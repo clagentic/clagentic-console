@@ -51,55 +51,43 @@
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)),
-    rgba(var(--overlay-rgb), 0.06);
-  backdrop-filter: blur(10px) saturate(1.1);
-  -webkit-backdrop-filter: blur(10px) saturate(1.1);
-  border: 1px solid rgba(255,255,255,0.18);
+  background: var(--bg-alt, var(--bg));
+  border: 1px solid var(--border);
   border-radius: 999px;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.16);
+  transition: color 0.15s, border-color 0.15s;
 }
 .notif-banner-clear-all:hover {
   color: var(--text);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06)),
-    rgba(var(--overlay-rgb), 0.08);
-  border-color: rgba(255,255,255,0.24);
+  border-color: var(--border-bright, var(--border));
 }
 .notif-banner-clear-all .lucide {
   width: 12px;
   height: 12px;
 }
 
-/* Individual banner (frosted glass) */
+/* Individual banner */
 .notif-banner {
   position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02)),
-    rgba(var(--overlay-rgb), 0.04);
-  backdrop-filter: blur(12px) saturate(1.04);
-  -webkit-backdrop-filter: blur(12px) saturate(1.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.06),
-    0 8px 24px rgba(var(--shadow-rgb), 0.14);
+  background: var(--bg-alt, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.22);
   pointer-events: auto;
   cursor: pointer;
   opacity: 0;
-  transform: translateY(-100%);
-  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s ease, box-shadow 0.18s ease;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s ease;
 }
 .notif-banner.show {
   opacity: 1;
@@ -107,13 +95,10 @@
 }
 .notif-banner.hide {
   opacity: 0;
-  transform: translateY(-100%);
+  transform: translateY(-8px);
 }
 .notif-banner:hover {
-  border-color: rgba(255,255,255,0.12);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.08),
-    0 10px 28px rgba(var(--shadow-rgb), 0.16);
+  border-color: var(--border-bright, var(--accent));
 }
 
 .notif-banner-icon {
@@ -123,11 +108,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px;
+  background: var(--bg-surface, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 6px;
   color: var(--text-muted);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
 }
 .notif-banner-icon .lucide { width: 16px; height: 16px; }
 .notif-banner-emoji { font-size: 18px; line-height: 1; }
@@ -135,7 +119,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 4px;
   display: block;
 }
 
@@ -144,25 +128,22 @@
   min-width: 0;
 }
 .notif-banner-project {
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.98);
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  font-weight: 400;
+  color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.55px;
+  letter-spacing: 0.12em;
   margin-bottom: 3px;
-  text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.75),
-    0 0 6px rgba(0, 0, 0, 0.25);
 }
 .notif-banner-title {
-  font-weight: 700;
+  font-weight: 500;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.98);
+  color: var(--text);
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
 .notif-banner-text {
   font-size: 12px;
@@ -228,21 +209,21 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  background: rgba(42, 42, 45, 1);
-  border: none;
-  color: rgba(255, 255, 255, 0.92);
+  background: var(--bg-surface, var(--bg-alt));
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   cursor: pointer;
   border-radius: 999px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s, background 0.15s, transform 0.15s;
-  box-shadow: 0 2px 6px rgba(var(--shadow-rgb), 0.26);
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+  box-shadow: 0 2px 6px rgba(var(--shadow-rgb), 0.20);
   z-index: 2;
 }
 .notif-banner:hover .notif-banner-close { opacity: 1; }
 .notif-banner-close:hover {
-  color: #fff;
-  background: rgba(42, 42, 45, 1);
+  color: var(--text);
+  border-color: var(--border-bright, var(--border));
   transform: scale(1.08);
 }
 .notif-banner-close .lucide { width: 12px; height: 12px; }
@@ -250,22 +231,11 @@
 /* Update available banner */
 .notif-banner-update .notif-banner-icon {
   background: none;
-}
-.notif-banner-update .notif-banner-project {
-  color: rgba(255, 255, 255, 0.98);
-}
-.notif-banner-auth .notif-banner-title {
-  white-space: normal;
-}
-.notif-banner-auth .notif-banner-text {
-  white-space: normal;
-}
-.notif-banner-auth .notif-banner-project {
-  color: rgba(255, 255, 255, 0.98);
+  border-color: transparent;
 }
 .notif-banner-auth .notif-banner-title,
-.notif-banner-update .notif-banner-title {
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+.notif-banner-auth .notif-banner-text {
+  white-space: normal;
 }
 .notif-banner-auth .notif-banner-actions {
   margin-top: 10px;
@@ -307,85 +277,7 @@
 .notif-banner-update-now:hover { opacity: 0.85; }
 .notif-banner-update-now:disabled { opacity: 0.6; cursor: default; }
 
-.light-theme .notif-banner-clear-all {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.54), rgba(255,255,255,0.28)),
-    rgba(248,250,255,0.22);
-  backdrop-filter: blur(10px) saturate(1.08);
-  -webkit-backdrop-filter: blur(10px) saturate(1.08);
-  border-color: rgba(255,255,255,0.52);
-  color: rgba(36, 45, 66, 0.72);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.78),
-    0 8px 22px rgba(31, 41, 55, 0.07);
-}
-
-.light-theme .notif-banner-clear-all:hover {
-  color: rgba(22, 29, 45, 0.92);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.34)),
-    rgba(248,250,255,0.26);
-  border-color: rgba(255,255,255,0.6);
-}
-
-.light-theme .notif-banner {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.22)),
-    rgba(248,250,255,0.2);
-  backdrop-filter: blur(12px) saturate(1.05);
-  -webkit-backdrop-filter: blur(12px) saturate(1.05);
-  border: 1px solid rgba(255,255,255,0.5);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.72),
-    0 10px 30px rgba(31, 41, 55, 0.09);
-}
-
-.light-theme .notif-banner:hover {
-  border-color: rgba(255,255,255,0.62);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.8),
-    0 12px 34px rgba(31, 41, 55, 0.11);
-}
-
-.light-theme .notif-banner-icon {
-  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(246,249,255,0.36));
-  border-color: rgba(255,255,255,0.52);
-  color: var(--text-secondary);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.78);
-}
-
-.light-theme .notif-banner-project {
-  color: rgba(50, 62, 86, 0.74);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.72);
-}
-
-.light-theme .notif-banner-title {
-  color: rgba(18, 24, 38, 0.95);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.72);
-}
-
-.light-theme .notif-banner-text {
-  color: rgba(61, 73, 96, 0.76);
-}
-
-.light-theme .notif-banner-update .notif-banner-project,
-.light-theme .notif-banner-auth .notif-banner-project {
-  color: rgba(50, 62, 86, 0.74);
-}
-
-.light-theme .notif-banner-auth .notif-banner-title,
-.light-theme .notif-banner-update .notif-banner-title {
-  text-shadow: 0 1px 0 rgba(255,255,255,0.76);
-}
-
-.light-theme .notif-banner-close,
-.light-theme .notif-banner-close:hover {
-  background: rgba(244, 246, 250, 0.98);
-  color: rgba(44, 52, 68, 0.88);
-  box-shadow:
-    0 2px 6px rgba(31, 41, 55, 0.12),
-    inset 0 1px 0 rgba(255,255,255,0.88);
-}
+/* light-theme overrides removed — all banner styles now use CSS vars */
 
 /* ========================================================
    Mobile
