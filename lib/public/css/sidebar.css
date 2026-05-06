@@ -1008,14 +1008,14 @@
   border: none;
   border-radius: 10px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--accent);
   font-family: inherit;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   text-align: left;
   min-width: 0;
-  opacity: 0.62;
+  opacity: 1;
   transition: background 0.15s, color 0.15s, opacity 0.15s;
 }
 
@@ -1028,24 +1028,21 @@
 
 .session-top-action:hover {
   background: var(--sidebar-hover);
-  color: var(--text);
+  color: var(--accent);
   opacity: 1;
 }
 
-/* Preferred agent quick-launch — highlighted when set */
+/* Preferred agent quick-launch — full opacity when set */
 .session-top-action--preferred {
-  opacity: 0.8;
-}
-.session-top-action--preferred:hover {
   opacity: 1;
 }
 
-/* Unset placeholder — extra muted so it doesn't distract */
+/* Unset placeholder — muted so it doesn't distract */
 .session-top-action--set-preferred {
-  opacity: 0.38;
+  opacity: 0.45;
 }
 .session-top-action--set-preferred:hover {
-  opacity: 0.8;
+  opacity: 1;
 }
 
 .session-favorites-section {

@@ -331,6 +331,14 @@
     padding-bottom: calc(var(--safe-bottom) + 16px);
   }
 
+  /* --- Session action grid (2-column) --- */
+  .mobile-session-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 4px;
+  }
+
   /* --- New session button --- */
   .mobile-session-new {
     display: flex;
@@ -338,7 +346,6 @@
     gap: 8px;
     width: 100%;
     padding: 12px 12px;
-    margin-bottom: 4px;
     background: none;
     border: none;
     color: var(--accent);
@@ -349,12 +356,13 @@
     text-align: left;
     -webkit-tap-highlight-color: transparent;
   }
-  .mobile-session-new:last-of-type {
-    border-bottom: 1px solid var(--border-subtle);
-  }
 
   .mobile-session-new:active {
     background: rgba(var(--overlay-rgb), 0.06);
+  }
+
+  .mobile-session-new--dim {
+    opacity: 0.45;
   }
 
   /* --- Chat filter bar (horizontal scroll chips) --- */
