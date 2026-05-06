@@ -1,0 +1,10 @@
+{
+  "name": "Clagentic Light",
+  "author": "Clagentic",
+  "variant": "light",
+  "base00": "F4F7FB", "base01": "EBF0F7", "base02": "C8D4E0", "base03": "8FA4BA",
+  "base04": "4A5D72", "base05": "1E2A38", "base06": "0D1421", "base07": "060A12",
+  "base08": "D4193A", "base09": "0099CC", "base0A": "2D5EB8", "base0B": "1BA87E",
+  "base0C": "6128B8", "base0D": "2D5EB8", "base0E": "7C3AED", "base0F": "4F46E5",
+  "accent2": "2D5EB8"
+}

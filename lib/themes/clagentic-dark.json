@@ -1,0 +1,10 @@
+{
+  "name": "Clagentic Dark",
+  "author": "Clagentic",
+  "variant": "dark",
+  "base00": "080A0F", "base01": "0D1017", "base02": "1A2233", "base03": "3A4A5C",
+  "base04": "7A8FA6", "base05": "C8D4E0", "base06": "E0EAF4", "base07": "F0F6FF",
+  "base08": "FF4D6A", "base09": "00CFFF", "base0A": "4A7FE8", "base0B": "29D9A8",
+  "base0C": "7B3FE4", "base0D": "4A7FE8", "base0E": "A855F7", "base0F": "6366F1",
+  "accent2": "4A7FE8"
+}
