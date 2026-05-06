@@ -311,7 +311,7 @@
 
 .md-content pre {
   background: var(--code-bg);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border);
   border-radius: 12px;
   margin: 14px 0;
   overflow: hidden;
