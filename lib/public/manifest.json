@@ -1,12 +1,12 @@
 {
-  "name": "Clay",
-  "short_name": "Clay",
+  "name": "Clagentic:Console",
+  "short_name": "Console",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#282a36",
-  "theme_color": "#282a36",
+  "background_color": "#080A0F",
+  "theme_color": "#080A0F",
   "icons": [
     {
       "src": "icon-192.png",

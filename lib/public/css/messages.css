@@ -7,7 +7,7 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  padding: 20px 0 12px;
+  padding: 20px 16px 12px;
   position: relative;
   /* Isolate layout/style from the rest of the page. Style mutations inside
      (syntax highlighting, streaming innerHTML, classList toggles) no longer

@@ -103,7 +103,7 @@ img.emoji {
   --sidebar-active: #111827;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --content-width: 760px;
+  --content-width: 820px;
 }
 
 /* PWA standalone: home indicator safe area still applies on notched devices */
