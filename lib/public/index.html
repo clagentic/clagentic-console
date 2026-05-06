@@ -96,7 +96,18 @@
   <div id="icon-strip">
     <div class="icon-strip-home" title="Clagentic:Console">
       <span class="icon-strip-pill"></span>
-      <img class="icon-strip-logo" src="icon-banded-76.png" width="38" height="38" alt="Clagentic:Console">
+      <svg class="icon-strip-logo" width="38" height="38" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Clagentic:Console">
+        <defs>
+          <linearGradient id="cg-strip" gradientUnits="userSpaceOnUse" x1="36" y1="4" x2="36" y2="68">
+            <stop offset="0%"   stop-color="#00CFFF"/>
+            <stop offset="50%"  stop-color="#4A7FE8"/>
+            <stop offset="100%" stop-color="#7B3FE4"/>
+          </linearGradient>
+        </defs>
+        <path d="M 58.98 16.71 A 30 30 0 1 0 58.98 55.29" stroke="url(#cg-strip)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="58.98" cy="16.71" r="2.8" fill="#00CFFF"/>
+        <circle cx="58.98" cy="55.29" r="2.8" fill="#7B3FE4"/>
+      </svg>
     </div>
     <div class="icon-strip-separator"></div>
     <button type="button" class="icon-strip-hint" id="icon-strip-hint-project" data-switcher-mode="project" aria-label="Switch project"></button>
@@ -585,7 +596,20 @@
   <div id="mobile-tab-bar">
     <button class="mobile-tab" data-tab="chat" id="mob-tab-chat"><i data-lucide="message-square"></i><span class="mobile-tab-label">Chat</span></button>
     <button class="mobile-tab" data-tab="search" id="mob-tab-search"><i data-lucide="search"></i><span class="mobile-tab-label">Search</span></button>
-    <button class="mobile-tab-home" id="mobile-home-btn"><img src="/icon-banded-76.png" alt="Home" class="mobile-home-icon"></button>
+    <button class="mobile-tab-home" id="mobile-home-btn">
+      <svg class="mobile-home-icon" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Home">
+        <defs>
+          <linearGradient id="cg-mobile" gradientUnits="userSpaceOnUse" x1="36" y1="4" x2="36" y2="68">
+            <stop offset="0%"   stop-color="#00CFFF"/>
+            <stop offset="50%"  stop-color="#4A7FE8"/>
+            <stop offset="100%" stop-color="#7B3FE4"/>
+          </linearGradient>
+        </defs>
+        <path d="M 58.98 16.71 A 30 30 0 1 0 58.98 55.29" stroke="url(#cg-mobile)" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <circle cx="58.98" cy="16.71" r="2.8" fill="#00CFFF"/>
+        <circle cx="58.98" cy="55.29" r="2.8" fill="#7B3FE4"/>
+      </svg>
+    </button>
     <button class="mobile-tab" data-tab="tools" id="mob-tab-tools"><i data-lucide="wrench"></i><span class="mobile-tab-label">Tools</span></button>
     <button class="mobile-tab" data-tab="settings" id="mob-tab-settings"><i data-lucide="settings"></i><span class="mobile-tab-label">Settings</span></button>
   </div>
