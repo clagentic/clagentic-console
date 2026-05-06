@@ -1245,12 +1245,17 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   justify-content: center;
   background: #000;
   z-index: 999;
-  transition: opacity 0.6s ease;
+  opacity: 1;
+  /* Fade-out is fast (0.4s); fade-in has a slight delay so sub-second
+     disconnects don't cause a jarring black flash before JS grace timer fires. */
+  transition: opacity 0.4s ease 0.1s;
 }
 
 #connect-overlay.hidden {
   opacity: 0;
   pointer-events: none;
+  /* Remove the fade-in delay on hide so reconnect feels instant */
+  transition-delay: 0s;
 }
 
 #ascii-logo-canvas {
