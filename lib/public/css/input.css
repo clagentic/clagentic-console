@@ -669,6 +669,10 @@
   margin: 0 auto;
   position: relative;
 }
+body.mate-dm-active #input-wrapper,
+#main-column.dm-mode #input-wrapper {
+  max-width: 100%;
+}
 
 #input-row {
   display: flex;

@@ -1096,6 +1096,15 @@
   flex-shrink: 0;
 }
 
+.dm-user-picker-section {
+  padding: 6px 10px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dimmer, #6272a4);
+}
+
 .dm-user-picker-name {
   font-size: 13px;
   font-weight: 500;

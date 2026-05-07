@@ -156,9 +156,51 @@
   text-align: start;
 }
 
-/* --- Bubble avatars --- */
-/* Hidden by default; shown only in channel (wide-view) or human DM mode.
-   Size and shape rules here since mates.css (which owned these) is removed. */
+/* --- Bubble layout (avatar + header + content) ---
+   These rules were in mates.css; moved here since that file is removed.
+   Default: bubble layout (no avatar, no header). Channel/DM views opt in. */
+
+.dm-bubble-content {
+  width: 100%;
+}
+.msg-user .dm-bubble-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+body.wide-view .msg-user .dm-bubble-content {
+  align-items: flex-start;
+}
+body.mate-dm-active .dm-bubble-content,
+body.wide-view .dm-bubble-content {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+body.mate-dm-active .msg-user .dm-bubble-content {
+  align-items: flex-start;
+}
+
+.dm-bubble-header {
+  display: none;
+  align-items: baseline;
+  gap: 8px;
+}
+body.mate-dm-active .dm-bubble-header,
+body.wide-view .dm-bubble-header {
+  display: flex;
+}
+
+.dm-bubble-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.dm-bubble-time {
+  font-size: 12px;
+  color: var(--text-dimmer);
+}
+
 .dm-bubble-avatar,
 .dm-bubble-avatar-me {
   image-rendering: -webkit-optimize-contrast;
@@ -173,10 +215,13 @@
   height: 36px;
   border-radius: 6px;
   flex-shrink: 0;
+  object-fit: cover;
+  margin-top: 2px;
 }
 .dm-bubble-avatar {
   display: none;
 }
+body.mate-dm-active .dm-bubble-avatar,
 body.wide-view .dm-bubble-avatar {
   display: block;
 }
@@ -1932,4 +1977,118 @@ body.wide-view .turn-meta {
   body.wide-view:not(.mate-dm-active) .tool-item,
   body.wide-view:not(.mate-dm-active) .tool-group { max-width: var(--content-width); }
   body.wide-view:not(.mate-dm-active) .turn-meta { max-width: var(--content-width); }
+}
+
+/* ==========================================================================
+   Human DM mode — Slack-style flat layout (body.mate-dm-active)
+   Ported from deleted mates.css; applies to human DM sessions.
+   ========================================================================== */
+
+body.mate-dm-active .msg-user,
+body.mate-dm-active .msg-assistant {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 16px;
+  margin: 0;
+  border-radius: 0;
+}
+body.mate-dm-active .msg-user:hover,
+body.mate-dm-active .msg-assistant:hover {
+  background: var(--bg-alt);
+}
+
+body.mate-dm-active .msg-user {
+  justify-content: flex-start;
+}
+body.mate-dm-active .msg-user .dm-bubble-avatar-me {
+  order: -1;
+}
+body.mate-dm-active .msg-user .bubble {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  max-width: 100%;
+  font-size: 15px;
+  line-height: 1.46;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+body.mate-dm-active .msg-user .msg-actions {
+  display: none;
+}
+
+body.mate-dm-active .msg-assistant .dm-bubble-content {
+  flex: 1;
+  min-width: 0;
+}
+body.mate-dm-active .msg-assistant .md-content {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+body.mate-dm-active .turn-meta {
+  display: none;
+}
+
+/* Mobile: revert to bubble layout in DM mode */
+@media (max-width: 768px) {
+  body.mate-dm-active .msg-user,
+  body.mate-dm-active .msg-assistant {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: initial !important;
+    gap: initial !important;
+    max-width: var(--content-width) !important;
+    padding: 0 20px !important;
+    margin: 0 auto 8px !important;
+    border-radius: initial !important;
+  }
+  body.mate-dm-active .msg-user {
+    align-items: flex-end !important;
+  }
+  body.mate-dm-active .msg-assistant {
+    margin-bottom: 12px !important;
+    padding: 4px 20px !important;
+  }
+  body.mate-dm-active .msg-user:hover {
+    background: initial !important;
+  }
+  body.mate-dm-active .msg-user .dm-bubble-avatar-me {
+    display: none !important;
+  }
+  body.mate-dm-active .msg-user .dm-bubble-content {
+    align-items: flex-end !important;
+    flex: initial !important;
+    width: 100% !important;
+  }
+  body.mate-dm-active .msg-user .dm-bubble-header {
+    display: none !important;
+  }
+  body.mate-dm-active .msg-user .bubble {
+    background: var(--user-bubble) !important;
+    border-radius: 20px 20px 4px 20px !important;
+    padding: 12px 18px !important;
+    max-width: 85% !important;
+    width: fit-content !important;
+    font-size: 15px !important;
+    line-height: 1.55 !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+  }
+  body.mate-dm-active .msg-user .msg-actions {
+    display: flex !important;
+  }
+  body.mate-dm-active .msg-assistant .dm-bubble-content {
+    flex: initial !important;
+    width: 100% !important;
+  }
+  body.mate-dm-active .msg-assistant .md-content {
+    background: initial !important;
+    border-radius: initial !important;
+    padding: initial !important;
+  }
 }
