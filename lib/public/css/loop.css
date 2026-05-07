@@ -926,11 +926,22 @@
 #ralph-sticky .ralph-sticky-status { font-size: 12px; color: var(--accent); white-space: nowrap; }
 #ralph-sticky .ralph-sticky-status .lucide { width: 12px; height: 12px; }
 
-/* Ready state — accent color with glow */
+/* Ready state — accent color with glow.
+   Animate opacity on a pseudo-element instead of box-shadow to avoid
+   triggering paint on every frame (box-shadow is a paint property). */
 #ralph-sticky.ralph-ready .ralph-sticky-inner {
   border-color: var(--accent, #6c5ce7);
-  box-shadow: 0 0 12px 2px color-mix(in srgb, var(--accent, #6c5ce7) 35%, transparent);
+  position: relative;
+}
+#ralph-sticky.ralph-ready .ralph-sticky-inner::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  box-shadow: 0 0 16px 4px color-mix(in srgb, var(--accent, #6c5ce7) 40%, transparent);
+  opacity: 0.6;
   animation: ralphReadyGlow 2s ease-in-out infinite;
+  pointer-events: none;
 }
 #ralph-sticky.ralph-ready .ralph-sticky-icon { color: var(--accent, #6c5ce7); }
 #ralph-sticky.ralph-ready .ralph-sticky-status {
@@ -938,8 +949,8 @@
   font-weight: 600;
 }
 @keyframes ralphReadyGlow {
-  0%, 100% { box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent, #6c5ce7) 25%, transparent); }
-  50% { box-shadow: 0 0 16px 4px color-mix(in srgb, var(--accent, #6c5ce7) 40%, transparent); }
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
 }
 #ralph-sticky .ralph-sticky-cancel {
   display: inline-flex;
