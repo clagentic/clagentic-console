@@ -156,6 +156,31 @@
   text-align: start;
 }
 
+/* --- Bubble avatars --- */
+/* Hidden by default; shown only in channel (wide-view) or human DM mode.
+   Size and shape rules here since mates.css (which owned these) is removed. */
+.dm-bubble-avatar,
+.dm-bubble-avatar-me {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: smooth;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.dm-bubble-avatar,
+.dm-bubble-avatar-me,
+.dm-bubble-avatar-other {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.dm-bubble-avatar {
+  display: none;
+}
+body.wide-view .dm-bubble-avatar {
+  display: block;
+}
+
 /* Other user's message: left-aligned with flipped bubble */
 .msg-user-other {
   align-items: flex-start;
