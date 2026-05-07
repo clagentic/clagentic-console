@@ -256,83 +256,8 @@
     <div id="sidebar-resize-handle"></div>
     <div id="sidebar-overlay"></div>
 
-    <!-- Mate sidebar (separate from project sidebar, shown during mate DM) -->
-    <div id="mate-sidebar-column" class="hidden">
-      <div class="mate-sidebar-header" id="mate-sidebar-header">
-        <img id="mate-sidebar-avatar" class="mate-sidebar-avatar" alt="">
-        <span id="mate-sidebar-name" class="mate-sidebar-name"></span>
-        <div id="mate-vendor-toggle" class="mate-vendor-toggle"></div>
-        <div id="mate-sidebar-seed-tooltip" class="mate-seed-tooltip hidden"></div>
-        <button id="mate-sidebar-toggle-btn" class="sidebar-collapse-btn" title="Collapse sidebar"><i data-lucide="panel-left-close"></i></button>
-      </div>
-      <div id="mate-sidebar-tools-wrap">
-        <div class="sidebar-tools-header">
-          <span class="sidebar-section-label">Tools</span>
-          <span class="sidebar-tools-hint" data-palette="mate" title="Show keyboard hotkeys"></span>
-          <button type="button" class="tool-palette-edit-btn" data-palette="mate" aria-label="Edit tool palette" title="Edit palette"><i data-lucide="pencil"></i></button>
-        </div>
-        <div id="mate-sidebar-tools"></div>
-        <div id="mate-sidebar-tools-hidden" class="tool-palette-hidden-section hidden"></div>
-      </div>
-      <div id="mate-sidebar-conversations">
-        <div class="mate-sidebar-sessions-header">
-          <span>Conversations</span>
-          <div class="mate-sidebar-actions">
-            <button id="mate-search-session-btn" type="button" title="Search sessions"><i data-lucide="search"></i></button>
-            <button id="mate-new-session-btn" type="button" title="New session"><i data-lucide="plus"></i></button>
-          </div>
-        </div>
-        <div id="mate-session-search" class="mate-session-search hidden">
-          <input id="mate-session-search-input" type="text" placeholder="Search sessions..." autocomplete="off" spellcheck="false" />
-          <button id="mate-session-search-clear" type="button" aria-label="Clear search"><i data-lucide="x"></i></button>
-        </div>
-        <div id="mate-session-list" class="mate-session-list"></div>
-      </div>
-      <div id="mate-sidebar-memory" class="hidden"></div>
-      <div id="mate-sidebar-knowledge" class="hidden">
-        <div class="mate-sidebar-sessions-header">
-          <span>Knowledge</span>
-          <div class="mate-sidebar-actions">
-            <button id="mate-knowledge-add-sidebar-btn" type="button" title="New file"><i data-lucide="plus"></i></button>
-            <button id="mate-knowledge-back-btn" type="button" title="Back to conversations"><i data-lucide="x"></i></button>
-          </div>
-        </div>
-        <div id="mate-knowledge-files" class="mate-knowledge-file-list"></div>
-      </div>
-    </div>
-    <div id="mate-sidebar-resize-handle" class="hidden"></div>
 
     <div id="main-column">
-      <!-- Knowledge editor (full overlay, shown on Edit) -->
-      <div id="mate-knowledge-editor" class="mate-knowledge-editor hidden">
-        <div class="mate-knowledge-header-bar">
-          <i data-lucide="file-text" class="mate-knowledge-header-icon"></i>
-          <span id="mate-knowledge-active-name" class="mate-knowledge-active-name">No file selected</span>
-          <div id="mate-knowledge-name-group" class="mate-knowledge-name-group hidden">
-            <input type="text" id="mate-knowledge-editor-name" placeholder="Knowledge name..." maxlength="80" spellcheck="false">
-            <span id="mate-knowledge-editor-ext" class="mate-knowledge-editor-ext">.md</span>
-          </div>
-          <div class="mate-knowledge-toolbar-spacer"></div>
-          <button id="mate-knowledge-editor-delete" class="mate-knowledge-header-btn" style="display:none" title="Delete"><i data-lucide="trash-2"></i></button>
-          <button id="mate-knowledge-editor-save" class="mate-knowledge-header-btn" disabled title="Save"><i data-lucide="save"></i></button>
-          <button id="mate-knowledge-close-btn" class="mate-knowledge-header-btn" title="Close"><i data-lucide="x"></i></button>
-        </div>
-        <div class="mate-knowledge-tab-bar">
-          <button class="mate-knowledge-tab-btn active" data-tab="edit">Edit</button>
-          <button class="mate-knowledge-tab-btn" data-tab="preview">Preview</button>
-        </div>
-        <div class="mate-knowledge-body">
-          <div class="mate-knowledge-editor-pane mobile-active">
-            <div class="mate-editor-highlight-wrap">
-              <pre class="mate-editor-highlight-pre" aria-hidden="true"><code id="mate-knowledge-editor-highlight" class="language-markdown"></code></pre>
-              <textarea id="mate-knowledge-editor-content" placeholder="Select a file from the sidebar..." spellcheck="false"></textarea>
-            </div>
-          </div>
-          <div class="mate-knowledge-preview-pane">
-            <div id="mate-knowledge-editor-preview" class="mate-knowledge-preview-content md-content"></div>
-          </div>
-        </div>
-      </div>
       <div class="dm-header-bar" id="dm-header-bar">
         <img id="dm-header-avatar" class="dm-header-avatar" alt="">
         <span id="dm-header-name" class="dm-header-name"></span>
@@ -340,18 +265,10 @@
       <div class="title-bar-content">
         <div id="header-left">
           <button id="sidebar-expand-btn" title="Open sidebar"><i data-lucide="panel-left-open"></i></button>
-          <div id="mate-collapsed-info" class="mate-collapsed-info">
-            <img id="mate-collapsed-avatar" class="mate-collapsed-avatar" alt="">
-            <span id="mate-collapsed-name" class="mate-collapsed-name"></span>
-          </div>
           <button id="hamburger-btn" aria-label="Toggle sidebar" title="Toggle sidebar"><i data-lucide="menu"></i></button>
           <span class="header-title" id="header-title">Connecting...</span>
           <button id="header-info-btn" type="button" title="Session info"><i data-lucide="info"></i></button>
           <button id="header-rename-btn" type="button" title="Rename session"><i data-lucide="pencil"></i></button>
-          <div id="mate-mobile-title" class="mate-mobile-title hidden">
-            <img id="mate-mobile-avatar" class="mate-mobile-avatar" alt="">
-            <span id="mate-mobile-name" class="mate-mobile-name"></span>
-          </div>
         </div>
         <div id="todo-sticky" class="hidden"></div>
         <div id="ralph-sticky" class="hidden"></div>
@@ -625,39 +542,6 @@
       <button class="file-viewer-btn" id="file-viewer-close" title="Close"><i data-lucide="x"></i></button>
     </div>
     <div class="file-viewer-body" id="file-viewer-body"></div>
-  </div>
-  <!-- Knowledge viewer (side panel, like file-viewer) -->
-  <div id="mate-knowledge-viewer" class="hidden">
-    <div class="mate-knowledge-viewer-header">
-      <i data-lucide="file-text" class="mate-knowledge-header-icon"></i>
-      <span id="mate-knowledge-viewer-name" class="mate-knowledge-active-name">No file selected</span>
-      <div class="mate-knowledge-toolbar-spacer"></div>
-      <button id="mate-knowledge-viewer-edit-btn" class="file-viewer-btn" title="Edit"><i data-lucide="pencil"></i></button>
-      <button id="mate-knowledge-viewer-close-btn" class="file-viewer-btn" title="Close"><i data-lucide="x"></i></button>
-    </div>
-    <div class="mate-knowledge-viewer-body">
-      <div id="mate-knowledge-viewer-content" class="mate-knowledge-preview-content md-content"></div>
-    </div>
-  </div>
-  <!-- Memory viewer (side panel) -->
-  <div id="mate-memory-viewer" class="hidden">
-    <div class="mate-memory-viewer-header">
-      <i data-lucide="brain" class="mate-knowledge-header-icon"></i>
-      <span class="mate-knowledge-active-name">Memory</span>
-      <div class="mate-knowledge-toolbar-spacer"></div>
-      <button id="mate-memory-viewer-close-btn" class="file-viewer-btn" title="Close"><i data-lucide="x"></i></button>
-    </div>
-    <div class="mate-memory-viewer-tabs">
-      <button class="mate-memory-tab active" data-tab="summary">Summary</button>
-      <button class="mate-memory-tab" data-tab="digests">Session Logs</button>
-    </div>
-    <div id="mate-memory-tab-summary" class="mate-memory-tab-body">
-      <div id="mate-memory-summary-content" class="mate-knowledge-preview-content md-content"></div>
-    </div>
-    <div id="mate-memory-tab-digests" class="mate-memory-tab-body hidden">
-      <div id="mate-memory-digest-list" class="mate-memory-digest-list"></div>
-      <div id="mate-memory-digest-detail" class="mate-memory-digest-detail hidden"></div>
-    </div>
   </div>
   <div id="project-settings" class="hidden panel-fullscreen">
     <div class="project-settings-layout">
