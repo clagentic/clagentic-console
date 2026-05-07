@@ -52,11 +52,11 @@
         <button id="ext-pill" class="top-bar-ext-btn" title="Chrome Extension"><i data-lucide="puzzle"></i> Extension</button>
         <div id="ext-popover" class="ext-popover">
           <div class="ext-popover-header">
-            <div class="ext-popover-title">Clay for Chrome <span class="ext-experimental">Experimental</span></div>
+            <div class="ext-popover-title">Clagentic:Console for Chrome <span class="ext-experimental">Experimental</span></div>
             <div class="ext-popover-sub">v0.1.0 &middot; <a href="https://github.com/chadbyte/clay-chrome" target="_blank" rel="noopener">GitHub</a></div>
           </div>
           <div class="ext-popover-connected hidden" id="ext-connected-banner"><i data-lucide="check-circle"></i> Extension connected</div>
-          <div class="ext-popover-desc" id="ext-popover-desc">Connect your browser to Clay. Gives Claude visibility into open tabs, console, network, DOM, and screenshots.</div>
+          <div class="ext-popover-desc" id="ext-popover-desc">Connect your browser to Clagentic:Console. Gives Claude visibility into open tabs, console, network, DOM, and screenshots.</div>
           <button class="ext-popover-download" id="ext-download-btn"><i data-lucide="download"></i> Download Extension (.zip)</button>
           <div class="ext-popover-status hidden" id="ext-download-status"></div>
           <div class="ext-popover-divider" id="ext-popover-divider"></div>
@@ -161,29 +161,6 @@
           <div class="hub-week-strip" id="hub-week-strip"></div>
         </div>
 
-        <div class="hub-card hub-playbooks" id="hub-playbooks">
-          <div class="hub-card-header">
-            <span class="hub-card-title">Quick Start</span>
-          </div>
-          <div class="hub-playbooks-grid" id="hub-playbooks-grid"></div>
-        </div>
-
-
-        <div class="hub-tip">
-          <div class="hub-tip-icon">💡</div>
-          <div class="hub-tip-body">
-            <div class="hub-tip-label">Did you know?</div>
-            <div class="hub-tip-text" id="hub-tip-text"></div>
-          </div>
-          <div class="hub-tip-nav">
-            <button class="hub-tip-prev" id="hub-tip-prev" title="Previous tip">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            </button>
-            <button class="hub-tip-next" id="hub-tip-next" title="Next tip">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
     <div id="sidebar-column">
@@ -282,7 +259,7 @@
       <div id="main-panels">
       <div id="app">
         <div id="connect-overlay">
-      <canvas id="ascii-logo-canvas"></canvas>
+      <svg id="console-logo-svg" viewBox="0 0 112 112" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
       <p id="connect-overlay-msg">Reconnecting to server…</p>
     </div>
     <div id="sticky-notes-container" class="hidden"></div>
@@ -893,7 +870,7 @@
               <button class="layout-option" data-brand="classic">
                 <span class="layout-option-icon">◈</span>
                 <span class="layout-option-label">Classic</span>
-                <span class="layout-option-desc">The original Clay look. Dracula dark, Ayu light.</span>
+                <span class="layout-option-desc">The original Clagentic:Console look. Dracula dark, Ayu light.</span>
               </button>
             </div>
           </div>
@@ -1291,7 +1268,7 @@
         </div>
         <div class="server-settings-section" data-section="restart">
           <h2>Restart</h2>
-          <p class="settings-hint" style="margin-bottom: 16px;">Restart the Clay daemon process. All active sessions will be briefly interrupted and clients will automatically reconnect.</p>
+          <p class="settings-hint" style="margin-bottom: 16px;">Restart the Clagentic:Console daemon process. All active sessions will be briefly interrupted and clients will automatically reconnect.</p>
           <div class="settings-card">
             <div class="settings-field">
               <label class="settings-label">Restart Daemon</label>
@@ -1309,7 +1286,7 @@
             <div class="settings-danger-icon"><i data-lucide="alert-triangle"></i></div>
             <div class="settings-danger-body">
               <h3 class="settings-danger-title">Danger Zone</h3>
-              <p class="settings-danger-desc">Shutting down the server will terminate all active sessions, disconnect all clients, and stop the Clay daemon process. This action cannot be undone.</p>
+              <p class="settings-danger-desc">Shutting down the server will terminate all active sessions, disconnect all clients, and stop the Clagentic:Console daemon process. This action cannot be undone.</p>
             </div>
           </div>
           <div class="settings-card settings-card-danger">
@@ -1549,7 +1526,7 @@
       <button class="skills-close" id="mcp-modal-close"><i data-lucide="x"></i></button>
     </div>
     <div class="mcp-content" id="mcp-content">
-      <p class="mcp-no-servers">No MCP servers detected. Configure in Clay Chrome Extension.</p>
+      <p class="mcp-no-servers">No MCP servers detected. Configure in Clagentic:Console Chrome Extension.</p>
     </div>
   </div>
 </div>
@@ -1658,7 +1635,7 @@
         <div class="ralph-mode-choice">
           <button class="ralph-mode-card active" data-loop-mode="judge">
             <span class="ralph-mode-card-icon"><i data-lucide="scale"></i></span>
-            <span class="ralph-mode-card-title">Clay Loop</span>
+            <span class="ralph-mode-card-title">Console Loop</span>
             <span class="ralph-mode-card-sub">Loop + Judge</span>
           </button>
           <button class="ralph-mode-card" data-loop-mode="simple">
@@ -1679,7 +1656,7 @@
             </div>
             <div class="config-segmented ralph-authorship-toggle" data-file="prompt">
               <button class="config-segment-btn" data-author="me">Me</button>
-              <button class="config-segment-btn active" data-author="clay">Clay</button>
+              <button class="config-segment-btn active" data-author="clay">Console</button>
             </div>
           </div>
           <div class="ralph-authorship-row" id="ralph-judge-authorship-row">
@@ -1689,7 +1666,7 @@
             </div>
             <div class="config-segmented ralph-authorship-toggle" data-file="judge">
               <button class="config-segment-btn" data-author="me">Me</button>
-              <button class="config-segment-btn active" data-author="clay">Clay</button>
+              <button class="config-segment-btn active" data-author="clay">Console</button>
             </div>
           </div>
         </div>
@@ -1698,7 +1675,7 @@
         <h3>Provide details</h3>
         <div id="ralph-input-task-section" class="hidden">
           <label class="ralph-field-label" for="ralph-task">Task description <span class="ralph-field-req">*</span></label>
-          <p class="ralph-hint">Write a rough idea. Clay will refine it into detailed instructions.</p>
+          <p class="ralph-hint">Write a rough idea. Clagentic:Console will refine it into detailed instructions.</p>
           <textarea id="ralph-task" rows="5" placeholder="e.g. Add dark mode toggle to the settings page"></textarea>
         </div>
         <div id="ralph-input-prompt-section" class="hidden">
@@ -1986,7 +1963,7 @@
   <div class="pwa-modal-card">
     <div class="pwa-modal-icon">📲</div>
     <h3 class="pwa-modal-title">Add to Home Screen</h3>
-    <p class="pwa-modal-desc">Add Clay to your home screen for a better experience.</p>
+    <p class="pwa-modal-desc">Add Clagentic:Console to your home screen for a better experience.</p>
     <ul class="pwa-modal-benefits">
       <li><i data-lucide="maximize" class="pwa-benefit-icon"></i>Full-screen — no browser toolbar</li>
       <li><i data-lucide="bell" class="pwa-benefit-icon"></i>Push notifications when tasks finish</li>
