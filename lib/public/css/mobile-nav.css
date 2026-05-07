@@ -555,6 +555,13 @@
     letter-spacing: 0.3px;
   }
 
+  /* Separator between favorites and the rest of the session list */
+  .mobile-sheet-divider {
+    margin: 6px 12px;
+    border: none;
+    border-top: 1px solid var(--border-subtle, var(--border));
+  }
+
   /* --- Loop session grouping (scheduled tasks / Ralph) --- */
   .mobile-loop-wrapper {
     margin-top: 2px;
