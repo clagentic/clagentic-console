@@ -5,6 +5,7 @@
 @import url("css/overlays.css");
 @import url("css/menus.css");
 @import url("css/messages.css?v=20260407");
+@import url("css/channel-layout.css");
 @import url("css/rewind.css");
 @import url("css/input.css");
 @import url("css/filebrowser.css");
@@ -25,7 +26,7 @@
 @import url("css/admin.css");
 @import url("css/session-search.css");
 @import url("css/tooltip.css");
-@import url("css/mates.css?v=20260407");
+
 @import url("css/command-palette.css");
 @import url("css/agent-picker.css");
 @import url("css/mention.css");
