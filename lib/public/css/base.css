@@ -12,6 +12,9 @@
   font-display: swap;
 }
 
+/* --- Global utility --- */
+.hidden { display: none !important; }
+
 /* --- Reset & Variables --- */
 * {
   margin: 0;

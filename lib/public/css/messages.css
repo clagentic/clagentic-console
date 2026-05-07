@@ -156,6 +156,76 @@
   text-align: start;
 }
 
+/* --- Bubble layout (avatar + header + content) ---
+   These rules were in mates.css; moved here since that file is removed.
+   Default: bubble layout (no avatar, no header). Channel/DM views opt in. */
+
+.dm-bubble-content {
+  width: 100%;
+}
+.msg-user .dm-bubble-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+body.wide-view .msg-user .dm-bubble-content {
+  align-items: flex-start;
+}
+body.mate-dm-active .dm-bubble-content,
+body.wide-view .dm-bubble-content {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+body.mate-dm-active .msg-user .dm-bubble-content {
+  align-items: flex-start;
+}
+
+.dm-bubble-header {
+  display: none;
+  align-items: baseline;
+  gap: 8px;
+}
+body.mate-dm-active .dm-bubble-header,
+body.wide-view .dm-bubble-header {
+  display: flex;
+}
+
+.dm-bubble-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.dm-bubble-time {
+  font-size: 12px;
+  color: var(--text-dimmer);
+}
+
+.dm-bubble-avatar,
+.dm-bubble-avatar-me {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: smooth;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.dm-bubble-avatar,
+.dm-bubble-avatar-me,
+.dm-bubble-avatar-other {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  object-fit: cover;
+  margin-top: 2px;
+}
+.dm-bubble-avatar {
+  display: none;
+}
+body.mate-dm-active .dm-bubble-avatar,
+body.wide-view .dm-bubble-avatar {
+  display: block;
+}
+
 /* Other user's message: left-aligned with flipped bubble */
 .msg-user-other {
   align-items: flex-start;
@@ -1907,4 +1977,265 @@ body.wide-view .turn-meta {
   body.wide-view:not(.mate-dm-active) .tool-item,
   body.wide-view:not(.mate-dm-active) .tool-group { max-width: var(--content-width); }
   body.wide-view:not(.mate-dm-active) .turn-meta { max-width: var(--content-width); }
+}
+
+/* ==========================================================================
+   Human DM mode — Slack-style flat layout (body.mate-dm-active)
+   Ported from deleted mates.css; applies to human DM sessions.
+   ========================================================================== */
+
+body.mate-dm-active .msg-user,
+body.mate-dm-active .msg-assistant {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 16px;
+  margin: 0;
+  border-radius: 0;
+}
+body.mate-dm-active .msg-user:hover,
+body.mate-dm-active .msg-assistant:hover {
+  background: var(--bg-alt);
+}
+
+body.mate-dm-active .msg-user {
+  justify-content: flex-start;
+}
+body.mate-dm-active .msg-user .dm-bubble-avatar-me {
+  order: -1;
+}
+body.mate-dm-active .msg-user .bubble {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  max-width: 100%;
+  font-size: 15px;
+  line-height: 1.46;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+body.mate-dm-active .msg-user .msg-actions {
+  display: none;
+}
+
+body.mate-dm-active .msg-assistant .dm-bubble-content {
+  flex: 1;
+  min-width: 0;
+}
+body.mate-dm-active .msg-assistant .md-content {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+body.mate-dm-active .turn-meta {
+  display: none;
+}
+
+/* Mobile: revert to bubble layout in DM mode */
+@media (max-width: 768px) {
+  body.mate-dm-active .msg-user,
+  body.mate-dm-active .msg-assistant {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: initial !important;
+    gap: initial !important;
+    max-width: var(--content-width) !important;
+    padding: 0 20px !important;
+    margin: 0 auto 8px !important;
+    border-radius: initial !important;
+  }
+  body.mate-dm-active .msg-user {
+    align-items: flex-end !important;
+  }
+  body.mate-dm-active .msg-assistant {
+    margin-bottom: 12px !important;
+    padding: 4px 20px !important;
+  }
+  body.mate-dm-active .msg-user:hover {
+    background: initial !important;
+  }
+  body.mate-dm-active .msg-user .dm-bubble-avatar-me {
+    display: none !important;
+  }
+  body.mate-dm-active .msg-user .dm-bubble-content {
+    align-items: flex-end !important;
+    flex: initial !important;
+    width: 100% !important;
+  }
+  body.mate-dm-active .msg-user .dm-bubble-header {
+    display: none !important;
+  }
+  body.mate-dm-active .msg-user .bubble {
+    background: var(--user-bubble) !important;
+    border-radius: 20px 20px 4px 20px !important;
+    padding: 12px 18px !important;
+    max-width: 85% !important;
+    width: fit-content !important;
+    font-size: 15px !important;
+    line-height: 1.55 !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+  }
+  body.mate-dm-active .msg-user .msg-actions {
+    display: flex !important;
+  }
+  body.mate-dm-active .msg-assistant .dm-bubble-content {
+    flex: initial !important;
+    width: 100% !important;
+  }
+  body.mate-dm-active .msg-assistant .md-content {
+    background: initial !important;
+    border-radius: initial !important;
+    padding: initial !important;
+  }
+}
+
+/* ==========================================================================
+   Channel-view pre-thinking indicator (bouncing dots before response)
+   Ported from deleted mates.css; renamed from mate-thinking to channel-thinking.
+   ========================================================================== */
+
+body.wide-view .channel-thinking {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 16px;
+  margin: 0;
+  max-width: 100%;
+}
+body.wide-view .channel-thinking:hover {
+  background: var(--bg-alt);
+}
+body.wide-view .channel-thinking > .dm-bubble-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 0;
+}
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: dot-bounce 1.4s ease-in-out infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* ==========================================================================
+   Channel-view permission prompt (avatar + bubble layout)
+   Ported from deleted mates.css; renamed from mate-permission/mate-perm-*
+   ========================================================================== */
+
+body.wide-view .permission-container,
+body.mate-dm-active .permission-container {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 16px;
+}
+body.wide-view .permission-container:hover,
+body.mate-dm-active .permission-container:hover {
+  background: var(--bg-alt);
+}
+body.wide-view .permission-container > .dm-bubble-content,
+body.mate-dm-active .permission-container > .dm-bubble-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.perm-ask {
+  font-size: 15px;
+  line-height: 1.46;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.perm-details {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.perm-details summary {
+  cursor: pointer;
+  user-select: none;
+}
+.perm-details pre {
+  font-size: 11px;
+  margin: 4px 0 0;
+  padding: 8px;
+  background: rgba(var(--overlay-rgb), 0.04);
+  border-radius: 6px;
+  overflow-x: auto;
+  max-height: 200px;
+}
+
+body.wide-view .permission-container .permission-actions,
+body.mate-dm-active .permission-container .permission-actions {
+  display: flex;
+  gap: 6px;
+  border: none;
+  padding: 0;
+  background: none;
+  margin-top: 8px;
+  border-radius: 0;
+}
+.perm-reply {
+  padding: 5px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  transition: background 0.15s, border-color 0.15s;
+}
+.perm-reply:hover {
+  border-color: var(--text-dimmer);
+  background: rgba(var(--overlay-rgb), 0.06);
+}
+.perm-allow {
+  background: var(--accent, #6c5ce7);
+  color: #fff;
+  border-color: var(--accent, #6c5ce7);
+}
+.perm-allow:hover {
+  opacity: 0.9;
+  background: var(--accent, #6c5ce7);
+  border-color: var(--accent, #6c5ce7);
+}
+.perm-deny {
+  color: var(--text-muted);
+}
+
+.permission-container.resolved .permission-actions {
+  pointer-events: none;
+}
+.permission-container.resolved .perm-reply {
+  display: none;
+}
+.permission-container.resolved .permission-decision-label {
+  font-size: 12px;
+  color: var(--text-dimmer);
 }
