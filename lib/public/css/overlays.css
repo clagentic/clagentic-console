@@ -1258,9 +1258,10 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   transition-delay: 0s;
 }
 
-#ascii-logo-canvas {
-  width: 800px;
-  height: 400px;
+#console-logo-svg {
+  width: 160px;
+  height: 160px;
+  opacity: 0;
 }
 
 #connect-overlay-msg {
