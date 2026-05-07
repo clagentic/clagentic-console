@@ -138,8 +138,6 @@
   max-width: var(--content-width);
   margin: 0 auto 8px;
   padding: 0 20px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 60px;
 }
 
 .msg-user .bubble {
@@ -223,10 +221,10 @@
   padding: 4px 20px;
   border-radius: 12px;
   transition: background 0.15s;
-  /* Skip paint+layout for off-screen messages. contain-intrinsic-size gives
-     the browser a size estimate so scrollbar height stays stable. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 80px;
+  /* content-visibility: auto removed — Firefox re-evaluates all cv:auto
+     elements on every viewport resize (including textarea growth), causing
+     per-keypress style recalc storms. The #messages contain:layout style
+     provides sufficient isolation for streaming recalc. */
 }
 
 .msg-assistant:hover {
