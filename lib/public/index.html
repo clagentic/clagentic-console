@@ -933,14 +933,12 @@
           <option value="us-account" selected>Account</option>
           <option value="us-appearance">Appearance</option>
           <option value="us-chat">Chat</option>
-          <option value="us-mates">Mates</option>
           <option value="us-email">Email</option>
         </select>
         <div class="us-modal-nav-items">
           <button class="us-nav-item active" data-section="us-account"><span>Account</span></button>
           <button class="us-nav-item" data-section="us-appearance"><span>Appearance</span></button>
           <button class="us-nav-item" data-section="us-chat"><span>Chat</span></button>
-          <button class="us-nav-item" data-section="us-mates"><span>Mates</span></button>
           <button class="us-nav-item" data-section="us-email"><span>Email</span></button>
           <div class="us-nav-separator"></div>
           <button class="us-nav-item us-nav-danger" data-section="us-logout"><span>Log Out</span></button>
@@ -1078,26 +1076,10 @@
           </div>
         </div>
 
-        <!-- Mates section -->
-        <div class="us-section" data-section="us-mates">
-          <h2>Mates</h2>
-          <p class="settings-hint">Specialist AI teammates with assigned roles and long-term memory across sessions. They carry context forward and push back when a session drifts. Use the built-ins or design your own.</p>
-          <div class="settings-card">
-            <label class="settings-toggle-row">
-              <div>
-                <span class="settings-label">Use Mates</span>
-                <div class="settings-hint">Off hides every Mates surface in Clay. Existing Mates and their memory are preserved.</div>
-              </div>
-              <input type="checkbox" id="us-mates-enabled">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </label>
-          </div>
-        </div>
-
         <!-- Email section -->
         <div class="us-section" data-section="us-email">
           <h2>Email Accounts</h2>
-          <p class="settings-hint">Connect personal email accounts so your Mates can read, search, and send emails on your behalf. Credentials are encrypted and private to you.</p>
+          <p class="settings-hint">Connect personal email accounts so Claude can read, search, and send emails on your behalf. Credentials are encrypted and private to you.</p>
           <div class="settings-card" id="us-email-list"></div>
           <button class="us-email-add-btn" id="us-email-add">+ Add Account</button>
         </div>
