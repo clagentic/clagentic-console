@@ -804,8 +804,10 @@ body.mate-dm-active #input-wrapper,
   overflow: hidden;
 }
 
-/* Allow popovers (context picker) to escape when open */
-#attach-wrap:has(#context-sources-picker:not(.hidden)) {
+/* Allow popovers (context picker) to escape when open.
+   Uses a JS-toggled class (.picker-open) instead of :has() to avoid
+   style recalc on every DOM mutation in Firefox. */
+#attach-wrap.picker-open {
   overflow: visible;
 }
 
@@ -1005,8 +1007,10 @@ body.mate-dm-active #input-wrapper,
 
 #ghost-suggestion.hidden { display: none; }
 
-/* Hide native placeholder when ghost suggestion is visible */
-#input-textarea-wrap:has(#ghost-suggestion:not(.hidden)) #input::placeholder {
+/* Hide native placeholder when ghost suggestion is visible.
+   Uses a JS-toggled class (.ghost-active) instead of :has() to avoid
+   forcing a style recalc on every keypress in Firefox. */
+#input-textarea-wrap.ghost-active #input::placeholder {
   color: transparent;
 }
 
