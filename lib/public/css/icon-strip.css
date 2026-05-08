@@ -1650,6 +1650,38 @@ select.wt-modal-input {
   box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb, 88, 87, 252), 0.4);
 }
 
+/* Reorder indicators on folder header when a folder is being dragged */
+.icon-strip-folder-header.drag-over-above::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  z-index: 10;
+}
+
+.icon-strip-folder-header.drag-over-below::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  z-index: 10;
+}
+
+/* Folder being dragged */
+.icon-strip-folder.dragging {
+  opacity: 0.3;
+}
+
 /* Folder label — shown below icon box, truncated */
 .icon-strip-folder-label {
   font-size: 9px;
@@ -1662,9 +1694,11 @@ select.wt-modal-input {
   text-align: center;
   line-height: 1.2;
   margin-top: 2px;
-  cursor: text;
+  cursor: inherit;
   border-radius: 3px;
   padding: 0 2px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .icon-strip-folder-label[contenteditable="true"] {
