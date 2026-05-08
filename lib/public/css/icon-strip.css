@@ -1780,3 +1780,40 @@ select.wt-modal-input {
 .icon-strip-item.in-folder.active::before {
   opacity: 1;
 }
+
+/* ==========================================================================
+   Light-theme overrides — make subtle structural lines visible
+   ========================================================================== */
+
+/* Indent lines next to folder items and worktree items are near-invisible in
+   light mode because --border resolves to a pale blue-grey (#C8D4E0) against
+   the light sidebar background. Use --text-dimmer instead, which maps to a
+   readable mid-tone in every theme. */
+.light-theme .icon-strip-folder-items,
+.light-theme .icon-strip-group-items {
+  border-left-color: var(--text-dimmer);
+}
+
+/* Folder header open/collapse pill indicator — use accent for contrast */
+.light-theme .icon-strip-folder:not(.collapsed) .icon-strip-folder-header::before {
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+/* Folder icon box — use a visible tint in light mode (default bg-alt is pale) */
+.light-theme .icon-strip-folder-icon-box {
+  background: var(--border);
+}
+
+/* Folder chevron badge — needs a darker border in light mode */
+.light-theme .icon-strip-folder-chevron {
+  background: var(--bg-alt);
+  border-color: var(--text-dimmer);
+  color: var(--text-secondary);
+}
+
+.light-theme .icon-strip-folder:not(.collapsed) .icon-strip-folder-chevron {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
