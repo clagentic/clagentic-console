@@ -1545,7 +1545,7 @@ select.wt-modal-input {
   width: 100%;
 }
 
-/* The folder header pill — same dimensions as a project icon */
+/* The folder header — same 48px hit-box as project icons */
 .icon-strip-folder-header {
   position: relative;
   width: 48px;
@@ -1555,45 +1555,102 @@ select.wt-modal-input {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 14px;
-  transition: background 0.15s, border-radius 0.15s;
+  border-radius: 0;
   -webkit-tap-highlight-color: transparent;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 600;
 }
 
-.icon-strip-folder-header:hover {
-  background: rgba(var(--overlay-rgb), 0.08);
+/* Left-edge pill indicator — same mechanic as .icon-strip-item .icon-strip-pill */
+.icon-strip-folder-header::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  width: 4px;
+  background: var(--text);
+  border-radius: 0 4px 4px 0;
+  transition: height 0.2s ease, opacity 0.2s ease;
+  opacity: 0;
+  height: 0;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
-.icon-strip-folder-header.active {
-  background: rgba(var(--accent-rgb, 88, 87, 252), 0.15);
+.icon-strip-folder-header:hover::before {
+  opacity: 1;
+  height: 20px;
 }
 
-/* The folder icon + emoji overlay wrapper */
-.icon-strip-folder-icon-wrap {
-  position: relative;
-  width: 28px;
+/* Folder open (not collapsed): pill shows to signal items are visible */
+.icon-strip-folder:not(.collapsed) .icon-strip-folder-header::before {
+  opacity: 1;
   height: 28px;
+}
+
+/* Contains-active (collapsed, active project inside): tall pill */
+.icon-strip-folder-header.active::before {
+  opacity: 1;
+  height: 32px;
+}
+
+/* Inner colored box — mirrors .icon-strip-item::before in shape/size */
+.icon-strip-folder-icon-box {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--bg-alt);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.2s ease, border-radius 0.15s ease;
+  flex-shrink: 0;
+}
+
+/* When open (not collapsed): box has slightly rounded corners to signal state */
+.icon-strip-folder:not(.collapsed) .icon-strip-folder-icon-box {
+  border-radius: 8px;
+}
+
+/* Folder SVG icon (fallback, no emoji set) */
+.icon-strip-folder-icon-box svg {
+  width: 22px;
+  height: 22px;
   color: var(--text-secondary);
+  transition: color 0.15s;
 }
 
-.icon-strip-folder-icon-wrap svg {
-  width: 24px;
-  height: 24px;
-}
-
-.icon-strip-folder-emoji-overlay {
-  position: absolute;
-  bottom: -3px;
-  right: -4px;
-  font-size: 12px;
+/* Emoji fills the box — rendered as plain text at a readable size */
+.icon-strip-folder-emoji-main {
+  font-size: 22px;
   line-height: 1;
   pointer-events: none;
+  user-select: none;
 }
 
-/* Folder label — shown below icon, truncated */
+.icon-strip-folder-header:hover .icon-strip-folder-icon-box {
+  background: var(--accent);
+  border-radius: 14px;
+}
+
+.icon-strip-folder-header:hover .icon-strip-folder-icon-box svg {
+  color: #fff;
+}
+
+.icon-strip-folder-header.active .icon-strip-folder-icon-box {
+  background: var(--accent);
+  border-radius: 14px;
+}
+
+/* Drag-over state: folder header highlights when a project is dragged over it */
+.icon-strip-folder-header.drag-over-folder .icon-strip-folder-icon-box {
+  background: var(--accent);
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb, 88, 87, 252), 0.4);
+}
+
+/* Folder label — shown below icon box, truncated */
 .icon-strip-folder-label {
   font-size: 9px;
   font-weight: 600;
@@ -1618,18 +1675,21 @@ select.wt-modal-input {
   cursor: text;
 }
 
-/* Chevron (small, bottom-right of header) */
+/* Chevron (small, bottom-right corner of the icon box area) */
 .icon-strip-folder-chevron {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 14px;
-  height: 14px;
+  bottom: 6px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-dimmer);
-  transition: transform 0.15s ease;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease, background 0.15s, border-color 0.15s;
   pointer-events: none;
 }
 
@@ -1640,6 +1700,14 @@ select.wt-modal-input {
 
 .icon-strip-folder.collapsed .icon-strip-folder-chevron {
   transform: rotate(-90deg);
+  background: var(--border);
+}
+
+/* Open: chevron has accent tint to reinforce open state */
+.icon-strip-folder:not(.collapsed) .icon-strip-folder-chevron {
+  background: rgba(var(--accent-rgb, 88, 87, 252), 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Items inside user folder */
