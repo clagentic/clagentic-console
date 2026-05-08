@@ -699,6 +699,41 @@
   background: var(--error-8);
 }
 
+/* Search */
+.emoji-picker-search-wrap {
+  padding: 0 0 6px;
+  flex-shrink: 0;
+}
+
+.emoji-picker-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--input-bg, var(--bg-secondary));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.emoji-picker-search:focus {
+  border-color: var(--accent, #7c6cf8);
+}
+
+.emoji-picker-search::placeholder {
+  color: var(--text-secondary);
+}
+
+.emoji-picker-no-results {
+  padding: 16px 0;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 /* Category tab bar */
 .emoji-picker-tabs {
   display: flex;
