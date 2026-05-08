@@ -15,10 +15,10 @@
 - Never use `localStorage` for user settings or preferences. All settings must be stored server-side (via WebSocket messages or REST API) so they persist across devices and browsers.
 - Client modules (`lib/public/modules/`): state goes in store.js (zustand-like), WS via ws-ref.js, functions via direct import. Never use `var _ctx = null` / `initXxx(ctx)`. See [docs/guides/CLIENT_MODULE_DEPS.md](docs/guides/CLIENT_MODULE_DEPS.md).
 - **NEVER bring Clay down without an immediate restart in the same command.** The current Claude session is hosted by `clay.service` (`/usr/lib/node_modules/clay-server/lib/daemon.js`). Any command that stops, restarts, reinstalls, or replaces clay-server kills this session — and Andy can't always reach a workstation to bring it back. ALWAYS chain the restart into the same shell invocation so systemd or the script handles recovery without human intervention. Examples:
-  - ✅ `npm install -g clay-server && systemctl restart clay`
-  - ✅ `npm link && systemctl restart clay`
+  - ✅ `npm pack --pack-destination /tmp/ && npm install -g /tmp/clay-server-*.tgz && systemctl restart clay`
   - ✅ `systemctl restart clay` (single atomic op — `Restart=on-failure` covers crashes)
-  - ❌ `npm install -g clay-server` alone (leaves daemon on stale code, may crash)
+  - ❌ `npm link` or `npm install -g /workspace/clay` — creates a symlink; workspace edits become immediately live in the running daemon, which will cause breakage mid-session
+  - ❌ `npm install -g clay-server` alone (installs from registry, not local changes; leaves daemon on stale code)
   - ❌ `systemctl stop clay` (no follow-up start)
   - ❌ `kill <clay-pid>` (no follow-up)
   Prefer `systemctl restart clay` over stop+start. If you must do multiple steps, use `&&` chaining so a failure aborts before the daemon is taken down. When in doubt, ask before running.
