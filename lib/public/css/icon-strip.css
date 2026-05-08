@@ -1521,3 +1521,160 @@ select.wt-modal-input {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Drag-to-merge: folder merge indicator on icon-strip items
+   ========================================================================== */
+
+.icon-strip-item.drag-over-merge {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb, 88, 87, 252), 0.4);
+  border-radius: 14px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  z-index: 5;
+}
+
+/* ==========================================================================
+   User-defined folder groups in the icon strip
+   ========================================================================== */
+
+.icon-strip-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* The folder header pill — same dimensions as a project icon */
+.icon-strip-folder-header {
+  position: relative;
+  width: 48px;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 14px;
+  transition: background 0.15s, border-radius 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.icon-strip-folder-header:hover {
+  background: rgba(var(--overlay-rgb), 0.08);
+}
+
+.icon-strip-folder-header.active {
+  background: rgba(var(--accent-rgb, 88, 87, 252), 0.15);
+}
+
+/* The folder icon + emoji overlay wrapper */
+.icon-strip-folder-icon-wrap {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.icon-strip-folder-icon-wrap svg {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-strip-folder-emoji-overlay {
+  position: absolute;
+  bottom: -3px;
+  right: -4px;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Folder label — shown below icon, truncated */
+.icon-strip-folder-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-dimmer);
+  max-width: 44px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.2;
+  margin-top: 2px;
+  cursor: text;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.icon-strip-folder-label[contenteditable="true"] {
+  outline: 1px solid var(--accent);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 10px;
+  cursor: text;
+}
+
+/* Chevron (small, bottom-right of header) */
+.icon-strip-folder-chevron {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dimmer);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+
+.icon-strip-folder-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+
+.icon-strip-folder.collapsed .icon-strip-folder-chevron {
+  transform: rotate(-90deg);
+}
+
+/* Items inside user folder */
+.icon-strip-folder-items {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  max-height: 800px;
+  transition: max-height 0.2s ease;
+  border-left: 2px solid var(--border);
+  width: 100%;
+}
+
+.icon-strip-folder.collapsed .icon-strip-folder-items {
+  max-height: 0;
+}
+
+/* Projects inside a user folder get a slight indent indicator */
+.icon-strip-item.in-folder {
+  opacity: 0.92;
+}
+.icon-strip-item.in-folder::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.icon-strip-item.in-folder.active::before {
+  opacity: 1;
+}
