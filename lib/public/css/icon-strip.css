@@ -1594,7 +1594,8 @@ select.wt-modal-input {
   height: 32px;
 }
 
-/* Inner colored box — mirrors .icon-strip-item::before in shape/size */
+/* Inner colored box — mirrors .icon-strip-item::before in shape/size.
+   A subtle border ring is always present to signal "this is a folder". */
 .icon-strip-folder-icon-box {
   position: relative;
   width: 38px;
@@ -1604,8 +1605,9 @@ select.wt-modal-input {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, border-radius 0.15s ease;
+  transition: background 0.2s ease, border-radius 0.15s ease, box-shadow 0.2s ease;
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1.5px rgba(var(--overlay-rgb), 0.15);
 }
 
 /* When open (not collapsed): box has slightly rounded corners to signal state */
@@ -1629,9 +1631,11 @@ select.wt-modal-input {
   user-select: none;
 }
 
+/* Folders hover with accent2 (blue) to distinguish from project icons (cyan) */
 .icon-strip-folder-header:hover .icon-strip-folder-icon-box {
-  background: var(--accent);
+  background: var(--accent2);
   border-radius: 14px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.25);
 }
 
 .icon-strip-folder-header:hover .icon-strip-folder-icon-box svg {
@@ -1639,15 +1643,16 @@ select.wt-modal-input {
 }
 
 .icon-strip-folder-header.active .icon-strip-folder-icon-box {
-  background: var(--accent);
+  background: var(--accent2);
   border-radius: 14px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.25);
 }
 
 /* Drag-over state: folder header highlights when a project is dragged over it */
 .icon-strip-folder-header.drag-over-folder .icon-strip-folder-icon-box {
-  background: var(--accent);
+  background: var(--accent2);
   border-radius: 14px;
-  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb, 88, 87, 252), 0.4);
+  box-shadow: 0 0 0 2px var(--accent2), 0 0 12px rgba(74, 127, 232, 0.4);
 }
 
 /* Reorder indicators on folder header when a folder is being dragged */
@@ -1760,11 +1765,13 @@ select.wt-modal-input {
   max-height: 0;
 }
 
-/* Projects inside a user folder get a slight indent indicator */
+/* Projects inside a user folder get a slight indent indicator.
+   Uses ::after (not ::before) so ::before remains the hover/active
+   background box inherited from .icon-strip-item::before. */
 .icon-strip-item.in-folder {
   opacity: 0.92;
 }
-.icon-strip-item.in-folder::before {
+.icon-strip-item.in-folder::after {
   content: "";
   position: absolute;
   left: 2px;
@@ -1776,8 +1783,9 @@ select.wt-modal-input {
   background: var(--accent);
   opacity: 0;
   transition: opacity 0.15s;
+  pointer-events: none;
 }
-.icon-strip-item.in-folder.active::before {
+.icon-strip-item.in-folder.active::after {
   opacity: 1;
 }
 
@@ -1803,6 +1811,7 @@ select.wt-modal-input {
 /* Folder icon box — use a visible tint in light mode (default bg-alt is pale) */
 .light-theme .icon-strip-folder-icon-box {
   background: var(--border);
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18);
 }
 
 /* Folder chevron badge — needs a darker border in light mode */
