@@ -210,6 +210,282 @@
     margin-left: auto;
   }
 
+  /* Projects tab unread badge */
+  .mobile-tab-projects-badge {
+    position: absolute;
+    top: 4px;
+    right: calc(50% - 18px);
+    background: #e74c3c;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: "Roboto Mono", monospace;
+    min-width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+  }
+  .mobile-tab-projects-badge.hidden { display: none; }
+
+  /* Projects sheet header ([+] button) */
+  .mobile-projects-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 12px 4px;
+  }
+  .mobile-projects-add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    border-radius: 8px;
+    color: var(--text-dimmer);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-projects-add-btn:active { background: rgba(var(--overlay-rgb), 0.08); }
+  .mobile-projects-add-btn .lucide { width: 18px; height: 18px; }
+
+  /* Indented project row inside a folder */
+  .mobile-project-item-indent {
+    padding-left: 28px;
+  }
+
+  /* Folder header row */
+  .mobile-folder-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-dimmer);
+    font-family: "Pretendard", system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s;
+  }
+  .mobile-folder-header:active { background: rgba(var(--overlay-rgb), 0.06); }
+  .mobile-folder-header.active { color: var(--text); }
+
+  .mobile-folder-icon-wrap {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-dimmer);
+  }
+  .mobile-folder-icon-wrap .lucide { width: 22px; height: 22px; }
+
+  .mobile-folder-emoji-overlay {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    font-size: 12px;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .mobile-folder-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-folder-chevron {
+    color: var(--text-dimmer);
+    transition: transform 0.2s;
+    display: flex;
+    align-items: center;
+  }
+  .mobile-folder-chevron .lucide { width: 14px; height: 14px; }
+  .mobile-folder-chevron.open { transform: rotate(90deg); }
+
+  .mobile-folder-children { overflow: hidden; }
+  .mobile-folder-children.hidden { display: none; }
+
+  /* Chat sheet — project header row */
+  .mobile-chat-project-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px 10px;
+    border-bottom: 1px solid var(--border-subtle, var(--border));
+    margin-bottom: 4px;
+  }
+  .mobile-chat-project-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: var(--bg-alt);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .mobile-chat-project-name {
+    flex: 1;
+    font-family: "Pretendard", system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-chat-project-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    border-radius: 8px;
+    color: var(--text-dimmer);
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-chat-project-more:active { background: rgba(var(--overlay-rgb), 0.08); }
+  .mobile-chat-project-more .lucide { width: 18px; height: 18px; }
+
+  /* Project action mini-sheet (from [⋯] button) */
+  .mobile-action-sheet-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 400;
+    background: rgba(var(--shadow-rgb), 0.45);
+    display: flex;
+    align-items: flex-end;
+  }
+  .mobile-action-sheet {
+    width: 100%;
+    background: var(--bg);
+    border-radius: 14px 14px 0 0;
+    padding: 8px 0 calc(16px + var(--safe-bottom));
+    display: flex;
+    flex-direction: column;
+  }
+  .mobile-action-sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 14px 20px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-family: "Pretendard", system-ui, sans-serif;
+    font-size: 15px;
+    cursor: pointer;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-action-sheet-item:active { background: rgba(var(--overlay-rgb), 0.06); }
+  .mobile-action-sheet-item .lucide { width: 20px; height: 20px; color: var(--text-dimmer); flex-shrink: 0; }
+  .mobile-action-sheet-cancel {
+    width: calc(100% - 32px);
+    margin: 8px 16px 0;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background: var(--bg-alt);
+    color: var(--text);
+    font-family: "Pretendard", system-ui, sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-action-sheet-cancel:active { background: rgba(var(--overlay-rgb), 0.08); }
+
+  /* More sheet — sectioned items */
+  .mobile-more-inline-row {
+    cursor: pointer;
+  }
+  .mobile-more-inline-value {
+    margin-left: auto;
+    color: var(--text-dimmer);
+    font-size: 13px;
+  }
+  .mobile-more-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+  .mobile-more-toggle-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    color: var(--text-secondary);
+  }
+  .mobile-more-toggle-left .lucide { width: 20px; height: 20px; color: var(--text-dimmer); }
+
+  /* Dark mode toggle switch */
+  .mobile-settings-theme-toggle {
+    position: relative;
+    width: 44px;
+    height: 26px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .mobile-settings-theme-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+  .mobile-settings-theme-thumb {
+    position: absolute;
+    inset: 0;
+    border-radius: 13px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    transition: background 0.2s;
+  }
+  .mobile-settings-theme-thumb::before {
+    content: "";
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--text-dimmer);
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .mobile-settings-theme-toggle input:checked + .mobile-settings-theme-thumb {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .mobile-settings-theme-toggle input:checked + .mobile-settings-theme-thumb::before {
+    transform: translateX(18px);
+    background: #fff;
+  }
+
   /* ==========================================================================
      Mobile Sheet — fullscreen overlay for Projects / Sessions
      ========================================================================== */
