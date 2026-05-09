@@ -40,20 +40,20 @@ img.emoji {
 
 :root {
   /* clagentic-dark — pre-JS fallback (matches clagentic-dark.json via computeVars) */
-  --bg: #080A0F;
-  --bg-alt: #0D1017;
+  --bg: #060810;
+  --bg-alt: #111827;
   --text: #E0EAF4;
   --text-secondary: #C8D4E0;
   --text-muted: #7A8FA6;
-  --text-dimmer: #3A4A5C;
+  --text-dimmer: #3D5068;
   --accent: #00CFFF;
   --accent-hover: #33D8FF;
   --accent-bg: rgba(0, 207, 255, 0.12);
-  --code-bg: #040507;
-  --border: #1A2233;
-  --border-subtle: #0F1520;
-  --input-bg: #132030;
-  --user-bubble: #111827;
+  --code-bg: #05070E;
+  --border: #1E2E48;
+  --border-subtle: #101726;
+  --input-bg: #172338;
+  --user-bubble: #151F31;
   --error: #FF4D6A;
   --success: #29D9A8;
   --warning: #4A7FE8;
@@ -83,7 +83,7 @@ img.emoji {
   --warning-bg: rgba(74, 127, 232, 0.12);
   --overlay-rgb: 255,255,255;
   --shadow-rgb: 0,0,0;
-  --hl-comment: #3A4A5C;
+  --hl-comment: #3D5068;
   --hl-keyword: #A855F7;
   --hl-string: #29D9A8;
   --hl-number: #00CFFF;
@@ -99,9 +99,9 @@ img.emoji {
   --hl-symbol: #6366F1;
   --hl-addition: #29D9A8;
   --hl-deletion: #FF4D6A;
-  --sidebar-bg: #040507;
-  --sidebar-hover: #080D14;
-  --sidebar-active: #111827;
+  --sidebar-bg: #04060B;
+  --sidebar-hover: #0A0E19;
+  --sidebar-active: #162134;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --content-width: 820px;
