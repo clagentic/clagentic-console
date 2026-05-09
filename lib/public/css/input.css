@@ -811,6 +811,37 @@ body.mate-dm-active #input-wrapper,
   overflow: visible;
 }
 
+/* Project context indicator — leftmost item in the input toolbar */
+#input-project-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border-subtle, var(--border));
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-right: 2px;
+  user-select: none;
+  cursor: default;
+  transition: background 0.15s;
+}
+/* Abbreviation (no emoji) — slightly smaller text, monospace weight */
+#input-project-indicator[data-abbrev] {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: "Roboto Mono", monospace;
+  letter-spacing: -0.5px;
+}
+/* Hide when empty (before first project loads) */
+#input-project-indicator:empty {
+  display: none;
+}
+
 #attach-file-btn,
 #attach-image-btn,
 #schedule-btn,
