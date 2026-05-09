@@ -457,6 +457,8 @@
     width: 0;
     height: 0;
     position: absolute;
+    appearance: none;
+    outline: none;
   }
   .mobile-settings-theme-thumb {
     position: absolute;
@@ -1186,35 +1188,6 @@
     color: var(--text-muted);
   }
 
-  .mobile-settings-theme-toggle {
-    width: 48px;
-    height: 28px;
-    border-radius: 14px;
-    background: rgba(var(--overlay-rgb), 0.15);
-    border: none;
-    padding: 2px;
-    cursor: pointer;
-    transition: background 0.15s;
-    position: relative;
-  }
-
-  .mobile-settings-theme-toggle.dark {
-    background: var(--accent, #ffb86c);
-  }
-
-  .mobile-settings-theme-thumb {
-    display: block;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: #fff;
-    transition: transform 0.15s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  }
-
-  .mobile-settings-theme-toggle.dark .mobile-settings-theme-thumb {
-    transform: translateX(20px);
-  }
 
   /* --- Search sheet --- */
   .mobile-search-input-wrap {
