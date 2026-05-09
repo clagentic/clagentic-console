@@ -1244,7 +1244,7 @@
   overflow: hidden;
   transition: max-height 0.2s ease;
   max-height: 500px;
-  border-left: 2px solid var(--border);
+  border-left: 3px solid var(--text-dimmer);
   margin-left: 0;
   padding-left: 0;
 }
@@ -1757,7 +1757,7 @@ select.wt-modal-input {
   overflow: hidden;
   max-height: 800px;
   transition: max-height 0.2s ease;
-  border-left: 2px solid var(--border);
+  border-left: 3px solid var(--text-dimmer);
   width: 100%;
 }
 
