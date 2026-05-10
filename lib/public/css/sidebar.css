@@ -1037,6 +1037,11 @@
   opacity: 1;
 }
 
+/* Full-width row — spans both grid columns */
+.session-top-action--full {
+  grid-column: 1 / -1;
+}
+
 /* Unset placeholder — muted so it doesn't distract */
 .session-top-action--set-preferred {
   opacity: 0.45;
