@@ -628,9 +628,9 @@
 
   /* --- Session action grid (2-column) --- */
   .mobile-session-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--border);
     margin-bottom: 4px;
   }
 
@@ -854,7 +854,7 @@
   .mobile-sheet-divider {
     margin: 6px 12px;
     border: none;
-    border-top: 1px solid var(--border-subtle, var(--border));
+    border-top: 1px solid var(--border);
   }
 
   /* --- Loop session grouping (scheduled tasks / Ralph) --- */
