@@ -1754,7 +1754,7 @@ select.wt-modal-input {
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow: hidden;
+  overflow: visible;
   max-height: 800px;
   transition: max-height 0.2s ease;
   border-left: 3px solid var(--text-dimmer);
@@ -1762,6 +1762,7 @@ select.wt-modal-input {
 }
 
 .icon-strip-folder.collapsed .icon-strip-folder-items {
+  overflow: hidden;
   max-height: 0;
 }
 
@@ -1787,6 +1788,33 @@ select.wt-modal-input {
 }
 .icon-strip-item.in-folder.active::after {
   opacity: 1;
+}
+
+/* Drag-over indicators for in-folder items.
+   Must reset ALL geometry from .icon-strip-item.in-folder::after (left:2px, top:50%,
+   transform:translateY(-50%), width:3px, height:20px) to avoid the indent bar showing
+   centered on the item instead of as a line at the top/bottom edge. */
+.icon-strip-item.in-folder.drag-over-above::after {
+  top: -1px;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 1;
+  z-index: 10;
+}
+.icon-strip-item.in-folder.drag-over-below::after {
+  top: auto;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 1;
+  z-index: 10;
 }
 
 /* ==========================================================================
