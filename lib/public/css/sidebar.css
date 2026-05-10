@@ -992,8 +992,8 @@
 }
 
 .session-top-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   padding: 0 0 2px;
 }
@@ -1035,11 +1035,6 @@
 /* Preferred agent quick-launch — full opacity when set */
 .session-top-action--preferred {
   opacity: 1;
-}
-
-/* Full-width row — spans both grid columns */
-.session-top-action--full {
-  grid-column: 1 / -1;
 }
 
 /* Unset placeholder — muted so it doesn't distract */
