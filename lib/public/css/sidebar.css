@@ -995,7 +995,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 0 2px;
+  padding: 0 0 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
 }
 
 .session-top-action {
@@ -1086,7 +1088,7 @@
   right: 0;
   top: 50%;
   height: 1px;
-  background: var(--border-subtle, var(--border));
+  background: var(--border);
   transform: translateY(-50%);
 }
 
