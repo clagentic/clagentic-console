@@ -14,7 +14,7 @@ var config = {
       message: "Release ${nextRelease.version}"
     }],
     ["@semantic-release/github", {
-      successComment: "This issue has been resolved in version ${nextRelease.version} (${nextRelease.channel || 'stable'}).\n\nTo update, run:\n```\nnpx clagentic-console@${nextRelease.version}\n```",
+      successComment: "This issue has been resolved in version ${nextRelease.version} (${nextRelease.channel || 'stable'}).\n\nTo update, run:\n```\nnpx @clagentic/console@${nextRelease.version}\n```",
       releasedLabels: ["released: ${nextRelease.channel || 'stable'}"]
     }]
   ]

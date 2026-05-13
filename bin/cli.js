@@ -210,7 +210,7 @@ if (addPath !== null) {
   var addConfig = loadConfig();
   isDaemonAliveAsync(addConfig).then(function (alive) {
     if (!alive) {
-      console.error("No running daemon. Start with: npx clagentic-console");
+      console.error("No running daemon. Start with: npx @clagentic/console");
       process.exit(1);
     }
     sendIPCCommand(socketPath(), { cmd: "add_project", path: absAdd }).then(function (res) {
@@ -236,7 +236,7 @@ if (removePath !== null) {
   var removeConfig = loadConfig();
   isDaemonAliveAsync(removeConfig).then(function (alive) {
     if (!alive) {
-      console.error("No running daemon. Start with: npx clagentic-console");
+      console.error("No running daemon. Start with: npx @clagentic/console");
       process.exit(1);
     }
     sendIPCCommand(socketPath(), { cmd: "remove_project", path: absRemove }).then(function (res) {
@@ -257,7 +257,7 @@ if (listMode) {
   var listConfig = loadConfig();
   isDaemonAliveAsync(listConfig).then(function (alive) {
     if (!alive) {
-      console.error("No running daemon. Start with: npx clagentic-console");
+      console.error("No running daemon. Start with: npx @clagentic/console");
       process.exit(1);
     }
     sendIPCCommand(socketPath(), { cmd: "get_status" }).then(function (res) {
@@ -383,7 +383,7 @@ function onDaemonDied() {
     // Intentional shutdown, no restart
     log("");
     log(sym.warn + "  " + a.yellow + "Server has been shut down." + a.reset);
-    log(a.dim + "     Run " + a.reset + "npx clagentic-console" + a.dim + " to start again." + a.reset);
+    log(a.dim + "     Run " + a.reset + "npx @clagentic/console" + a.dim + " to start again." + a.reset);
     log("");
     process.exit(0);
     return;
@@ -1412,7 +1412,7 @@ function setup(callback) {
             log(sym.bar);
             log(sym.warn + "  " + a.yellow + "OS user isolation requires root." + a.reset);
             log(sym.bar + "  Run:");
-            log(sym.bar + "    " + a.bold + "sudo npx clagentic-console" + a.reset);
+            log(sym.bar + "    " + a.bold + "sudo npx @clagentic/console" + a.reset);
             log(sym.end);
             log("");
             process.exit(0);
@@ -2038,14 +2038,14 @@ function showMainMenu(config, ip, setupCode) {
           case "exit":
             log("");
             log("  " + a.bold + "Bye!" + a.reset + "  " + a.dim + "Server is still running in background." + a.reset);
-            log("  " + a.dim + "Run " + a.reset + "npx clagentic-console" + a.dim + " to come back here." + a.reset);
+            log("  " + a.dim + "Run " + a.reset + "npx @clagentic/console" + a.dim + " to come back here." + a.reset);
             log("");
             process.exit(0);
             break;
         }
       }, {
         hint: [
-          "Run npx clagentic-console in other directories to add more projects.",
+          "Run npx @clagentic/console in other directories to add more projects.",
           "★ github.com/chadbyte/clay — Press s to star the repo",
         ],
         keys: [
@@ -2239,7 +2239,7 @@ function showSettingsMenu(config, ip) {
           log(sym.bar);
           log(sym.bar + "  " + a.red + sym.warn + " OS user isolation requires root." + a.reset);
           log(sym.bar + "  " + a.dim + "Shut down this server, then restart with:" + a.reset);
-          log(sym.bar + "    " + a.bold + "sudo npx clagentic-console" + a.reset);
+          log(sym.bar + "    " + a.bold + "sudo npx @clagentic/console" + a.reset);
           log(sym.bar);
           promptSelect("Back?", [{ label: "Back", value: "back" }], function () {
             showSettingsMenu(config, ip);
@@ -2742,7 +2742,7 @@ var currentVersion = require("../package.json").version;
       // os-users requires root
       if (savedOsUsers && typeof process.getuid === "function" && process.getuid() !== 0) {
         console.error(a.red + "OS user isolation requires root." + a.reset);
-        console.error("Run:  " + a.bold + "sudo npx clagentic-console" + a.reset);
+        console.error("Run:  " + a.bold + "sudo npx @clagentic/console" + a.reset);
         process.exit(1);
         return;
       }

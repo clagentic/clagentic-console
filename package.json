@@ -1,5 +1,8 @@
 {
-  "name": "clagentic-console",
+  "name": "@clagentic/console",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "1.0.0",
   "description": "Self-hosted console for Claude Code and Codex. Multi-user, browser-based, persistent AI sessions.",
   "bin": {
