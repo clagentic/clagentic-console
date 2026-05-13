@@ -1,6 +1,9 @@
 node_modules/
 .claude/
+.claude-local/
 .claude-relay/
+.lore
+CLAUDE.md
 ref/
 TODO.md
 publish.sh
