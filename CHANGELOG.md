@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/clagentic/clagentic-console/compare/v1.0.0...v1.0.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* publish beta releases to beta dist-tag instead of main ([a36e533](https://github.com/clagentic/clagentic-console/commit/a36e5336b6aac3f4ec330b95bed684d9a91e3ebe))
+
 ## [1.0.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.0...v1.0.1-beta.1) (2026-05-13)
 
 
