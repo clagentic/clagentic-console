@@ -50,3 +50,4 @@ echo "Host script: $HOST_SCRIPT"
 echo "Extension ID: $EXT_ID"
 echo ""
 echo "Done."
+

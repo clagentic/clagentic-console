@@ -1,3 +1,15 @@
+# [1.0.0-beta.5](https://github.com/clagentic/clagentic-console/compare/v1.0.0-beta.4...v1.0.0-beta.5) (2026-05-13)
+
+### Changes
+
+* docs: full README rewrite with Clagentic:Console branding, C-arc logo, and correct philosophy
+* docs: rewrite architecture.md, MODULE_MAP, MCP guide, ECOSYSTEM — remove all Clay/Mates references
+* docs: add Clagentic logo assets (console-lockup, console-icon)
+* chore: simplify PWA onboarding — remove Tailscale as blocking step, add push notifications skip
+* chore: native-host rename clay-mcp-bridge → clagentic-mcp-bridge
+* chore: LICENSE updated to include Clagentic:Console copyright
+* chore: remove screenshot.gif, test-loop-output.txt, and Clay logo assets
+
 # [1.0.0-beta.4](https://github.com/clagentic/clagentic-console/compare/v1.0.0-beta.3...v1.0.0-beta.4) (2026-05-13)
 
 
