@@ -63,6 +63,9 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `daemon-projects.js` | Worktree tracking (scan, rescan, cleanup), removed project filtering |
 | `ws-schema.js` | WebSocket message type registry (328 message types, informational) |
 
+
+
+> **Note:** `mapSessionForClient` in `lib/sessions.js` is the canonical mapper for `session_list` payloads. All session list builders must use this function — do not inline-build session wire objects.
 ### YOKE Adapters (lib/yoke/)
 
 YOKE is the vendor-agnostic interface layer. Each adapter implements the same contract (init, createQuery, etc.) for a specific agent runtime.
@@ -149,7 +152,19 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 
 ---
 
+## Client Module Architecture
+
+**Three-layer callback registration pattern:** Clay uses a three-layer system for wiring module behavior:
+1. The module exports an `init(ctx)` function that receives a context object.
+2. The context object carries callbacks and DOM refs injected by the caller (app.js or a parent module).
+3. The module binds event listeners only once during init using these callbacks — never re-binding on each render.
+
+This avoids listener accumulation on re-renders and keeps modules stateless between session switches. When adding a new module, follow this pattern rather than using globals or re-binding on each update.
+
+---
+
 ## Extraction Pattern Reference
+
 
 ```js
 // lib/project-example.js
