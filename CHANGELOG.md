@@ -1,3 +1,10 @@
+# [1.0.0-beta.4](https://github.com/clagentic/clagentic-console/compare/v1.0.0-beta.3...v1.0.0-beta.4) (2026-05-13)
+
+
+### Bug Fixes
+
+* arm sticky-bottom at history_meta to prevent mid-replay scroll detection ([8054e87](https://github.com/clagentic/clagentic-console/commit/8054e87243e4e7a66f01f8ba2adb3d455def6783))
+
 # [1.0.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.0.0-beta.2...v1.0.0-beta.3) (2026-05-13)
 
 
