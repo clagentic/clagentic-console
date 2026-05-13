@@ -22,7 +22,7 @@ var net = require("net");
 // Detect dev mode — dev and prod use separate daemon files so they can run simultaneously
 var _isDev = (process.argv[1] && path.basename(process.argv[1]) === "clay-dev") || process.argv.includes("--dev");
 if (_isDev) {
-  process.env.CLAY_DEV = "1";
+  process.env.CLAGENTIC_DEV = "1";
 }
 
 // Preserve console output in dev/debug mode so logs remain readable
@@ -88,7 +88,7 @@ for (var i = 0; i < args.length; i++) {
   } else if (args[i] === "--no-update" || args[i] === "--skip-update") {
     skipUpdate = true;
   } else if (args[i] === "--dev") {
-    // Already handled above for CLAY_HOME, just skip
+    // Already handled above for CLAGENTIC_HOME, just skip
   } else if (args[i] === "--watch" || args[i] === "-w") {
     watchMode = true;
   } else if (args[i] === "--debug") {
@@ -456,7 +456,7 @@ async function restartDaemonFromConfig() {
 
   // Debug mode: run in foreground with logs to stdout
   if (debugMode) {
-    process.env.CLAY_CONFIG = configPath();
+    process.env.CLAGENTIC_CONFIG = configPath();
     newConfig.pid = process.pid;
     saveConfig(newConfig);
     require(daemonScript);
@@ -471,7 +471,7 @@ async function restartDaemonFromConfig() {
     windowsHide: true,
     stdio: ["ignore", logFd, logFd],
     env: Object.assign({}, process.env, {
-      CLAY_CONFIG: configPath(),
+      CLAGENTIC_CONFIG: configPath(),
     }),
   });
   child.unref();
@@ -601,18 +601,10 @@ function ensureCerts(ip) {
     return null;
   }
 
-  var certDir = path.join(process.env.CLAY_HOME || path.join(REAL_HOME, ".clay"), "certs");
+  var certDir = path.join(process.env.CLAGENTIC_HOME || process.env.CLAY_HOME || path.join(REAL_HOME, ".clagentic"), "certs");
   var keyPath = path.join(certDir, "key.pem");
   var certPath = path.join(certDir, "cert.pem");
 
-  var legacyDir = path.join(cwd, ".claude-relay", "certs");
-  var legacyKey = path.join(legacyDir, "key.pem");
-  var legacyCert = path.join(legacyDir, "cert.pem");
-  if (!fs.existsSync(keyPath) && fs.existsSync(legacyKey) && fs.existsSync(legacyCert)) {
-    fs.mkdirSync(certDir, { recursive: true });
-    fs.copyFileSync(legacyKey, keyPath);
-    fs.copyFileSync(legacyCert, certPath);
-  }
 
   var mkcertInstalled = hasMkcert();
 
@@ -1552,7 +1544,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
 
   // Debug mode: run in foreground with logs to stdout
   if (debugMode) {
-    process.env.CLAY_CONFIG = configPath();
+    process.env.CLAGENTIC_CONFIG = configPath();
     config.pid = process.pid;
     saveConfig(config);
     require(daemonScript);
@@ -1567,7 +1559,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     windowsHide: true,
     stdio: ["ignore", logFd, logFd],
     env: Object.assign({}, process.env, {
-      CLAY_CONFIG: configPath(),
+      CLAGENTIC_CONFIG: configPath(),
     }),
   });
   child.unref();
@@ -1737,7 +1729,7 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
     child = spawn(process.execPath, [daemonScript], {
       stdio: ["ignore", "inherit", "inherit"],
       env: Object.assign({}, process.env, {
-        CLAY_CONFIG: configPath(),
+        CLAGENTIC_CONFIG: configPath(),
       }),
     });
 
@@ -1893,7 +1885,7 @@ async function restartDaemonWithTLS(config, callback) {
     windowsHide: true,
     stdio: ["ignore", logFd, logFd],
     env: Object.assign({}, process.env, {
-      CLAY_CONFIG: configPath(),
+      CLAGENTIC_CONFIG: configPath(),
     }),
   });
   child.unref();
@@ -1919,7 +1911,7 @@ async function restartDaemonWithTLS(config, callback) {
       windowsHide: true,
       stdio: ["ignore", logFd2, logFd2],
       env: Object.assign({}, process.env, {
-        CLAY_CONFIG: configPath(),
+        CLAGENTIC_CONFIG: configPath(),
       }),
     });
     child2.unref();
@@ -1981,7 +1973,7 @@ function showMainMenu(config, ip, setupCode) {
         parts.push(a.reset + a.yellow + a.bold + totalAwaiting + a.reset + a.yellow + " awaiting" + a.reset + a.dim);
       }
       log("  " + a.dim + parts.join(a.reset + a.dim + " · ") + a.reset);
-      log("  " + a.dim + "~/.clay → " + path.join(REAL_HOME, ".clay") + a.reset);
+      log("  " + a.dim + "~/.clagentic → " + path.join(REAL_HOME, ".clagentic") + a.reset);
       log("  Press " + a.bold + "o" + a.reset + " to open in browser");
       log("");
 
