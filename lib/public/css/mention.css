@@ -288,7 +288,7 @@
 }
 
 /* DM-style mention: override the DM mate avatar so it uses the mentioned mate's avatar */
-.msg-mention-dm .dm-bubble-avatar-mate {
+.msg-mention-dm .dm-bubble-avatar-agent {
   /* Inherits dm-bubble-avatar styling from mates.css */
 }
 

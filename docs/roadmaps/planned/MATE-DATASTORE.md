@@ -1,3 +1,4 @@
+> **Archived:** This roadmap describes the Mates feature which was removed in lr-316f. Kept for historical reference.
 # Mate Datastore
 
 > Per-Mate SQLite database backed by Node 22 native `node:sqlite`. Each Mate owns its own schema and persists structured data across sessions and projects. Powers Home Hub widgets and long-term Mate memory.

@@ -1,3 +1,4 @@
+> **Archived:** This roadmap describes the Mates feature which was removed in lr-316f. Kept for historical reference.
 # Mate Canvas
 
 > The V in Mate MVC. Each Mate owns visual canvases that display data from its Datastore. A canvas is a single self-contained `.canvas` file with markup, style, logic, and data schema. Canvases live in the Mate, visible in DM. Users promote canvases to Home Hub.
