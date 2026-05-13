@@ -553,16 +553,12 @@
       <div class="project-settings-nav">
         <div class="project-settings-nav-inner">
           <div class="server-settings-nav-header" id="ps-nav-title">-</div>
-          <select id="ps-nav-dropdown" class="settings-nav-dropdown">
-            <optgroup label="General">
-              <option value="profile" selected>Profile</option>
-              <option value="defaults">Model</option>
-            </optgroup>
-            <optgroup label="Config">
-              <option value="instructions">Instructions</option>
-              <option value="environment">Environment</option>
-            </optgroup>
-          </select>
+          <button id="ps-nav-pill" class="settings-nav-pill" aria-haspopup="dialog" aria-expanded="false">
+            <span class="settings-nav-pill-group" id="ps-nav-pill-group">General</span>
+            <span class="settings-nav-pill-divider"></span>
+            <span class="settings-nav-pill-label" id="ps-nav-pill-label">Profile</span>
+            <span class="settings-nav-pill-chevron"><i data-lucide="chevron-down"></i></span>
+          </button>
           <div class="server-settings-nav-items">
             <div class="settings-nav-category">General</div>
             <button class="settings-nav-item active" data-section="profile"><span>Profile</span></button>
@@ -725,6 +721,17 @@
           <span>ESC</span>
         </button>
       </div>
+    </div>
+  </div>
+  <div id="ps-palette" class="settings-palette hidden" role="dialog" aria-modal="true" aria-label="Jump to setting">
+    <div class="settings-palette-backdrop"></div>
+    <div class="settings-palette-dialog">
+      <div class="settings-palette-input-row">
+        <i data-lucide="search" class="settings-palette-search-icon"></i>
+        <input id="ps-palette-input" class="settings-palette-input" type="text" placeholder="Jump to setting…" autocomplete="off" spellcheck="false" />
+        <span class="settings-palette-esc-hint">esc</span>
+      </div>
+      <div id="ps-palette-results" class="settings-palette-results"></div>
     </div>
   </div>
   <div id="terminal-container" class="hidden">
