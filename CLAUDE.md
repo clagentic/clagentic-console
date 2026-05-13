@@ -1,6 +1,6 @@
 # Project Rules
 
-> **Upstream:** This repo is a fork of [chadbyte/clay](https://github.com/chadbyte/clay) (git remote `upstream`). Our fork lives at [akuehner/clay](https://github.com/akuehner/clay) (git remote `origin`). When investigating Clay behavior, search upstream issues/PRs (especially prior fixes by `akuehner`) before grepping local code or filing new tickets.
+> **Origin:** This codebase is built on [chadbyte/clay](https://github.com/chadbyte/clay) (MIT). It is now an independent product under the clagentic org — there is no active upstream sync.
 
 > **PHASE A — AMoS deferred.** Sessions do code work directly in this project. **No AMoS dispatch. No intent-payload handoff.** The agentic-program end-state contract (PROGRAM.md §1, PATTERN.md §4–§10) describes the destination, not today's operational mode. If you're tempted to hand work to AMoS, stop and execute it in-session. Tracked: project-agents lr-3129.
 
