@@ -1,3 +1,4 @@
+> **Archived:** This roadmap describes the Mates feature which was removed in lr-316f. Kept for historical reference.
 # Mate Datastore Implementation Spec
 
 > Concrete v1 implementation spec for per-Mate SQLite datastores. This document turns [MATE-DATASTORE.md](./MATE-DATASTORE.md) into a buildable server, MCP, and UI plan.
