@@ -12,6 +12,7 @@
   },
   "scripts": {
     "dev": "node bin/cli.js --dev",
+    "test": "node --test test/*.test.js",
     "semantic-release": "semantic-release"
   },
   "files": [
