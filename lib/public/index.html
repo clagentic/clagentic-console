@@ -984,31 +984,12 @@
     <div class="server-settings-nav">
       <div class="server-settings-nav-inner">
         <div class="server-settings-nav-header" id="settings-server-name"></div>
-        <select id="settings-nav-dropdown" class="settings-nav-dropdown">
-          <optgroup label="General">
-            <option value="overview" selected>Status</option>
-            <option value="notifications">Notifications</option>
-            <option value="security">Security</option>
-          </optgroup>
-          <optgroup label="Defaults">
-            <option value="models">Model</option>
-          </optgroup>
-          <optgroup label="Config">
-            <option value="claudemd">Instructions</option>
-            <option value="environment">Environment</option>
-          </optgroup>
-          <optgroup label="Admin" class="settings-admin-only">
-            <option value="admin-users">Users</option>
-            <option value="admin-invites">Invites</option>
-            <option value="admin-projects">Projects</option>
-            <option value="admin-smtp">Email</option>
-          </optgroup>
-          <optgroup label="Server">
-            <option value="keep-awake" class="hidden" id="settings-keep-awake-opt">Keep Awake</option>
-            <option value="restart">Restart</option>
-            <option value="shutdown">Shutdown</option>
-          </optgroup>
-        </select>
+        <button id="settings-nav-pill" class="settings-nav-pill" aria-haspopup="dialog" aria-expanded="false">
+          <span class="settings-nav-pill-group" id="settings-nav-pill-group">General</span>
+          <span class="settings-nav-pill-divider"></span>
+          <span class="settings-nav-pill-label" id="settings-nav-pill-label">Status</span>
+          <span class="settings-nav-pill-chevron"><i data-lucide="chevron-down"></i></span>
+        </button>
         <div class="server-settings-nav-items">
           <div class="settings-nav-category">General</div>
           <button class="settings-nav-item active" data-section="overview"><span>Status</span></button>
@@ -1346,6 +1327,17 @@
         <i data-lucide="x"></i>
         <span>ESC</span>
       </button>
+    </div>
+  </div>
+  <div id="settings-palette" class="settings-palette hidden" role="dialog" aria-modal="true" aria-label="Jump to setting">
+    <div class="settings-palette-backdrop"></div>
+    <div class="settings-palette-dialog">
+      <div class="settings-palette-input-row">
+        <i data-lucide="search" class="settings-palette-search-icon"></i>
+        <input id="settings-palette-input" class="settings-palette-input" type="text" placeholder="Jump to setting…" autocomplete="off" spellcheck="false" />
+        <span class="settings-palette-esc-hint">esc</span>
+      </div>
+      <div id="settings-palette-results" class="settings-palette-results"></div>
     </div>
   </div>
 </div>
