@@ -7,8 +7,7 @@
   "description": "Self-hosted console for Claude Code and Codex. Multi-user, browser-based, persistent AI sessions.",
   "bin": {
     "clagentic": "./bin/cli.js",
-    "clagentic-console": "./bin/cli.js",
-    "clay-server": "./bin/cli.js"
+    "clagentic-console": "./bin/cli.js"
   },
   "scripts": {
     "dev": "node bin/cli.js --dev",

@@ -1603,7 +1603,6 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
       : protocol + "://" + ip + ":" + config.port;
     console.log("  " + sym.done + "  Daemon started (PID " + config.pid + ")");
     console.log("  " + sym.done + "  " + url);
-    if (config.builtinCert) console.log("  " + sym.done + "  d.clay.studio provides HTTPS certificates only. Your traffic never leaves your network.");
     if (config.mkcertDetected) console.log("  " + sym.warn + "  Clay now ships with a builtin HTTPS certificate. To use it, pass --builtin-cert or uninstall mkcert.");
     if (_pendingSetupCode) {
       console.log("");
@@ -1964,8 +1963,7 @@ function showMainMenu(config, ip, setupCode) {
 
     function afterQr() {
       // Status line
-      log("  " + a.dim + "clay" + a.reset + " " + a.dim + "v" + currentVersion + a.reset + a.dim + " — " + url + a.reset);
-      if (config.builtinCert) log("  " + a.dim + "d.clay.studio provides HTTPS certificates only. Your traffic never leaves your network." + a.reset);
+      log("  " + a.dim + "clagentic" + a.reset + " " + a.dim + "v" + currentVersion + a.reset + a.dim + " — " + url + a.reset);
       var parts = [];
       parts.push(a.bold + projs.length + a.reset + a.dim + (projs.length === 1 ? " project" : " projects"));
       parts.push(a.reset + a.bold + totalSessions + a.reset + a.dim + (totalSessions === 1 ? " session" : " sessions"));
@@ -2045,16 +2043,14 @@ function showMainMenu(config, ip, setupCode) {
         }
       }, {
         hint: [
-          "Run npx @clagentic/console in other directories to add more projects.",
-          "★ github.com/chadbyte/clay — Press s to star the repo",
-        ],
+          "Run npx @clagentic/console in other directories to add more projects.",        ],
         keys: [
           { key: "o", onKey: function () {
             openUrl(url);
             showMainMenu(config, ip);
           }},
           { key: "s", onKey: function () {
-            openUrl("https://github.com/chadbyte/clay");
+            openUrl("https://github.com/clagentic/clagentic-console");
             showMainMenu(config, ip);
           }},
         ],
@@ -2659,7 +2655,6 @@ var currentVersion = require("../package.json").version;
         : protocol + "://" + ip + ":" + config.port;
       console.log("  " + sym.done + "  Daemon already running (PID " + config.pid + ")");
       console.log("  " + sym.done + "  " + url);
-      if (config.builtinCert) console.log("  " + sym.done + "  d.clay.studio provides HTTPS certificates only. Your traffic never leaves your network.");
       process.exit(0);
       return;
     }
