@@ -1,3 +1,10 @@
+# [1.0.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2026-05-13)
+
+
+### Bug Fixes
+
+* **lr-d46e:** mobile Enter adopts ghost suggestion when input is empty ([153622e](https://github.com/clagentic/clagentic-console/commit/153622e6742d548bc93f1a0af9f2f35ea2799b3f))
+
 # 1.0.0-beta.1 (2026-05-13)
 
 
