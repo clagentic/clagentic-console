@@ -1,16 +1,14 @@
 {
-  "name": "clay-server",
-  "version": "2.36.2-beta.7",
-  "description": "Self-hosted team workspace for Claude Code and Codex. Multi-user, browser-based, with persistent AI mates.",
+  "name": "clagentic-console",
+  "version": "1.0.0",
+  "description": "Self-hosted console for Claude Code and Codex. Multi-user, browser-based, persistent AI sessions.",
   "bin": {
-    "clay-server": "./bin/cli.js",
-    "claude-relay": "./bin/claude-relay.js",
-    "clay-dev": "./bin/cli.js"
+    "clagentic": "./bin/cli.js",
+    "clagentic-console": "./bin/cli.js",
+    "clay-server": "./bin/cli.js"
   },
   "scripts": {
     "dev": "node bin/cli.js --dev",
-    "prepack": "npm pkg delete bin.clay-dev",
-    "postpack": "npm pkg set bin.clay-dev=./bin/cli.js",
     "semantic-release": "semantic-release"
   },
   "files": [
@@ -30,24 +28,25 @@
     "workspace",
     "ai-agent",
     "ai-coding-agent",
-    "mates",
-    "ralph-loop",
+    "clagentic",
     "cron",
     "mobile",
     "pwa",
     "web-ui",
-    "browser",
-    "relay"
+    "browser"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chadbyte/clay.git"
+    "url": "git+https://github.com/clagentic/clagentic-console.git"
   },
   "bugs": {
-    "url": "https://github.com/chadbyte/clay/issues"
+    "url": "https://github.com/clagentic/clagentic-console/issues"
   },
-  "homepage": "https://github.com/chadbyte/clay#readme",
-  "author": "Chad",
+  "homepage": "https://github.com/clagentic/clagentic-console#readme",
+  "author": "Andy Kuehner",
+  "contributors": [
+    "Chad (original Clay author)"
+  ],
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.112",
     "@lydell/node-pty": "^1.2.0-beta.3",
@@ -63,7 +62,6 @@
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/exec": "^7.1.0",
     "@semantic-release/git": "^10.0.1",
     "semantic-release": "^25.0.3"
   }
