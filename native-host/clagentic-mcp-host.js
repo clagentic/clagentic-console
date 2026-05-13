@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Clay MCP Bridge - Native Messaging Host
-// Communicates with the Clay Chrome Extension via Chrome Native Messaging protocol.
+// Clagentic MCP Bridge - Native Messaging Host
+// Communicates with the Clagentic Chrome Extension via Chrome Native Messaging protocol.
 // Spawns and manages local MCP server processes, relays JSON-RPC messages.
 
 var child_process = require("child_process");
@@ -163,7 +163,7 @@ function spawnServer(name) {
     params: {
       protocolVersion: "2024-11-05",
       capabilities: {},
-      clientInfo: { name: "clay-mcp-bridge", version: "1.0.0" },
+      clientInfo: { name: "clagentic-mcp-bridge", version: "1.0.0" },
     },
   }) + "\n";
   proc.stdin.write(initMsg);
@@ -326,9 +326,9 @@ function getStatus() {
   return result;
 }
 
-// ---------- Clay Config Management (~/.clay/mcp.json) ----------
+// ---------- Clagentic Config Management (~/.clagentic/mcp.json) ----------
 
-var CLAY_CONFIG_PATH = path.join(os.homedir(), ".clay", "mcp.json");
+var CLAY_CONFIG_PATH = path.join(os.homedir(), ".clagentic", "mcp.json");
 
 function ensureClayConfig() {
   var dir = path.dirname(CLAY_CONFIG_PATH);

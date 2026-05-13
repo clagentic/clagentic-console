@@ -1,15 +1,15 @@
 #!/bin/bash
-# Install Clay MCP Bridge Native Messaging Host
+# Install Clagentic MCP Bridge Native Messaging Host
 # Usage: ./install.sh [extension-id]
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOST_SCRIPT="$SCRIPT_DIR/clay-mcp-host.js"
+HOST_SCRIPT="$SCRIPT_DIR/clagentic-mcp-host.js"
 EXT_ID="${1:-__EXTENSION_ID__}"
 
 if [ ! -f "$HOST_SCRIPT" ]; then
-  echo "Error: clay-mcp-host.js not found in $SCRIPT_DIR"
+  echo "Error: clagentic-mcp-host.js not found in $SCRIPT_DIR"
   exit 1
 fi
 
@@ -33,18 +33,18 @@ esac
 mkdir -p "$TARGET_DIR"
 
 # Write manifest with resolved paths
-cat > "$TARGET_DIR/com.clay.mcp_bridge.json" << EOF
+cat > "$TARGET_DIR/com.clagentic.mcp_bridge.json" << HEREDOC
 {
-  "name": "com.clay.mcp_bridge",
-  "description": "Clay MCP Bridge - Manages local MCP server processes",
+  "name": "com.clagentic.mcp_bridge",
+  "description": "Clagentic MCP Bridge - Manages local MCP server processes",
   "path": "$HOST_SCRIPT",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://$EXT_ID/"]
 }
-EOF
+HEREDOC
 
 echo "Installed native messaging host manifest to:"
-echo "  $TARGET_DIR/com.clay.mcp_bridge.json"
+echo "  $TARGET_DIR/com.clagentic.mcp_bridge.json"
 echo ""
 echo "Host script: $HOST_SCRIPT"
 echo "Extension ID: $EXT_ID"
