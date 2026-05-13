@@ -233,3 +233,55 @@ html, body {
   color: var(--warning);
 }
 
+/* SW update banner — shown when a new service worker activates while the page is visible */
+.sw-update-banner {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--bg-alt);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 12px 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 400;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 4px 20px rgba(var(--shadow-rgb), 0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.sw-update-banner.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.sw-update-banner-btn {
+  background: var(--accent);
+  color: var(--accent-text, #1a1208);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sw-update-banner-btn:hover {
+  filter: brightness(1.1);
+}
+.sw-update-banner-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+.sw-update-banner-dismiss:hover {
+  color: var(--text);
+}
+
