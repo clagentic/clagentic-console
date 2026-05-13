@@ -1,7 +1,7 @@
 var config = {
   repositoryUrl: "https://github.com/clagentic/clagentic-console.git",
   branches: [
-    { name: "main", prerelease: "beta" },
+    { name: "main", prerelease: "beta", channel: "beta" },
     { name: "release" }
   ],
   plugins: [
