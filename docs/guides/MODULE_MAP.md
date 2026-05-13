@@ -27,15 +27,13 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 
 | Module | Message types | Concern |
 |--------|--------------|---------|
-| `project-knowledge.js` | `knowledge_list`, `knowledge_read`, `knowledge_save`, `knowledge_delete`, `knowledge_promote`, `knowledge_depromote` | Knowledge file CRUD for mates and projects |
+| `project-knowledge.js` | `knowledge_list`, `knowledge_read`, `knowledge_save`, `knowledge_delete`, `knowledge_promote`, `knowledge_depromote` | Knowledge file CRUD |
 | `project-sessions.js` | `new_session`, `switch_session`, `delete_session`, `rename_session`, `resume_session`, `fork_session`, `rewind_*`, `permission_response`, `elicitation_response`, `set_model`, `set_effort`, `set_thinking`, `set_betas`, `set_*_mode`, `browse_dir`, `add_project`, `create_project`, `clone_project`, `create_worktree`, `remove_project*`, `schedule_move`, `reorder_projects`, `set_project_title`, `set_project_icon`, `get_daemon_config`, `set_pin`, `set_keep_awake`, `set_auto_continue`, `set_image_retention`, `shutdown_server`, `restart_server`, `process_stats`, `stop`, `stop_task`, `kill_process`, `set_update_channel`, `check_update`, `update_now`, `ask_user_response`, `input_sync`, `cursor_*`, `text_select`, `push_subscribe`, `load_more_history`, `search_sessions`, `search_session_content`, `list_cli_sessions`, `set_session_visibility`, `transfer_project_owner`, `set_mate_dm` | Session lifecycle, config, project management, daemon settings, permissions, updates |
 | `project-filesystem.js` | `fs_list`, `fs_read`, `fs_write`, `fs_watch`, `fs_unwatch`, `fs_file_history`, `fs_git_diff`, `fs_file_at`, `get_project_env`, `set_project_env`, `read_global_claude_md`, `write_global_claude_md`, `get_shared_env`, `set_shared_env` | File browser, file history, project env/settings |
 | `project-user-message.js` | `message`, `note_*`, `term_*`, `context_sources_save`, `browser_tab_list`, `extension_result`, `loop_*` (delegation), `schedule_*`, `send_scheduled_now`, `cancel_scheduled_message` | User message dispatch, sticky notes, terminals, context sources, browser extension |
 | `project-loop.js` | `loop_start`, `loop_stop`, `ralph_wizard_complete`, `ralph_wizard_cancel`, `ralph_cancel_crafting`, `ralph_preview_files`, `loop_registry_*`, `schedule_create`, `hub_schedules_list`, `delete_loop_group` | Loop/Ralph engine, loop registry, scheduling |
 | `project-notifications.js` | `notification_mark_read`, `notification_mark_all_read`, `notification_delete`, `notification_clear_all` | Notification center persistence and CRUD |
-| `project-debate.js` | (called from project.js) `debate_start`, `debate_stop`, `debate_comment`, `debate_conclude_response`, `debate_confirm_brief`, `debate_hand_raise`, `debate_user_floor_response` | Multi-agent debate engine |
-| `project-mate-interaction.js` | (called from project.js) `mention`, `mention_stop` | @mention handling, DM digests |
-| `project-user-mention.js` | (called from project.js) `user_mention` | User-to-user @mention side conversations within a session. Records to history, broadcasts to other session viewers, queues transcript into `pendingMentionContexts` for the next coding-agent turn, fires alarm-center notification + push for the target user (push only when offline) |
+| `project-user-mention.js` | (called from project.js) `user_mention` | User-to-user @mention side conversations within a session. Records to history, broadcasts to other session viewers, fires notification + push for the target user (push only when offline) |
 | `project-memory.js` | `memory_list`, `memory_search`, `memory_delete` | Session digest memory |
 | `project-mcp.js` | `mcp_servers_available`, `mcp_tool_result`, `mcp_tool_error`, `mcp_toggle_server` | Remote MCP server bridge via Chrome Extension |
 
@@ -52,14 +50,10 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `sdk-message-queue.js` | Async iterable message queue for streaming input to SDK |
 | `sdk-message-processor.js` | SDK stream event processing (message_start, content_block_*), sub-agent message routing |
 | `codex-defaults.js` | Codex-specific default values (sandbox, approval, web search). **Single source of truth** - do not duplicate elsewhere |
-| `mates.js` | Mate CRUD, builtin mate management, atomic section enforcement, migration |
-| `mates-prompts.js` | System section enforcers (team, session memory, sticky notes, project registry, debate), marker constants |
-| `mates-knowledge.js` | Common knowledge registry (promote/depromote, cross-mate file sharing) |
-| `mates-identity.js` | Identity extraction, backup/restore, change tracking, primary capabilities |
 | `users.js` | User CRUD, invites, profile/PIN update, storage, Linux user integration |
 | `users-auth.js` | Authentication, PIN hashing, auth tokens, multi-user mode, setup codes |
 | `users-permissions.js` | RBAC permissions, project/session access control |
-| `users-preferences.js` | DM favorites/hidden, auto-continue, chat layout, deleted builtin keys, mate onboarding |
+| `users-preferences.js` | DM favorites/hidden, auto-continue, chat layout, user preferences |
 | `daemon-projects.js` | Worktree tracking (scan, rescan, cleanup), removed project filtering |
 | `ws-schema.js` | WebSocket message type registry (328 message types, informational) |
 
@@ -77,7 +71,7 @@ YOKE is the vendor-agnostic interface layer. Each adapter implements the same co
 | `yoke/adapters/claude.js` | Claude adapter using `@anthropic-ai/claude-agent-sdk`. In-process + worker (OS user isolation) paths |
 | `yoke/adapters/codex.js` | Codex adapter using `codex app-server` JSON-RPC protocol. Handles approval events, skill injection, MCP bridge config |
 | `yoke/codex-app-server.js` | Codex `app-server` child process manager. JSON-RPC 2.0 over stdin/stdout, request ID tracking, event routing |
-| `yoke/mcp-bridge-server.js` | Stdio MCP server spawned by Codex. Proxies tool list/call to Clay via HTTP at `/api/mcp-bridge` |
+| `yoke/mcp-bridge-server.js` | Stdio MCP server spawned by Codex. Proxies tool list/call to the daemon via HTTP at `/api/mcp-bridge` |
 
 **When adding a new vendor**: implement the YOKE interface, register in `yoke/index.js` createAdapter switch. Do not add vendor-specific logic outside the adapter.
 
@@ -92,10 +86,9 @@ server.js is a thin router. It wires all server modules, sets up HTTP/WS, and di
 | `server-auth.js` | `/auth`, `/auth/setup`, `/auth/login`, `/auth/request-otp`, `/auth/verify-otp`, `/auth/register`, `/auth/logout`, `/invite/*`, `/recover/*` | PIN auth, multi-user login, OTP, invite registration, admin recovery, rate limiting |
 | `server-admin.js` | `/api/admin/users*`, `/api/admin/invites*`, `/api/admin/smtp*`, `/api/admin/projects/*/visibility`, `/api/admin/projects/*/owner`, `/api/admin/projects/*/users`, `/api/admin/projects/*/access` | User CRUD, permissions, invites, SMTP config, project access control |
 | `server-skills.js` | `/api/skills`, `/api/skills/search`, `/api/skills/detail` | Skills proxy cache, leaderboard, search, detail page scraping |
-| `server-settings.js` | `/api/profile`, `/api/avatar/*`, `/api/mate-avatar/*`, `/api/user/pin`, `/api/user/auto-continue`, `/api/user/chat-layout`, `/api/user/mate-onboarded` | User profile, avatars, user preferences |
+| `server-settings.js` | `/api/profile`, `/api/avatar/*`, `/api/user/pin`, `/api/user/auto-continue`, `/api/user/chat-layout` | User profile, avatars, user preferences |
 | `server-palette.js` | `/api/palette/search` | Cross-project session search (recent + BM25 ranked) |
 | `server-dm.js` | WS: `dm_list`, `dm_open`, `dm_typing`, `dm_send`, `dm_add_favorite`, `dm_remove_favorite` | Cross-project DM messaging, typing indicators, push notifications |
-| `server-mates.js` | WS: `mate_create`, `mate_list`, `mate_delete`, `mate_update`, `mate_readd_builtin`, `mate_list_available_builtins` | Mate CRUD, builtin mate management, team section enforcement |
 
 ### Where to add a new server HTTP endpoint
 
@@ -126,7 +119,7 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 |--------|---------|
 | `app-connection.js` | WebSocket creation, reconnect with exponential backoff, connection status UI, disconnect/restore notifications |
 | `app-messages.js` | WebSocket message router (`processMessage`). Dispatches all incoming message types to appropriate handlers |
-| `app-dm.js` | DM mode (open/enter/exit), mate project switching, mate onboarding, DM message rendering, typing indicators |
+| `app-dm.js` | DM mode (open/enter/exit), DM message rendering, typing indicators |
 | `app-home-hub.js` | Home hub rendering, weather, tip rotation, upcoming schedules, project summary |
 | `app-rate-limit.js` | Rate limit UI, countdown timers, scheduled message bubbles, fast mode indicator |
 | `app-cursors.js` | Remote cursor presence, text selection sharing, cursor toggle UI |
@@ -136,15 +129,14 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 | `app-loop-ui.js` | Ralph Loop UI: bars, banners, preview modal, execution modal |
 | `app-loop-wizard.js` | Ralph Loop wizard: step navigation, mode/authorship selection, data collection |
 | `app-notifications.js` | Notification center panel, badge, rendering, click-to-navigate |
-| `app-debate-ui.js` | Debate sticky banner, floor/conclude/ended modes, bottom bar, hand raise |
-| `app-skills-install.js` | Skill install dialog, requireSkills, requireClayMateInterview |
+| `app-skills-install.js` | Skill install dialog, requireSkills |
 | `app-favicon.js` | Dynamic favicon, IO blink, urgent blink, send button mode, activity indicator |
 | `app-header.js` | Session rename, session info popover, progressive history loading |
 | `app-misc.js` | Image/paste/confirm modals, force PIN overlay, PWA install, Chrome extension bridge |
 | `sidebar.js` | Sidebar coordinator: init, open/close, page title, panel switching, collapse/expand, resize handle, dust particles |
 | `sidebar-sessions.js` | Session list rendering, search/filter, loop groups, inline rename, context menus, presence avatars, countdown timers, CLI session picker, unread badges |
 | `sidebar-projects.js` | Project icon strip, context menus, emoji picker, drag-and-drop reorder, worktree modal, project access popover, project rename, project badges |
-| `sidebar-mates.js` | User/mate icon strip, DM picker, user/mate context menus, icon strip tooltips, sidebar presence, DM badges, DM user state |
+| `sidebar-mates.js` | User icon strip, DM picker, user context menus, icon strip tooltips, sidebar presence, DM badges, user state |
 | `sidebar-mobile.js` | Mobile sheet overlays (projects, sessions, mate profile, search, tools, settings), mobile tab bar, drag-to-dismiss, mobile loop groups, mobile session rendering |
 | `scheduler.js` | Scheduler coordinator: init, open/close, calendar views (month/week), detail view, crafting mode, sidebar task list, cron utilities |
 | `scheduler-config.js` | Schedule create/edit modal, delete dialog, cron builder, recurrence/interval UI, calendar date picker, preview events |
@@ -154,7 +146,7 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 
 ## Client Module Architecture
 
-**Three-layer callback registration pattern:** Clay uses a three-layer system for wiring module behavior:
+**Three-layer callback registration pattern:** The client uses a three-layer system for wiring module behavior:
 1. The module exports an `init(ctx)` function that receives a context object.
 2. The context object carries callbacks and DOM refs injected by the caller (app.js or a parent module).
 3. The module binds event listeners only once during init using these callbacks — never re-binding on each render.

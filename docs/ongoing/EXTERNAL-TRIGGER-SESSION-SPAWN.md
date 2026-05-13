@@ -1,18 +1,18 @@
 # External Trigger: Context-Injected Session Spawn
 
-**Status:** Implemented — shipped in akuehner/clay PR #22 (lr-790e). Upstream issue to be filed separately (lr-a953).
+**Status:** Implemented — shipped in clagentic-console PR #22 (lr-790e). Upstream issue to be filed separately (lr-a953).
 
-**Decision (a):** implemented in akuehner/clay fork; upstream issue filed for chadbyte/clay consideration — see §5.
+**Decision (a):** implemented in clagentic-console fork; upstream issue filed for upstream consideration — see §5.
 
 ---
 
 ## 1. Problem Statement
 
-Clay sessions today start in two ways: a user opens one manually from the UI, or the scheduler's `onTrigger` path creates one from a cron-timed Ralph Loop. Neither path lets an external process (a script, a daemon, another agent) say: "open a session in this project, and start it with this context already loaded."
+Clagentic:Console sessions today start in two ways: a user opens one manually from the UI, or the scheduler's `onTrigger` path creates one from a cron-timed Ralph Loop. Neither path lets an external process (a script, a daemon, another agent) say: "open a session in this project, and start it with this context already loaded."
 
-The gap is not just missing UI — the underlying session-spawn primitive does not accept an initial prompt, and there is no watched directory or event bus that an external writer can push to. Clay has no inbox for the outside world.
+The gap is not just missing UI — the underlying session-spawn primitive does not accept an initial prompt, and there is no watched directory or event bus that an external writer can push to. Clagentic:Console has no inbox for the outside world.
 
-This matters for any workflow where an event happens outside Clay (a deploy finishes, an alert fires, a queue fills up, another agent hits a decision it cannot resolve) and the right response is a human-with-context, not another automated step. The current options are: (1) open Clay manually and reconstruct context by hand; (2) use a scheduled loop that polls — which wastes sessions on nothing and cannot carry event-specific context; or (3) do not use Clay at all.
+This matters for any workflow where an event happens outside Clay (a deploy finishes, an alert fires, a queue fills up, another agent hits a decision it cannot resolve) and the right response is a human-with-context, not another automated step. The current options are: (1) open Clagentic:Console manually and reconstruct context by hand; (2) use a scheduled loop that polls — which wastes sessions on nothing and cannot carry event-specific context; or (3) use neither.
 
 The feature requested is: a generic "external trigger → contextual session spawn" primitive that any external process can use by writing a structured file to a watched directory.
 
@@ -25,7 +25,7 @@ The feature requested is: a generic "external trigger → contextual session spa
 An external process drops a JSON file at:
 
 ```
-~/.clay/external-triggers/<trigger-id>.json
+~/.clagentic/external-triggers/<trigger-id>.json
 ```
 
 The file schema (v1):
@@ -56,14 +56,14 @@ Fields:
 
 ### 2.2 Clay behavior on trigger file arrival
 
-1. Clay's new external trigger watcher (`project-external-trigger.js`) fires `fs.watch` on `~/.clay/external-triggers/`.
+1. The external trigger watcher (`project-external-trigger.js`) fires `fs.watch` on `~/.clagentic/external-triggers/`.
 2. On file appear event: read and validate the JSON. Reject unknown versions silently (log only).
 3. Find the matching project by `projectSlug`. If not found, log and skip.
 4. Call `sm.createSession()` on the target project (same call as `new_session` handler, `project-sessions.js:129`).
 5. Pre-seed the session with `initialPrompt` by pushing a synthetic `user_message` history entry and immediately calling `sdk.startQuery(session, initialPrompt, ...)` — exactly the pattern in `project-loop.js:500-511`.
-6. Broadcast `session_list_changed` so any open Clay client reflects the new session.
-7. Move or delete the trigger file to `~/.clay/external-triggers/processed/<id>.json` to prevent re-fire on Clay restart.
-8. **No Clay UI notification is emitted.** The trigger is its own notification channel (ntfy, email, etc.). Adding a Clay bell notification is opt-in via a future `notifyUser` field in the schema.
+6. Broadcast `session_list_changed` so any open browser client reflects the new session.
+7. Move or delete the trigger file to `~/.clagentic/external-triggers/processed/<id>.json` to prevent re-fire on Clay restart.
+8. **No UI notification is emitted.** The trigger is its own notification channel (ntfy, email, etc.). Adding a notification is opt-in via a future `notifyUser` field in the schema.
 
 ### 2.3 What the new session looks like
 
@@ -111,7 +111,7 @@ This is the exact pattern the new module would use. `session.singleTurn = true` 
 
 `project-file-watch.js` is purpose-built for the UI's file/dir browser: `startFileWatch`, `startDirWatch`. It is scoped to paths within a project's cwd via `safePath(cwd, relPath)`. It is not reusable for a global config-dir watcher without modification.
 
-The external trigger watcher watches `~/.clay/external-triggers/` — a path outside any project's cwd. It should be a **separate module** (`project-external-trigger.js`) that calls `fs.watch` directly on the Clay config dir. The pattern is identical to `startDirWatch` (debounced `fs.watch`, read on change event) but scoped to the global config dir, not a project path.
+The external trigger watcher watches `~/.clagentic/external-triggers/` — a path outside any project's cwd. It should be a **separate module** (`project-external-trigger.js`) that calls `fs.watch` directly on the config dir. The pattern is identical to `startDirWatch` (debounced `fs.watch`, read on change event) but scoped to the global config dir, not a project path.
 
 **Reuse: pattern, not code.** ~60 lines of `fs.watch` setup can be copied from `project-file-watch.js`.
 
@@ -123,7 +123,7 @@ The external trigger watcher watches `~/.clay/external-triggers/` — a path out
 
 ### 3.5 Notification system — `project-notifications.js`
 
-`project-notifications.js` is all-or-nothing per event type — there is no per-event-type opt-out today (line 144: `function notify(event, data)` routes through a `formatters` map, but all events write to the same queue and broadcast to all clients). Adding a new `external_trigger` formatter would show a Clay bell notification, which Andy has disabled because notifications are too coarse today.
+`project-notifications.js` is all-or-nothing per event type — there is no per-event-type opt-out today (line 144: `function notify(event, data)` routes through a `formatters` map, but all events write to the same queue and broadcast to all clients). Adding a new `external_trigger` formatter would show a notification, which Andy has disabled because notifications are too coarse today.
 
 **Recommendation:** bypass the notification system entirely for this event class. Wire the watcher directly to session-spawn with no `notify()` call. The human-pull channel is ntfy (or whatever the caller chose). A future `notifyUser: true` field in the trigger schema can opt back in.
 
@@ -145,7 +145,7 @@ Total: **1 new file (~120 lines), 2 small edits (~13 lines combined).** No chang
 attachExternalTrigger(ctx)
   ctx fields needed: CONFIG_DIR, getProjectBySlug, createSessionAndPrompt
 
-  - startWatcher()        ~25 lines  fs.watch on CONFIG_DIR/external-triggers/
+  - startWatcher()        ~25 lines  fs.watch on CLAGENTIC_HOME/external-triggers/
   - handleFile(filePath)  ~40 lines  read/validate JSON, find project, spawn session
   - spawnSession(project, trigger)  ~30 lines  createSession + pushMessage + startQuery
   - archiveTrigger(id)    ~10 lines  move to processed/ subdir
@@ -176,10 +176,10 @@ Per `MODULE_MAP.md`, the new module is an **Infrastructure Module** (alongside `
 
 **Conclusion:** Upstream merge by PR is not viable — feature PRs are closed by policy. The viable path is:
 
-1. **Implement in akuehner/clay** (the fork).
-2. **Open a chadbyte/clay issue** describing the feature generically ("external trigger → session spawn for CI/CD and agentic workflows"). If chadbyte is interested, they implement it themselves. If they do, the fork's patch is dropped. If not, the fork carries 3 changed files with low conflict surface.
+1. **Implement in clagentic-console** (the fork).
+2. **Open a upstream issue** describing the feature generically ("external trigger → session spawn for CI/CD and agentic workflows"). If chadbyte is interested, they implement it themselves. If they do, the fork's patch is dropped. If not, the fork carries 3 changed files with low conflict surface.
 
-**Recommended call: (a) — implement in akuehner/clay, file a chadbyte/clay issue for upstream consideration.**
+**Recommended call: (a) — implement in clagentic-console, file a upstream issue for upstream consideration.**
 
 Deferral is not warranted: the feature is ~135 lines total and unblocks the agentic-program escalation flow with no upstream dependency.
 
@@ -197,20 +197,20 @@ Estimated merge cost per upstream release: **~5 minutes.**
 
 ## 6. Consumer Example: Agentic-Program Escalation Flow
 
-The agentic-program escalation flow is one consumer of this primitive. When a lead-to-lead disagreement cannot resolve autonomously, `clagentic-relay` writes a trigger file to `~/.clay/external-triggers/<dispatch-id>.json` with `projectSlug: "escalations"`, `initialPrompt` containing the disagreement summary and the two lead positions, and `cwd: /workspace/escalations`. Simultaneously it fires an ntfy notification so Andy knows to look. Clay picks up the trigger file, opens a session in the escalations project already loaded with context, and waits. Andy opens Clay, sees the pre-loaded session, reads the summary, and types a decision. The session history (including Andy's response) is written to disk. The next lead session that orients reads the escalations project's session history or a LORE task created from it. No polling, no blocked relay subprocess, no context reconstruction.
+The agentic-program escalation flow is one consumer of this primitive. When a lead-to-lead disagreement cannot resolve autonomously, `clagentic-relay` writes a trigger file to `~/.clagentic/external-triggers/<dispatch-id>.json` with `projectSlug: "escalations"`, `initialPrompt` containing the disagreement summary and the two lead positions, and `cwd: /workspace/escalations`. Simultaneously it fires an ntfy notification so Andy knows to look. Clagentic:Console picks up the trigger file, opens a session in the escalations project already loaded with context, and waits. Andy opens Clagentic:Console, sees the pre-loaded session, reads the summary, and types a decision. The session history (including Andy's response) is written to disk. The next lead session that orients reads the escalations project's session history or a LORE task created from it. No polling, no blocked relay subprocess, no context reconstruction.
 
 ---
 
 ## 7. Open Questions
 
-1. **Trigger file security.** `~/.clay/external-triggers/` is under the user's home directory. Any process running as the same user can write trigger files. Is this acceptable, or should Clay verify a shared secret in the trigger JSON? For single-user self-hosted installs (Andy's use case), it is acceptable. For multi-user Clay deployments, a secret or per-user subdir would be needed.
+1. **Trigger file security.** `~/.clagentic/external-triggers/` is under the user's home directory. Any process running as the same user can write trigger files. Is this acceptable, or should Clay verify a shared secret in the trigger JSON? For single-user self-hosted installs (Andy's use case), it is acceptable. For multi-user Clay deployments, a secret or per-user subdir would be needed.
 
 2. **Auto-continue behavior.** Should the spawned session auto-process the `initialPrompt` immediately (like a loop iteration), or wait for the user to open it first? The proposal defaults to auto-process. If the project's `autoContineMode` setting is off, this will not fire. Should the trigger schema include an `autoProcess: true/false` override?
 
 3. **`singleTurn` vs. open session.** The consumer example wants an open session (human responds). Loop sessions use `singleTurn: true`. The trigger schema should expose this as an optional field. Default: `false` (open, multi-turn).
 
-4. **Processed file retention.** The proposal moves trigger files to `~/.clay/external-triggers/processed/`. How long are they kept? A TTL or max-count cleanup is not specified here.
+4. **Processed file retention.** The proposal moves trigger files to `~/.clagentic/external-triggers/processed/`. How long are they kept? A TTL or max-count cleanup is not specified here.
 
-5. **What if Clay is not running?** If Clay daemon is down when the trigger file lands, the file sits unprocessed. On next daemon start, Clay would pick it up (the watcher fires on startup scan if a `ready` file or mtime check is added). This restart-recovery behavior is not fully specified.
+5. **What if Clay is not running?** If Clagentic:Console daemon is down when the trigger file lands, the file sits unprocessed. On next daemon start, Clay would pick it up (the watcher fires on startup scan if a `ready` file or mtime check is added). This restart-recovery behavior is not fully specified.
 
 6. **`projectSlug` vs. `cwd` routing.** The proposal uses `projectSlug` as the primary routing key. If the slug is unknown (project not registered), the trigger is dropped. Should Clay also accept routing by `cwd` alone (auto-register the project if not present)? Simpler to require the project to be registered first.
