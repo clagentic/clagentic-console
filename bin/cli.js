@@ -1236,7 +1236,7 @@ function hasMkcert() {
 }
 
 // ==============================
-// Restore projects from ~/.clayrc
+// Restore projects from ~/.clagentic-rc
 // ==============================
 function promptRestoreProjects(projects, callback) {
   log(sym.bar);
@@ -1254,7 +1254,7 @@ function promptRestoreProjects(projects, callback) {
   });
 
   promptMultiSelect("Restore projects", items, function (selected) {
-    // Remove unselected projects from ~/.clayrc
+    // Remove unselected projects from ~/.clagentic-rc
     if (selected.length < projects.length) {
       var selectedPaths = {};
       for (var si = 0; si < selected.length; si++) {
@@ -1483,7 +1483,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
   if (addCwd) {
     var slug = generateSlug(cwd, []);
     var cwdEntry = { path: cwd, slug: slug, addedAt: Date.now() };
-    // Restore title/icon from .clayrc if available
+    // Restore title/icon from .clagentic-rc if available
     var cwdRc = loadClayrc();
     var cwdRecent = cwdRc.recentProjects || [];
     for (var cr = 0; cr < cwdRecent.length; cr++) {
@@ -1501,7 +1501,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     usedSlugs.push(slug);
   }
 
-  // Add restored projects (from ~/.clayrc)
+  // Add restored projects (from ~/.clagentic-rc)
   if (extraProjects && extraProjects.length > 0) {
     for (var ep = 0; ep < extraProjects.length; ep++) {
       var rp = extraProjects[ep];
@@ -1661,7 +1661,7 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
   var restorable = (rc.recentProjects || []).filter(function (p) {
     return p.path !== cwd && fs.existsSync(p.path);
   });
-  // Restore title/icon for cwd from .clayrc
+  // Restore title/icon for cwd from .clagentic-rc
   var rcAll = rc.recentProjects || [];
   for (var ci = 0; ci < rcAll.length; ci++) {
     if (rcAll[ci].path === cwd) {
@@ -2776,7 +2776,7 @@ var currentVersion = require("../package.json").version;
       if (autoRestorable.length > 0 && autoYes) {
         console.log("  " + sym.done + "  Restoring " + autoRestorable.length + " previous project(s)");
       }
-      // Add cwd if it has history in .clayrc, or if there are no other projects to restore
+      // Add cwd if it has history in .clagentic-rc, or if there are no other projects to restore
       var cwdInRc = (autoRc.recentProjects || []).some(function (p) {
         return p.path === cwd;
       });
@@ -2785,7 +2785,7 @@ var currentVersion = require("../package.json").version;
     } else {
       // First run: interactive wizard
       setup(function (mode, keepAwake, wantOsUsers) {
-        // Check ~/.clayrc for previous projects to restore
+        // Check ~/.clagentic-rc for previous projects to restore
         var rc = loadClayrc();
         var restorable = (rc.recentProjects || []).filter(function (p) {
           return p.path !== cwd && fs.existsSync(p.path);
