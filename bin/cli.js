@@ -20,7 +20,7 @@ var qrcode = require("qrcode-terminal");
 var net = require("net");
 
 // Detect dev mode — dev and prod use separate daemon files so they can run simultaneously
-var _isDev = (process.argv[1] && path.basename(process.argv[1]) === "clay-dev") || process.argv.includes("--dev");
+var _isDev = (process.argv[1] && (path.basename(process.argv[1]) === "clay-dev" || path.basename(process.argv[1]) === "clagentic-dev")) || process.argv.includes("--dev");
 if (_isDev) {
   process.env.CLAGENTIC_DEV = "1";
 }
@@ -120,10 +120,10 @@ for (var i = 0; i < args.length; i++) {
   } else if (args[i] === "--os-users") {
     osUsersMode = true;
   } else if (args[i] === "-h" || args[i] === "--help") {
-    console.log("Usage: clay-server [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart]");
-    console.log("       clay-server --add <path>     Add a project to the running daemon");
-    console.log("       clay-server --remove <path>  Remove a project from the running daemon");
-    console.log("       clay-server --list            List registered projects");
+  console.log("Usage: clagentic [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart]");
+  console.log("       clagentic --add <path>     Add a project to the running daemon");
+  console.log("       clagentic --remove <path>  Remove a project from the running daemon");
+  console.log("       clagentic --list            List registered projects");
     console.log("");
     console.log("Options:");
     console.log("  -p, --port <port>  Port to listen on (default: 2633)");
@@ -210,7 +210,7 @@ if (addPath !== null) {
   var addConfig = loadConfig();
   isDaemonAliveAsync(addConfig).then(function (alive) {
     if (!alive) {
-      console.error("No running daemon. Start with: npx clay-server");
+      console.error("No running daemon. Start with: npx clagentic-console");
       process.exit(1);
     }
     sendIPCCommand(socketPath(), { cmd: "add_project", path: absAdd }).then(function (res) {
@@ -236,7 +236,7 @@ if (removePath !== null) {
   var removeConfig = loadConfig();
   isDaemonAliveAsync(removeConfig).then(function (alive) {
     if (!alive) {
-      console.error("No running daemon. Start with: npx clay-server");
+      console.error("No running daemon. Start with: npx clagentic-console");
       process.exit(1);
     }
     sendIPCCommand(socketPath(), { cmd: "remove_project", path: absRemove }).then(function (res) {
@@ -257,7 +257,7 @@ if (listMode) {
   var listConfig = loadConfig();
   isDaemonAliveAsync(listConfig).then(function (alive) {
     if (!alive) {
-      console.error("No running daemon. Start with: npx clay-server");
+      console.error("No running daemon. Start with: npx clagentic-console");
       process.exit(1);
     }
     sendIPCCommand(socketPath(), { cmd: "get_status" }).then(function (res) {
@@ -383,7 +383,7 @@ function onDaemonDied() {
     // Intentional shutdown, no restart
     log("");
     log(sym.warn + "  " + a.yellow + "Server has been shut down." + a.reset);
-    log(a.dim + "     Run " + a.reset + "npx clay-server" + a.dim + " to start again." + a.reset);
+    log(a.dim + "     Run " + a.reset + "npx clagentic-console" + a.dim + " to start again." + a.reset);
     log("");
     process.exit(0);
     return;
@@ -1412,7 +1412,7 @@ function setup(callback) {
             log(sym.bar);
             log(sym.warn + "  " + a.yellow + "OS user isolation requires root." + a.reset);
             log(sym.bar + "  Run:");
-            log(sym.bar + "    " + a.bold + "sudo npx clay-server" + a.reset);
+            log(sym.bar + "    " + a.bold + "sudo npx clagentic-console" + a.reset);
             log(sym.end);
             log("");
             process.exit(0);
@@ -2038,14 +2038,14 @@ function showMainMenu(config, ip, setupCode) {
           case "exit":
             log("");
             log("  " + a.bold + "Bye!" + a.reset + "  " + a.dim + "Server is still running in background." + a.reset);
-            log("  " + a.dim + "Run " + a.reset + "npx clay-server" + a.dim + " to come back here." + a.reset);
+            log("  " + a.dim + "Run " + a.reset + "npx clagentic-console" + a.dim + " to come back here." + a.reset);
             log("");
             process.exit(0);
             break;
         }
       }, {
         hint: [
-          "Run npx clay-server in other directories to add more projects.",
+          "Run npx clagentic-console in other directories to add more projects.",
           "★ github.com/chadbyte/clay — Press s to star the repo",
         ],
         keys: [
@@ -2239,7 +2239,7 @@ function showSettingsMenu(config, ip) {
           log(sym.bar);
           log(sym.bar + "  " + a.red + sym.warn + " OS user isolation requires root." + a.reset);
           log(sym.bar + "  " + a.dim + "Shut down this server, then restart with:" + a.reset);
-          log(sym.bar + "    " + a.bold + "sudo npx clay-server" + a.reset);
+          log(sym.bar + "    " + a.bold + "sudo npx clagentic-console" + a.reset);
           log(sym.bar);
           promptSelect("Back?", [{ label: "Back", value: "back" }], function () {
             showSettingsMenu(config, ip);
@@ -2742,7 +2742,7 @@ var currentVersion = require("../package.json").version;
       // os-users requires root
       if (savedOsUsers && typeof process.getuid === "function" && process.getuid() !== 0) {
         console.error(a.red + "OS user isolation requires root." + a.reset);
-        console.error("Run:  " + a.bold + "sudo npx clay-server" + a.reset);
+        console.error("Run:  " + a.bold + "sudo npx clagentic-console" + a.reset);
         process.exit(1);
         return;
       }
