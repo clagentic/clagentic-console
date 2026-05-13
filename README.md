@@ -1,20 +1,7 @@
 <p align="center">
-<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" width="72" height="72">
-  <defs>
-    <linearGradient id="cg" gradientUnits="userSpaceOnUse" x1="36" y1="4" x2="36" y2="68">
-      <stop offset="0%"   stop-color="#00CFFF"/>
-      <stop offset="50%"  stop-color="#4A7FE8"/>
-      <stop offset="100%" stop-color="#7B3FE4"/>
-    </linearGradient>
-  </defs>
-  <path d="M 58.98 16.71 A 30 30 0 1 0 58.98 55.29"
-        stroke="url(#cg)" stroke-width="5" stroke-linecap="round" fill="none"/>
-  <circle cx="58.98" cy="16.71" r="2.8" fill="#00CFFF"/>
-  <circle cx="58.98" cy="55.29" r="2.8" fill="#7B3FE4"/>
-</svg>
+  <img src="media/logo/console-lockup-256.png" alt="Clagentic:Console" width="260" />
 </p>
 
-<h2 align="center">CLAGENTIC:CONSOLE</h2>
 <h4 align="center">AI tooling. Built for builders.</h4>
 
 <p align="center">
@@ -24,16 +11,19 @@
   <a href="https://ko-fi.com/clagentic"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi" /></a>
 </p>
 
-A self-hosted browser console for Claude Code and Claude agents. Run sessions, talk directly to named agents, manage multiple projects, get push notifications on your phone — all from a single tab.
+A self-hosted browser console for Claude Code and Claude agents. Everything you get from the CLI — sessions, approvals, agents, tools — in a browser tab, on any device, with push notifications when you need them.
+
+No extras bolted on. No opinionated workflows. The floor is solid; you build what you need on top.
 
 ## What it does
 
-- **Named agent sessions.** Talk directly to any agent defined in your Claude Code config. Agents get their own sessions, context, and conversation history. No synthetic scaffolding.
-- **Multi-project dashboard.** Every repo on your machine in one sidebar. Jump between projects, run agents across several in parallel, see live status at a glance.
-- **Mobile PWA + push notifications.** Installable on iOS and Android. Your phone buzzes when Claude needs approval or finishes a long task — tap to respond.
-- **Loop automation.** Write a `PROMPT.md`, hit go. Clagentic:Console iterates: run, evaluate, retry until done or capped. Schedule with standard cron. Wake up to results.
-- **One toggle between vendors.** The YOKE adapter speaks Claude Agent SDK and Codex app-server protocol natively. Switch per session.
-- **Your data, your machine.** Sessions are JSONL, settings are JSON, knowledge is Markdown. No cloud relay, no proprietary database. Walk away and everything walks with you.
+- **Full CLI parity in the browser.** Every capability you have in Claude Code CLI is available here — tool approvals, model selection, context management, session history.
+- **Named agent sessions.** Talk directly to any agent defined in your Claude Code config. Agents get their own sessions, context, and history. First-class, not bolted on.
+- **Multi-project dashboard.** Every repo on your machine in one sidebar. Jump between projects, run sessions in parallel, see live status at a glance.
+- **Mobile PWA + push notifications.** Installable on iOS and Android. Your phone buzzes when Claude needs approval or finishes a long task — tap to respond from anywhere.
+- **Loop automation.** Write a `PROMPT.md`, hit go. Clagentic:Console iterates: run, evaluate, retry until done or capped. Schedule with standard cron.
+- **Vendor flexibility.** Supports Claude Agent SDK and Codex app-server protocol. Switch per session.
+- **Your data, your machine.** Sessions are JSONL, settings are JSON, knowledge is Markdown. No cloud relay, no proprietary database.
 
 ## Getting Started
 
@@ -43,7 +33,7 @@ A self-hosted browser console for Claude Code and Claude agents. Run sessions, t
 npx @clagentic/console
 ```
 
-On first run, you'll be asked for a port and whether you're running solo or multi-user. Open the URL from any device on your network.
+On first run you'll be asked for a port and whether you're running solo or multi-user. Open the URL from any device on your network.
 
 For remote access, use a tunnel — Tailscale, Cloudflare Tunnel, or your existing VPN.
 
@@ -110,10 +100,10 @@ For architecture details, sequence diagrams, and key design decisions, see [docs
 No. Clagentic:Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, and a full browser UI on top.
 
 **"What are named agents?"**
-Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — they get their own conversation history, context window, and session state. No synthetic projects, no workarounds.
+Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state. No workarounds.
 
 **"Can I run Claude Code and Codex in the same workspace?"**
-Yes. Pick a vendor when you open a session. Switch per session. Same projects, same history.
+Yes. Pick a vendor when you open a session. Switch per session.
 
 **"Does my code leave my machine?"**
 Only as model API calls — the same as using the CLI directly. Sessions, settings, and knowledge all stay on disk.
@@ -122,7 +112,7 @@ Only as model API calls — the same as using the CLI directly. Sessions, settin
 Yes. Native instruction files are loaded per vendor and merged automatically.
 
 **"Can I continue a CLI session in the browser?"**
-Yes. CLI sessions appear in the sidebar. Browser sessions can be picked up in the CLI.
+Yes. CLI sessions appear in the sidebar and can be picked up in the CLI.
 
 **"Can I use it on my phone?"**
 Yes. Install as a PWA on iOS or Android. Push notifications for approvals, errors, and task completion.
@@ -130,21 +120,8 @@ Yes. Install as a PWA on iOS or Android. Push notifications for approvals, error
 **"Does it work with MCP servers?"**
 Yes. User-configured MCPs from `~/.clagentic/mcp.json` plus built-in ask-user and browser servers work in both Claude and Codex sessions.
 
-**"What about multi-user teams?"**
-Multi-user mode is supported. On Linux, opt in to OS-level isolation: each user maps to a real Linux account, file ACLs enforced via `setfacl`, processes spawn under the correct UID/GID.
-
-## Philosophy
-
-One idea: **user experience sovereignty**.
-
-Not a grand statement. A simple wish: not to have your thinking, your work, and your data locked in the moment a vendor changes a price or rewrites a ToS.
-
-That shows up in the technical choices:
-
-- **Your machine is the server.** Browser → your daemon → model API. No vendor cloud, no relay, no middle tier.
-- **One toggle between vendors.** YOKE speaks Claude Agent SDK and Codex app-server natively. Switching is a setting, not a migration.
-- **Plain text on disk.** Sessions, settings, and knowledge live as JSONL and Markdown. No proprietary database. You can `cat`, `grep`, version, and back up everything.
-- **Standard formats only.** CLAUDE.md, AGENTS.md, `.cursorrules`, MCP, Unix cron. Walk away and your data is already in formats every other tool understands.
+**"Multi-user support?"**
+Yes. On Linux, opt in to OS-level isolation: each user maps to a real Linux account, file ACLs via `setfacl`, processes spawn under the correct UID/GID.
 
 ## Support
 

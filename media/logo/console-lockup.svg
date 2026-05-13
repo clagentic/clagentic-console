@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 112" width="260" height="112">
+  <defs>
+    <linearGradient id="grad" gradientUnits="userSpaceOnUse" x1="0" y1="8" x2="0" y2="104">
+      <stop offset="0%"   stop-color="#00CFFF"/>
+      <stop offset="45%"  stop-color="#4A7FE8"/>
+      <stop offset="100%" stop-color="#7B3FE4"/>
+    </linearGradient>
+    <linearGradient id="grad2" gradientUnits="userSpaceOnUse" x1="148" y1="16" x2="240" y2="96">
+      <stop offset="0%"   stop-color="#00CFFF"/>
+      <stop offset="50%"  stop-color="#4A7FE8"/>
+      <stop offset="100%" stop-color="#7B3FE4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- V8 C mark (2 rings, breaks) centered at 56,56 -->
+  <!-- OUTER r=44 -->
+  <path d="M 92.04 81.24 A 44 44 0 0 1 27.72 89.71" fill="none" stroke="url(#grad)" stroke-width="7.5" stroke-linecap="round"/>
+  <circle cx="92.04" cy="81.24" r="3.2" fill="url(#grad)"/>
+  <path d="M 17.89 78.00 A 44 44 0 0 1 27.72 22.29" fill="none" stroke="url(#grad)" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M 42.40 14.15 A 44 44 0 0 1 92.04 30.76" fill="none" stroke="url(#grad)" stroke-width="7.5" stroke-linecap="round"/>
+  <circle cx="92.04" cy="30.76" r="3.2" fill="url(#grad)"/>
+  <!-- INNER r=34 -->
+  <path d="M 83.85 75.50 A 34 34 0 0 1 24.05 67.63" fill="none" stroke="url(#grad)" stroke-width="7.5" stroke-linecap="round"/>
+  <circle cx="83.85" cy="75.50" r="3.2" fill="url(#grad)"/>
+  <path d="M 22.02 54.81 A 34 34 0 0 1 51.27 22.33" fill="none" stroke="url(#grad)" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M 63.07 22.74 A 34 34 0 0 1 83.85 36.50" fill="none" stroke="url(#grad)" stroke-width="7.5" stroke-linecap="round"/>
+  <circle cx="83.85" cy="36.50" r="3.2" fill="url(#grad)"/>
+
+  <!-- Colon separator -->
+  <circle cx="114" cy="40" r="5" fill="url(#grad)"/>
+  <circle cx="114" cy="72" r="5" fill="url(#grad)"/>
+
+  <!-- Console icon, offset to x+132 -->
+  <!-- Outer frame -->
+  <rect x="142" y="16" width="92" height="80" rx="8" ry="8"
+        fill="none" stroke="url(#grad2)" stroke-width="5"/>
+  <!-- Vertical divider -->
+  <line x1="170" y1="16" x2="170" y2="96"
+        stroke="url(#grad2)" stroke-width="3" stroke-opacity="0.6"/>
+  <!-- Left panel lines -->
+  <line x1="149" y1="34" x2="163" y2="34" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="149" y1="42" x2="161" y2="42" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="149" y1="54" x2="163" y2="54" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="149" y1="62" x2="159" y2="62" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Bottom-left square -->
+  <rect x="149" y="73" width="14" height="12" rx="2"
+        fill="none" stroke="url(#grad2)" stroke-width="2.5"/>
+  <!-- Right panel lines -->
+  <line x1="177" y1="30" x2="220" y2="30" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="177" y1="39" x2="212" y2="39" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="177" y1="48" x2="217" y2="48" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="177" y1="57" x2="206" y2="57" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="177" y1="66" x2="214" y2="66" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="177" y1="75" x2="220" y2="75" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="177" y1="84" x2="202" y2="84" stroke="url(#grad2)" stroke-width="2.5" stroke-linecap="round"/>
+
+</svg>

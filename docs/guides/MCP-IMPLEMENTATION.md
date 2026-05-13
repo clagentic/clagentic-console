@@ -1,6 +1,6 @@
 # MCP Implementation Guide
 
-> How MCP servers connect to Clay. Read this before working on any MCP-related code.
+> How MCP servers connect to Clagentic:Console. Read this before working on any MCP-related code.
 
 ---
 
@@ -9,11 +9,11 @@
 MCP servers let Mates (and Claude Code sessions) use external tools (GitHub, Notion, filesystem, etc.). There are two connection paths depending on whether the user is local or remote.
 
 ```
-LOCAL USER (same machine as Clay server):
-  Clay Server -> spawns MCP process directly -> stdin/stdout JSON-RPC
+LOCAL USER (same machine as Clagentic:Console server):
+  Clagentic:Console server -> spawns MCP process directly -> stdin/stdout JSON-RPC
 
 REMOTE USER (browser on different machine):
-  Clay Server -> WebSocket -> Webapp -> Extension -> Native Host -> MCP process
+  Clagentic:Console server -> WebSocket -> Webapp -> Extension -> Native Host -> MCP process
 ```
 
 ---
@@ -30,10 +30,10 @@ REMOTE USER (browser on different machine):
 
 ## Connection Path: Local
 
-When `ws._clayLocal` is true (client IP is 127.0.0.1 / ::1), Clay server manages MCP processes directly via `lib/mcp-local.js`.
+When `ws._clayLocal` is true (client IP is 127.0.0.1 / ::1), Clagentic:Console server manages MCP processes directly via `lib/mcp-local.js`.
 
 ```
-lib/mcp-local.js    reads ~/.clay/mcp.json, spawns processes, relays JSON-RPC
+lib/mcp-local.js    reads ~/.clagentic/mcp.json, spawns processes, relays JSON-RPC
 lib/project.js      creates _localMcp, initializes on local client connect
 lib/project-mcp.js  builds SDK proxy servers from local tools (createLocalToolHandler)
 ```
@@ -41,7 +41,7 @@ lib/project-mcp.js  builds SDK proxy servers from local tools (createLocalToolHa
 **Flow:**
 1. Local client connects -> `ws._clayLocal = true` (set in server.js upgrade handler)
 2. `handleConnection` in project.js calls `_localMcp.initialize()`
-3. `mcp-local.js` reads `~/.clay/mcp.json`, spawns all configured servers
+3. `mcp-local.js` reads `~/.clagentic/mcp.json`, spawns all configured servers
 4. Each server goes through MCP handshake (initialize -> notifications/initialized -> tools/list)
 5. When ready, `_mcp.rebuildAndBroadcast()` builds SDK proxy servers
 6. `createLocalToolHandler` returns a function that calls `localMcp.callTool()` directly
@@ -56,7 +56,7 @@ When `ws._clayLocal` is false, MCP processes run on the user's machine via the N
 
 | Component | Location | Role |
 |-----------|----------|------|
-| `lib/project-mcp.js` | Clay server | Builds SDK proxy servers, relays tool calls via WebSocket |
+| `lib/project-mcp.js` | Clagentic:Console server | Builds SDK proxy servers, relays tool calls via WebSocket |
 | `lib/public/modules/app-misc.js` | Webapp (browser) | Forwards messages between server WS and Extension |
 | `clay-chrome/content.js` | Extension content script | Port bridge between webapp and service worker |
 | `clay-chrome/background.js` | Extension service worker | Connects to Native Host, relays messages |
@@ -106,13 +106,13 @@ When `ws._clayLocal` is false, MCP processes run on the user's machine via the N
 ### Message Flow: Server List (Extension -> Server)
 
 ```
-1. Native Host auto-starts servers from ~/.clay/mcp.json on launch
+1. Native Host auto-starts servers from ~/.clagentic/mcp.json on launch
 2. When a server finishes MCP handshake, Native Host sends:
    { type: "server_ready", server, tools }
 
 3. background.js receives, calls broadcastMcpServers()
 4. broadcastMcpServers() calls get_servers on Native Host, gets full list
-5. Broadcasts to Clay tabs:
+5. Broadcasts to browser tabs:
    { type: "mcp_servers_available", servers: [...], hostConnected: true }
 
 6. content.js forwards to page
@@ -158,7 +158,7 @@ When `ws._clayLocal` is false, MCP processes run on the user's machine via the N
 |-----------|------|---------|
 | Ext -> NH | `ping` | Health check |
 | Ext -> NH | `get_servers` | Get all configured servers with status |
-| Ext -> NH | `add_server` | Add server to ~/.clay/mcp.json |
+| Ext -> NH | `add_server` | Add server to ~/.clagentic/mcp.json |
 | Ext -> NH | `remove_server` | Remove server from config |
 | Ext -> NH | `import_config` | Add external config to include list |
 | Ext -> NH | `get_imports` | Get include list |
@@ -183,11 +183,11 @@ When `ws._clayLocal` is false, MCP processes run on the user's machine via the N
 | `lib/daemon.js` | onGetProjectMcpServers / onSetProjectMcpServers (config persistence) |
 | `lib/public/modules/app-misc.js` | Webapp MCP message forwarding |
 | `lib/public/modules/mcp-ui.js` | MCP Servers modal (setup wizard + toggle list) |
-| `native-host/clay-mcp-host.js` | Native Host source (also in clay-mcp-bridge npm package) |
+| `native-host/clagentic-mcp-host.js` | Native Host source (also in clay-mcp-bridge npm package) |
 
 ## Config
 
-### ~/.clay/mcp.json (managed by Native Host)
+### ~/.clagentic/mcp.json (managed by Native Host)
 
 ```json
 {
@@ -235,13 +235,13 @@ State tracked by: `_extensionConnected`, `_nativeHostConnected` (from hostConnec
 
 ## Common Issues
 
-- **Extension not detected**: Clay page must be refreshed after extension install/reload
+- **Extension not detected**: Clagentic:Console page must be refreshed after extension install/reload
 - **Native Host not found**: Browser must be restarted after `npx clay-mcp-bridge install`
 - **npx not found by Native Host**: Chrome uses minimal PATH. The install script writes absolute node path in wrapper
 - **Tool call timeout**: Check message type alignment (clay_mcp_tool_call vs mcp_tool_call)
 - **Toggle not persisting**: Verify onSetProjectMcpServers is wired through server.js to project context
 - **Service worker state lost**: MV3 SWs lose memory on sleep. Use URL pattern matching for tab detection, not in-memory Sets
-- **Multi-server setup**: Each Clay tab needs its own port in background.js `clayPorts`. Check `Object.keys(clayPorts)` in SW console
+- **Multi-server setup**: Each browser tab needs its own port in background.js `clayPorts`. Check `Object.keys(clayPorts)` in SW console
 
 ---
 
@@ -251,15 +251,15 @@ State tracked by: `_extensionConnected`, `_nativeHostConnected` (from hostConnec
 npx clay-mcp-bridge install <extension-id>
 ```
 
-Find extension ID at `chrome://extensions` (look for "Clay").
+Find extension ID at `chrome://extensions` (look for "Clagentic:Console").
 
 Installs to:
-- `~/.clay/mcp-bridge/host.js` - permanent copy of Native Host
-- `~/.clay/mcp-bridge/clay-mcp-host` - bash wrapper with absolute node path
-- `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.clay.mcp_bridge.json` (macOS Chrome)
-- `~/Library/Application Support/Arc/User Data/NativeMessagingHosts/com.clay.mcp_bridge.json` (macOS Arc)
-- `~/Library/Application Support/Chromium/NativeMessagingHosts/com.clay.mcp_bridge.json` (macOS Chromium)
-- `~/.config/google-chrome/NativeMessagingHosts/com.clay.mcp_bridge.json` (Linux Chrome)
+- `~/.clagentic/mcp-bridge/host.js` - permanent copy of Native Host
+- `~/.clagentic/mcp-bridge/clagentic-mcp-host` - bash wrapper with absolute node path
+- `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.clagentic.mcp_bridge.json` (macOS Chrome)
+- `~/Library/Application Support/Arc/User Data/NativeMessagingHosts/com.clagentic.mcp_bridge.json` (macOS Arc)
+- `~/Library/Application Support/Chromium/NativeMessagingHosts/com.clagentic.mcp_bridge.json` (macOS Chromium)
+- `~/.config/google-chrome/NativeMessagingHosts/com.clagentic.mcp_bridge.json` (Linux Chrome)
 
 **Requires browser restart** after install. No sudo needed.
 
