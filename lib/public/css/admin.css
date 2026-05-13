@@ -734,3 +734,26 @@
 .admin-perm-toggle:checked::before {
   transform: translateX(16px);
 }
+
+.migration-callout {
+  background: var(--overlay-soft, rgba(124, 58, 237, 0.08));
+  border: 1px solid var(--accent, #7c3aed);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.migration-callout strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.migration-callout p {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.migration-callout .admin-action-btn {
+  margin-top: 4px;
+}
