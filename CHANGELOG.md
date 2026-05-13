@@ -1,3 +1,10 @@
+# [1.0.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.0.0-beta.2...v1.0.0-beta.3) (2026-05-13)
+
+
+### Performance Improvements
+
+* reduce typing lag, fix session resume scroll, batch history highlights ([1dd8c6c](https://github.com/clagentic/clagentic-console/commit/1dd8c6c5fb1ef87d154e97b3b1a0bc3d5d902412))
+
 # [1.0.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2026-05-13)
 
 
