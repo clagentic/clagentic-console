@@ -1,3 +1,10 @@
+## [1.0.3-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.2...v1.0.3-beta.1) (2026-05-14)
+
+
+### Bug Fixes
+
+* usage panel now shows correct data — context fill, output, cache write ([2f22930](https://github.com/clagentic/clagentic-console/commit/2f229306149cb134722d0e057ae0ef6c719f4696))
+
 ## [1.0.2](https://github.com/clagentic/clagentic-console/compare/v1.0.1...v1.0.2) (2026-05-14)
 
 
