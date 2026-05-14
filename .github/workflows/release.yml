@@ -136,7 +136,7 @@ jobs:
         run: npm ci
 
       - name: Run semantic-release (stable)
-        run: npx semantic-release --branches release
+        run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: true
@@ -145,7 +145,8 @@ jobs:
         run: |
           git config user.name "clagentic-release-bot[bot]"
           git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
-          git checkout main
+          git fetch origin main
+          git checkout -B main origin/main
           git merge release --no-edit -X theirs || true
           git checkout release -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
           git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
