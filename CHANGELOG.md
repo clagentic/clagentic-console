@@ -1,3 +1,12 @@
+## [1.0.2](https://github.com/clagentic/clagentic-console/compare/v1.0.1...v1.0.2) (2026-05-14)
+
+
+### Bug Fixes
+
+* git checkout release/main branch tracking in promote and stable jobs ([40592ed](https://github.com/clagentic/clagentic-console/commit/40592ed2100355ed60890e04ab15cf9a7a56adf4))
+* re-enable update check against npm registry ([787e9c1](https://github.com/clagentic/clagentic-console/commit/787e9c1296dc2d6539481f97955ca3baa2af38af))
+* remove invalid --branches flag from stable semantic-release invocation ([7ba2c4a](https://github.com/clagentic/clagentic-console/commit/7ba2c4afdaa4f1488c49091267c7a857166b5db1))
+
 ## [1.0.1](https://github.com/clagentic/clagentic-console/compare/v1.0.0...v1.0.1) (2026-05-13)
 
 
