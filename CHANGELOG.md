@@ -1,3 +1,11 @@
+## [1.0.3-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.0.3-beta.1...v1.0.3-beta.2) (2026-05-14)
+
+
+### Bug Fixes
+
+* complete agent-chat/codex guard — reactive UI + vendor toggle hide ([f640949](https://github.com/clagentic/clagentic-console/commit/f640949293a7bcfdc46e67610e22c4e7d5602fe1))
+* hide Agent Chat in Codex mode — Claude Code only ([675bdce](https://github.com/clagentic/clagentic-console/commit/675bdcee21a78b5c4f65ba81471353ef85208d64))
+
 ## [1.0.3-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.2...v1.0.3-beta.1) (2026-05-14)
 
 
