@@ -1,8 +1,13 @@
-name: Release
+name: Stable Release
+
+# Conscious-decision only — never triggered automatically.
+# To promote the current beta to stable:
+#   1. Go to Actions → Stable Release → Run workflow (on branch: main)
+# The promote job will merge main→release and then trigger the stable job on the release branch.
+# To publish stable directly from the release branch (e.g. after a hotfix):
+#   1. Go to Actions → Stable Release → Run workflow (on branch: release)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,62 +17,8 @@ permissions:
   actions: write
 
 jobs:
-  beta:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    environment: npm-publish
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - name: Generate app token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Sync release tags into main
-        run: |
-          git config user.name "clagentic-release-bot[bot]"
-          git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
-          if git rev-parse --verify origin/release >/dev/null 2>&1; then
-            RELEASE_AHEAD=$(git rev-list --count HEAD..origin/release)
-            if [ "$RELEASE_AHEAD" -gt 0 ]; then
-              echo "Release branch is $RELEASE_AHEAD commits ahead of main, merging..."
-              git merge origin/release --no-edit -X theirs || true
-              git checkout origin/release -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
-              git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
-              git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git main
-            fi
-          fi
-        env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run semantic-release (beta)
-        run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          NPM_CONFIG_PROVENANCE: true
-
   promote:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Generate app token
@@ -98,13 +49,13 @@ jobs:
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - name: Trigger stable release
-        run: gh workflow run release.yml --ref release
+      - name: Trigger stable job on release branch
+        run: gh workflow run stable-release.yml --ref release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
   stable:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
