@@ -136,7 +136,7 @@ jobs:
         run: npm ci
 
       - name: Run semantic-release (stable)
-        run: npx semantic-release --branches release
+        run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: true
