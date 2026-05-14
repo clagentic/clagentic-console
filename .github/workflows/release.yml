@@ -70,11 +70,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Debug secrets visibility
-        run: |
-          echo "APP_ID is set: ${{ secrets.APP_ID != '' }}"
-          echo "APP_PRIVATE_KEY is set: ${{ secrets.APP_PRIVATE_KEY != '' }}"
-
       - name: Generate app token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -87,6 +82,9 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Fetch all branches
+        run: git fetch --all
 
       - name: Merge main to release
         run: |
