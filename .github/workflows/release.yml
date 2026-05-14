@@ -1,14 +1,19 @@
-name: Stable Release
+name: Release
 
 # Conscious-decision only — never triggered automatically.
-# To promote the current beta to stable:
-#   1. Go to Actions → Stable Release → Run workflow (on branch: main)
-# The promote job will merge main→release and then trigger the stable job on the release branch.
-# To publish stable directly from the release branch (e.g. after a hotfix):
-#   1. Go to Actions → Stable Release → Run workflow (on branch: release)
+# To promote to stable:
+#   Actions → Release → Run workflow (branch: main) — promote job merges main→release then triggers stable.
+#   Actions → Release → Run workflow (branch: release) — stable job runs directly (e.g. after a hotfix).
+#
+# A confirmation input is required to prevent accidental clicks from publishing.
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "release" to confirm stable publish'
+        required: true
+        default: ''
 
 permissions:
   contents: write
@@ -18,7 +23,7 @@ permissions:
 
 jobs:
   promote:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event.inputs.confirm == 'release'
     runs-on: ubuntu-latest
     steps:
       - name: Generate app token
@@ -50,12 +55,12 @@ jobs:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Trigger stable job on release branch
-        run: gh workflow run stable-release.yml --ref release
+        run: gh workflow run release.yml --ref release --field confirm=release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
   stable:
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && github.event.inputs.confirm == 'release'
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
