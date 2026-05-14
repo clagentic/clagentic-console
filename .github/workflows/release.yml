@@ -70,6 +70,11 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - name: Debug secrets visibility
+        run: |
+          echo "APP_ID is set: ${{ secrets.APP_ID != '' }}"
+          echo "APP_PRIVATE_KEY is set: ${{ secrets.APP_PRIVATE_KEY != '' }}"
+
       - name: Generate app token
         id: app-token
         uses: actions/create-github-app-token@v1
