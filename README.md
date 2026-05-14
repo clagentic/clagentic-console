@@ -15,6 +15,26 @@ A self-hosted browser console for Claude Code and ChatGPT Codex. Run AI sessions
 
 No extras bolted on. No opinionated workflows. The floor is solid; you build what you need on top.
 
+## Install
+
+```bash
+npm install -g @clagentic/console
+```
+
+Then run from anywhere:
+
+```bash
+clagentic
+```
+
+Or try it without installing:
+
+```bash
+npx @clagentic/console
+```
+
+**Requirements:** Node.js 20+. Authenticated Claude Code CLI, Codex CLI, or both.
+
 ## What it does
 
 - **Browser access to your AI runtimes.** The goal is full parity with the CLI for both Claude Code and Codex — tool approvals, model selection, context management, session history. Most things work; see the FAQ for current gaps.
@@ -26,12 +46,6 @@ No extras bolted on. No opinionated workflows. The floor is solid; you build wha
 - **Your data, your machine.** Sessions are JSONL, settings are JSON, knowledge is Markdown. No cloud relay, no proprietary database.
 
 ## Getting Started
-
-**Requirements:** Node.js 20+. Authenticated Claude Code CLI, Codex CLI, or both.
-
-```bash
-npx @clagentic/console
-```
 
 On first run you'll be asked for a port and whether you're running solo or multi-user. Open the URL from any device on your network.
 
