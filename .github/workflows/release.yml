@@ -22,15 +22,23 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Sync release tags into main
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "clagentic-release-bot[bot]"
+          git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
           if git rev-parse --verify origin/release >/dev/null 2>&1; then
             RELEASE_AHEAD=$(git rev-list --count HEAD..origin/release)
             if [ "$RELEASE_AHEAD" -gt 0 ]; then
@@ -38,11 +46,11 @@ jobs:
               git merge origin/release --no-edit -X theirs || true
               git checkout origin/release -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
               git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
-              git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git main
+              git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git main
             fi
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -55,34 +63,42 @@ jobs:
       - name: Run semantic-release (beta)
         run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: true
 
   promote:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Merge main to release
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "clagentic-release-bot[bot]"
+          git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
           git checkout release
           git merge main --no-edit -X theirs || true
           git checkout main -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
           git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git release
+          git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Trigger stable release
         run: gh workflow run release.yml --ref release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
   stable:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release'
@@ -94,11 +110,19 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -111,17 +135,17 @@ jobs:
       - name: Run semantic-release (stable)
         run: npx semantic-release --branches release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: true
 
       - name: Merge release back to main
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "clagentic-release-bot[bot]"
+          git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
           git checkout main
           git merge release --no-edit -X theirs || true
           git checkout release -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
           git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git main
+          git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git main
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
