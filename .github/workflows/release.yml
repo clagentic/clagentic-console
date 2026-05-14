@@ -90,7 +90,7 @@ jobs:
         run: |
           git config user.name "clagentic-release-bot[bot]"
           git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
-          git checkout release
+          git checkout -B release origin/release
           git merge main --no-edit -X theirs || true
           git checkout main -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
           git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
