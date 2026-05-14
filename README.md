@@ -11,18 +11,18 @@
   <a href="https://ko-fi.com/clagentic"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi" /></a>
 </p>
 
-A self-hosted browser console for Claude Code and Claude agents. Everything you get from the CLI — sessions, approvals, agents, tools — in a browser tab, on any device, with push notifications when you need them.
+A self-hosted browser console for Claude Code and ChatGPT Codex. Run AI sessions from any browser or phone — tool approvals, model selection, context management, session history — without leaving your own machine.
 
 No extras bolted on. No opinionated workflows. The floor is solid; you build what you need on top.
 
 ## What it does
 
-- **Full CLI parity in the browser.** Every capability you have in Claude Code CLI is available here — tool approvals, model selection, context management, session history.
-- **Named agent sessions.** Talk directly to any agent defined in your Claude Code config. Agents get their own sessions, context, and history. First-class, not bolted on. (Claude Code only — see FAQ.)
+- **Browser access to your AI runtimes.** The goal is full parity with the CLI for both Claude Code and Codex — tool approvals, model selection, context management, session history. Most things work; see the FAQ for current gaps.
+- **Named agent sessions (Claude Code).** Talk directly to any agent defined in your Claude Code config. Agents get their own sessions, context, and history. This feature is currently Claude Code only — see FAQ for details and what's planned for Codex.
 - **Multi-project dashboard.** Every repo on your machine in one sidebar. Jump between projects, run sessions in parallel, see live status at a glance.
 - **Mobile PWA + push notifications.** Installable on iOS and Android. Your phone buzzes when Claude needs approval or finishes a long task — tap to respond from anywhere.
 - **Loop automation.** Write a `PROMPT.md`, hit go. Clagentic:Console iterates: run, evaluate, retry until done or capped. Schedule with standard cron.
-- **Vendor flexibility.** Supports Claude Agent SDK and Codex app-server protocol. Switch per session.
+- **Vendor flexibility.** Supports Claude Code (Claude Agent SDK) and ChatGPT Codex (codex app-server protocol). Switch per session.
 - **Your data, your machine.** Sessions are JSONL, settings are JSON, knowledge is Markdown. No cloud relay, no proprietary database.
 
 ## Getting Started
@@ -100,10 +100,15 @@ For architecture details, sequence diagrams, and key design decisions, see [docs
 No. Clagentic:Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, and a full browser UI on top.
 
 **"What are named agents?"**
-Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state. No workarounds. Named agents are currently **Claude Code only** — the Codex adapter has no equivalent API for per-session agent identity injection. The Agent Chat entry point is hidden automatically when you're using a Codex session.
+Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state.
+
+Named agents are **currently Claude Code only.** The Codex adapter has no equivalent API for per-session agent identity injection — the Claude Agent SDK exposes this directly, Codex does not. When you're in a Codex session, the Agent Chat entry point is hidden automatically. Partial Codex parity (system-prompt prepend) is planned; until then, agents only apply when the session vendor is Claude Code.
+
+**"Is feature parity between Claude Code and Codex complete?"**
+Not yet. The goal is full parity, but there are gaps. Named agents (above) are the main one. Claude Code has been the primary development target; Codex support covers sessions, tool approvals, model selection, MCP servers, loop, and most UI surfaces. Features that depend on Claude Agent SDK internals (agent identity, extended thinking, some beta flags) have no Codex equivalent today.
 
 **"Can I run Claude Code and Codex in the same workspace?"**
-Yes. Pick a vendor when you open a session. Switch per session.
+Yes. Pick a vendor when you open a session. Switch per session — sessions remember their vendor.
 
 **"Does my code leave my machine?"**
 Only as model API calls — the same as using the CLI directly. Sessions, settings, and knowledge all stay on disk.
