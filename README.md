@@ -18,7 +18,7 @@ No extras bolted on. No opinionated workflows. The floor is solid; you build wha
 ## What it does
 
 - **Full CLI parity in the browser.** Every capability you have in Claude Code CLI is available here — tool approvals, model selection, context management, session history.
-- **Named agent sessions.** Talk directly to any agent defined in your Claude Code config. Agents get their own sessions, context, and history. First-class, not bolted on.
+- **Named agent sessions.** Talk directly to any agent defined in your Claude Code config. Agents get their own sessions, context, and history. First-class, not bolted on. (Claude Code only — see FAQ.)
 - **Multi-project dashboard.** Every repo on your machine in one sidebar. Jump between projects, run sessions in parallel, see live status at a glance.
 - **Mobile PWA + push notifications.** Installable on iOS and Android. Your phone buzzes when Claude needs approval or finishes a long task — tap to respond from anywhere.
 - **Loop automation.** Write a `PROMPT.md`, hit go. Clagentic:Console iterates: run, evaluate, retry until done or capped. Schedule with standard cron.
@@ -100,7 +100,7 @@ For architecture details, sequence diagrams, and key design decisions, see [docs
 No. Clagentic:Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, and a full browser UI on top.
 
 **"What are named agents?"**
-Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state. No workarounds.
+Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state. No workarounds. Named agents are currently **Claude Code only** — the Codex adapter has no equivalent API for per-session agent identity injection. The Agent Chat entry point is hidden automatically when you're using a Codex session.
 
 **"Can I run Claude Code and Codex in the same workspace?"**
 Yes. Pick a vendor when you open a session. Switch per session.
