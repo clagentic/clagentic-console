@@ -1,3 +1,12 @@
+## [1.0.4](https://github.com/clagentic/clagentic-console/compare/v1.0.3...v1.0.4) (2026-05-15)
+
+
+### Bug Fixes
+
+* **lr-8e39:** pass settingSources as array to SDK (not comma string) ([9380f83](https://github.com/clagentic/clagentic-console/commit/9380f83a0e0496754c00b0787eff2adfc582b54f))
+* **lr-8e39:** replace CLI agent parse with SDK supportedAgents() + chattable.json migration ([6ca26dc](https://github.com/clagentic/clagentic-console/commit/6ca26dc692dd9744c4883f3d64f9ec9bcae0b94c))
+* stop button stuck after WS drops mid-processing on Android Chrome ([d8ac4a2](https://github.com/clagentic/clagentic-console/commit/d8ac4a2134e209b17b2d296e1d7d492b41dd3773))
+
 ## [1.0.4-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.0.4-beta.2...v1.0.4-beta.3) (2026-05-15)
 
 

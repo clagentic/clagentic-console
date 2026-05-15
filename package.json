@@ -3,7 +3,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.0.4-beta.3",
+  "version": "1.0.4",
   "description": "Self-hosted console for Claude Code and Codex. Multi-user, browser-based, persistent AI sessions.",
   "bin": {
     "clagentic": "./bin/cli.js",
