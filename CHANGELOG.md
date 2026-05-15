@@ -1,3 +1,10 @@
+## [1.0.4-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.0.4-beta.1...v1.0.4-beta.2) (2026-05-15)
+
+
+### Bug Fixes
+
+* **lr-8e39:** replace CLI agent parse with SDK supportedAgents() + chattable.json migration ([6ca26dc](https://github.com/clagentic/clagentic-console/commit/6ca26dc692dd9744c4883f3d64f9ec9bcae0b94c))
+
 ## [1.0.4-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.3...v1.0.4-beta.1) (2026-05-15)
 
 
