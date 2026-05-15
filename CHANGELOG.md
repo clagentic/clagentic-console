@@ -1,3 +1,10 @@
+## [1.0.4-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.0.4-beta.2...v1.0.4-beta.3) (2026-05-15)
+
+
+### Bug Fixes
+
+* **lr-8e39:** pass settingSources as array to SDK (not comma string) ([9380f83](https://github.com/clagentic/clagentic-console/commit/9380f83a0e0496754c00b0787eff2adfc582b54f))
+
 ## [1.0.4-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.0.4-beta.1...v1.0.4-beta.2) (2026-05-15)
 
 
