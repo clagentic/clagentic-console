@@ -1,14 +1,15 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
-      confirm:
-        description: 'Type "release" to confirm stable publish'
+      type:
+        description: 'Release type'
         required: true
-        default: ''
+        type: choice
+        options:
+          - beta
+          - release
 
 permissions:
   contents: write
@@ -18,7 +19,7 @@ permissions:
 
 jobs:
   beta:
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.type == 'beta'
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
@@ -72,7 +73,7 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
 
   promote:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.confirm == 'release'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.type == 'release'
     runs-on: ubuntu-latest
     steps:
       - name: Generate app token
@@ -104,12 +105,12 @@ jobs:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Trigger stable job on release branch
-        run: gh workflow run release.yml --ref release --field confirm=release
+        run: gh workflow run release.yml --ref release --field type=release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
   stable:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && github.event.inputs.confirm == 'release'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && github.event.inputs.type == 'release'
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
