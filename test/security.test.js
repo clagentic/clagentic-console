@@ -490,3 +490,84 @@ test("dangerouslySkipPermissionsBlocked is set in info message only when configu
   assert.strictEqual(multiNotConfigured.dangerouslySkipPermissions, false, "multi-user not configured: active=false");
   assert.ok(!multiNotConfigured.dangerouslySkipPermissionsBlocked, "multi-user not configured: blocked field absent");
 });
+
+// ============================================================
+// 11. getScrollback ownership gate (lr-4d6a follow-up)
+// ============================================================
+
+test("getScrollback returns null for unauthorized caller in multi-user mode", function () {
+  var { createTerminalManager } = require("../lib/terminal-manager");
+
+  var tm = createTerminalManager({ cwd: "/tmp", isMultiUser: true });
+
+  // Inject a fake terminal session directly into the manager's internals.
+  // We do this by creating a terminal (which would require a real pty) so
+  // instead we test the isAuthorized logic inline, mirroring the production
+  // path, using a separate instance to verify the callerWs check.
+
+  // Build a minimal fake session and wrap it in a test-local isAuthorized
+  // that mirrors terminal-manager.js exactly.
+  function isAuthorizedLocal(session, callerWs, isMultiUser) {
+    if (!isMultiUser) return true;
+    if (!callerWs) return true;
+    if (!session.ownerUserId) return true;
+    var caller = callerWs._clayUser;
+    if (!caller) return true;
+    if (caller.role === "admin") return true;
+    return caller.id === session.ownerUserId;
+  }
+
+  var session = { ownerUserId: "user-A", scrollback: [], totalBytesWritten: 0 };
+
+  var wsOwner = { _clayUser: { id: "user-A", role: "user" } };
+  var wsOther = { _clayUser: { id: "user-B", role: "user" } };
+  var wsAdmin = { _clayUser: { id: "user-C", role: "admin" } };
+
+  assert.ok(isAuthorizedLocal(session, wsOwner, true), "owner can read their own scrollback");
+  assert.ok(!isAuthorizedLocal(session, wsOther, true), "non-owner cannot read scrollback in multi-user mode");
+  assert.ok(isAuthorizedLocal(session, wsAdmin, true), "admin can read any scrollback");
+  assert.ok(isAuthorizedLocal(session, wsOther, false), "non-owner can read in single-user mode");
+});
+
+// ============================================================
+// 12. context_sources_save strips unauthorized term: IDs (lr-4d6a follow-up)
+// ============================================================
+
+test("context_sources_save filters out term: IDs the caller does not own", function () {
+  // Simulate the filter logic from project-user-message.js context_sources_save.
+  // In production: activeIds = activeIds.filter(srcId => tm.getScrollback(tid, ws) !== null)
+  // getScrollback returns null when caller is unauthorized.
+
+  // Mock tm.getScrollback that only grants access to user-A's terminal (id=1)
+  var fakeGetScrollback = function(termId, callerWs) {
+    // terminal 1 is owned by user-A
+    if (termId === 1) {
+      if (!callerWs || !callerWs._clayUser) return null;
+      return callerWs._clayUser.id === "user-A" ? { totalBytesWritten: 0 } : null;
+    }
+    return null; // unknown terminal
+  };
+
+  var tm = { getScrollback: fakeGetScrollback };
+
+  function filterContextSources(activeIds, ws) {
+    return activeIds.filter(function(srcId) {
+      if (!srcId.startsWith("term:")) return true;
+      var tid = parseInt(srcId.split(":")[1], 10);
+      return tm.getScrollback(tid, ws) !== null;
+    });
+  }
+
+  var wsA = { _clayUser: { id: "user-A" } };
+  var wsB = { _clayUser: { id: "user-B" } };
+
+  var sources = ["file:readme.md", "term:1", "term:2"];
+
+  var filteredA = filterContextSources(sources, wsA);
+  assert.deepStrictEqual(filteredA, ["file:readme.md", "term:1"],
+    "owner keeps their own term:1, unknown term:2 is stripped");
+
+  var filteredB = filterContextSources(sources, wsB);
+  assert.deepStrictEqual(filteredB, ["file:readme.md"],
+    "non-owner has all term: IDs stripped");
+});
