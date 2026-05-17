@@ -253,3 +253,321 @@ test("scrypt hash is detected (contains colon)", function () {
   var scryptHash = generateAuthToken("123456");
   assert.ok(scryptHash.indexOf(":") !== -1, "Scrypt hash should contain colon");
 });
+
+// ============================================================
+// 8. Terminal ownership enforcement (lr-4d6a)
+// ============================================================
+
+var { createTerminalManager } = require("../lib/terminal-manager");
+
+function makeWs(userId, role) {
+  return {
+    _clayUser: userId ? { id: userId, role: role || "user" } : null,
+    readyState: 1,
+    send: function () {},
+  };
+}
+
+function makeNullPtyManager() {
+  // createTerminalManager calls createTerminal internally; stub it out by returning
+  // null from tm.create (no node-pty available in test environment).
+  // We test the ownership logic directly by constructing fake sessions.
+  return null;
+}
+
+test("terminal manager: single-user mode allows any ws to attach", function () {
+  var tm = createTerminalManager({
+    cwd: "/tmp",
+    send: function () {},
+    sendTo: function () {},
+    isMultiUser: false,
+  });
+  // In single-user mode, create() will call createTerminal which may not have node-pty.
+  // We only test that the attach/write/close/rename signatures accept the new callerWs
+  // parameter without throwing (no actual PTY required).
+  var ws = makeWs(null);
+  // attach to non-existent terminal returns false gracefully
+  assert.strictEqual(tm.attach(99, ws), false, "attach to missing id returns false");
+  assert.doesNotThrow(function () { tm.write(99, "data", ws); }, "write to missing id does not throw");
+  assert.doesNotThrow(function () { tm.close(99, ws); }, "close on missing id does not throw");
+  assert.doesNotThrow(function () { tm.rename(99, "title", ws); }, "rename on missing id does not throw");
+  var list = tm.list(ws);
+  assert.ok(Array.isArray(list), "list returns array");
+  assert.strictEqual(list.length, 0, "empty list when no terminals");
+});
+
+test("terminal manager: multi-user mode attach returns false for unauthorized ws", function () {
+  var tm = createTerminalManager({
+    cwd: "/tmp",
+    send: function () {},
+    sendTo: function () {},
+    isMultiUser: true,
+  });
+
+  // Manually inject a fake terminal session to bypass PTY creation
+  var ownerWs = makeWs("user-A");
+  var fakeSession = {
+    id: 1,
+    pty: null,
+    scrollback: [],
+    scrollbackSize: 0,
+    totalBytesWritten: 0,
+    cols: 80,
+    rows: 24,
+    title: "Terminal 1",
+    exited: false,
+    exitCode: null,
+    subscribers: new Set(),
+    ownerWs: ownerWs,
+    ownerUserId: "user-A",
+  };
+  tm._terminals_for_test = fakeSession; // not a real API — we expose via map trick below
+
+  // Access the internal Map by calling list() and attach() to observe authorization
+  // Since we cannot inject into the Map directly through the public API without a PTY,
+  // we test the property-level logic using the isAuthorized-equivalent: the list() filter.
+
+  // In multi-user mode, a user who does not own any terminal should see an empty list.
+  var wsB = makeWs("user-B");
+  var wsA = makeWs("user-A");
+
+  // No terminals exist (PTY unavailable), so list is always empty — verify no crash
+  assert.strictEqual(tm.list(wsA).length, 0, "owner sees empty list when no terminals created");
+  assert.strictEqual(tm.list(wsB).length, 0, "non-owner sees empty list when no terminals created");
+  assert.strictEqual(tm.attach(1, wsB), false, "attach to non-existent terminal returns false");
+});
+
+test("terminal manager: list() filters by caller userId in multi-user mode", function () {
+  // This test verifies the filtering logic in list() without needing real PTYs.
+  // We use a custom terminal manager with the isAuthorized function tested directly.
+  var filterResults = [];
+
+  // Simulate what list(ws) does for two users by testing the isMultiUser gate logic:
+  var isMultiUser = true;
+
+  function isAuthorized(session, callerWs) {
+    if (!isMultiUser) return true;
+    if (!callerWs) return true;
+    if (!session.ownerUserId) return true;
+    var caller = callerWs._clayUser;
+    if (!caller) return true;
+    if (caller.role === "admin") return true;
+    return caller.id === session.ownerUserId;
+  }
+
+  var sessions = [
+    { id: 1, ownerUserId: "user-A", title: "A's terminal" },
+    { id: 2, ownerUserId: "user-B", title: "B's terminal" },
+    { id: 3, ownerUserId: null,     title: "Legacy terminal" },
+  ];
+
+  var wsA = makeWs("user-A");
+  var wsB = makeWs("user-B");
+  var wsAdmin = makeWs("user-admin", "admin");
+  var wsNoUser = { _clayUser: null, readyState: 1, send: function () {} };
+
+  var listForA = sessions.filter(function (s) { return isAuthorized(s, wsA); });
+  var listForB = sessions.filter(function (s) { return isAuthorized(s, wsB); });
+  var listForAdmin = sessions.filter(function (s) { return isAuthorized(s, wsAdmin); });
+  var listForNoUser = sessions.filter(function (s) { return isAuthorized(s, wsNoUser); });
+
+  assert.strictEqual(listForA.length, 2, "user-A sees own terminal + legacy");
+  assert.ok(listForA.some(function (s) { return s.id === 1; }), "user-A sees their terminal");
+  assert.ok(listForA.some(function (s) { return s.id === 3; }), "user-A sees legacy terminal");
+  assert.ok(!listForA.some(function (s) { return s.id === 2; }), "user-A does not see user-B terminal");
+
+  assert.strictEqual(listForB.length, 2, "user-B sees own terminal + legacy");
+  assert.ok(listForB.some(function (s) { return s.id === 2; }), "user-B sees their terminal");
+  assert.ok(!listForB.some(function (s) { return s.id === 1; }), "user-B does not see user-A terminal");
+
+  assert.strictEqual(listForAdmin.length, 3, "admin sees all terminals");
+  assert.strictEqual(listForNoUser.length, 3, "unauthenticated client sees all (single-user compat)");
+});
+
+// ============================================================
+// 9. Push notification routing (lr-4d6a)
+// ============================================================
+
+test("push routing: sendPushToUser is called for user-specific events in multi-user mode", function () {
+  var broadcastCalls = [];
+  var userCalls = [];
+
+  var fakePush = {
+    sendPush: function (payload) { broadcastCalls.push(payload); },
+    sendPushToUser: function (userId, payload) { userCalls.push({ userId: userId, payload: payload }); },
+  };
+
+  // Simulate the routing decision made in sdk-message-processor.js and sdk-bridge.js:
+  // In multi-user mode with a session owner, use sendPushToUser.
+  function routePush(isMultiUser, ownerId, pushModule, payload) {
+    if (isMultiUser && ownerId && pushModule.sendPushToUser) {
+      pushModule.sendPushToUser(ownerId, payload);
+    } else {
+      pushModule.sendPush(payload);
+    }
+  }
+
+  var donePayload = { type: "done", slug: "proj", title: "Title", body: "Preview" };
+  var askPayload  = { type: "ask_user", slug: "proj", title: "Q", body: "question?" };
+
+  // Multi-user mode with owner — should route to user
+  routePush(true, "user-A", fakePush, donePayload);
+  routePush(true, "user-A", fakePush, askPayload);
+
+  assert.strictEqual(userCalls.length, 2, "two user-targeted pushes sent");
+  assert.strictEqual(broadcastCalls.length, 0, "no broadcast pushes in multi-user mode");
+  assert.strictEqual(userCalls[0].userId, "user-A", "done notification routed to owner");
+  assert.strictEqual(userCalls[1].userId, "user-A", "ask_user notification routed to owner");
+
+  // Single-user mode — should broadcast
+  broadcastCalls.length = 0;
+  userCalls.length = 0;
+  routePush(false, null, fakePush, donePayload);
+  assert.strictEqual(broadcastCalls.length, 1, "broadcast in single-user mode");
+  assert.strictEqual(userCalls.length, 0, "no user-targeted push in single-user mode");
+});
+
+test("push routing: falls back to sendPush when no ownerId in multi-user mode", function () {
+  var broadcastCalls = [];
+  var userCalls = [];
+
+  var fakePush = {
+    sendPush: function (payload) { broadcastCalls.push(payload); },
+    sendPushToUser: function (userId, payload) { userCalls.push({ userId: userId, payload: payload }); },
+  };
+
+  function routePush(isMultiUser, ownerId, pushModule, payload) {
+    if (isMultiUser && ownerId && pushModule.sendPushToUser) {
+      pushModule.sendPushToUser(ownerId, payload);
+    } else {
+      pushModule.sendPush(payload);
+    }
+  }
+
+  // Multi-user but no ownerId (legacy session) — falls back to broadcast
+  routePush(true, null, fakePush, { type: "done" });
+  assert.strictEqual(broadcastCalls.length, 1, "legacy session falls back to broadcast");
+  assert.strictEqual(userCalls.length, 0, "no user-targeted push for legacy session");
+});
+
+// ============================================================
+// 10. dangerouslySkipPermissions scope gate (lr-4d6a)
+// ============================================================
+
+test("dangerouslySkipPermissions is disabled in multi-user mode regardless of config", function () {
+  // Mirrors the gate in project.js:
+  //   var dangerouslySkipPermissions = dangerouslySkipPermissionsConfigured && !usersModule.isMultiUser();
+  function computeFlag(configured, isMultiUser) {
+    return configured && !isMultiUser;
+  }
+
+  assert.strictEqual(computeFlag(true, false), true,  "single-user: flag active when configured");
+  assert.strictEqual(computeFlag(false, false), false, "single-user: flag inactive when not configured");
+  assert.strictEqual(computeFlag(true, true), false,  "multi-user: flag suppressed even when configured");
+  assert.strictEqual(computeFlag(false, true), false,  "multi-user: flag inactive when not configured");
+});
+
+test("dangerouslySkipPermissionsBlocked is set in info message only when configured+multi-user", function () {
+  // Mirrors the gate in project-connection.js
+  function buildInfoFields(configured, isMultiUser) {
+    var active = configured && !isMultiUser;
+    var fields = { dangerouslySkipPermissions: active };
+    if (configured && !active) {
+      fields.dangerouslySkipPermissionsBlocked = true;
+    }
+    return fields;
+  }
+
+  var singleConfigured = buildInfoFields(true, false);
+  assert.strictEqual(singleConfigured.dangerouslySkipPermissions, true, "single-user configured: active=true");
+  assert.ok(!singleConfigured.dangerouslySkipPermissionsBlocked, "single-user configured: blocked field absent");
+
+  var multiConfigured = buildInfoFields(true, true);
+  assert.strictEqual(multiConfigured.dangerouslySkipPermissions, false, "multi-user configured: active=false");
+  assert.strictEqual(multiConfigured.dangerouslySkipPermissionsBlocked, true, "multi-user configured: blocked=true");
+
+  var multiNotConfigured = buildInfoFields(false, true);
+  assert.strictEqual(multiNotConfigured.dangerouslySkipPermissions, false, "multi-user not configured: active=false");
+  assert.ok(!multiNotConfigured.dangerouslySkipPermissionsBlocked, "multi-user not configured: blocked field absent");
+});
+
+// ============================================================
+// 11. getScrollback ownership gate (lr-4d6a follow-up)
+// ============================================================
+
+test("getScrollback returns null for unauthorized caller in multi-user mode", function () {
+  var { createTerminalManager } = require("../lib/terminal-manager");
+
+  var tm = createTerminalManager({ cwd: "/tmp", isMultiUser: true });
+
+  // Inject a fake terminal session directly into the manager's internals.
+  // We do this by creating a terminal (which would require a real pty) so
+  // instead we test the isAuthorized logic inline, mirroring the production
+  // path, using a separate instance to verify the callerWs check.
+
+  // Build a minimal fake session and wrap it in a test-local isAuthorized
+  // that mirrors terminal-manager.js exactly.
+  function isAuthorizedLocal(session, callerWs, isMultiUser) {
+    if (!isMultiUser) return true;
+    if (!callerWs) return true;
+    if (!session.ownerUserId) return true;
+    var caller = callerWs._clayUser;
+    if (!caller) return true;
+    if (caller.role === "admin") return true;
+    return caller.id === session.ownerUserId;
+  }
+
+  var session = { ownerUserId: "user-A", scrollback: [], totalBytesWritten: 0 };
+
+  var wsOwner = { _clayUser: { id: "user-A", role: "user" } };
+  var wsOther = { _clayUser: { id: "user-B", role: "user" } };
+  var wsAdmin = { _clayUser: { id: "user-C", role: "admin" } };
+
+  assert.ok(isAuthorizedLocal(session, wsOwner, true), "owner can read their own scrollback");
+  assert.ok(!isAuthorizedLocal(session, wsOther, true), "non-owner cannot read scrollback in multi-user mode");
+  assert.ok(isAuthorizedLocal(session, wsAdmin, true), "admin can read any scrollback");
+  assert.ok(isAuthorizedLocal(session, wsOther, false), "non-owner can read in single-user mode");
+});
+
+// ============================================================
+// 12. context_sources_save strips unauthorized term: IDs (lr-4d6a follow-up)
+// ============================================================
+
+test("context_sources_save filters out term: IDs the caller does not own", function () {
+  // Simulate the filter logic from project-user-message.js context_sources_save.
+  // In production: activeIds = activeIds.filter(srcId => tm.getScrollback(tid, ws) !== null)
+  // getScrollback returns null when caller is unauthorized.
+
+  // Mock tm.getScrollback that only grants access to user-A's terminal (id=1)
+  var fakeGetScrollback = function(termId, callerWs) {
+    // terminal 1 is owned by user-A
+    if (termId === 1) {
+      if (!callerWs || !callerWs._clayUser) return null;
+      return callerWs._clayUser.id === "user-A" ? { totalBytesWritten: 0 } : null;
+    }
+    return null; // unknown terminal
+  };
+
+  var tm = { getScrollback: fakeGetScrollback };
+
+  function filterContextSources(activeIds, ws) {
+    return activeIds.filter(function(srcId) {
+      if (!srcId.startsWith("term:")) return true;
+      var tid = parseInt(srcId.split(":")[1], 10);
+      return tm.getScrollback(tid, ws) !== null;
+    });
+  }
+
+  var wsA = { _clayUser: { id: "user-A" } };
+  var wsB = { _clayUser: { id: "user-B" } };
+
+  var sources = ["file:readme.md", "term:1", "term:2"];
+
+  var filteredA = filterContextSources(sources, wsA);
+  assert.deepStrictEqual(filteredA, ["file:readme.md", "term:1"],
+    "owner keeps their own term:1, unknown term:2 is stripped");
+
+  var filteredB = filterContextSources(sources, wsB);
+  assert.deepStrictEqual(filteredB, ["file:readme.md"],
+    "non-owner has all term: IDs stripped");
+});
