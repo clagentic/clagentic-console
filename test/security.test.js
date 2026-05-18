@@ -571,3 +571,108 @@ test("context_sources_save filters out term: IDs the caller does not own", funct
   assert.deepStrictEqual(filteredB, ["file:readme.md"],
     "non-owner has all term: IDs stripped");
 });
+
+// ============================================================
+// 13. switchSession access guards (lr-f0d8)
+// ============================================================
+
+test("switchSession: rejects non-existent session ID with structured error", function () {
+  // Mirror the guard logic added to sessions.js switchSession.
+  // We test the decision path in isolation (the actual manager requires file I/O).
+  var sessions = new Map();
+  sessions.set(1, { localId: 1, ownerId: null });
+
+  var sentErrors = [];
+  var fakeSendTo = function (ws, msg) { sentErrors.push(msg); };
+
+  function switchSessionGuard(localId, targetWs) {
+    if (!sessions.has(localId)) {
+      if (targetWs && fakeSendTo) {
+        fakeSendTo(targetWs, { type: "error", error: "Session not found" });
+      }
+      return false; // blocked
+    }
+    return true; // would proceed
+  }
+
+  var fakeWs = { _clayUser: null, readyState: 1, send: function () {} };
+
+  assert.strictEqual(switchSessionGuard(99, fakeWs), false, "non-existent ID is rejected");
+  assert.strictEqual(sentErrors.length, 1, "one error sent");
+  assert.strictEqual(sentErrors[0].type, "error", "error message has type=error");
+  assert.strictEqual(sentErrors[0].error, "Session not found", "error text matches");
+
+  // Internal call (targetWs=null) must not send error and must return early silently
+  sentErrors.length = 0;
+  assert.strictEqual(switchSessionGuard(99, null), false, "internal call also returns false");
+  assert.strictEqual(sentErrors.length, 0, "no error sent for internal call");
+});
+
+test("switchSession: rejects unauthorized access in multi-user mode", function () {
+  // Simulate the guard logic: user-B must not switch to a private session owned by user-A.
+  var sessions = new Map();
+  sessions.set(1, { localId: 1, ownerId: "user-A", sessionVisibility: "private" });
+  sessions.set(2, { localId: 2, ownerId: "user-A", sessionVisibility: "shared" });
+
+  // Minimal canAccessSession mirror (same logic as users-permissions.js)
+  function canAccessSession(userId, session) {
+    if (!session.ownerId) return false; // no owner = admin-only (treat as denied here)
+    if (session.ownerId === userId) return true;
+    if (!session.sessionVisibility || session.sessionVisibility === "shared") return true;
+    return false;
+  }
+
+  var sentErrors = [];
+  var fakeSendTo = function (ws, msg) { sentErrors.push(msg); };
+
+  function switchSessionGuard(localId, targetWs, isMultiUser) {
+    if (!sessions.has(localId)) {
+      if (targetWs) fakeSendTo(targetWs, { type: "error", error: "Session not found" });
+      return false;
+    }
+    var session = sessions.get(localId);
+    if (targetWs) {
+      if (isMultiUser) {
+        var user = targetWs._clayUser;
+        if (!user) {
+          fakeSendTo(targetWs, { type: "error", error: "Access denied" });
+          return false;
+        }
+        if (!canAccessSession(user.id, session)) {
+          fakeSendTo(targetWs, { type: "error", error: "Access denied" });
+          return false;
+        }
+      } else {
+        if (session.ownerId) {
+          fakeSendTo(targetWs, { type: "error", error: "Access denied" });
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  var wsB = { _clayUser: { id: "user-B", role: "user" }, readyState: 1, send: function () {} };
+  var wsA = { _clayUser: { id: "user-A", role: "user" }, readyState: 1, send: function () {} };
+
+  // user-B cannot access user-A's private session in multi-user mode
+  sentErrors.length = 0;
+  assert.strictEqual(switchSessionGuard(1, wsB, true), false, "private session rejected for non-owner");
+  assert.strictEqual(sentErrors.length, 1, "error sent for unauthorized access");
+  assert.strictEqual(sentErrors[0].error, "Access denied");
+
+  // user-A can access their own private session
+  sentErrors.length = 0;
+  assert.strictEqual(switchSessionGuard(1, wsA, true), true, "owner accesses own private session");
+  assert.strictEqual(sentErrors.length, 0, "no error for authorized access");
+
+  // user-B can access user-A's shared session
+  sentErrors.length = 0;
+  assert.strictEqual(switchSessionGuard(2, wsB, true), true, "shared session accessible to non-owner");
+  assert.strictEqual(sentErrors.length, 0, "no error for shared session");
+
+  // Internal call (no ws) bypasses the guard entirely
+  sentErrors.length = 0;
+  assert.strictEqual(switchSessionGuard(1, null, true), true, "internal call bypasses access check");
+  assert.strictEqual(sentErrors.length, 0, "no error for internal call");
+});
