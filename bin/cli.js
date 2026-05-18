@@ -2606,7 +2606,11 @@ var { checkAndUpdate } = require("../lib/updater");
 var currentVersion = require("../package.json").version;
 
 (async function () {
-  var updated = await checkAndUpdate(currentVersion, skipUpdate);
+  // Read update channel from saved config (best-effort — may not exist yet on first run)
+  var _startupConfig = null;
+  try { _startupConfig = loadConfig(); } catch (e) {}
+  var _updateChannel = (_startupConfig && _startupConfig.updateChannel) || (currentVersion.includes("-") ? "beta" : "stable");
+  var updated = await checkAndUpdate(currentVersion, skipUpdate, _updateChannel);
   if (updated) return;
 
   // Dev mode — foreground daemon with file watching
