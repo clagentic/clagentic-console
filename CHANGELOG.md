@@ -1,3 +1,12 @@
+# [1.1.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.1.0-beta.1...v1.1.0-beta.2) (2026-05-18)
+
+
+### Bug Fixes
+
+* **lr-7443b:** session list wiped by session_switched after project switch ([181a12f](https://github.com/clagentic/clagentic-console/commit/181a12f13c0509d8d41615a4b236403b36b9443d))
+* **lr-7443c:** empty chat on project switch — lazy history not loaded on connect ([5373744](https://github.com/clagentic/clagentic-console/commit/53737443e99700e8902acb31c4bb390fcec66dfe))
+* **lr-7443:** session sidebar blank on project switch + beta update detection ([972590e](https://github.com/clagentic/clagentic-console/commit/972590e944411fedc600d4a6822039e2f9ebd0b3))
+
 # [1.1.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.5-beta.1...v1.1.0-beta.1) (2026-05-18)
 
 
