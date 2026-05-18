@@ -1,3 +1,14 @@
+## [1.0.5-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.4...v1.0.5-beta.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* **lr-4d6a:** close scrollback read bypass and reminder push broadcast ([5e4164b](https://github.com/clagentic/clagentic-console/commit/5e4164b664029f4541d6dca2fa8cb2225f442ebf))
+* **lr-4d6a:** multi-user isolation — terminal ownership, push routing, dangerouslySkipPermissions scope ([a13955b](https://github.com/clagentic/clagentic-console/commit/a13955be6f8120491434189ddbff14ae56965bb0))
+* **lr-6425:** stream reliability — silent errors, message queue race, permission timeout, orphaned promises ([f00e1ad](https://github.com/clagentic/clagentic-console/commit/f00e1adc8bffde1887ac0c3f1308caa486d6d732))
+* make beta release manual — remove push trigger, add type choice input ([c5d9849](https://github.com/clagentic/clagentic-console/commit/c5d9849d6932e8d47ae86690bee30db645357854))
+* mobile add-project button was a no-op — getElementById targeted nonexistent id ([f839143](https://github.com/clagentic/clagentic-console/commit/f8391430ec0963ecbd47bbbc3a7ea1351d76683a)), closes [#add-project-btn](https://github.com/clagentic/clagentic-console/issues/add-project-btn)
+
 ## [1.0.4](https://github.com/clagentic/clagentic-console/compare/v1.0.3...v1.0.4) (2026-05-15)
 
 
