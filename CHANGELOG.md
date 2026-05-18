@@ -1,3 +1,18 @@
+# [1.1.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.5-beta.1...v1.1.0-beta.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* **lr-5339:** clear session sidebar immediately on project switch ([5756d00](https://github.com/clagentic/clagentic-console/commit/5756d008f7f54d61beef963d60b604601c287768))
+* **lr-d767:** auth hardening — debug logs, per-username brute-force, token expiry, su-c allowlist ([#137](https://github.com/clagentic/clagentic-console/issues/137)) ([84c8c17](https://github.com/clagentic/clagentic-console/commit/84c8c17aa16a6b8304a66639ecdc07eb393b871c))
+* **lr-f0d8:** sanitize mermaid SVG output and add switchSession access guards ([#136](https://github.com/clagentic/clagentic-console/issues/136)) ([540cf6c](https://github.com/clagentic/clagentic-console/commit/540cf6cf0fcf5b81a88d39248cb9df78dbb5c413))
+* **lr-f311:** session memory — lazy history load, LRU eviction, async I/O ([7013895](https://github.com/clagentic/clagentic-console/commit/70138954b942a77cf38eaa655bb73721c845a0e7))
+
+
+### Features
+
+* **lr-6580:** append-only audit log for privileged actions ([#139](https://github.com/clagentic/clagentic-console/issues/139)) ([6ac6ce1](https://github.com/clagentic/clagentic-console/commit/6ac6ce1148c853ab397b068f0cb6600deed77d00))
+
 ## [1.0.5-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.0.4...v1.0.5-beta.1) (2026-05-18)
 
 
