@@ -571,3 +571,92 @@ test("context_sources_save filters out term: IDs the caller does not own", funct
   assert.deepStrictEqual(filteredB, ["file:readme.md"],
     "non-owner has all term: IDs stripped");
 });
+
+// ============================================================
+// 13. Audit log module (lr-6580)
+// ============================================================
+
+test("audit.log: writes a valid JSON line to the audit log file", function (t, done) {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-"));
+  var auditPath = path.join(tmpDir, "audit.log");
+
+  // Temporarily override CONFIG_DIR by patching the loaded module's path resolution.
+  // We re-require a fresh audit module with a patched config so it writes to tmpDir.
+  // Clear require cache to get a fresh module instance.
+  var auditModulePath = require.resolve("../lib/audit");
+  var configModulePath = require.resolve("../lib/config");
+
+  // Patch: temporarily override the CONFIG_DIR in cache for this test
+  var originalConfig = require.cache[configModulePath];
+  require.cache[configModulePath] = {
+    id: configModulePath,
+    filename: configModulePath,
+    loaded: true,
+    exports: Object.assign({}, require(configModulePath), { CONFIG_DIR: tmpDir }),
+  };
+
+  // Remove audit from cache so it re-requires with our patched config
+  delete require.cache[auditModulePath];
+  var freshAudit = require("../lib/audit");
+
+  freshAudit.log("test.action", {
+    actorId: "user-1",
+    actorName: "alice",
+    target: "user-2",
+    metadata: { role: "admin" },
+  });
+
+  // Restore original config and audit modules
+  require.cache[configModulePath] = originalConfig;
+  delete require.cache[auditModulePath];
+
+  // Audit writes via setImmediate — give it one tick to flush
+  setImmediate(function () {
+    try {
+      var content = fs.readFileSync(auditPath, "utf8").trim();
+      assert.ok(content.length > 0, "audit log should not be empty");
+      var entry = JSON.parse(content);
+      assert.strictEqual(entry.action, "test.action", "action field should match");
+      assert.strictEqual(entry.actorId, "user-1", "actorId should match");
+      assert.strictEqual(entry.actorName, "alice", "actorName should match");
+      assert.strictEqual(entry.target, "user-2", "target should match");
+      assert.deepStrictEqual(entry.metadata, { role: "admin" }, "metadata should match");
+      assert.ok(typeof entry.ts === "string" && entry.ts.length > 0, "ts should be an ISO string");
+      var stat = fs.statSync(auditPath);
+      var mode = stat.mode & 0o777;
+      assert.strictEqual(mode, 0o600, "audit.log should have 0600 permissions");
+      fs.rmSync(tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      fs.rmSync(tmpDir, { recursive: true });
+      done(e);
+    }
+  });
+});
+
+test("audit.log: does not throw when called with no context", function () {
+  // Should not throw even if ctx is omitted or empty
+  var auditModulePath = require.resolve("../lib/audit");
+  delete require.cache[auditModulePath];
+  // Use a temp dir so we don't pollute the real config dir
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audit2-"));
+  var configModulePath = require.resolve("../lib/config");
+  var originalConfig = require.cache[configModulePath];
+  require.cache[configModulePath] = {
+    id: configModulePath,
+    filename: configModulePath,
+    loaded: true,
+    exports: Object.assign({}, require(configModulePath), { CONFIG_DIR: tmpDir }),
+  };
+  delete require.cache[auditModulePath];
+  var freshAudit = require("../lib/audit");
+  assert.doesNotThrow(function () {
+    freshAudit.log("action.no.ctx");
+    freshAudit.log("action.empty.ctx", {});
+    freshAudit.log("action.null.fields", { actorId: null, target: null, metadata: null });
+  });
+  require.cache[configModulePath] = originalConfig;
+  delete require.cache[auditModulePath];
+  // Give setImmediate a chance to run before cleanup
+  setImmediate(function () { try { fs.rmSync(tmpDir, { recursive: true }); } catch (_) {} });
+});
