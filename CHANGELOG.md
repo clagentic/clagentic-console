@@ -1,3 +1,27 @@
+# [1.1.0](https://github.com/clagentic/clagentic-console/compare/v1.0.4...v1.1.0) (2026-05-18)
+
+
+### Bug Fixes
+
+* call refreshIcons after refreshSessionTopActions to render Lucide icons ([928322c](https://github.com/clagentic/clagentic-console/commit/928322c264c3c44d146c2223b83eafa775da2cde))
+* **lr-4d6a:** close scrollback read bypass and reminder push broadcast ([5e4164b](https://github.com/clagentic/clagentic-console/commit/5e4164b664029f4541d6dca2fa8cb2225f442ebf))
+* **lr-4d6a:** multi-user isolation — terminal ownership, push routing, dangerouslySkipPermissions scope ([a13955b](https://github.com/clagentic/clagentic-console/commit/a13955be6f8120491434189ddbff14ae56965bb0))
+* **lr-5339:** clear session sidebar immediately on project switch ([5756d00](https://github.com/clagentic/clagentic-console/commit/5756d008f7f54d61beef963d60b604601c287768))
+* **lr-6425:** stream reliability — silent errors, message queue race, permission timeout, orphaned promises ([f00e1ad](https://github.com/clagentic/clagentic-console/commit/f00e1adc8bffde1887ac0c3f1308caa486d6d732))
+* **lr-7443b:** session list wiped by session_switched after project switch ([181a12f](https://github.com/clagentic/clagentic-console/commit/181a12f13c0509d8d41615a4b236403b36b9443d))
+* **lr-7443c:** empty chat on project switch — lazy history not loaded on connect ([5373744](https://github.com/clagentic/clagentic-console/commit/53737443e99700e8902acb31c4bb390fcec66dfe))
+* **lr-7443:** session sidebar blank on project switch + beta update detection ([972590e](https://github.com/clagentic/clagentic-console/commit/972590e944411fedc600d4a6822039e2f9ebd0b3))
+* **lr-d767:** auth hardening — debug logs, per-username brute-force, token expiry, su-c allowlist ([#137](https://github.com/clagentic/clagentic-console/issues/137)) ([84c8c17](https://github.com/clagentic/clagentic-console/commit/84c8c17aa16a6b8304a66639ecdc07eb393b871c))
+* **lr-f0d8:** sanitize mermaid SVG output and add switchSession access guards ([#136](https://github.com/clagentic/clagentic-console/issues/136)) ([540cf6c](https://github.com/clagentic/clagentic-console/commit/540cf6cf0fcf5b81a88d39248cb9df78dbb5c413))
+* **lr-f311:** session memory — lazy history load, LRU eviction, async I/O ([7013895](https://github.com/clagentic/clagentic-console/commit/70138954b942a77cf38eaa655bb73721c845a0e7))
+* make beta release manual — remove push trigger, add type choice input ([c5d9849](https://github.com/clagentic/clagentic-console/commit/c5d9849d6932e8d47ae86690bee30db645357854))
+* mobile add-project button was a no-op — getElementById targeted nonexistent id ([f839143](https://github.com/clagentic/clagentic-console/commit/f8391430ec0963ecbd47bbbc3a7ea1351d76683a)), closes [#add-project-btn](https://github.com/clagentic/clagentic-console/issues/add-project-btn)
+
+
+### Features
+
+* **lr-6580:** append-only audit log for privileged actions ([#139](https://github.com/clagentic/clagentic-console/issues/139)) ([6ac6ce1](https://github.com/clagentic/clagentic-console/commit/6ac6ce1148c853ab397b068f0cb6600deed77d00))
+
 # [1.1.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.1.0-beta.1...v1.1.0-beta.2) (2026-05-18)
 
 
