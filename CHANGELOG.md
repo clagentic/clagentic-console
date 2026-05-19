@@ -1,3 +1,11 @@
+## [1.1.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.1.0...v1.1.1-beta.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* **lr-b61b:** kill orphaned claude child process and buffer between-turn messages ([6e7bdbe](https://github.com/clagentic/clagentic-console/commit/6e7bdbe55356c8925606cceff67d3c43e61a8910))
+* resolve sidebar top-action icons synchronously to eliminate blank-icon frame ([8842841](https://github.com/clagentic/clagentic-console/commit/88428411fb53e7cfaf907b5377e4e05ae6239388))
+
 # [1.1.0](https://github.com/clagentic/clagentic-console/compare/v1.0.4...v1.1.0) (2026-05-18)
 
 
