@@ -1,3 +1,10 @@
+# [1.2.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.1.1-beta.1...v1.2.0-beta.1) (2026-05-19)
+
+
+### Features
+
+* **lr-9cfc:** wire UI-path agent sessions to relay live-claim registration ([95692c5](https://github.com/clagentic/clagentic-console/commit/95692c50c310ed1a8429a46cd0413325d15d3002))
+
 ## [1.1.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.1.0...v1.1.1-beta.1) (2026-05-19)
 
 
