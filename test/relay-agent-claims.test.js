@@ -2,13 +2,11 @@
 //
 // Tests cover:
 //   - listOpenConversationsForAgent: sidecar directory parsing + participant filter
+//   - isRelayReachable: returns false when socket is absent
 //   - attachAgentSession: no-op when relay is absent
 //   - detachAgentSession: cleans up state and stops heartbeat timer
-//   - onNewConversation: registers claim for new convs on active sessions
-//
-// All relay HTTP calls are avoided by ensuring isRelayReachable resolves false
-// in the absence of a live socket. The listOpenConversationsForAgent tests use
-// a temp sidecar directory.
+//   - onNewConversation: no-op when relay absent; registers claim when relay present
+//   - relay-present path: register/heartbeat/release via Unix socket fake server
 
 var test = require("node:test");
 var assert = require("node:assert");
@@ -171,4 +169,113 @@ test("detachAgentSession is safe to call for unknown localId", function () {
 test("getClaimsForSession returns null for unknown localId", function () {
   var result = claims.getClaimsForSession(88888);
   assert.strictEqual(result, null);
+});
+
+// --- onNewConversation tests ---
+
+test("onNewConversation is a no-op when no active session state exists", function (t, done) {
+  // No attachAgentSession called for localId 77777.
+  claims.onNewConversation(77777, "test-agent", "conv-id-xyz").then(function (result) {
+    assert.strictEqual(result, null, "should return null when no state exists for localId");
+    done();
+  });
+});
+
+test("onNewConversation returns null when relay is absent (no claim registered)", function (t, done) {
+  // Use a fresh localId to avoid interference from prior tests.
+  var fakeSession = { localId: 9002, agentName: "test-agent-conv" };
+  var sendFn = function () {};
+
+  claims.attachAgentSession(fakeSession, "test-agent-conv", sendFn);
+
+  // Wait for relay check to complete and state to be cleaned up (relay absent).
+  setTimeout(function () {
+    // With relay absent, attachAgentSession deletes state after isRelayReachable resolves false.
+    // onNewConversation should therefore return null.
+    claims.onNewConversation(9002, "test-agent-conv", "some-conv-id").then(function (result) {
+      assert.strictEqual(result, null, "should return null when relay is absent (state cleaned up)");
+      done();
+    });
+  }, 400);
+});
+
+// --- relay-present path tests using a Unix socket fake server ---
+
+test("registerClaim, heartbeatClaim, releaseClaim succeed against fake relay server", function (t, done) {
+  var net = require("net");
+  var os = require("os");
+  var path = require("path");
+  var fs = require("fs");
+
+  // Build a minimal HTTP/1.1 Unix-socket server that returns 200 JSON for any POST.
+  var sockPath = path.join(os.tmpdir(), "relay-fake-" + Date.now() + ".sock");
+  var received = [];
+
+  var server = net.createServer(function (conn) {
+    var buf = "";
+    conn.on("data", function (chunk) {
+      buf += chunk.toString();
+      // Wait for end of headers + body.
+      var headerEnd = buf.indexOf("\r\n\r\n");
+      if (headerEnd === -1) return;
+      var headers = buf.substring(0, headerEnd);
+      var body = buf.substring(headerEnd + 4);
+
+      // Parse Content-Length to know when full body arrived.
+      var clMatch = headers.match(/content-length:\s*(\d+)/i);
+      var contentLength = clMatch ? parseInt(clMatch[1], 10) : 0;
+      if (body.length < contentLength) return; // wait for more data
+
+      var requestLine = headers.split("\r\n")[0];
+      var urlPath = requestLine.split(" ")[1] || "";
+      received.push(urlPath);
+
+      var resp = JSON.stringify({ claim_id: "test-claim-id", heartbeat_ts: Date.now(), effective: true });
+      conn.write(
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: application/json\r\n" +
+        "Content-Length: " + Buffer.byteLength(resp) + "\r\n" +
+        "Connection: close\r\n" +
+        "\r\n" +
+        resp
+      );
+      conn.end();
+      buf = "";
+    });
+    conn.on("error", function () {});
+  });
+
+  server.listen(sockPath, function () {
+    // Point the module at the fake server.
+    var origSocket = process.env.CLAGENTIC_RELAY_SOCKET;
+    process.env.CLAGENTIC_RELAY_SOCKET = sockPath;
+
+    // isRelayReachable should now return true.
+    claims.isRelayReachable().then(function (reachable) {
+      assert.ok(reachable, "isRelayReachable should return true for fake server");
+
+      // Exercise register / heartbeat / release.
+      return claims.registerClaim("test-agent", "conv-fake-id", "test-session").then(function (claimId) {
+        assert.ok(claimId, "registerClaim should return a claim_id");
+        return claims.heartbeatClaim("test-agent", "conv-fake-id", claimId);
+      }).then(function (effective) {
+        assert.ok(effective, "heartbeatClaim should return true for 200 response");
+        return claims.releaseClaim("test-agent", "conv-fake-id", "test-claim-id");
+      }).then(function () {
+        assert.ok(received.some(function (p) { return p.indexOf("register") !== -1; }), "register endpoint called");
+        assert.ok(received.some(function (p) { return p.indexOf("heartbeat") !== -1; }), "heartbeat endpoint called");
+        assert.ok(received.some(function (p) { return p.indexOf("release") !== -1; }), "release endpoint called");
+      });
+    }).then(function () {
+      process.env.CLAGENTIC_RELAY_SOCKET = origSocket || path.join(os.tmpdir(), "no-relay-test-absent.sock");
+      server.close();
+      try { fs.unlinkSync(sockPath); } catch (e) {}
+      done();
+    }).catch(function (err) {
+      process.env.CLAGENTIC_RELAY_SOCKET = origSocket || path.join(os.tmpdir(), "no-relay-test-absent.sock");
+      server.close();
+      try { fs.unlinkSync(sockPath); } catch (e) {}
+      done(err);
+    });
+  });
 });
