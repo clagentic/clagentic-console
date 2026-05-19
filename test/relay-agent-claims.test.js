@@ -199,6 +199,128 @@ test("onNewConversation returns null when relay is absent (no claim registered)"
   }, 400);
 });
 
+// --- startSidecarWatcher B4 regression test ---
+//
+// Verify that sidecar rewrites for pre-existing conversations do NOT trigger
+// auto-claim (regression guard for B4 — startSidecarWatcher must skip convIds
+// that existed at watcher-start time).
+
+test("startSidecarWatcher does not auto-claim pre-existing conv on sidecar rewrite", function (t, done) {
+  var net = require("net");
+
+  // Build a minimal fake relay server on a temp socket so attachAgentSession
+  // believes relay is reachable (otherwise watcher is never started).
+  var sockPath = path.join(os.tmpdir(), "relay-b4-test-" + Date.now() + ".sock");
+
+  // Sidecar dir with one pre-existing conv.
+  var tmpLore = fs.mkdtempSync(path.join(os.tmpdir(), "relay-b4-lore-"));
+  var sidecarDir = path.join(tmpLore, "conversation-sidecars");
+  fs.mkdirSync(sidecarDir);
+
+  var preExistingConvId = "pre-existing-conv-b4b4-1234";
+  var preExistingSidecar = {
+    conversation_id: preExistingConvId,
+    topic: "pre-existing conv",
+    kind: "build",
+    status: "open",
+    opened_at: "2026-05-18T10:00:00Z",
+    message_count: 2,
+    participants: [{ name: "amos", role: "crew" }],
+  };
+  var sidecarPath = path.join(sidecarDir, "pre-existing.json");
+  fs.writeFileSync(sidecarPath, JSON.stringify(preExistingSidecar));
+
+  var claimedConvIds = [];
+
+  var server = net.createServer(function (conn) {
+    var buf = "";
+    conn.on("data", function (chunk) {
+      buf += chunk.toString();
+      var headerEnd = buf.indexOf("\r\n\r\n");
+      if (headerEnd === -1) return;
+      var headers = buf.substring(0, headerEnd);
+      var body = buf.substring(headerEnd + 4);
+      var clMatch = headers.match(/content-length:\s*(\d+)/i);
+      var contentLength = clMatch ? parseInt(clMatch[1], 10) : 0;
+      if (body.length < contentLength) return;
+
+      // Record the conversation_id from the request body so we can assert.
+      try {
+        var parsed = JSON.parse(body);
+        if (parsed.conversation_id) claimedConvIds.push(parsed.conversation_id);
+      } catch (e) {}
+
+      var resp = JSON.stringify({ claim_id: "b4-claim-id", heartbeat_ts: Date.now(), effective: true });
+      conn.write(
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: application/json\r\n" +
+        "Content-Length: " + Buffer.byteLength(resp) + "\r\n" +
+        "Connection: close\r\n" +
+        "\r\n" +
+        resp
+      );
+      conn.end();
+      buf = "";
+    });
+    conn.on("error", function () {});
+  });
+
+  server.listen(sockPath, function () {
+    var origSocket = process.env.CLAGENTIC_RELAY_SOCKET;
+    var origHomedir = os.homedir;
+    process.env.CLAGENTIC_RELAY_SOCKET = sockPath;
+    os.homedir = function () { return tmpLore; };
+
+    var fakeSession = { localId: 8001 };
+    var messages = [];
+    claims.attachAgentSession(fakeSession, "amos", function (m) { messages.push(m); });
+
+    // Wait for attachAgentSession to complete (relay reachable → watcher started).
+    setTimeout(function () {
+      // Now rewrite the pre-existing sidecar (simulates a new message arriving
+      // in an existing conversation — this was the B4 trigger).
+      preExistingSidecar.message_count = 5;
+      fs.writeFileSync(sidecarPath, JSON.stringify(preExistingSidecar));
+
+      // Also write a brand-new conv sidecar to confirm new convs ARE auto-claimed.
+      var newConvId = "new-conv-after-attach-b4b4-5678";
+      fs.writeFileSync(path.join(sidecarDir, "new-conv.json"), JSON.stringify({
+        conversation_id: newConvId,
+        topic: "new conv",
+        kind: "build",
+        status: "open",
+        opened_at: "2026-05-19T20:00:00Z",
+        message_count: 1,
+        participants: [{ name: "amos", role: "crew" }],
+      }));
+
+      // Allow watcher debounce (50ms) + async claim to settle.
+      setTimeout(function () {
+        // Cleanup.
+        process.env.CLAGENTIC_RELAY_SOCKET = origSocket || path.join(os.tmpdir(), "no-relay-test-absent.sock");
+        os.homedir = origHomedir;
+        claims.detachAgentSession(8001);
+        server.close();
+        try { fs.unlinkSync(sockPath); } catch (e) {}
+        try { fs.rmSync(tmpLore, { recursive: true, force: true }); } catch (e) {}
+
+        // Pre-existing conv must NOT have been auto-claimed.
+        assert.ok(
+          !claimedConvIds.includes(preExistingConvId),
+          "pre-existing conv must not be auto-claimed on sidecar rewrite (B4 regression)"
+        );
+        // New conv SHOULD have been auto-claimed.
+        assert.ok(
+          claimedConvIds.includes(newConvId),
+          "newly-appeared conv must be auto-claimed by watcher"
+        );
+
+        done();
+      }, 400);
+    }, 400);
+  });
+});
+
 // --- relay-present path tests using a Unix socket fake server ---
 
 test("registerClaim, heartbeatClaim, releaseClaim succeed against fake relay server", function (t, done) {
