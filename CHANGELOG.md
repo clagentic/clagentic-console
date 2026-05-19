@@ -1,3 +1,12 @@
+# [1.2.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* **lr-4c90:** enforce agent tool restrictions in clagentic-console sdk-bridge ([b4e2506](https://github.com/clagentic/clagentic-console/commit/b4e2506efb2954408b8d001722a47c6170056101))
+* **lr-9cfc:** address PEACHES blocking findings B1/B2/B3 ([7451aee](https://github.com/clagentic/clagentic-console/commit/7451aee9811c1493d4578b7b27fb115d16cc529c))
+* **lr-9cfc:** fix B4 regression — skip pre-existing conv IDs in sidecar watcher ([393ee44](https://github.com/clagentic/clagentic-console/commit/393ee448c79c90bbd3eb92175a12a052a0b6730d))
+
 # [1.2.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.1.1-beta.1...v1.2.0-beta.1) (2026-05-19)
 
 
