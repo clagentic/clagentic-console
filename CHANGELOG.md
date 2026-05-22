@@ -1,3 +1,22 @@
+# [1.2.0](https://github.com/clagentic/clagentic-console/compare/v1.1.0...v1.2.0) (2026-05-22)
+
+
+### Bug Fixes
+
+* add missing People & Body group to emoji picker + regenerate data from emojibase v17 ([8f36fce](https://github.com/clagentic/clagentic-console/commit/8f36fcee30b081151fba63dd86357ef5da60729a))
+* **lr-4c90:** enforce agent tool restrictions in clagentic-console sdk-bridge ([b4e2506](https://github.com/clagentic/clagentic-console/commit/b4e2506efb2954408b8d001722a47c6170056101))
+* **lr-9cfc:** address PEACHES blocking findings B1/B2/B3 ([7451aee](https://github.com/clagentic/clagentic-console/commit/7451aee9811c1493d4578b7b27fb115d16cc529c))
+* **lr-9cfc:** fix B4 regression — skip pre-existing conv IDs in sidecar watcher ([393ee44](https://github.com/clagentic/clagentic-console/commit/393ee448c79c90bbd3eb92175a12a052a0b6730d))
+* **lr-b61b:** kill orphaned claude child process and buffer between-turn messages ([6e7bdbe](https://github.com/clagentic/clagentic-console/commit/6e7bdbe55356c8925606cceff67d3c43e61a8910))
+* **lr-c5ab:** use npm install -g for in-app update instead of npx ([b0aa99a](https://github.com/clagentic/clagentic-console/commit/b0aa99a8a01d24422f058782193895c4f73eeacd))
+* remove dead requireClayMateInterview stub and stale Mates comments ([f11e71a](https://github.com/clagentic/clagentic-console/commit/f11e71a47b305b3cd32d13121a86a5e0695d1c8b))
+* resolve sidebar top-action icons synchronously to eliminate blank-icon frame ([8842841](https://github.com/clagentic/clagentic-console/commit/88428411fb53e7cfaf907b5377e4e05ae6239388))
+
+
+### Features
+
+* **lr-9cfc:** wire UI-path agent sessions to relay live-claim registration ([95692c5](https://github.com/clagentic/clagentic-console/commit/95692c50c310ed1a8429a46cd0413325d15d3002))
+
 # [1.2.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2026-05-19)
 
 
