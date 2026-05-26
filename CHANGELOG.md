@@ -1,3 +1,16 @@
+## [1.2.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.2.0...v1.2.1-beta.1) (2026-05-26)
+
+
+### Bug Fixes
+
+* allow fs_read/fs_list for ~/.claude/ paths (plan file preview) ([256de29](https://github.com/clagentic/clagentic-console/commit/256de29409ca3a4159f2a54f9b12e480b7f15293))
+* cap findTurnBoundary scan to HISTORY_PAGE_SIZE; revert delta accumulation ([243ba19](https://github.com/clagentic/clagentic-console/commit/243ba1921a9b2d2443036b7b12b6871f46dd495d))
+
+
+### Performance Improvements
+
+* eliminate session replay latency on large sessions ([0db572e](https://github.com/clagentic/clagentic-console/commit/0db572e058c2b2c1d12be540cc18145e860ebfd4))
+
 # [1.2.0](https://github.com/clagentic/clagentic-console/compare/v1.1.0...v1.2.0) (2026-05-22)
 
 
