@@ -420,6 +420,78 @@
   height: 14px;
 }
 
+/* --- Recent Sessions --- */
+.hub-recent-sessions {
+  animation: hubCardIn 0.4s ease 0.2s both;
+}
+.hub-recent-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hub-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.hub-recent-item:hover {
+  background: rgba(var(--overlay-rgb), 0.06);
+}
+.hub-recent-project-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.hub-recent-project-icon--blank {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(var(--overlay-rgb), 0.08);
+  display: inline-block;
+  vertical-align: middle;
+}
+.hub-recent-title {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-recent-agent {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-12);
+  padding: 1px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-recent-time {
+  font-size: 11px;
+  color: var(--text-dimmer);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  min-width: 52px;
+  text-align: right;
+}
+.hub-recent-empty {
+  font-size: 13px;
+  color: var(--text-dimmer);
+  text-align: center;
+  padding: 16px 8px;
+}
+
 /* Hide user island when hub is visible */
 #main-area:has(#home-hub:not(.hidden)) ~ #user-island,
 #layout-body:has(#home-hub:not(.hidden)) #user-island {
