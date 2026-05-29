@@ -1,3 +1,18 @@
+# [1.3.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.2.1-beta.1...v1.3.0-beta.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* address peaches review findings on hub recent sessions + replay loading ([0d69070](https://github.com/clagentic/clagentic-console/commit/0d6907036836617281fc60e34250579dbb2d6099)), closes [#replay-loading](https://github.com/clagentic/clagentic-console/issues/replay-loading)
+* apply enrichClaudeModels in worker-init path; remove dead code ([537f636](https://github.com/clagentic/clagentic-console/commit/537f6365d706cc785544f745817a9074f4bd15e4))
+* stagger mobile sheet close before session replay + add replay loading indicator ([77bac59](https://github.com/clagentic/clagentic-console/commit/77bac59500d6d337cfbc4ebab724d5f19a92e4a8)), closes [#replay-loading](https://github.com/clagentic/clagentic-console/issues/replay-loading)
+
+
+### Features
+
+* add Recent Sessions card to Home Hub ([7863a43](https://github.com/clagentic/clagentic-console/commit/7863a4330d706a8710d040a499a16d266c5e9519))
+* dynamic model registry with per-model capability flags ([91ae427](https://github.com/clagentic/clagentic-console/commit/91ae42755122a146a051a847be3a0629c6fd0d40))
+
 ## [1.2.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.2.0...v1.2.1-beta.1) (2026-05-26)
 
 
