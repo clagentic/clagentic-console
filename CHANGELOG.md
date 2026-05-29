@@ -1,3 +1,12 @@
+# [1.3.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-05-29)
+
+
+### Bug Fixes
+
+* inject copy buttons after batched highlight pass at history_done ([856b18a](https://github.com/clagentic/clagentic-console/commit/856b18a84abefa6df3cfc4173fb5a5f784de4d18)), closes [#155](https://github.com/clagentic/clagentic-console/issues/155)
+* re-request hub data when WS connects while hub is visible ([1776844](https://github.com/clagentic/clagentic-console/commit/1776844f4c3eb3b6940e84f9796896953c84f285))
+* suppress per-message scroll during history replay ([6412cad](https://github.com/clagentic/clagentic-console/commit/6412cad2d5e892be4c84e912cc6af73e2cd59c23))
+
 # [1.3.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.2.1-beta.1...v1.3.0-beta.1) (2026-05-29)
 
 
