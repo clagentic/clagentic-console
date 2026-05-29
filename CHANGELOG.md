@@ -1,3 +1,12 @@
+## [1.3.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.3.0...v1.3.1-beta.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* **hub:** move Recent Sessions to top of Today view ([1646fde](https://github.com/clagentic/clagentic-console/commit/1646fde0945d55efe47e7caaafb904b5128c6e63))
+* **sdk-bridge:** close slot-leak window in startQuery (peaches lr-29f9) ([c8fb953](https://github.com/clagentic/clagentic-console/commit/c8fb95395af0d0348741be4d259cd9c6484cf20a))
+* **sdk-bridge:** reap worker processes on query completion and cap concurrent sessions (lr-29f9) ([92b57f5](https://github.com/clagentic/clagentic-console/commit/92b57f5d17273e827a5c8493bd4c16662dfc08c3))
+
 # [1.3.0](https://github.com/clagentic/clagentic-console/compare/v1.2.0...v1.3.0) (2026-05-29)
 
 
