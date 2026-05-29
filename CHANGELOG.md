@@ -1,3 +1,28 @@
+# [1.3.0](https://github.com/clagentic/clagentic-console/compare/v1.2.0...v1.3.0) (2026-05-29)
+
+
+### Bug Fixes
+
+* address peaches review findings on hub recent sessions + replay loading ([0d69070](https://github.com/clagentic/clagentic-console/commit/0d6907036836617281fc60e34250579dbb2d6099)), closes [#replay-loading](https://github.com/clagentic/clagentic-console/issues/replay-loading)
+* allow fs_read/fs_list for ~/.claude/ paths (plan file preview) ([256de29](https://github.com/clagentic/clagentic-console/commit/256de29409ca3a4159f2a54f9b12e480b7f15293))
+* apply enrichClaudeModels in worker-init path; remove dead code ([537f636](https://github.com/clagentic/clagentic-console/commit/537f6365d706cc785544f745817a9074f4bd15e4))
+* cap findTurnBoundary scan to HISTORY_PAGE_SIZE; revert delta accumulation ([243ba19](https://github.com/clagentic/clagentic-console/commit/243ba1921a9b2d2443036b7b12b6871f46dd495d))
+* inject copy buttons after batched highlight pass at history_done ([856b18a](https://github.com/clagentic/clagentic-console/commit/856b18a84abefa6df3cfc4173fb5a5f784de4d18)), closes [#155](https://github.com/clagentic/clagentic-console/issues/155)
+* re-request hub data when WS connects while hub is visible ([1776844](https://github.com/clagentic/clagentic-console/commit/1776844f4c3eb3b6940e84f9796896953c84f285))
+* stagger mobile sheet close before session replay + add replay loading indicator ([77bac59](https://github.com/clagentic/clagentic-console/commit/77bac59500d6d337cfbc4ebab724d5f19a92e4a8)), closes [#replay-loading](https://github.com/clagentic/clagentic-console/issues/replay-loading)
+* suppress per-message scroll during history replay ([6412cad](https://github.com/clagentic/clagentic-console/commit/6412cad2d5e892be4c84e912cc6af73e2cd59c23))
+
+
+### Features
+
+* add Recent Sessions card to Home Hub ([7863a43](https://github.com/clagentic/clagentic-console/commit/7863a4330d706a8710d040a499a16d266c5e9519))
+* dynamic model registry with per-model capability flags ([91ae427](https://github.com/clagentic/clagentic-console/commit/91ae42755122a146a051a847be3a0629c6fd0d40))
+
+
+### Performance Improvements
+
+* eliminate session replay latency on large sessions ([0db572e](https://github.com/clagentic/clagentic-console/commit/0db572e058c2b2c1d12be540cc18145e860ebfd4))
+
 # [1.3.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-05-29)
 
 
