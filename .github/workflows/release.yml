@@ -41,6 +41,16 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
+      - name: Ensure release branch exists
+        run: |
+          git fetch origin
+          if ! git rev-parse --verify origin/release >/dev/null 2>&1; then
+            echo "release branch missing — creating at main HEAD"
+            git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git HEAD:refs/heads/release
+          fi
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+
       - name: Sync release tags into main
         run: |
           git config user.name "clagentic-release-bot[bot]"
