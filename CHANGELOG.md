@@ -1,3 +1,18 @@
+# [1.4.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.3.1-beta.1...v1.4.0-beta.1) (2026-05-31)
+
+
+### Bug Fixes
+
+* **ask-user:** preserve MCP pendingAskUser across turns, prefix answers, clear stale hub key ([7fe2c5a](https://github.com/clagentic/clagentic-console/commit/7fe2c5a3635228b187f5493d2035f0aec820e835))
+* **hub:** cross-project sessions excluded due to lazy-loaded history check ([f7462e2](https://github.com/clagentic/clagentic-console/commit/f7462e2e8495a318bcd95c11141be19e7ad965cd))
+* **ralph-loop:** update all clay-ralph skill references to ralph-loop ([2c731c1](https://github.com/clagentic/clagentic-console/commit/2c731c13f2edd0e80833ecbc167cf604870c5906))
+
+
+### Features
+
+* **codex:** dynamic model list via model/list app-server endpoint ([0ac3e68](https://github.com/clagentic/clagentic-console/commit/0ac3e6842a29579d21efb22f5d7d26ee4e8269cc))
+* **hub:** add activity dot to Recent Sessions list items ([a875069](https://github.com/clagentic/clagentic-console/commit/a8750691f290fda9e71c3087d767fa7e0a95741d))
+
 ## [1.3.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.3.0...v1.3.1-beta.1) (2026-05-29)
 
 
