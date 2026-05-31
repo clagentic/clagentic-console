@@ -156,7 +156,7 @@ function freshSdkBridge(maxConcurrent) {
   delete require.cache[modPath];
   var mod = require("../lib/sdk-bridge");
   // Don't leave the env var set — tests that don't call freshSdkBridge use
-  // the default (6) from the already-cached module.
+  // the default (50) from the already-cached module.
   delete process.env.CLAGENTIC_MAX_CONCURRENT_SESSIONS;
   return mod;
 }
