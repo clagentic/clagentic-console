@@ -40,8 +40,9 @@ test("listOpenConversationsForAgent filters by participant name and status=open"
   // Build a temp sidecar dir, inject sidecars, and point loreHomeDir at it.
   // We do this by temporarily replacing os.homedir.
   var tmpLore = fs.mkdtempSync(path.join(os.tmpdir(), "relay-claims-test-"));
-  var sidecarDir = path.join(tmpLore, "conversation-sidecars");
-  fs.mkdirSync(sidecarDir);
+  // loreHomeDir() = os.homedir()/.lore, so sidecars live under <home>/.lore/conversation-sidecars.
+  var sidecarDir = path.join(tmpLore, ".lore", "conversation-sidecars");
+  fs.mkdirSync(sidecarDir, { recursive: true });
 
   // Sidecar 1: open, participant "amos"
   fs.writeFileSync(path.join(sidecarDir, "aaaa-1111.json"), JSON.stringify({
@@ -107,8 +108,9 @@ test("listOpenConversationsForAgent filters by participant name and status=open"
 
 test("listOpenConversationsForAgent handles malformed JSON gracefully", function () {
   var tmpLore = fs.mkdtempSync(path.join(os.tmpdir(), "relay-claims-bad-json-"));
-  var sidecarDir = path.join(tmpLore, "conversation-sidecars");
-  fs.mkdirSync(sidecarDir);
+  // loreHomeDir() = os.homedir()/.lore, so sidecars live under <home>/.lore/conversation-sidecars.
+  var sidecarDir = path.join(tmpLore, ".lore", "conversation-sidecars");
+  fs.mkdirSync(sidecarDir, { recursive: true });
   fs.writeFileSync(path.join(sidecarDir, "bad.json"), "not valid json {{");
   fs.writeFileSync(path.join(sidecarDir, "good.json"), JSON.stringify({
     conversation_id: "dddd-4444-5555-6666",
@@ -214,8 +216,9 @@ test("startSidecarWatcher does not auto-claim pre-existing conv on sidecar rewri
 
   // Sidecar dir with one pre-existing conv.
   var tmpLore = fs.mkdtempSync(path.join(os.tmpdir(), "relay-b4-lore-"));
-  var sidecarDir = path.join(tmpLore, "conversation-sidecars");
-  fs.mkdirSync(sidecarDir);
+  // loreHomeDir() = os.homedir()/.lore, so sidecars live under <home>/.lore/conversation-sidecars.
+  var sidecarDir = path.join(tmpLore, ".lore", "conversation-sidecars");
+  fs.mkdirSync(sidecarDir, { recursive: true });
 
   var preExistingConvId = "pre-existing-conv-b4b4-1234";
   var preExistingSidecar = {
