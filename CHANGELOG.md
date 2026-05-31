@@ -1,3 +1,11 @@
+# [1.4.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.4.0-beta.1...v1.4.0-beta.2) (2026-05-31)
+
+
+### Bug Fixes
+
+* **hub:** gather all projects uniformly for recent sessions recency sort ([c08ec1e](https://github.com/clagentic/clagentic-console/commit/c08ec1ea4604937b0a848a231a19d38a856ba205))
+* **updater:** install resolved version with isNewer guard, never a bare dist-tag ([5c17b6d](https://github.com/clagentic/clagentic-console/commit/5c17b6db8874901428a2fdc12f23bfa1a5cf66e3))
+
 # [1.4.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.3.1-beta.1...v1.4.0-beta.1) (2026-05-31)
 
 
