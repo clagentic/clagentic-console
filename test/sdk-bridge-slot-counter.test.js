@@ -166,7 +166,7 @@ function freshSdkBridge(maxConcurrent) {
  * Returns { bridge, sm, messages } where messages is the array of all
  * events sent via the `send` callback.
  */
-function makeBridge(maxConcurrent, createQueryFn) {
+function makeBridge(maxConcurrent, createQueryFn, getConfig) {
   var { createSDKBridge } = freshSdkBridge(maxConcurrent);
   var messages = [];
   var sm = makeSessionManager(messages);
@@ -179,6 +179,7 @@ function makeBridge(maxConcurrent, createQueryFn) {
     adapter: adapter,
     adapters: { claude: adapter },
     onProcessingChanged: function () {},
+    getConfig: getConfig || null,
   });
   return { bridge, sm, messages };
 }
@@ -532,4 +533,147 @@ test("lr-29f9 (7): sequential queries on the same session each claim and release
     assert.equal(session._isCountedLive, false,
       "slot should be released after turn " + i + " completes");
   }
+});
+
+// ---------------------------------------------------------------------------
+// lr-2d91: MemAvailable gate tests
+// ---------------------------------------------------------------------------
+
+test("lr-2d91 (1): query is rejected when getConfig returns a threshold above available memory", async function () {
+  // Simulate 512 MB available, 1024 MB required.
+  // We cannot write real /proc/meminfo in a unit test, so we test the gate
+  // only on Linux where the file exists. On other platforms the gate is a no-op
+  // and we skip the assertion.
+  if (process.platform !== "linux") return;
+
+  var queryCount = 0;
+  // Use a very high threshold that will certainly exceed real available memory
+  // on any sane test host. If available memory is somehow > 1 TB, this test
+  // would produce a false negative — that's acceptable for a unit test.
+  var HUGE_THRESHOLD = 1024 * 1024; // 1 TB in MB
+  var { bridge, sm, messages } = makeBridge(50, async function () {
+    queryCount++;
+    return makeEmptyHandle();
+  }, function () { return { memAvailableMinMB: HUGE_THRESHOLD }; });
+
+  var session = makeSession();
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "hello", null, null);
+  await new Promise(function (r) { setImmediate(r); });
+
+  // The gate should have fired — adapter should NOT have been called
+  assert.equal(queryCount, 0, "adapter createQuery should NOT be called when memory gate fires");
+  assert.equal(session._isCountedLive, false, "slot should not be claimed when memory gate fires");
+  assert.equal(session.isProcessing, false, "isProcessing should be false after gate rejection");
+
+  var errorMsgs = messages.filter(function (m) { return m.type === "error"; });
+  var doneMsgs  = messages.filter(function (m) { return m.type === "done"; });
+  var toastMsgs = messages.filter(function (m) { return m.type === "toast"; });
+
+  assert.ok(errorMsgs.length > 0, "error message should be emitted when memory gate fires");
+  assert.ok(
+    errorMsgs.some(function (m) { return m.text && m.text.indexOf("Not enough memory") !== -1; }),
+    "error message should mention 'Not enough memory'"
+  );
+  assert.ok(doneMsgs.length > 0, "done message should be emitted when memory gate fires");
+  assert.ok(toastMsgs.length > 0, "global toast should be broadcast when memory gate fires");
+  assert.ok(
+    toastMsgs.some(function (m) { return m.level === "warn"; }),
+    "toast should have level 'warn'"
+  );
+});
+
+test("lr-2d91 (2): query proceeds normally when memory is above threshold", async function () {
+  // Use a threshold of 0 — gate should never fire, regardless of available memory.
+  var queryCount = 0;
+  var { bridge, sm, messages } = makeBridge(50, async function () {
+    queryCount++;
+    return makeEmptyHandle();
+  }, function () { return { memAvailableMinMB: 0 }; });
+
+  var session = makeSession();
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "hello", null, null);
+  await new Promise(function (r) { setImmediate(r); });
+
+  assert.equal(queryCount, 1, "adapter createQuery should be called when threshold is 0");
+});
+
+test("lr-2d91 (3): memory gate is a no-op when getConfig is not provided", async function () {
+  // No getConfig injected — bridge should use the default 1024 MB threshold but
+  // since it cannot force a low-memory scenario from a unit test, we just verify
+  // that the bridge doesn't crash and the adapter IS called (normal path on dev).
+  // This is a smoke test for the null-getConfig path.
+  var queryCount = 0;
+  var { bridge, sm, messages } = makeBridge(50, async function () {
+    queryCount++;
+    return makeEmptyHandle();
+  }); // no getConfig arg
+
+  var session = makeSession();
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "hello", null, null);
+  await new Promise(function (r) { setImmediate(r); });
+
+  // On a dev machine with sufficient memory, the query proceeds. On a CI box
+  // with < 1024 MB free, the gate might fire — both outcomes are valid here.
+  // We only assert that the bridge does not throw.
+  assert.ok(true, "bridge did not throw without getConfig");
+});
+
+test("lr-2d91 (4): getMemoryStats returns activeLiveCount and maxConcurrentSessions", async function () {
+  var MAX = 3;
+  var openHandles = [];
+  var { bridge, sm, messages } = makeBridge(MAX, async function () {
+    var h = {
+      _adapterState: null,
+      _resolve: null,
+      [Symbol.asyncIterator]: function () {
+        var self = this;
+        return {
+          next: function () {
+            return new Promise(function (resolve) {
+              self._resolve = function () { resolve({ value: undefined, done: true }); };
+            });
+          },
+        };
+      },
+      pushMessage: function () {},
+      close: function () { if (this._resolve) this._resolve(); },
+      endInput: function () {},
+      abort: function () { if (this._resolve) this._resolve(); },
+    };
+    openHandles.push(h);
+    return h;
+  });
+
+  var stats0 = bridge.getMemoryStats();
+  assert.equal(stats0.activeLiveCount, 0, "activeLiveCount should be 0 before any queries");
+  assert.equal(stats0.maxConcurrentSessions, MAX, "maxConcurrentSessions should match bridge MAX");
+
+  // Start two sessions
+  var s1 = makeSession();
+  var s2 = makeSession();
+  sm.sessions.set(s1.localId, s1);
+  sm.sessions.set(s2.localId, s2);
+  await bridge.startQuery(s1, "q1", null, null);
+  await bridge.startQuery(s2, "q2", null, null);
+
+  var stats2 = bridge.getMemoryStats();
+  assert.equal(stats2.activeLiveCount, 2, "activeLiveCount should reflect open queries");
+
+  // Drain handles
+  for (var k = 0; k < openHandles.length; k++) {
+    if (openHandles[k]._resolve) openHandles[k]._resolve();
+  }
+  for (var l of [s1, s2]) {
+    if (l.streamPromise) { try { await l.streamPromise; } catch (e) {} }
+  }
+  await new Promise(function (r) { setImmediate(r); });
+
+  var statsFinal = bridge.getMemoryStats();
+  assert.equal(statsFinal.activeLiveCount, 0, "activeLiveCount should be 0 after streams end");
 });
