@@ -544,6 +544,7 @@ test("lr-2d91 (1): query is rejected when getConfig returns a threshold above av
   // We cannot write real /proc/meminfo in a unit test, so we test the gate
   // only on Linux where the file exists. On other platforms the gate is a no-op
   // and we skip the assertion.
+  // gate is Linux-only; test is a no-op on other platforms — verify on Linux CI
   if (process.platform !== "linux") return;
 
   var queryCount = 0;
