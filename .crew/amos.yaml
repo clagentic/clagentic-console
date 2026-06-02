@@ -1,8 +1,8 @@
 scope:
   allowed_paths:
-    - /workspace/clagentic-console/lib/
-    - /workspace/clagentic-console/.crew/
-    - /workspace/clagentic-console/test/
+    - lib/**
+    - .crew/**
+    - test/**
 
 branch_conventions:
   feat: "feat/lr-{task_id}-{slug}"
