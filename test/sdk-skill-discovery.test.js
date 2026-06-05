@@ -266,3 +266,62 @@ test("extractSkillDescription: plain description: some text still works (regress
     fs.rmSync(tmp, { recursive: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// lr-9106: YAML frontmatter (--- delimited) description parsing
+// ---------------------------------------------------------------------------
+
+test("extractSkillDescription: YAML frontmatter with double-quoted description", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      '---\nname: my-skill\ndescription: "Does something useful with quotes"\nallowed-tools: Bash(*)\n---\n# My Skill\n\nBody.\n');
+    assert.equal(extractSkillDescription(skillDir), "Does something useful with quotes");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
+
+test("extractSkillDescription: YAML frontmatter with unquoted description", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "---\nname: my-skill\ndescription: Restores session context from lore\nallowed-tools: Bash(*)\n---\n# My Skill\n\nBody.\n");
+    assert.equal(extractSkillDescription(skillDir), "Restores session context from lore");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
+
+test("extractSkillDescription: YAML frontmatter with block scalar description (>)", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "---\nname: my-skill\ndescription: >\n  Multi-line description\n  joined together.\n---\n# My Skill\n\nBody.\n");
+    assert.equal(extractSkillDescription(skillDir), "Multi-line description joined together.");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
+
+test("extractSkillDescription: YAML frontmatter without description falls through to prose", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "---\nname: my-skill\nallowed-tools: Bash(*)\n---\n# My Skill\n\nFirst prose line here.\n");
+    assert.equal(extractSkillDescription(skillDir), "First prose line here.");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
+
+test("extractSkillDescription: file without frontmatter still returns prose (regression)", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "# My Skill\n\nNo frontmatter at all.\n");
+    assert.equal(extractSkillDescription(skillDir), "No frontmatter at all.");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
