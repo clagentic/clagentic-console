@@ -218,3 +218,51 @@ test("new exports: discoverSkillsWithMeta and mergeSkillsWithMeta are exported f
   assert.equal(typeof discoverSkillsWithMeta, "function");
   assert.equal(typeof mergeSkillsWithMeta, "function");
 });
+
+// ---------------------------------------------------------------------------
+// lr-2634: YAML block scalar descriptions in extractSkillDescription
+// ---------------------------------------------------------------------------
+
+test("extractSkillDescription: description: > folded block scalar returns joined text", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "description: >\n  The actual description text\n  that spans multiple lines.\n# My Skill\n\nBody.\n");
+    assert.equal(extractSkillDescription(skillDir), "The actual description text that spans multiple lines.");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
+
+test("extractSkillDescription: description: | literal block scalar returns joined text", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "description: |\n  Line one.\n  Line two.\n# My Skill\n\nBody.\n");
+    assert.equal(extractSkillDescription(skillDir), "Line one. Line two.");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
+
+test("extractSkillDescription: description: >- chomping modifier works", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "description: >-\n  Strip trailing newlines.\n  Still joined.\n# My Skill\n\nBody.\n");
+    assert.equal(extractSkillDescription(skillDir), "Strip trailing newlines. Still joined.");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
+
+test("extractSkillDescription: plain description: some text still works (regression)", function () {
+  var tmp = makeTmpDir();
+  try {
+    var skillDir = makeSkillDir(tmp, "my-skill",
+      "description: A plain one-line description\n# My Skill\n\nBody.\n");
+    assert.equal(extractSkillDescription(skillDir), "A plain one-line description");
+  } finally {
+    fs.rmSync(tmp, { recursive: true });
+  }
+});
