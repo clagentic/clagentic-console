@@ -1,3 +1,30 @@
+# [1.4.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.4.0-beta.2...v1.4.0-beta.3) (2026-06-05)
+
+
+### Bug Fixes
+
+* address Peaches review findings on memory gate (lr-2d91) ([1577b05](https://github.com/clagentic/clagentic-console/commit/1577b0595d28853c7722784731ab22afd70349a9))
+* discover .md workflow slash commands from .claude/workflows/ ([57e6f06](https://github.com/clagentic/clagentic-console/commit/57e6f064ce1852dcbc69f47a0d8d4b476166ce99))
+* **lr-3628:** convert missed abort-timeout SIGKILL to group kill ([a9aa638](https://github.com/clagentic/clagentic-console/commit/a9aa638a4173917b16717f7eb4deb9d5a293a984))
+* **lr-3628:** kill full child process tree on daemon SIGTERM ([0f87073](https://github.com/clagentic/clagentic-console/commit/0f870737b018afb1efeca6742f0fe2bc1cca36a4))
+* **lr-9106:** extractSkillDescription parses YAML frontmatter (--- delimited) ([d14fb67](https://github.com/clagentic/clagentic-console/commit/d14fb67c2eeed2ba5d8d46bd2d2235e3ea671ddb))
+* **lr-cf84:** extract shared enrichment helper, apply to warmup path ([5831998](https://github.com/clagentic/clagentic-console/commit/58319987f5a56deec8d3ab549cfd9203f427491f))
+* **lr-ea58:** remove bundled skills from builtinCommands reserved filter ([0257a4e](https://github.com/clagentic/clagentic-console/commit/0257a4ea0e9b3da4da6aeff467a3664456492805))
+* **mobile:** swipe back closes overlay instead of exiting the app ([3125f8f](https://github.com/clagentic/clagentic-console/commit/3125f8f98b35e4cd4988a66c1b2adce87d683af1))
+* **sdk-bridge:** raise concurrent session default from 6 to 50 ([7f14440](https://github.com/clagentic/clagentic-console/commit/7f144407298313149adbf40d34dbb3b274bcbacc))
+* **ui:** truncate long slash-command descriptions with ellipsis ([58da17d](https://github.com/clagentic/clagentic-console/commit/58da17dbb0a053a67173002d44d220d783abceee))
+* use correct resume command in session info popover for Codex sessions ([f9b7c5b](https://github.com/clagentic/clagentic-console/commit/f9b7c5b8bd1fb0aab53a70cb91a08ec1e712a47c))
+
+
+### Features
+
+* **lr-1c7f:** slash_commands WS message carries {name,desc,type} objects ([bef349f](https://github.com/clagentic/clagentic-console/commit/bef349f47ae26a9b332feca13388eb7011280ef0))
+* **lr-2d91:** MemAvailable gate — reject queries when host memory is low ([90970d9](https://github.com/clagentic/clagentic-console/commit/90970d9aa6a66ce7a9c4aae393b05a2cbbf137d4))
+* **lr-7bd3:** workflow discovery module — scan .claude/workflows/ for slash autocomplete ([252a1c1](https://github.com/clagentic/clagentic-console/commit/252a1c11f1433975f9bfb4ca717f63cb413bc775))
+* **lr-7d8d:** enrich skill discovery to return {name, description, type} objects ([8ea9d01](https://github.com/clagentic/clagentic-console/commit/8ea9d01657171bb074eb3e23810347226d0c47b7))
+* **lr-e3d7,lr-2634:** Codex adapter workflow enrichment + YAML block scalar descriptions ([2402d96](https://github.com/clagentic/clagentic-console/commit/2402d968d48875517ae8ab9461d7a03880fda5a5))
+* **lr-ea58:** expand builtinCommands to full Claude CLI slash command set ([b39b6c8](https://github.com/clagentic/clagentic-console/commit/b39b6c8e3adfc6a8689b659d9361a37ed7521180))
+
 # [1.4.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.4.0-beta.1...v1.4.0-beta.2) (2026-05-31)
 
 
