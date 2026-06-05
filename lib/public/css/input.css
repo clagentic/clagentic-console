@@ -859,11 +859,16 @@ body.mate-dm-active #input-wrapper,
   font-weight: 600;
   font-size: 14px;
   font-family: "Roboto Mono", monospace;
+  flex-shrink: 0;
 }
 
 .slash-item .slash-desc {
   color: var(--text-muted);
   font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* ==========================================================================
