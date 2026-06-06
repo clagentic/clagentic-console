@@ -30,24 +30,27 @@ systemctl status clagentic-console.service
 
 ### Rename cutover (clagentic.service → clagentic-console.service)
 
-**Order matters.** The running daemon is tracked in the old unit's cgroup. An in-app update
-triggers `gracefulShutdown()` followed by `Restart=always` — if the old unit is still active
-when this happens, systemd restarts it under `clagentic.service`, not the new unit. Stop the
-old unit first, then start the new one.
+**Order matters — stop the old unit before starting the new one.**
+
+The running daemon is tracked in the old unit's cgroup under `Restart=always`. An in-app
+update triggers `gracefulShutdown()`; systemd immediately attempts a restart under whichever
+unit owns the cgroup at that moment. `enable`/`disable` only affect boot-time wants — they
+do not close this window. The old unit must be stopped first so no restart can fire under it.
 
 ```bash
 # 1. Install the new unit file
 cp deploy/clagentic-console.service /etc/systemd/system/clagentic-console.service
 systemctl daemon-reload
 
-# 2. Enable new, disable old (no start/stop yet)
+# 2. Enable new, disable old
 systemctl enable clagentic-console.service
 systemctl disable clagentic.service
 
-# 3. Stop old unit (takes the daemon down briefly)
+# 3. Stop old unit FIRST — brief downtime starts here.
+#    Do not trigger an in-app update between steps 2 and 3.
 systemctl stop clagentic.service
 
-# 4. Start under new unit
+# 4. Start under new unit — downtime ends here
 systemctl start clagentic-console.service
 
 # 5. Verify
@@ -59,8 +62,8 @@ rm /etc/systemd/system/clagentic.service
 systemctl daemon-reload
 ```
 
-After step 4, in-app updates work correctly: `gracefulShutdown()` → systemd restarts under
-`clagentic-console.service`.
+After step 4 (and the old unit file removed at step 6), in-app updates work correctly:
+`gracefulShutdown()` → systemd restarts under `clagentic-console.service`.
 
 ### Verify memory limits are active
 
@@ -77,6 +80,13 @@ systemctl show clagentic-console.service --property=MemoryHigh,MemoryMax,OOMPoli
 ```bash
 cp deploy/clagentic-console.service /etc/systemd/system/clagentic-console.service
 systemctl daemon-reload
-# No restart needed for most changes — takes effect on next service restart
-# Exception: changes to ExecStart or Environment require a restart
 ```
+
+`daemon-reload` is always required after editing a unit file. Whether a service restart is
+also needed depends on what changed:
+
+- `MemoryHigh` / `MemoryMax` / `OOMPolicy` — require a service restart to apply to the
+  running cgroup (daemon-reload alone does not update live cgroup limits).
+- `Environment=` — requires a service restart (env vars are set at process start).
+- `ExecStart` / `Restart*` / `TimeoutStopSec` — require a service restart.
+- `[Unit]` and `[Install]` metadata — daemon-reload is sufficient; no restart needed.

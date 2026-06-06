@@ -21,6 +21,7 @@ StandardError=journal
 SyslogIdentifier=clagentic-console
 Environment=SHELL=/bin/bash
 Environment=PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# TODO(lr-9452): rename to CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS once sdk-bridge.js is updated
 Environment=CLAGENTIC_MAX_CONCURRENT_SESSIONS=50
 
 [Install]
