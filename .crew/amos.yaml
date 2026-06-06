@@ -3,6 +3,7 @@ scope:
     - lib/**
     - .crew/**
     - test/**
+    - deploy/**
 
 branch_conventions:
   feat: "feat/lr-{task_id}-{slug}"
