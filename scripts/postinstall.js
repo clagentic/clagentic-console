@@ -129,41 +129,22 @@ if (fs.existsSync(OLD_UNIT_PATH)) {
   }
 }
 
-// Step 5: Start or restart clagentic-console.service.
-// Never restart during a self-update — gracefulShutdown() + Restart=always handles it.
+// Step 5: Start clagentic-console.service only if it was running under the old unit
+// and needs to be moved to the new one. Never restart a running service — that kills
+// live sessions. Never auto-start on a fresh install — the daemon needs configuration.
+// Self-updates use gracefulShutdown() + Restart=always; postinstall must not interfere.
 if (selfUpdate) {
-  log('skipping start/restart (self-update — gracefulShutdown will hand off to systemd)');
-} else {
-  let newUnitActive = false;
+  log('skipping start (self-update — gracefulShutdown will hand off to systemd)');
+} else if (wasRunningUnderOldUnit) {
+  // Stopped the old unit during rename cutover — start under the new one now.
+  log(`starting ${NEW_UNIT} (was running under ${OLD_UNIT})`);
   try {
-    const activeState = runCmd('systemctl', ['is-active', NEW_UNIT]);
-    newUnitActive = activeState === 'active';
-  } catch (_) {
-    // is-active exits non-zero when not active.
+    runCmd('systemctl', ['start', NEW_UNIT]);
+  } catch (err) {
+    log(`WARNING: start ${NEW_UNIT} failed: ${errMsg(err)}`);
   }
-
-  if (newUnitActive) {
-    // Already running (manual operator update) — restart so new unit file changes
-    // (memory limits, env vars, etc.) take effect immediately.
-    log(`restarting ${NEW_UNIT} (already active — applying unit file changes)`);
-    try {
-      runCmd('systemctl', ['restart', NEW_UNIT]);
-    } catch (err) {
-      log(`WARNING: restart ${NEW_UNIT} failed: ${errMsg(err)}`);
-    }
-  } else if (wasRunningUnderOldUnit) {
-    // Was running under the old unit — start it under the new one now.
-    log(`starting ${NEW_UNIT} (was running under ${OLD_UNIT})`);
-    try {
-      runCmd('systemctl', ['start', NEW_UNIT]);
-    } catch (err) {
-      log(`WARNING: start ${NEW_UNIT} failed: ${errMsg(err)}`);
-    }
-  } else {
-    // Not previously running — do not auto-start. The daemon requires configuration
-    // before it can run; starting without config would loop under Restart=always.
-    log(`${NEW_UNIT} was not running — skipping auto-start (run: systemctl start ${NEW_UNIT})`);
-  }
+} else {
+  log(`skipping start (daemon was not running or is already running — operator controls restarts)`);
 }
 
 log('done');
