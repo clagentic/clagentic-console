@@ -1,0 +1,28 @@
+[Unit]
+Description=Clagentic Console daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/clagentic-daemon.sh
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=20
+SendSIGKILL=yes
+# Soft ceiling — kernel begins reclaiming memory early (requires systemd 240+; host runs systemd 255)
+MemoryHigh=70%
+# Hard ceiling — triggers per-service OOM so OOMPolicy fires instead of host-level OOM killer
+MemoryMax=85%
+# On OOM, kill all remaining cgroup members so no orphaned child processes survive
+OOMPolicy=kill
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=clagentic-console
+Environment=SHELL=/bin/bash
+Environment=PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# TODO(lr-9452): rename to CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS once sdk-bridge.js is updated
+Environment=CLAGENTIC_MAX_CONCURRENT_SESSIONS=50
+
+[Install]
+WantedBy=multi-user.target
