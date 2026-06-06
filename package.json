@@ -10,12 +10,15 @@
   },
   "scripts": {
     "dev": "node bin/cli.js --dev",
+    "postinstall": "node scripts/postinstall.js",
     "test": "node --test --test-force-exit test/*.test.js",
     "semantic-release": "semantic-release"
   },
   "files": [
     "bin/",
     "lib/",
+    "scripts/",
+    "deploy/",
     "CREDITS.md"
   ],
   "keywords": [
