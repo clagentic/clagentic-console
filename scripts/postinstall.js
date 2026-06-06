@@ -15,9 +15,16 @@ function log(msg) {
   console.log(`${PREFIX} ${msg}`);
 }
 
-function runCmd(cmd, args, opts) {
+function runCmd(cmd, args) {
   // Returns stdout string on success, throws on failure.
-  return execFileSync(cmd, args, { stdio: 'pipe', ...opts }).toString().trim();
+  // stderr is captured in err.stderr on failure.
+  return execFileSync(cmd, args, { stdio: 'pipe' }).toString().trim();
+}
+
+function errMsg(err) {
+  // execFileSync puts detail in err.stderr; fall back to err.message.
+  const stderr = err.stderr && err.stderr.toString().trim();
+  return stderr || err.message;
 }
 
 // Skip silently on non-Linux platforms.
@@ -29,6 +36,16 @@ if (process.platform !== 'linux') {
 if (process.getuid() !== 0) {
   log('skipping (not root)');
   process.exit(0);
+}
+
+// When the daemon triggers its own in-app update it passes CLAGENTIC_SELF_UPDATE=1.
+// In that case, skip restarting the service — the daemon calls gracefulShutdown()
+// immediately after npm install completes, and systemd Restart=always handles the
+// supervised restart. Issuing systemctl restart here would race with gracefulShutdown
+// and tear down sessions before state is flushed.
+const selfUpdate = process.env.CLAGENTIC_SELF_UPDATE === '1';
+if (selfUpdate) {
+  log('self-update detected (CLAGENTIC_SELF_UPDATE=1) — skipping service restart');
 }
 
 const SYSTEMD_DIR = '/etc/systemd/system';
@@ -43,7 +60,7 @@ log(`installing unit file -> ${NEW_UNIT_DEST}`);
 try {
   fs.copyFileSync(UNIT_SRC, NEW_UNIT_DEST);
 } catch (err) {
-  log(`ERROR copying unit file: ${err.message}`);
+  log(`ERROR copying unit file: ${errMsg(err)}`);
   // Cannot continue without the unit file in place.
   process.exit(0);
 }
@@ -53,7 +70,7 @@ log('running systemctl daemon-reload');
 try {
   runCmd('systemctl', ['daemon-reload']);
 } catch (err) {
-  log(`WARNING: daemon-reload failed: ${err.message}`);
+  log(`WARNING: daemon-reload failed: ${errMsg(err)}`);
 }
 
 // Step 3: Enable the new unit if not already enabled.
@@ -61,7 +78,7 @@ log(`enabling ${NEW_UNIT}`);
 try {
   runCmd('systemctl', ['enable', NEW_UNIT]);
 } catch (err) {
-  log(`WARNING: enable ${NEW_UNIT} failed: ${err.message}`);
+  log(`WARNING: enable ${NEW_UNIT} failed: ${errMsg(err)}`);
 }
 
 // Step 4: Handle rename — migrate from old clagentic.service if present.
@@ -79,20 +96,20 @@ if (fs.existsSync(OLD_UNIT_PATH)) {
     // is-active exits non-zero when not active — not an error.
   }
 
-  // Disable the old unit (suppress errors — may already be disabled).
+  // Disable the old unit.
   log(`disabling ${OLD_UNIT}`);
   try {
     runCmd('systemctl', ['disable', OLD_UNIT]);
   } catch (err) {
-    log(`WARNING: disable ${OLD_UNIT} failed (ignored): ${err.message}`);
+    log(`WARNING: disable ${OLD_UNIT} failed (ignored): ${errMsg(err)}`);
   }
 
-  // Stop the old unit (suppress errors — may already be stopped).
+  // Stop the old unit.
   log(`stopping ${OLD_UNIT}`);
   try {
     runCmd('systemctl', ['stop', OLD_UNIT]);
   } catch (err) {
-    log(`WARNING: stop ${OLD_UNIT} failed (ignored): ${err.message}`);
+    log(`WARNING: stop ${OLD_UNIT} failed (ignored): ${errMsg(err)}`);
   }
 
   // Remove the old unit file.
@@ -100,7 +117,7 @@ if (fs.existsSync(OLD_UNIT_PATH)) {
   try {
     fs.unlinkSync(OLD_UNIT_PATH);
   } catch (err) {
-    log(`WARNING: remove ${OLD_UNIT_PATH} failed: ${err.message}`);
+    log(`WARNING: remove ${OLD_UNIT_PATH} failed: ${errMsg(err)}`);
   }
 
   // daemon-reload again to clear the old unit from systemd's view.
@@ -108,42 +125,44 @@ if (fs.existsSync(OLD_UNIT_PATH)) {
   try {
     runCmd('systemctl', ['daemon-reload']);
   } catch (err) {
-    log(`WARNING: daemon-reload (post-rename) failed: ${err.message}`);
+    log(`WARNING: daemon-reload (post-rename) failed: ${errMsg(err)}`);
   }
 }
 
 // Step 5: Start or restart clagentic-console.service.
-let newUnitActive = false;
-try {
-  const activeState = runCmd('systemctl', ['is-active', NEW_UNIT]);
-  newUnitActive = activeState === 'active';
-} catch (_) {
-  // is-active exits non-zero when not active.
-}
-
-if (newUnitActive) {
-  // Already running — restart so new unit file changes (memory limits, env, etc.) take effect.
-  log(`restarting ${NEW_UNIT} (already active, applying unit file changes)`);
-  try {
-    runCmd('systemctl', ['restart', NEW_UNIT]);
-  } catch (err) {
-    log(`WARNING: restart ${NEW_UNIT} failed: ${err.message}`);
-  }
-} else if (wasRunningUnderOldUnit) {
-  // Was running under the old unit — start it under the new one now.
-  log(`starting ${NEW_UNIT} (was running under ${OLD_UNIT})`);
-  try {
-    runCmd('systemctl', ['start', NEW_UNIT]);
-  } catch (err) {
-    log(`WARNING: start ${NEW_UNIT} failed: ${err.message}`);
-  }
+// Never restart during a self-update — gracefulShutdown() + Restart=always handles it.
+if (selfUpdate) {
+  log('skipping start/restart (self-update — gracefulShutdown will hand off to systemd)');
 } else {
-  // Not currently running and was not running under old unit — start fresh.
-  log(`starting ${NEW_UNIT}`);
+  let newUnitActive = false;
   try {
-    runCmd('systemctl', ['start', NEW_UNIT]);
-  } catch (err) {
-    log(`WARNING: start ${NEW_UNIT} failed: ${err.message}`);
+    const activeState = runCmd('systemctl', ['is-active', NEW_UNIT]);
+    newUnitActive = activeState === 'active';
+  } catch (_) {
+    // is-active exits non-zero when not active.
+  }
+
+  if (newUnitActive) {
+    // Already running (manual operator update) — restart so new unit file changes
+    // (memory limits, env vars, etc.) take effect immediately.
+    log(`restarting ${NEW_UNIT} (already active — applying unit file changes)`);
+    try {
+      runCmd('systemctl', ['restart', NEW_UNIT]);
+    } catch (err) {
+      log(`WARNING: restart ${NEW_UNIT} failed: ${errMsg(err)}`);
+    }
+  } else if (wasRunningUnderOldUnit) {
+    // Was running under the old unit — start it under the new one now.
+    log(`starting ${NEW_UNIT} (was running under ${OLD_UNIT})`);
+    try {
+      runCmd('systemctl', ['start', NEW_UNIT]);
+    } catch (err) {
+      log(`WARNING: start ${NEW_UNIT} failed: ${errMsg(err)}`);
+    }
+  } else {
+    // Not previously running — do not auto-start. The daemon requires configuration
+    // before it can run; starting without config would loop under Restart=always.
+    log(`${NEW_UNIT} was not running — skipping auto-start (run: systemctl start ${NEW_UNIT})`);
   }
 }
 
