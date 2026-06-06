@@ -18,6 +18,7 @@ MemoryMax=85%
 OOMPolicy=kill
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=clagentic-console
 Environment=SHELL=/bin/bash
 Environment=PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=CLAGENTIC_MAX_CONCURRENT_SESSIONS=50
