@@ -26,7 +26,7 @@ npm install -g @clagentic/console
 Then run from anywhere:
 
 ```bash
-clagentic
+clagentic-console
 ```
 
 Or try it without installing:
@@ -67,7 +67,7 @@ npx @clagentic/console --shutdown   # Stop daemon
 npx @clagentic/console --dangerously-skip-permissions
 ```
 
-Also available as `clagentic` or `clagentic-console` if installed globally.
+Also available as `clagentic-console` if installed globally.
 
 ## Architecture
 
