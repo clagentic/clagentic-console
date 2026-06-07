@@ -1,17 +1,19 @@
 <p align="center">
-  <img src="media/logo/console-lockup-256.png" alt="Clagentic:Console" width="260" />
+  <img src="media/logo/console-lockup-256.png" alt="clagentic:console" width="260" />
 </p>
 
 <h4 align="center">AI tooling. Built for builders.</h4>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@clagentic/console"><img src="https://img.shields.io/npm/v/@clagentic/console" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@clagentic/console"><img src="https://img.shields.io/npm/dw/@clagentic/console" alt="npm downloads" /></a>
-  <a href="https://github.com/clagentic/clagentic-console/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <a href="https://ko-fi.com/clagentic"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi" /></a>
+  <a href="https://clagentic.ai"><img src="https://img.shields.io/badge/-clagentic.ai-00CFFF?style=flat&logoColor=white" alt="clagentic.ai" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat&logo=node.js&logoColor=white" alt="Node.js 20+" />
+  <a href="https://www.npmjs.com/package/@clagentic/console"><img src="https://img.shields.io/npm/v/@clagentic/console?style=flat&label=npm" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@clagentic/console"><img src="https://img.shields.io/npm/dw/@clagentic/console?style=flat&label=downloads" alt="npm downloads" /></a>
+  <a href="https://ko-fi.com/clagentic"><img src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white&label=support" alt="Support on Ko-fi" /></a>
 </p>
 
-A self-hosted browser console for Claude Code and ChatGPT Codex. Run AI sessions from any browser or phone — tool approvals, model selection, context management, session history — without leaving your own machine.
+A self-hosted browser console for Claude Code and ChatGPT Codex. Part of the [clagentic](https://clagentic.ai) suite. Run AI sessions from any browser or phone — tool approvals, model selection, context management, session history — without leaving your own machine.
 
 No extras bolted on. No opinionated workflows. The floor is solid; you build what you need on top.
 
@@ -144,7 +146,7 @@ Yes. On Linux, opt in to OS-level isolation: each user maps to a real Linux acco
 
 ## Support
 
-If Clagentic:Console is useful to you: [ko-fi.com/clagentic](https://ko-fi.com/clagentic)
+If clagentic:console is useful to you: [ko-fi.com/clagentic](https://ko-fi.com/clagentic)
 
 ## Credits
 
@@ -156,4 +158,4 @@ Not affiliated with Anthropic or OpenAI. Claude is a trademark of Anthropic. Cod
 
 ## License
 
-MIT
+[MIT](LICENSE)
