@@ -1,3 +1,12 @@
+## [1.4.1](https://github.com/clagentic/clagentic-console/compare/v1.4.0...v1.4.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* **lr-3b81:** set homepage to https://clagentic.ai/tools ([97669b3](https://github.com/clagentic/clagentic-console/commit/97669b315ce9a8071fabf1f3efca7abe1d8f2b51))
+* never restart running service from postinstall ([2121a4f](https://github.com/clagentic/clagentic-console/commit/2121a4fb8ed86f734192dd2abc29d68e0673f92e))
+* service rename to clagentic-console.service + OOM limits + postinstall automation (lr-d22a, lr-fb65) ([0af1f7a](https://github.com/clagentic/clagentic-console/commit/0af1f7a7234cdc77fb0a0aa586105881faf676e1))
+
 # [1.4.0](https://github.com/clagentic/clagentic-console/compare/v1.3.0...v1.4.0) (2026-06-06)
 
 
