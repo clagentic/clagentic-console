@@ -13,6 +13,17 @@ branch_conventions:
   fix: "fix/lr-{task_id}-{slug}"
   chore: "chore/lr-{task_id}-{slug}"
 
+pr_workflow:
+  # MANDATORY — do NOT use gh pr create or curl to open PRs.
+  # The only supported path for push + PR on this repo is ship.py:
+  #
+  #   python3 /workspace/local-scripts/ship/ship.py clagentic-console --title '...'
+  #
+  # ship.py handles push, PR creation, merge, and post-merge cleanup atomically.
+  # If clagentic-console is missing from ship.py's config, add it to:
+  #   /workspace/local-scripts/ship/config.json
+  # then run ship.py — do not bypass it.
+
 brand_rules:
   # MANDATORY — violating these is a hard error, not a style note.
   #
