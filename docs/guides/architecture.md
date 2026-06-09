@@ -49,7 +49,7 @@ Clagentic:Console decouples the CLI from the long-running server. The CLI starts
 graph TB
     CLI1["npx @clagentic/console<br/>(Terminal 1)"]
     CLI2["npx @clagentic/console --add ."]
-    IPC["Unix socket<br/>~/.clagentic/daemon.sock"]
+    IPC["Unix socket<br/>~/.clagentic/console/daemon.sock"]
     Daemon["Daemon Process<br/>lib/daemon.js"]
     HTTP["HTTP / WS<br/>:2633"]
     P1["Project A"]
