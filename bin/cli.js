@@ -123,10 +123,10 @@ for (var i = 0; i < args.length; i++) {
   } else if (args[i] === "--os-users") {
     osUsersMode = true;
   } else if (args[i] === "-h" || args[i] === "--help") {
-  console.log("Usage: clagentic [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart] [--no-restart]");
-  console.log("       clagentic --add <path>     Add a project to the running daemon");
-  console.log("       clagentic --remove <path>  Remove a project from the running daemon");
-  console.log("       clagentic --list            List registered projects");
+  console.log("Usage: clagentic-console [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart] [--no-restart]");
+  console.log("       clagentic-console --add <path>     Add a project to the running daemon");
+  console.log("       clagentic-console --remove <path>  Remove a project from the running daemon");
+  console.log("       clagentic-console --list            List registered projects");
     console.log("");
     console.log("Options:");
     console.log("  -p, --port <port>  Port to listen on (default: 2633)");
@@ -1985,7 +1985,7 @@ function showMainMenu(config, ip, setupCode) {
 
     function afterQr() {
       // Status line
-      log("  " + a.dim + "clagentic" + a.reset + " " + a.dim + "v" + currentVersion + a.reset + a.dim + " — " + url + a.reset);
+      log("  " + a.dim + "Clagentic: Console" + a.reset + " " + a.dim + "v" + currentVersion + a.reset + a.dim + " — " + url + a.reset);
       var parts = [];
       parts.push(a.bold + projs.length + a.reset + a.dim + (projs.length === 1 ? " project" : " projects"));
       parts.push(a.reset + a.bold + totalSessions + a.reset + a.dim + (totalSessions === 1 ? " session" : " sessions"));
