@@ -1,5 +1,6 @@
 scope:
   allowed_paths:
+    - bin/**
     - lib/**
     - .crew/**
     - test/**
@@ -11,3 +12,20 @@ branch_conventions:
   feat: "feat/lr-{task_id}-{slug}"
   fix: "fix/lr-{task_id}-{slug}"
   chore: "chore/lr-{task_id}-{slug}"
+
+
+brand_rules:
+  # MANDATORY — violating these is a hard error, not a style note.
+  #
+  # Product name (user-facing text, help strings, log output): "Clagentic: Console"
+  # CLI binary / command:                                       clagentic-console
+  # npm package:                                                @clagentic/console
+  # NEVER use bare "clagentic" as a product name or command.
+  #
+  # Technical identifiers that ARE correct:
+  #   CLAGENTIC_*   (env var prefix)
+  #   ~/.clagentic/ (home dir)
+  #   clagentic-*   (hyphenated service names: clagentic-relay, clagentic-router, etc.)
+  #
+  # Before committing any change to bin/cli.js or lib/**/*.js, grep for violations:
+  #   grep -n '"clagentic[^-_/@]' bin/cli.js lib/**/*.js

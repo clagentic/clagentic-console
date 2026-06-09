@@ -58,6 +58,7 @@ var autoYes = false;
 var cliPin = null;
 var shutdownMode = false;
 var restartMode = false;
+var noRestart = false;
 var addPath = null;
 var removePath = null;
 var listMode = false;
@@ -102,6 +103,8 @@ for (var i = 0; i < args.length; i++) {
     shutdownMode = true;
   } else if (args[i] === "--restart") {
     restartMode = true;
+  } else if (args[i] === "--no-restart") {
+    noRestart = true;
   } else if (args[i] === "--add") {
     addPath = args[i + 1] || ".";
     i++;
@@ -120,10 +123,10 @@ for (var i = 0; i < args.length; i++) {
   } else if (args[i] === "--os-users") {
     osUsersMode = true;
   } else if (args[i] === "-h" || args[i] === "--help") {
-  console.log("Usage: clagentic [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart]");
-  console.log("       clagentic --add <path>     Add a project to the running daemon");
-  console.log("       clagentic --remove <path>  Remove a project from the running daemon");
-  console.log("       clagentic --list            List registered projects");
+  console.log("Usage: clagentic-console [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart] [--no-restart]");
+  console.log("       clagentic-console --add <path>     Add a project to the running daemon");
+  console.log("       clagentic-console --remove <path>  Remove a project from the running daemon");
+  console.log("       clagentic-console --list            List registered projects");
     console.log("");
     console.log("Options:");
     console.log("  -p, --port <port>  Port to listen on (default: 2633)");
@@ -137,6 +140,7 @@ for (var i = 0; i < args.length; i++) {
     console.log("  --pin <pin>        Set 6-digit PIN (use with --yes)");
     console.log("  --shutdown         Shut down the running relay daemon");
     console.log("  --restart          Restart the running relay daemon");
+    console.log("  --no-restart       Do not auto-restart on crash (useful for debugging crash state)");
     console.log("  --add <path>       Add a project directory (use '.' for current)");
     console.log("  --remove <path>    Remove a project directory");
     console.log("  --list             List all registered projects");
@@ -386,6 +390,19 @@ function onDaemonDied() {
     log(a.dim + "     Run " + a.reset + "npx @clagentic/console" + a.dim + " to start again." + a.reset);
     log("");
     process.exit(0);
+    return;
+  }
+
+  // --no-restart: leave the daemon dead so the developer can inspect crash state
+  if (noRestart) {
+    log("");
+    log(sym.warn + "  " + a.yellow + "Server crashed. --no-restart is set — not restarting." + a.reset);
+    if (crashInfo.reason) {
+      log(a.dim + "     " + crashInfo.reason.split("\n")[0] + a.reset);
+    }
+    log(a.dim + "     Check logs: " + a.reset + logPath());
+    log("");
+    process.exit(1);
     return;
   }
 
@@ -1751,7 +1768,12 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
         process.exit(78);
         return;
       }
-      // Unexpected exit — auto restart
+      // Unexpected exit — auto restart (suppressed when --no-restart is set)
+      if (noRestart) {
+        console.log("\x1b[33m[dev] Daemon exited (code " + code + "). --no-restart is set — not restarting.\x1b[0m");
+        process.exit(code || 1);
+        return;
+      }
       console.log("\x1b[33m[dev] Daemon exited (code " + code + "), restarting...\x1b[0m");
       setTimeout(spawnDaemon, 500);
     });
@@ -1963,7 +1985,7 @@ function showMainMenu(config, ip, setupCode) {
 
     function afterQr() {
       // Status line
-      log("  " + a.dim + "clagentic" + a.reset + " " + a.dim + "v" + currentVersion + a.reset + a.dim + " — " + url + a.reset);
+      log("  " + a.dim + "Clagentic: Console" + a.reset + " " + a.dim + "v" + currentVersion + a.reset + a.dim + " — " + url + a.reset);
       var parts = [];
       parts.push(a.bold + projs.length + a.reset + a.dim + (projs.length === 1 ? " project" : " projects"));
       parts.push(a.reset + a.bold + totalSessions + a.reset + a.dim + (totalSessions === 1 ? " session" : " sessions"));
