@@ -1,3 +1,13 @@
+## [Unreleased]
+
+### Breaking Changes
+
+* **daemon.sock path has moved:** `~/.clagentic/daemon.sock` → `~/.clagentic/console/daemon.sock`
+
+  Console creates `~/.clagentic/console/` automatically on first startup after upgrade. A one-time warning is printed if the old socket path is still present on disk.
+
+  If you use `clagentic-relay claim register` without `--daemon-sock-path`, update `CLAGENTIC_CONSOLE_HOME` from `~/.clagentic` to `~/.clagentic/console`, or pass `--daemon-sock-path ~/.clagentic/console/daemon.sock` explicitly until the relay follow-up update ships (lr-a752).
+
 ## [1.4.1](https://github.com/clagentic/clagentic-console/compare/v1.4.0...v1.4.1) (2026-06-08)
 
 
