@@ -1,5 +1,6 @@
 scope:
   allowed_paths:
+    - bin/**
     - lib/**
     - .crew/**
     - test/**
