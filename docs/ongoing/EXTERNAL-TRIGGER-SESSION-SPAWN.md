@@ -112,6 +112,66 @@ When `sessionId` is present and the session is found:
 
 ---
 
+## 2.5 Quick Start Examples
+
+### New session (v1 — simplest form)
+
+Drop a file at `~/.clagentic/external-triggers/<id>.json`. The filename does not need to match `id`, but using `<id>.json` is conventional.
+
+```json
+{
+  "version": 1,
+  "id": "deploy-alert-20260510-001",
+  "projectSlug": "my-project",
+  "initialPrompt": "The production deploy finished 3 minutes ago. Smoke tests passed but error rate on /checkout is up 0.4%. Investigate and decide whether to roll back.",
+  "contextNote": "Deploy alert",
+  "createdAt": "2026-05-10T14:23:00Z"
+}
+```
+
+Clagentic: Console picks this up within ~200ms, opens a new session in `my-project` with that text as the first user turn, and starts processing it automatically.
+
+**Shell one-liner:**
+
+```sh
+ID="deploy-alert-$(date +%s)"
+cat > ~/.clagentic/external-triggers/${ID}.json << EOF
+{
+  "version": 1,
+  "id": "${ID}",
+  "projectSlug": "my-project",
+  "initialPrompt": "Deploy finished. Error rate elevated on /checkout — investigate.",
+  "contextNote": "Deploy alert",
+  "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+```
+
+---
+
+### Mid-session inject (v2 — push into a running session)
+
+Use this when you have an agent session already open and want to feed it new information without breaking its context.
+
+You need the session's `cliSessionId` — the UUID visible in the session file under `~/.clagentic/sessions/<slug>/`. You can find it from the session list in the UI (session info popover) or by reading the first line of the most recent `.jsonl` file.
+
+```json
+{
+  "version": 2,
+  "id": "queue-depth-alert-20260510-002",
+  "projectSlug": "my-project",
+  "initialPrompt": "Update: the job queue depth just hit 50k. The backlog is growing at ~200/min. Previous estimate of 2h to drain was wrong — adjust your plan.",
+  "sessionId": "3f8a1c2d-5e6b-7890-abcd-ef1234567890",
+  "createdAt": "2026-05-10T14:31:00Z"
+}
+```
+
+The message lands in the session as if the operator typed it. If the session is mid-turn, it queues and delivers after the current turn completes.
+
+**If the session is not found** (daemon restarted, session was closed), the trigger file is left in place and retried on the next watcher fire. Remove it manually if retry is not wanted.
+
+---
+
 ## 3. Existing Clay Surfaces This Builds On
 
 ### 3.1 Session creation — `sm.createSession()`
