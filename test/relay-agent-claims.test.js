@@ -335,6 +335,7 @@ test("registerClaim, heartbeatClaim, releaseClaim succeed against fake relay ser
   // Build a minimal HTTP/1.1 Unix-socket server that returns 200 JSON for any POST.
   var sockPath = path.join(os.tmpdir(), "relay-fake-" + Date.now() + ".sock");
   var received = [];
+  var bodies = {};
 
   var server = net.createServer(function (conn) {
     var buf = "";
@@ -354,6 +355,14 @@ test("registerClaim, heartbeatClaim, releaseClaim succeed against fake relay ser
       var requestLine = headers.split("\r\n")[0];
       var urlPath = requestLine.split(" ")[1] || "";
       received.push(urlPath);
+
+      // Capture parsed body keyed by path fragment for per-endpoint assertions.
+      try {
+        var parsed = JSON.parse(body);
+        if (urlPath.indexOf("register") !== -1) bodies["register"] = parsed;
+        else if (urlPath.indexOf("heartbeat") !== -1) bodies["heartbeat"] = parsed;
+        else if (urlPath.indexOf("release") !== -1) bodies["release"] = parsed;
+      } catch (e) {}
 
       var resp = JSON.stringify({ claim_id: "test-claim-id", heartbeat_ts: Date.now(), effective: true });
       conn.write(
@@ -390,6 +399,7 @@ test("registerClaim, heartbeatClaim, releaseClaim succeed against fake relay ser
         assert.ok(received.some(function (p) { return p.indexOf("register") !== -1; }), "register endpoint called");
         assert.ok(received.some(function (p) { return p.indexOf("heartbeat") !== -1; }), "heartbeat endpoint called");
         assert.ok(received.some(function (p) { return p.indexOf("release") !== -1; }), "release endpoint called");
+        assert.ok(bodies["register"] && typeof bodies["register"].daemon_sock_path === "string" && bodies["register"].daemon_sock_path.length > 0, "registerClaim body includes daemon_sock_path");
       });
     }).then(function () {
       process.env.CLAGENTIC_RELAY_SOCKET = origSocket || path.join(os.tmpdir(), "no-relay-test-absent.sock");
