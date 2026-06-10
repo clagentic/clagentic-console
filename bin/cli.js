@@ -31,7 +31,7 @@ if (_isDev || process.argv.includes("--debug")) {
 }
 
 var crypto = require("crypto");
-var { loadConfig, saveConfig, configPath, socketPath, logPath, ensureConfigDir, isDaemonAlive, isDaemonAliveAsync, generateSlug, clearStaleConfig, loadClayrc, saveClayrc, readCrashInfo, REAL_HOME } = require("../lib/config");
+var { loadConfig, saveConfig, configPath, socketPath, oldSocketPath, logPath, ensureConfigDir, isDaemonAlive, isDaemonAliveAsync, checkOldDaemon, generateSlug, clearStaleConfig, loadClayrc, saveClayrc, readCrashInfo, REAL_HOME } = require("../lib/config");
 var { sendIPCCommand } = require("../lib/ipc");
 var { generateAuthToken } = require("../lib/server");
 var { enableMultiUser, disableMultiUser, hasAdmin, isMultiUser, getSetupCode } = require("../lib/users");
@@ -163,16 +163,29 @@ if (_isDev) {
 if (shutdownMode) {
   var shutdownConfig = loadConfig();
   isDaemonAliveAsync(shutdownConfig).then(function (alive) {
-    if (!alive) {
-      console.error("No running daemon found.");
-      process.exit(1);
+    if (alive) {
+      return sendIPCCommand(socketPath(), { cmd: "shutdown" }).then(function () {
+        console.log("Server stopped.");
+        clearStaleConfig();
+        process.exit(0);
+      }).catch(function (err) {
+        console.error("Shutdown failed:", err.message);
+        process.exit(1);
+      });
     }
-    sendIPCCommand(socketPath(), { cmd: "shutdown" }).then(function () {
-      console.log("Server stopped.");
-      clearStaleConfig();
-      process.exit(0);
-    }).catch(function (err) {
-      console.error("Shutdown failed:", err.message);
+    // New socket not alive — check whether a pre-1.5 daemon is on the old path
+    return checkOldDaemon().then(function (old) {
+      if (old && old.alive) {
+        console.log("[migration] Sending shutdown to pre-1.5 daemon at " + old.sockPath);
+        return sendIPCCommand(old.sockPath, { cmd: "shutdown" }).then(function () {
+          console.log("Server stopped.");
+          process.exit(0);
+        }).catch(function (err) {
+          console.error("Shutdown failed:", err.message);
+          process.exit(1);
+        });
+      }
+      console.error("No running daemon found.");
       process.exit(1);
     });
   });
@@ -183,15 +196,31 @@ if (shutdownMode) {
 if (restartMode) {
   var restartConfig = loadConfig();
   isDaemonAliveAsync(restartConfig).then(function (alive) {
-    if (!alive) {
-      console.error("No running daemon found.");
-      process.exit(1);
+    if (alive) {
+      return sendIPCCommand(socketPath(), { cmd: "restart" }).then(function () {
+        console.log("Server restarted.");
+        process.exit(0);
+      }).catch(function (err) {
+        console.error("Restart failed:", err.message);
+        process.exit(1);
+      });
     }
-    sendIPCCommand(socketPath(), { cmd: "restart" }).then(function () {
-      console.log("Server restarted.");
-      process.exit(0);
-    }).catch(function (err) {
-      console.error("Restart failed:", err.message);
+    // New socket not alive — check whether a pre-1.5 daemon is on the old path
+    return checkOldDaemon().then(function (old) {
+      if (old && old.alive) {
+        // Pre-1.5 daemon does not understand {cmd:"restart"} for the CLI restart
+        // flow (it would restart on the old socket path). Shut it down instead so
+        // the caller can re-run without a port conflict.
+        console.log("[migration] Pre-1.5 daemon found at " + old.sockPath + " — shutting it down so a fresh start can proceed.");
+        return sendIPCCommand(old.sockPath, { cmd: "shutdown" }).then(function () {
+          console.log("Pre-1.5 daemon stopped. Run clagentic-console to start the updated daemon.");
+          process.exit(0);
+        }).catch(function (err) {
+          console.error("Shutdown of pre-1.5 daemon failed:", err.message);
+          process.exit(1);
+        });
+      }
+      console.error("No running daemon found.");
       process.exit(1);
     });
   });
@@ -1475,11 +1504,34 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     }
   }
 
+  // Migration shim: detect and shut down a pre-1.5 daemon holding the old socket
+  // path. This prevents the port-in-use dead-end on upgrade. (lr-6ed3)
+  if (process.platform !== "win32") {
+    var oldCheck = await checkOldDaemon();
+    if (oldCheck && oldCheck.alive) {
+      log(sym.warn + "  " + a.yellow + "Pre-1.5 daemon detected at " + oldCheck.sockPath + " — shutting it down..." + a.reset);
+      await sendIPCCommand(oldCheck.sockPath, { cmd: "shutdown" });
+      // Wait up to 5 s for the port to be released
+      var migWaited = 0;
+      while (migWaited < 5000) {
+        await new Promise(function (resolve) { setTimeout(resolve, 300); });
+        migWaited += 300;
+        if (await isPortFree(port)) break;
+      }
+      log(sym.done + "  " + a.green + "Pre-1.5 daemon stopped. Continuing startup..." + a.reset);
+    } else if (oldCheck && !oldCheck.alive && fs.existsSync(oldCheck.sockPath)) {
+      // Stale socket not yet cleaned up by ensureConfigDir (e.g. ensureConfigDir not
+      // called yet on this path). Remove it now so nothing trips on it later.
+      try { fs.unlinkSync(oldCheck.sockPath); } catch (e) {}
+    }
+  }
+
   // Check port availability
   var portFree = await isPortFree(port);
   if (!portFree) {
     log(a.red + "Port " + port + " is already in use." + a.reset);
-    log(a.dim + "Is another Clay daemon running?" + a.reset);
+    log(a.dim + "Another process is holding this port." + a.reset);
+    log(a.dim + "If a pre-1.5 daemon is running, clagentic-console --shutdown will stop it." + a.reset);
     process.exit(1);
     return;
   }
