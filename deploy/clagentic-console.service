@@ -7,6 +7,8 @@ Type=simple
 ExecStart=/usr/local/bin/clagentic-daemon.sh
 Restart=always
 RestartSec=5
+# EX_CONFIG (78) is a fatal configuration error (mis-set CLAGENTIC_HOME, unsupported Node) — do not restart-loop
+RestartPreventExitStatus=78
 KillMode=mixed
 TimeoutStopSec=20
 SendSIGKILL=yes
