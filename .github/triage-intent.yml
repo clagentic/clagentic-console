@@ -1,0 +1,68 @@
+# Clagentic: Console — triage intent
+# Consumed by clagentic:triage assessor. See docs/INTENT_AUTHORING.md in the
+# clagentic-triage repo for schema reference and authoring guidance.
+
+repo_context_files:
+  - path: CONTRIBUTING.md
+
+triage_rules:
+  - id: bugs
+    description: "Bug reports against the daemon, CLI, relay, YOKE, session storage, auth, push, or UI"
+    llm_context: |
+      This repo is Clagentic: Console — a self-hosted daemon that manages
+      Claude Code and Codex sessions and serves a multi-user browser workspace.
+
+      Accept bug reports about:
+      - The daemon (startup, crash, IPC socket, project registration)
+      - The CLI (clagentic-console command behavior)
+      - The WebSocket relay layer
+      - YOKE adapter behavior (Claude or Codex session handling, cross-vendor
+        instruction merging)
+      - Session storage (JSONL files, replay on restart)
+      - Authentication, PIN, multi-user accounts, RBAC, OTP
+      - OS-level user isolation on Linux
+      - Push notifications (VAPID, service worker, permission requests)
+      - The browser UI
+
+      Bug reports must include: steps to reproduce, actual behavior, expected
+      behavior, and the version of @clagentic/console in use. If any of these
+      are missing, respond asking for the missing information and leave the
+      issue open. Do not close incomplete bug reports. Verdict: needs_changes.
+
+      Issues about the behavior of Claude Code itself, the Anthropic API, or
+      the Codex CLI — not how this daemon integrates them — are out of scope.
+      Respond by explaining the scope and pointing the author to the appropriate
+      upstream project. Verdict: reject.
+
+      Security reports (authentication bypass, privilege escalation, unsafe code
+      execution, isolation failures, credential exposure) must always get verdict
+      "escalate" regardless of completeness. Never close or auto-respond to them.
+
+  - id: features
+    description: "Feature requests, enhancements, and PRs"
+    llm_context: |
+      Accept feature requests that fit the scope of a self-hosted, multi-user
+      agent session management tool. No specific format required — coherent and
+      on-topic is sufficient. Verdict: accept.
+
+      Per the contribution guidelines, feature PRs require a linked issue first.
+      If a PR adds new functionality (not a bug fix or docs improvement) and has
+      no linked issue, respond asking the author to open an issue first and link
+      it. Verdict: needs_changes.
+
+      Large refactors and PRs that add new runtime dependencies require prior
+      discussion before code is written. If a PR does either and has no linked
+      issue or prior discussion thread, respond asking for one. Verdict:
+      needs_changes.
+
+  - id: support
+    description: "Configuration questions, how-to, and off-topic"
+    llm_context: |
+      Questions about how to configure, install, or use Clagentic: Console
+      (MCP setup, PIN auth, multi-user config, worktree detection, push
+      notification setup, etc.) are support questions, not bug reports.
+      Redirect the author to GitHub Discussions and do not close the issue.
+      Verdict: reject.
+
+      Spam, solicitations, and issues clearly about an unrelated product:
+      close with no response needed. Verdict: reject.
