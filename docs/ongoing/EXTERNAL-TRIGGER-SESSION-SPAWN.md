@@ -1,6 +1,6 @@
-# External Trigger: Context-Injected Session Spawn
+# External Trigger: Context-Injected Session Spawn and Mid-Session Inject
 
-**Status:** Implemented — shipped in clagentic-console PR #22 (lr-790e). Upstream issue to be filed separately (lr-a953).
+**Status:** Implemented — v1 (session spawn) shipped in PR #22 (lr-790e); v2 (mid-session inject via `sessionId`) shipped in PR #205 (lr-1688). Upstream issue filed separately (lr-a953).
 
 **Decision (a):** implemented in clagentic-console fork; upstream issue filed for upstream consideration — see §5.
 
@@ -14,11 +14,13 @@ The gap is not just missing UI — the underlying session-spawn primitive does n
 
 This matters for any workflow where an event happens outside Clay (a deploy finishes, an alert fires, a queue fills up, another agent hits a decision it cannot resolve) and the right response is a human-with-context, not another automated step. The current options are: (1) open Clagentic:Console manually and reconstruct context by hand; (2) use a scheduled loop that polls — which wastes sessions on nothing and cannot carry event-specific context; or (3) use neither.
 
-The feature requested is: a generic "external trigger → contextual session spawn" primitive that any external process can use by writing a structured file to a watched directory.
+The feature requested is: a generic "external trigger → session" primitive covering two cases:
+- **Spawn:** open a new session pre-loaded with context (v1 and v2 without `sessionId`)
+- **Inject:** push a message into an already-running session (v2 with `sessionId`)
 
 ---
 
-## 2. Proposed Primitive
+## 2. The Primitive
 
 ### 2.1 Event file format
 
@@ -28,7 +30,7 @@ An external process drops a JSON file at:
 ~/.clagentic/external-triggers/<trigger-id>.json
 ```
 
-The file schema (v1):
+#### Schema v1 — spawn a new session (backward-compatible, still valid)
 
 ```json
 {
@@ -36,41 +38,77 @@ The file schema (v1):
   "id": "trigger-abc123",
   "projectSlug": "escalations",
   "initialPrompt": "String shown as the first user-turn in the new session.",
-  "contextNote": "Optional extra context prepended to the session title or shown as a system message.",
+  "contextNote": "Optional extra context prepended to the session title.",
   "cwd": "/workspace/escalations",
   "createdAt": "2026-05-01T12:00:00Z"
 }
 ```
 
-Fields:
-
 | Field | Required | Description |
 |-------|----------|-------------|
 | `version` | yes | Schema version. Must be `1`. |
-| `id` | yes | Unique trigger ID. File name must match. |
-| `projectSlug` | yes | Clay project slug to open the session in. |
+| `id` | yes | Unique trigger ID. |
+| `projectSlug` | yes | Clagentic: Console project slug to open the session in. |
 | `initialPrompt` | yes | Text injected as the first user-turn of the new session. |
 | `contextNote` | no | Short string used as the session title prefix. Defaults to "External trigger". |
 | `cwd` | no | Override project working directory. Defaults to the project's registered cwd. |
 | `createdAt` | no | ISO timestamp for ordering and diagnostics. |
 
-### 2.2 Clay behavior on trigger file arrival
+#### Schema v2 — spawn or inject
+
+```json
+{
+  "version": 2,
+  "id": "trigger-xyz789",
+  "projectSlug": "escalations",
+  "initialPrompt": "Here is new context for you.",
+  "sessionId": "abc123...",
+  "contextNote": "Optional.",
+  "cwd": "/workspace/escalations",
+  "createdAt": "2026-05-01T12:00:00Z"
+}
+```
+
+All v1 fields carry the same meaning. Additional v2 field:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `sessionId` | no | The `cliSessionId` of an existing running session. When present, pushes `initialPrompt` as a new message into that session (mid-session inject). When absent, behaves identically to v1 (spawn a new session). |
+
+The `sessionId` value is the Claude CLI session UUID — the same identifier visible in the session's `.jsonl` filename under `~/.clagentic/sessions/<slug>/` and in the `cliSessionId` field of session objects.
+
+### 2.2 Behavior on trigger file arrival
 
 1. The external trigger watcher (`project-external-trigger.js`) fires `fs.watch` on `~/.clagentic/external-triggers/`.
 2. On file appear event: read and validate the JSON. Reject unknown versions silently (log only).
 3. Find the matching project by `projectSlug`. If not found, log and skip.
-4. Call `sm.createSession()` on the target project (same call as `new_session` handler, `project-sessions.js:129`).
-5. Pre-seed the session with `initialPrompt` by pushing a synthetic `user_message` history entry and immediately calling `sdk.startQuery(session, initialPrompt, ...)` — exactly the pattern in `project-loop.js:500-511`.
-6. Broadcast `session_list_changed` so any open browser client reflects the new session.
-7. Move or delete the trigger file to `~/.clagentic/external-triggers/processed/<id>.json` to prevent re-fire on Clay restart.
-8. **No UI notification is emitted.** The trigger is its own notification channel (ntfy, email, etc.). Adding a notification is opt-in via a future `notifyUser` field in the schema.
+4. **If `sessionId` is present (v2 inject path):**
+   - Search `sm.sessions` for a session where `cliSessionId === sessionId`.
+   - If found: call `sdk.pushMessage(session, initialPrompt, null)` — same call as the operator typing in the UI.
+   - If not found: log a warning and **do not archive** the trigger file. The file remains so the daemon can retry on next watcher fire (daemon-down recovery).
+   - If `pushMessage` throws: log the error and leave `dispatched[id]` set to prevent a rapid retry loop.
+5. **If `sessionId` is absent (spawn path, v1 and v2):**
+   - Call `sm.createSession()` on the target project.
+   - Pre-seed the session with `initialPrompt` by pushing a synthetic `user_message` history entry and immediately calling `sdk.startQuery(session, initialPrompt, ...)`.
+   - Broadcast `session_list_changed` so any open browser client reflects the new session.
+6. Move the trigger file to `~/.clagentic/external-triggers/processed/<id>.json` on success to prevent re-fire on restart.
+7. **No UI notification is emitted.** The trigger is its own notification channel (ntfy, email, etc.).
 
-### 2.3 What the new session looks like
+### 2.3 Mid-session inject: what happens in the session
+
+When `sessionId` is present and the session is found:
+- `sdk.pushMessage` enqueues the text as if the operator typed it.
+- If the session is currently processing (mid-turn), the message is queued and delivered when the current turn completes.
+- If the session is idle, the message starts a new turn immediately.
+- The injected message appears in the session history like any other user message.
+- No new session is created; no session list broadcast is needed.
+
+### 2.4 New session spawn: what the session looks like
 
 - It appears in the project's session list like any manually-created session.
 - The first turn is the `initialPrompt` text — already visible in history.
-- Clay processes it automatically (auto-continue on, same as a Ralph Loop iteration). If the caller wants the session to pause for human input rather than auto-process, `initialPrompt` should end with a question mark and the project's auto-continue setting controls behavior.
-- The session has no special marker — it is a normal session. The `contextNote` is used as the title prefix if supplied.
+- Clagentic: Console processes it automatically (`acceptEditsAfterStart = true`). If the project's auto-continue setting is off, the session will pause after the first assistant turn.
+- The session has no special marker. The `contextNote` is used as the title prefix if supplied.
 
 ---
 
@@ -129,33 +167,33 @@ The external trigger watcher watches `~/.clagentic/external-triggers/` — a pat
 
 ---
 
-## 4. Net New Code Estimate
+## 4. Implementation
 
-| File | Status | Estimated lines | Ownership per MODULE_MAP.md |
-|------|--------|----------------|------------------------------|
-| `lib/project-external-trigger.js` | **new** | ~120 | New module, `attachXxx(ctx)` pattern |
-| `lib/project.js` | **edit** | ~8 (wire + `attachExternalTrigger(ctx)` call) | project.js thin coordinator |
-| `lib/config.js` | **edit** | ~5 (export `EXTERNAL_TRIGGERS_DIR` constant) | config.js |
+**Status: shipped.** The module is `lib/project-external-trigger.js` (~295 lines). Tests live in `test/external-trigger.test.js`.
 
-Total: **1 new file (~120 lines), 2 small edits (~13 lines combined).** No changes to project-sessions.js, sdk-bridge.js, project-loop.js, project-file-watch.js, or project-notifications.js.
-
-### `project-external-trigger.js` internal structure
+### Actual module structure
 
 ```
 attachExternalTrigger(ctx)
-  ctx fields needed: CONFIG_DIR, getProjectBySlug, createSessionAndPrompt
+  ctx fields: triggersDir, getProject
 
-  - startWatcher()        ~25 lines  fs.watch on CLAGENTIC_HOME/external-triggers/
-  - handleFile(filePath)  ~40 lines  read/validate JSON, find project, spawn session
-  - spawnSession(project, trigger)  ~30 lines  createSession + pushMessage + startQuery
-  - archiveTrigger(id)    ~10 lines  move to processed/ subdir
-  - stopWatcher()          ~5 lines
-  - exports: { startWatcher, stopWatcher }
+  - startWatcher()              fs.watch on ~/.clagentic/external-triggers/
+  - stopWatcher()               close watcher + clear debounce
+  - scanExisting()              daemon-down recovery: process unarchived files on startup
+  - handleFile(filePath)        read/validate JSON, route to spawnSession or pushMessageToSession
+  - spawnSession(project, trigger)          createSession + startQuery (v1 and v2 without sessionId)
+  - pushMessageToSession(project, trigger)  sdk.pushMessage into existing session (v2 with sessionId)
+  - archiveTrigger(filePath, id)            rename to processed/ subdir
+  - pruneOldProcessed()         delete processed files older than 30 days on startup
+
+exports: { startWatcher, stopWatcher }
 ```
+
+Wired in `project.js` at startup; `triggersDir` is `config.externalTriggersDir()`.
 
 ### Module map placement
 
-Per `MODULE_MAP.md`, the new module is an **Infrastructure Module** (alongside `project-file-watch.js`) — it watches a path and emits side effects. It is not a message handler. Wired in `project.js` at startup (not via handleMessage dispatch).
+Per `MODULE_MAP.md`, this is an **Infrastructure Module** (alongside `project-file-watch.js`) — it watches a path and emits side effects. It is not a message handler. Wired in `project.js` at startup (not via `handleMessage` dispatch).
 
 ---
 
