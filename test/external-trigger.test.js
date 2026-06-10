@@ -80,7 +80,7 @@ function makeFakeProjectWithSession(spawnLog, cliSessionId) {
 // ============================================================
 
 test("validateTrigger: valid trigger passes", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -116,7 +116,7 @@ test("validateTrigger: valid trigger passes", function () {
 });
 
 test("validateTrigger: missing version rejects trigger", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -140,7 +140,7 @@ test("validateTrigger: missing version rejects trigger", function () {
 });
 
 test("validateTrigger: wrong version rejects trigger", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -163,7 +163,7 @@ test("validateTrigger: wrong version rejects trigger", function () {
 });
 
 test("validateTrigger: missing initialPrompt rejects trigger", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -190,7 +190,7 @@ test("validateTrigger: missing initialPrompt rejects trigger", function () {
 // ============================================================
 
 test("handleFile: routes to registered project", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -215,7 +215,7 @@ test("handleFile: routes to registered project", function () {
 });
 
 test("handleFile: drops trigger for unregistered project", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -241,7 +241,7 @@ test("handleFile: drops trigger for unregistered project", function () {
 // ============================================================
 
 test("duplicate trigger ID is processed only once", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -272,7 +272,7 @@ test("duplicate trigger ID is processed only once", function () {
 // ============================================================
 
 test("malformed JSON trigger is silently dropped", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -297,7 +297,7 @@ test("malformed JSON trigger is silently dropped", function () {
 // ============================================================
 
 test("scanExisting picks up pre-existing trigger files on startWatcher", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
 
   // Drop file BEFORE startWatcher is called (simulates file arriving while daemon was down)
@@ -325,7 +325,7 @@ test("scanExisting picks up pre-existing trigger files on startWatcher", functio
 // ============================================================
 
 test("v2 trigger with sessionId calls pushMessage on matching session", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var CLI_SESSION_ID = "abc-123-cli-session";
   var et = attachExternalTrigger({
@@ -364,7 +364,7 @@ test("v2 trigger with sessionId calls pushMessage on matching session", function
 });
 
 test("v2 trigger with sessionId not found: not archived, dispatched entry cleared", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -399,7 +399,7 @@ test("v2 trigger with sessionId not found: not archived, dispatched entry cleare
 });
 
 test("v2 trigger without sessionId falls back to spawnSession", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,
@@ -424,7 +424,7 @@ test("v2 trigger without sessionId falls back to spawnSession", function () {
 });
 
 test("v2 trigger with invalid sessionId (empty string) is rejected by validator", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
     triggersDir: tmpDir,

@@ -4,8 +4,8 @@
 var _nodeMajor = parseInt(process.versions.node.split(".")[0], 10);
 if (_nodeMajor < 20) {
   console.error("");
-  console.error("\x1b[31m[clay] Node.js 20+ is required (current: " + process.version + ")\x1b[0m");
-  console.error("[clay] The Claude Agent SDK 0.2.40+ requires Node 20 for Symbol.dispose support.");
+  console.error("\x1b[31m[clagentic-console] Node.js 20+ is required (current: " + process.version + ")\x1b[0m");
+  console.error("[clagentic-console] The Claude Agent SDK 0.2.40+ requires Node 20 for Symbol.dispose support.");
   console.error("");
   console.error("  Upgrade Node:  nvm install 22 && nvm use 22");
   console.error("");
@@ -20,7 +20,7 @@ var qrcode = require("qrcode-terminal");
 var net = require("net");
 
 // Detect dev mode — dev and prod use separate daemon files so they can run simultaneously
-var _isDev = (process.argv[1] && (path.basename(process.argv[1]) === "clay-dev" || path.basename(process.argv[1]) === "clagentic-dev")) || process.argv.includes("--dev");
+var _isDev = (process.argv[1] && path.basename(process.argv[1]) === "clagentic-dev") || process.argv.includes("--dev");
 if (_isDev) {
   process.env.CLAGENTIC_DEV = "1";
 }
@@ -345,7 +345,7 @@ var a = {
   reset: "\x1b[0m",
   bold: "\x1b[1m",
   dim: "\x1b[2m",
-  clay: isBasicTerm ? "\x1b[34m" : "\x1b[38;2;88;87;252m",   // #5857FC Indigo — active interaction
+  indigo: isBasicTerm ? "\x1b[34m" : "\x1b[38;2;88;87;252m",   // #5857FC Indigo — active interaction
   green: "\x1b[32m",
   yellow: "\x1b[33m",
   red: "\x1b[31m",
@@ -355,7 +355,7 @@ function gradient(text) {
   if (isBasicTerm) {
     return a.yellow + text + a.reset;
   }
-  // Terracotta (#FE7150) → Warm brown (#D09558) — Clay earthy warmth
+  // Terracotta (#FE7150) → Warm brown (#D09558) gradient
   var r0 = 254, g0 = 113, b0 = 80;
   var r1 = 208, g1 = 149, b1 = 88;
   var out = "";
@@ -371,7 +371,7 @@ function gradient(text) {
 }
 
 var sym = {
-  pointer: a.clay + "◆" + a.reset,
+  pointer: a.indigo + "◆" + a.reset,
   done: a.green + "◇" + a.reset,
   bar: a.dim + "│" + a.reset,
   end: a.dim + "└" + a.reset,
@@ -884,7 +884,7 @@ function promptPin(callback) {
       }
     } else if (/\d/.test(ch) && pin.length < 6) {
       pin += ch;
-      process.stdout.write(a.clay + "●" + a.reset);
+      process.stdout.write(a.indigo + "●" + a.reset);
     }
   });
 }
@@ -1187,7 +1187,7 @@ function promptMultiSelect(title, items, callback) {
   function render() {
     var out = "";
     for (var i = 0; i < items.length; i++) {
-      var cursor = i === idx ? a.clay + ">" + a.reset : " ";
+      var cursor = i === idx ? a.indigo + ">" + a.reset : " ";
       var check = selected[i]
         ? a.green + a.bold + "■" + a.reset
         : a.dim + "□" + a.reset;
@@ -1354,14 +1354,14 @@ function setup(callback) {
   console.clear();
   printLogo();
   log("");
-  log(sym.pointer + "  " + a.bold + "Clay" + a.reset + a.dim + "  ·  Unofficial, open-source project" + a.reset);
+  log(sym.pointer + "  " + a.bold + "Clagentic: Console" + a.reset + a.dim + "  ·  Unofficial, open-source project" + a.reset);
   log(sym.bar);
   log(sym.bar + "  " + a.yellow + sym.warn + " Disclaimer" + a.reset);
   log(sym.bar);
   log(sym.bar + "  " + a.dim + "This is an independent project and is not affiliated with Anthropic." + a.reset);
   log(sym.bar + "  " + a.dim + "Claude is a trademark of Anthropic." + a.reset);
   log(sym.bar);
-  log(sym.bar + "  " + a.dim + "Clay is provided \"as is\" without warranty of any kind. Users are" + a.reset);
+  log(sym.bar + "  " + a.dim + "Clagentic: Console is provided \"as is\" without warranty of any kind. Users are" + a.reset);
   log(sym.bar + "  " + a.dim + "responsible for complying with the terms of service of underlying AI" + a.reset);
   log(sym.bar + "  " + a.dim + "providers (e.g., Anthropic, OpenAI) and all applicable terms of any" + a.reset);
   log(sym.bar + "  " + a.dim + "third-party services." + a.reset);
@@ -1414,7 +1414,7 @@ function setup(callback) {
     }
 
     function askMode() {
-      promptSelect("How will you use Clay?", [
+      promptSelect("How will you use Clagentic: Console?", [
         { label: "Just me (single user)", value: "single" },
         { label: "Multiple users", value: "multi" },
       ], function (mode) {
@@ -1444,7 +1444,7 @@ function setup(callback) {
         log(sym.bar);
         log(sym.bar + "  " + a.yellow + sym.warn + " OS-Level User Isolation" + a.reset);
         log(sym.bar);
-        log(sym.bar + "  " + a.dim + "This feature maps each Clay user to a Linux OS user account." + a.reset);
+        log(sym.bar + "  " + a.dim + "This feature maps each Clagentic: Console user to a Linux OS user account." + a.reset);
         log(sym.bar + "  " + a.dim + "The daemon must run as root and will spawn processes (SDK workers," + a.reset);
         log(sym.bar + "  " + a.dim + "terminals, file operations) as the mapped Linux user." + a.reset);
         log(sym.bar);
@@ -1453,7 +1453,7 @@ function setup(callback) {
         log(sym.bar + "  " + a.dim + "- Terminals and file access follow Linux permissions" + a.reset);
         log(sym.bar + "  " + a.dim + "- Linux user accounts are created automatically (clay-username)" + a.reset);
         log(sym.bar);
-        log(sym.bar + "  " + a.dim + "Recommended: Run on a dedicated Clay server or cloud instance," + a.reset);
+        log(sym.bar + "  " + a.dim + "Recommended: Run on a dedicated Clagentic: Console server or cloud instance," + a.reset);
         log(sym.bar + "  " + a.dim + "not on a personal computer or general-purpose server." + a.reset);
         log(sym.bar);
         promptSelect("Confirm", [
@@ -1692,12 +1692,12 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
       : protocol + "://" + ip + ":" + config.port;
     console.log("  " + sym.done + "  Daemon started (PID " + config.pid + ")");
     console.log("  " + sym.done + "  " + url);
-    if (config.mkcertDetected) console.log("  " + sym.warn + "  Clay now ships with a builtin HTTPS certificate. To use it, pass --builtin-cert or uninstall mkcert.");
+    if (config.mkcertDetected) console.log("  " + sym.warn + "  Clagentic: Console now ships with a builtin HTTPS certificate. To use it, pass --builtin-cert or uninstall mkcert.");
     if (_pendingSetupCode) {
       console.log("");
       console.log("  " + sym.done + "  " + a.green + "Multi-user mode enabled." + a.reset);
       console.log("  " + sym.bar + "  Setup code:  " + a.bold + _pendingSetupCode + a.reset);
-      console.log("  " + sym.bar + "  Open Clay in your browser and enter this code to create the admin account.");
+      console.log("  " + sym.bar + "  Open Clagentic: Console in your browser and enter this code to create the admin account.");
     }
     console.log("  " + sym.done + "  Headless mode — exiting CLI");
     process.exit(0);
@@ -2089,7 +2089,7 @@ function showMainMenu(config, ip, setupCode) {
       log("");
 
       if (config.mkcertDetected) {
-        log("  " + sym.warn + "  " + a.yellow + "Clay now ships with a builtin HTTPS certificate." + a.reset);
+        log("  " + sym.warn + "  " + a.yellow + "Clagentic: Console now ships with a builtin HTTPS certificate." + a.reset);
         log("     " + a.dim + "No more CA setup on each device." + a.reset);
         log("     " + a.dim + "To use it, pass --builtin-cert or uninstall mkcert." + a.reset);
         log("");
@@ -2208,7 +2208,7 @@ function showSettingsMenu(config, ip) {
 
     var modeLabel = config.mode === "multi" ? "Multi-user" : "Single user";
     var modeStatus = config.mode === "multi"
-      ? a.clay + modeLabel + a.reset
+      ? a.indigo + modeLabel + a.reset
       : a.dim + modeLabel + a.reset;
     log(sym.bar + "  Mode         " + modeStatus);
     log(sym.bar + "  PIN          " + pinStatus);
@@ -2301,7 +2301,7 @@ function showSettingsMenu(config, ip) {
           log(sym.bar);
           log(sym.bar + "  Setup code:  " + a.bold + muResult.setupCode + a.reset);
           log(sym.bar);
-          log(sym.bar + "  " + a.dim + "Open Clay in your browser and enter this code to create the admin account." + a.reset);
+          log(sym.bar + "  " + a.dim + "Open Clagentic: Console in your browser and enter this code to create the admin account." + a.reset);
           log(sym.bar + "  " + a.dim + "The code is single-use and will be cleared once the admin is set up." + a.reset);
         } else {
           log(sym.bar + "  " + a.dim + "Multi-user mode is already enabled." + a.reset);
@@ -2359,7 +2359,7 @@ function showSettingsMenu(config, ip) {
           log(sym.bar);
           log(sym.bar + "  " + a.red + sym.warn + " OS-level user isolation requires Linux." + a.reset);
           log(sym.bar + "  " + a.dim + "This feature depends on setfacl, getent, and uid/gid process spawning." + a.reset);
-          log(sym.bar + "  " + a.dim + "Use Docker or a Linux VM to run Clay with OS user isolation." + a.reset);
+          log(sym.bar + "  " + a.dim + "Use Docker or a Linux VM to run Clagentic: Console with OS user isolation." + a.reset);
           log(sym.bar);
           showSettingsMenu(config, ip);
           return;
@@ -2367,7 +2367,7 @@ function showSettingsMenu(config, ip) {
         log(sym.bar);
         log(sym.bar + "  " + a.yellow + sym.warn + " OS-Level User Isolation" + a.reset);
         log(sym.bar);
-        log(sym.bar + "  " + a.dim + "This feature maps each Clay user to a Linux OS user account." + a.reset);
+        log(sym.bar + "  " + a.dim + "This feature maps each Clagentic: Console user to a Linux OS user account." + a.reset);
         log(sym.bar + "  " + a.dim + "The daemon must run as root and will spawn processes (SDK workers," + a.reset);
         log(sym.bar + "  " + a.dim + "terminals, file operations) as the mapped Linux user." + a.reset);
         log(sym.bar);
@@ -2376,7 +2376,7 @@ function showSettingsMenu(config, ip) {
         log(sym.bar + "  " + a.dim + "- Terminals and file access follow Linux permissions" + a.reset);
         log(sym.bar + "  " + a.dim + "- Linux user accounts are created automatically (clay-username)" + a.reset);
         log(sym.bar);
-        log(sym.bar + "  " + a.dim + "Recommended: Run on a dedicated Clay server or cloud instance," + a.reset);
+        log(sym.bar + "  " + a.dim + "Recommended: Run on a dedicated Clagentic: Console server or cloud instance," + a.reset);
         log(sym.bar + "  " + a.dim + "not on a personal computer or general-purpose server." + a.reset);
         log(sym.bar);
         promptSelect("Select", [
@@ -2868,7 +2868,7 @@ var currentVersion = require("../package.json").version;
           console.error("");
           console.error("Install it:  " + a.bold + aclCheck.installCmd + a.reset);
           console.error("");
-          console.error("Then restart Clay.");
+          console.error("Then restart Clagentic: Console.");
           process.exit(1);
           return;
         }
