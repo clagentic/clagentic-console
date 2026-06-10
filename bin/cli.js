@@ -164,25 +164,35 @@ if (shutdownMode) {
   var shutdownConfig = loadConfig();
   isDaemonAliveAsync(shutdownConfig).then(function (alive) {
     if (alive) {
-      return sendIPCCommand(socketPath(), { cmd: "shutdown" }).then(function () {
-        console.log("Server stopped.");
-        clearStaleConfig();
-        process.exit(0);
-      }).catch(function (err) {
-        console.error("Shutdown failed:", err.message);
-        process.exit(1);
+      return sendIPCCommand(socketPath(), { cmd: "shutdown" }).then(function (resp) {
+        if (resp && resp.ok) {
+          console.log("Server stopped.");
+          clearStaleConfig();
+          process.exit(0);
+        } else {
+          var pid = shutdownConfig && shutdownConfig.pid;
+          console.error("Shutdown failed: daemon did not acknowledge the command.");
+          if (pid) console.error("  Daemon PID: " + pid + "  (try: kill " + pid + ")");
+          console.error("  Or: systemctl restart clagentic-console");
+          process.exit(1);
+        }
       });
     }
     // New socket not alive — check whether a pre-1.5 daemon is on the old path
     return checkOldDaemon().then(function (old) {
       if (old && old.alive) {
         console.log("[migration] Sending shutdown to pre-1.5 daemon at " + old.sockPath);
-        return sendIPCCommand(old.sockPath, { cmd: "shutdown" }).then(function () {
-          console.log("Server stopped.");
-          process.exit(0);
-        }).catch(function (err) {
-          console.error("Shutdown failed:", err.message);
-          process.exit(1);
+        return sendIPCCommand(old.sockPath, { cmd: "shutdown" }).then(function (resp) {
+          if (resp && resp.ok) {
+            console.log("Server stopped.");
+            process.exit(0);
+          } else {
+            var oldPid = shutdownConfig && shutdownConfig.pid;
+            console.error("Shutdown of pre-1.5 daemon failed: no acknowledgement from " + old.sockPath);
+            if (oldPid) console.error("  Daemon PID: " + oldPid + "  (try: kill " + oldPid + ")");
+            console.error("  Or: systemctl restart clagentic-console");
+            process.exit(1);
+          }
         });
       }
       console.error("No running daemon found.");
@@ -197,12 +207,17 @@ if (restartMode) {
   var restartConfig = loadConfig();
   isDaemonAliveAsync(restartConfig).then(function (alive) {
     if (alive) {
-      return sendIPCCommand(socketPath(), { cmd: "restart" }).then(function () {
-        console.log("Server restarted.");
-        process.exit(0);
-      }).catch(function (err) {
-        console.error("Restart failed:", err.message);
-        process.exit(1);
+      return sendIPCCommand(socketPath(), { cmd: "restart" }).then(function (resp) {
+        if (resp && resp.ok) {
+          console.log("Server restarted.");
+          process.exit(0);
+        } else {
+          var pid = restartConfig && restartConfig.pid;
+          console.error("Restart failed: daemon did not acknowledge the command.");
+          if (pid) console.error("  Daemon PID: " + pid + "  (try: kill " + pid + " && clagentic-console)");
+          console.error("  Or: systemctl restart clagentic-console");
+          process.exit(1);
+        }
       });
     }
     // New socket not alive — check whether a pre-1.5 daemon is on the old path
@@ -212,12 +227,17 @@ if (restartMode) {
         // flow (it would restart on the old socket path). Shut it down instead so
         // the caller can re-run without a port conflict.
         console.log("[migration] Pre-1.5 daemon found at " + old.sockPath + " — shutting it down so a fresh start can proceed.");
-        return sendIPCCommand(old.sockPath, { cmd: "shutdown" }).then(function () {
-          console.log("Pre-1.5 daemon stopped. Run clagentic-console to start the updated daemon.");
-          process.exit(0);
-        }).catch(function (err) {
-          console.error("Shutdown of pre-1.5 daemon failed:", err.message);
-          process.exit(1);
+        return sendIPCCommand(old.sockPath, { cmd: "shutdown" }).then(function (resp) {
+          if (resp && resp.ok) {
+            console.log("Pre-1.5 daemon stopped. Run clagentic-console to start the updated daemon.");
+            process.exit(0);
+          } else {
+            var oldPid = restartConfig && restartConfig.pid;
+            console.error("Shutdown of pre-1.5 daemon failed: no acknowledgement from " + old.sockPath);
+            if (oldPid) console.error("  Daemon PID: " + oldPid + "  (try: kill " + oldPid + ")");
+            console.error("  Or: systemctl restart clagentic-console");
+            process.exit(1);
+          }
         });
       }
       console.error("No running daemon found.");
@@ -1703,6 +1723,25 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
       hasTls = true;
       if (certPaths.builtin) hasBuiltinCert = true;
       if (certPaths.mkcertDetected) mkcertDetected = true;
+    }
+  }
+
+  // Migration shim: detect and shut down a pre-1.5 daemon on the old (dev) socket
+  // path before checking port availability — mirrors what forkDaemon() does. (lr-6ed3)
+  if (process.platform !== "win32") {
+    var devOldCheck = await checkOldDaemon();
+    if (devOldCheck && devOldCheck.alive) {
+      log(sym.warn + "  " + a.yellow + "Pre-1.5 daemon detected at " + devOldCheck.sockPath + " — shutting it down..." + a.reset);
+      await sendIPCCommand(devOldCheck.sockPath, { cmd: "shutdown" });
+      var devMigWaited = 0;
+      while (devMigWaited < 5000) {
+        await new Promise(function (resolve) { setTimeout(resolve, 300); });
+        devMigWaited += 300;
+        if (await isPortFree(port)) break;
+      }
+      log(sym.done + "  " + a.green + "Pre-1.5 daemon stopped. Continuing startup..." + a.reset);
+    } else if (devOldCheck && !devOldCheck.alive && fs.existsSync(devOldCheck.sockPath)) {
+      try { fs.unlinkSync(devOldCheck.sockPath); } catch (e) {}
     }
   }
 
