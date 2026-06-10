@@ -25,6 +25,7 @@ function makeFakeProject(spawnLog) {
   var history = [];
   var files = [];
   var sm = {
+    sessions: new Map(),
     createSession: function () {
       return {
         localId: "sess-" + Date.now(),
@@ -44,6 +45,9 @@ function makeFakeProject(spawnLog) {
     startQuery: function (sess, text, images, linuxUser) {
       spawnLog.push({ sessionId: sess.localId, text: text });
     },
+    pushMessage: function (sess, text, images) {
+      spawnLog.push({ sessionId: sess.localId, text: text, pushed: true });
+    },
   };
   return {
     sm: sm,
@@ -52,6 +56,23 @@ function makeFakeProject(spawnLog) {
     onProcessingChanged: function () {},
     getLinuxUserForSession: function () { return null; },
   };
+}
+
+// Makes a fake project that already has a live session with the given cliSessionId.
+function makeFakeProjectWithSession(spawnLog, cliSessionId) {
+  var project = makeFakeProject(spawnLog);
+  var liveSession = {
+    localId: "live-sess-001",
+    cliSessionId: cliSessionId,
+    history: [],
+    title: "live session",
+    cwd: null,
+    isProcessing: false,
+    sentToolResults: {},
+    acceptEditsAfterStart: true,
+  };
+  project.sm.sessions.set(liveSession.localId, liveSession);
+  return project;
 }
 
 // ============================================================
@@ -293,6 +314,131 @@ test("scanExisting picks up pre-existing trigger files on startWatcher", functio
     setTimeout(function () {
       et.stopWatcher();
       assert.strictEqual(spawnLog.length, 1, "Pre-existing trigger should be picked up on start");
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      resolve();
+    }, 600);
+  });
+});
+
+// ============================================================
+// 6. Schema v2: mid-session inject
+// ============================================================
+
+test("v2 trigger with sessionId calls pushMessage on matching session", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var spawnLog = [];
+  var CLI_SESSION_ID = "abc-123-cli-session";
+  var et = attachExternalTrigger({
+    triggersDir: tmpDir,
+    getProject: function (slug) {
+      if (slug === "test-project") return makeFakeProjectWithSession(spawnLog, CLI_SESSION_ID);
+      return null;
+    },
+  });
+
+  var trigger = makeTrigger({
+    version: 2,
+    id: "trigger-inject-001",
+    sessionId: CLI_SESSION_ID,
+    initialPrompt: "Inject this message",
+  });
+  var filePath = path.join(tmpDir, trigger.id + ".json");
+  fs.writeFileSync(filePath, JSON.stringify(trigger));
+  et.startWatcher();
+
+  var processedDir = path.join(tmpDir, "processed");
+  return new Promise(function (resolve) {
+    setTimeout(function () {
+      et.stopWatcher();
+      // pushMessage was called, not startQuery
+      assert.strictEqual(spawnLog.length, 1, "pushMessage should be called once");
+      assert.strictEqual(spawnLog[0].pushed, true, "Should use pushMessage path");
+      assert.strictEqual(spawnLog[0].text, "Inject this message", "Text should match initialPrompt");
+      // Trigger should be archived on success
+      assert.ok(fs.existsSync(path.join(processedDir, trigger.id + ".json")), "Trigger should be archived");
+      assert.ok(!fs.existsSync(filePath), "Original trigger file should be removed");
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      resolve();
+    }, 600);
+  });
+});
+
+test("v2 trigger with sessionId not found: not archived, dispatched entry cleared", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var spawnLog = [];
+  var et = attachExternalTrigger({
+    triggersDir: tmpDir,
+    getProject: function (slug) {
+      if (slug === "test-project") return makeFakeProjectWithSession(spawnLog, "different-session-id");
+      return null;
+    },
+  });
+
+  var trigger = makeTrigger({
+    version: 2,
+    id: "trigger-inject-002",
+    sessionId: "nonexistent-session-id",
+    initialPrompt: "This should not land",
+  });
+  var filePath = path.join(tmpDir, trigger.id + ".json");
+  fs.writeFileSync(filePath, JSON.stringify(trigger));
+  et.startWatcher();
+
+  var processedDir = path.join(tmpDir, "processed");
+  return new Promise(function (resolve) {
+    setTimeout(function () {
+      et.stopWatcher();
+      assert.strictEqual(spawnLog.length, 0, "No push should occur if session not found");
+      // File should remain — not archived
+      assert.ok(fs.existsSync(filePath), "Trigger should not be archived when session is not found");
+      assert.ok(!fs.existsSync(path.join(processedDir, trigger.id + ".json")), "Should not appear in processed/");
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      resolve();
+    }, 600);
+  });
+});
+
+test("v2 trigger without sessionId falls back to spawnSession", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var spawnLog = [];
+  var et = attachExternalTrigger({
+    triggersDir: tmpDir,
+    getProject: function () { return makeFakeProject(spawnLog); },
+  });
+
+  var trigger = makeTrigger({ version: 2, id: "trigger-v2-spawn-001" });
+  // No sessionId — should behave like v1
+  delete trigger.sessionId;
+  fs.writeFileSync(path.join(tmpDir, trigger.id + ".json"), JSON.stringify(trigger));
+  et.startWatcher();
+
+  return new Promise(function (resolve) {
+    setTimeout(function () {
+      et.stopWatcher();
+      assert.strictEqual(spawnLog.length, 1, "v2 without sessionId should spawn a session");
+      assert.ok(!spawnLog[0].pushed, "Should use startQuery, not pushMessage");
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      resolve();
+    }, 600);
+  });
+});
+
+test("v2 trigger with invalid sessionId (empty string) is rejected by validator", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clay-trigger-test-"));
+  var spawnLog = [];
+  var et = attachExternalTrigger({
+    triggersDir: tmpDir,
+    getProject: function () { return makeFakeProjectWithSession(spawnLog, "any-session"); },
+  });
+
+  var trigger = makeTrigger({ version: 2, id: "trigger-inject-bad-sid", sessionId: "" });
+  fs.writeFileSync(path.join(tmpDir, trigger.id + ".json"), JSON.stringify(trigger));
+  et.startWatcher();
+
+  return new Promise(function (resolve) {
+    setTimeout(function () {
+      et.stopWatcher();
+      assert.strictEqual(spawnLog.length, 0, "Empty sessionId should fail validation");
       fs.rmSync(tmpDir, { recursive: true, force: true });
       resolve();
     }, 600);
