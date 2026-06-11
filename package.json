@@ -54,7 +54,8 @@
     "Chad (original Clay author)"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.112",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.173",
+    "@anthropic-ai/sdk": "^0.104.1",
     "@lydell/node-pty": "^1.2.0-beta.3",
     "@openai/codex": "^0.124.0",
     "nodemailer": "^6.10.1",
