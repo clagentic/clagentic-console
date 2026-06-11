@@ -1,27 +1,23 @@
 // boot-smoke-lr-1a5f.test.js
 //
-// Regression guard for the class of failure documented in lr-8657 / PR #223:
-// a broken static ESM import in lib/public/ caused a fatal boot error that
-// all unit tests missed because no test exercises the real module load path.
+// Daemon boot smoke test (lr-1a5f).
 //
-// This test catches that failure class without requiring a browser.
-// It uses only Node built-ins (http, net, child_process) and the `ws` package
-// already present in dependencies — no new deps, no Playwright, no Chromium.
-//
-// What it proves:
+// What this test proves (server-side only):
 //   1. The daemon starts and its HTTP server responds on /info (boot success).
 //   2. The frontend HTML is served with HTTP 200 (static asset pipeline works).
-//   3. A WebSocket upgrade to the project endpoint succeeds (auth gate + WS
-//      handler wired up, ESM relay code loaded without errors).
-//   4. The daemon exits cleanly when killed (no orphan processes).
+//   3. A WebSocket upgrade to the project endpoint succeeds (server-side WS
+//      handler wired up, auth gate passes, relay code loaded without errors).
 //
-// What it does NOT prove (and doesn't need to):
-//   - That browser-side JS executes without errors (separate concern).
-//   - That the full UI renders (integration/E2E territory).
+// What this test does NOT prove:
+//   - That browser-side ESM (lib/public/*.js) loads without errors.
+//     Browser ESM imports are NOT loaded by the daemon; they are served as
+//     static assets. Broken browser imports (the lr-8657 failure class) are
+//     caught by the static import-resolution check (lr-5e24), not here.
+//   - That the full UI renders correctly (integration/E2E territory).
 //
-// The test FAILS if any of the four checks above fail.
-// The test is isolated: it uses an ephemeral port + a tmpdir home that is
-// removed on completion. It never touches the real ~/.clagentic directory.
+// The test FAILS if any of the three server-side checks fail.
+// The test is isolated: uses an ephemeral port + a tmpdir home, never touches
+// the real ~/.clagentic directory.
 
 "use strict";
 
@@ -180,7 +176,7 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
         ws.terminate();
         reject(new Error(
           "WebSocket did not open within " + WS_CONNECT_MS + " ms. " +
-          "This typically means the ESM module graph failed to boot (lr-8657 class). " +
+          "Check that the daemon booted cleanly and the WS handler is registered. " +
           "WS URL: " + wsUrl
         ));
       }, WS_CONNECT_MS);
