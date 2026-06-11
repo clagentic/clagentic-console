@@ -35,6 +35,16 @@ npx @clagentic/console
 
 **Requirements:** Node.js 20+. Authenticated Claude Code CLI, Codex CLI, or both.
 
+### Postinstall / systemd
+
+On Linux, a global npm install runs a postinstall script that registers and enables a `clagentic-console.service` systemd unit. The script never restarts an already-running daemon — active sessions are not interrupted. Self-updates triggered from inside the app skip the restart entirely and let systemd's `Restart=always` handle the handoff after graceful shutdown.
+
+To skip the postinstall script:
+
+```bash
+npm install -g @clagentic/console --ignore-scripts
+```
+
 ## What it does
 
 - **Named agent sessions.** Type `@` in the session input to launch any agent defined in `.claude/agents/` or `~/.claude/agents/` into its own session — with its own conversation history, context window, and state. Pick agents by name, switch mid-conversation.
@@ -123,6 +133,39 @@ graph LR
 ```
 
 For architecture details, sequence diagrams, and key design decisions, see [docs/guides/architecture.md](docs/guides/architecture.md).
+
+## Security
+
+These are implementation-level properties, not configuration options — they apply to every installation.
+
+- **Token TTL.** Multi-user auth tokens expire after 30 days (`TOKEN_TTL_MS`). Tokens issued before TTL support was added are migrated on first use to a fresh 30-day window, avoiding forced logouts on upgrade.
+
+- **Atomic writes, mode 0o600.** All config and state files (`users.json`, `auth-tokens.json`, and similar) are written via rename-after-write: data goes to a `.tmp.<pid>` path, then `rename()` atomically replaces the target. After rename, `chmod 0o600` is applied. Concurrent writes to the same file are serialized in call order.
+
+- **Append-only audit log.** Privileged actions — user creation, lockouts, token revocation, multi-user enable/disable — are written as newline-delimited JSON to `~/.clagentic/audit.log` (mode 0o600, opened with `O_APPEND`).
+
+- **Progressive lockout.** Failed login attempts trigger escalating per-username backoff: 1s, 5s, 30s, 5 min. Reaching the threshold results in permanent lockout until an admin explicitly unlocks the account. Per-IP rate limiting runs in parallel.
+
+- **OS-level isolation (Linux, multi-user mode).** Each app user maps to a real system account. File ACLs are set via `setfacl`; processes spawn under the correct UID/GID.
+
+## Testing
+
+The test suite covers 12 areas across 26 test files:
+
+- **Boot / smoke** — daemon startup, config bootstrap, guard checks
+- **Security gates** — auth token TTL, lockout thresholds, PIN rate limiting, audit log entries
+- **WebSocket permission gates** — per-user RBAC enforcement on WS message types
+- **Session lifecycle** — session open, resume, shutdown, and reaper behavior
+- **External triggers** — v1 and v2 trigger processing, file archival, restart survival
+- **Scheduler** — cron parsing, loop execution, run accounting
+- **Store atomicity** — concurrent write serialization, atomic rename, 0o600 mode
+- **XSS escaping** — output sanitization for user-controlled strings rendered in HTML
+- **YOKE robustness** — vendor adapter error handling and fallback paths
+- **SDK bridge** — slot counter, message processor, slash command enrichment, workflow and skill discovery, worker shutdown
+- **Replay** — session replay correctness
+- **ESM import check** — verifies the package is importable as an ES module
+
+Run the suite: `npm test`
 
 ## FAQ
 
