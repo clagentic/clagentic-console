@@ -31,7 +31,7 @@ if (_isDev || process.argv.includes("--debug")) {
 }
 
 var crypto = require("crypto");
-var { loadConfig, saveConfig, configPath, socketPath, oldSocketPath, logPath, ensureConfigDir, isDaemonAlive, isDaemonAliveAsync, checkOldDaemon, generateSlug, clearStaleConfig, loadClayrc, saveClayrc, readCrashInfo, REAL_HOME } = require("../lib/config");
+var { loadConfig, saveConfig, configPath, socketPath, oldSocketPath, logPath, ensureConfigDir, isDaemonAlive, isDaemonAliveAsync, checkOldDaemon, generateSlug, clearStaleConfig, loadClayrc, saveClayrc, readCrashInfo, REAL_HOME, CONFIG_DIR } = require("../lib/config");
 var { sendIPCCommand } = require("../lib/ipc");
 var { generateAuthToken } = require("../lib/server");
 var { enableMultiUser, disableMultiUser, hasAdmin, isMultiUser, getSetupCode } = require("../lib/users");
@@ -523,6 +523,7 @@ async function restartDaemonFromConfig() {
   // Debug mode: run in foreground with logs to stdout
   if (debugMode) {
     process.env.CLAGENTIC_CONFIG = configPath();
+    process.env.CLAGENTIC_HOME = CONFIG_DIR;
     newConfig.pid = process.pid;
     saveConfig(newConfig);
     require(daemonScript);
@@ -538,6 +539,7 @@ async function restartDaemonFromConfig() {
     stdio: ["ignore", logFd, logFd],
     env: Object.assign({}, process.env, {
       CLAGENTIC_CONFIG: configPath(),
+      CLAGENTIC_HOME: CONFIG_DIR,
     }),
   });
   child.unref();
@@ -1624,6 +1626,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
   // Debug mode: run in foreground with logs to stdout
   if (debugMode) {
     process.env.CLAGENTIC_CONFIG = configPath();
+    process.env.CLAGENTIC_HOME = CONFIG_DIR;
     config.pid = process.pid;
     saveConfig(config);
     require(daemonScript);
@@ -1639,6 +1642,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     stdio: ["ignore", logFd, logFd],
     env: Object.assign({}, process.env, {
       CLAGENTIC_CONFIG: configPath(),
+      CLAGENTIC_HOME: CONFIG_DIR,
     }),
   });
   child.unref();
@@ -1827,6 +1831,7 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
       stdio: ["ignore", "inherit", "inherit"],
       env: Object.assign({}, process.env, {
         CLAGENTIC_CONFIG: configPath(),
+        CLAGENTIC_HOME: CONFIG_DIR,
       }),
     });
 
@@ -1988,6 +1993,7 @@ async function restartDaemonWithTLS(config, callback) {
     stdio: ["ignore", logFd, logFd],
     env: Object.assign({}, process.env, {
       CLAGENTIC_CONFIG: configPath(),
+      CLAGENTIC_HOME: CONFIG_DIR,
     }),
   });
   child.unref();
@@ -2014,6 +2020,7 @@ async function restartDaemonWithTLS(config, callback) {
       stdio: ["ignore", logFd2, logFd2],
       env: Object.assign({}, process.env, {
         CLAGENTIC_CONFIG: configPath(),
+        CLAGENTIC_HOME: CONFIG_DIR,
       }),
     });
     child2.unref();

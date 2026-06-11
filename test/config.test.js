@@ -52,3 +52,11 @@ test("EXTERNAL_TRIGGERS_DIR is inside ~/.clagentic/console/", function () {
     "expected EXTERNAL_TRIGGERS_DIR to contain console/external-triggers, got: " + config.EXTERNAL_TRIGGERS_DIR
   );
 });
+
+test("configPath returns path inside ~/.clagentic/console/", function () {
+  var cp = config.configPath();
+  assert.ok(
+    cp.includes(path.join("console", "daemon.json")),
+    "expected configPath() to contain console/daemon.json, got: " + cp
+  );
+});
