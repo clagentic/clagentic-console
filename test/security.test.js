@@ -1324,6 +1324,158 @@ test("server-dm.js dm_typing handler: silently drops traversal dmKey", function 
   assert.strictEqual(forEachClientCalled, false, "forEachClient must not be called for traversal key");
 });
 
+// ============================================================
+// 18. Loop registry path traversal prevention (lr-d049)
+//     Tests the REAL production validateLoopId exported from project-loop.js
+//     and drives the real handleLoopMessage handler through a minimal ctx stub
+//     to confirm the guard fires before any filesystem access.
+// ============================================================
+
+var { validateLoopId: prodValidateLoopId, attachLoop } = require("../lib/project-loop");
+
+// --- helpers ---
+
+// Build a minimal ctx stub sufficient for attachLoop.
+// The invalid-ID guard fires before any sm/sdk/fs access, so most
+// ctx fields can be no-ops for the invalid-ID tests.
+function makeLoopCtx(cwd, sendSpy) {
+  var sessions = new Map();
+  return {
+    cwd: cwd,
+    slug: "test",
+    sm: {
+      sessions: sessions,
+      createSession: function () { return { localId: "s1", history: [], loop: null }; },
+      saveSessionFile: function () {},
+      appendToSessionFile: function () {},
+      switchSession: function () {},
+      broadcastSessionList: function () {},
+      deleteSessionQuiet: function () {},
+      setResolveLoopInfo: function () {},
+    },
+    sdk: { startQuery: function () {} },
+    send: sendSpy,
+    sendTo: function (_ws, msg) { sendSpy(msg); },
+    sendToSession: function () {},
+    pushModule: null,
+    notificationsModule: null,
+    getHubSchedules: function () { return []; },
+    getAllProjectSessions: function () { return []; },
+    getStatus: function () { return null; },
+    getLinuxUserForSession: function () { return null; },
+    onProcessingChanged: function () {},
+    hydrateImageRefs: function () {},
+  };
+}
+
+// --- validateLoopId unit tests (call the REAL production export) ---
+
+test("validateLoopId: rejects path traversal payload", function () {
+  assert.strictEqual(prodValidateLoopId("../../../etc/passwd"), false,
+    "../../../etc/passwd must be rejected");
+});
+
+test("validateLoopId: rejects null/undefined/empty id", function () {
+  assert.strictEqual(prodValidateLoopId(null), false, "null must be rejected");
+  assert.strictEqual(prodValidateLoopId(undefined), false, "undefined must be rejected");
+  assert.strictEqual(prodValidateLoopId(""), false, "empty string must be rejected");
+});
+
+test("validateLoopId: rejects id without loop_ prefix", function () {
+  assert.strictEqual(prodValidateLoopId("abc123"), false, "no prefix must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop"), false, "bare 'loop' must be rejected");
+});
+
+test("validateLoopId: rejects id with dots or slashes", function () {
+  assert.strictEqual(prodValidateLoopId("loop_abc/../../../etc/shadow"), false,
+    "id with ../ must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc/subdir"), false,
+    "id with embedded slash must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc.evil"), false,
+    "id with dot must be rejected");
+});
+
+test("validateLoopId: rejects null byte and shell metacharacters", function () {
+  assert.strictEqual(prodValidateLoopId("loop_abc\x00def"), false, "null byte must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc;whoami"), false, "semicolon must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc def"), false, "space must be rejected");
+});
+
+test("validateLoopId: accepts well-formed loop IDs", function () {
+  var valid = [
+    "loop_abc",
+    "loop_ABC123",
+    "loop_my-task",
+    "loop_task_2025",
+    "loop_A-b_C-d",
+  ];
+  for (var i = 0; i < valid.length; i++) {
+    assert.strictEqual(prodValidateLoopId(valid[i]), true,
+      valid[i] + " should be accepted");
+  }
+});
+
+// --- handleLoopMessage integration tests ---
+// Drive the REAL handler dispatch path through a minimal ctx stub.
+// For invalid IDs the guard fires before any fs operation; we assert the
+// correct error is emitted and no exception propagates.
+
+test("loop_registry_files handler: sends loop_registry_error for invalid id via real handleLoopMessage", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-h-test-"));
+  try {
+    var sent = [];
+    var ctx = makeLoopCtx(tmpDir, function (msg) { sent.push(msg); });
+    var loop = attachLoop(ctx);
+
+    var attackIds = [
+      "../../../etc/passwd",
+      "loop_ok/../../../tmp/evil",
+      "loop_ok%2F..%2F..%2Fetc%2Fpasswd",
+      null,
+      "",
+      "abc123",
+    ];
+    for (var i = 0; i < attackIds.length; i++) {
+      sent = [];
+      loop.handleLoopMessage({}, { type: "loop_registry_files", id: attackIds[i] });
+      assert.ok(sent.length >= 1, "handler must emit a message for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].type, "loop_registry_error",
+        "must emit loop_registry_error for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].text, "invalid_loop_id",
+        "error text must be invalid_loop_id for id=" + attackIds[i]);
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true });
+  }
+});
+
+test("loop_registry_save_files handler: sends loop_registry_error for invalid id via real handleLoopMessage", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-h-test-"));
+  try {
+    var sent = [];
+    var ctx = makeLoopCtx(tmpDir, function (msg) { sent.push(msg); });
+    var loop = attachLoop(ctx);
+
+    var attackIds = [
+      "../../../etc/passwd",
+      "loop_ok/../../../tmp/evil",
+      null,
+      "",
+    ];
+    for (var i = 0; i < attackIds.length; i++) {
+      sent = [];
+      loop.handleLoopMessage({}, { type: "loop_registry_save_files", id: attackIds[i] });
+      assert.ok(sent.length >= 1, "handler must emit a message for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].type, "loop_registry_error",
+        "must emit loop_registry_error for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].text, "invalid_loop_id",
+        "error text must be invalid_loop_id for id=" + attackIds[i]);
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true });
+  }
+});
+
 test("server-dm.js dm_send handler: allows valid key and calls dm.sendMessage", function () {
   var { attachDm } = require("../lib/server-dm");
 
