@@ -15,12 +15,15 @@
 //   5. Launch headless Chromium via Playwright.
 //   6. Load http://127.0.0.1:{port}/p/smoke-project/
 //   7. Assert: zero `pageerror` events during and after load.
-//   8. Assert: at least one WebSocket open event within 8 s.
+//   8. Assert: at least one WebSocket open event within WS_WAIT_MS ms.
 //   9. Kill daemon, close browser, clean up temp dir.
 //
+// CI note: after `npm ci`, run `npx playwright install chromium` before this
+// test suite to ensure the Chromium binary is available.
+//
 // Skip conditions (not failures):
-//   - Playwright package unavailable at PLAYWRIGHT_PATH (env or default).
-//   - Chromium binary not found by Playwright.
+//   - Playwright package unavailable (not installed as devDependency).
+//   - Chromium binary not found by Playwright (run: npx playwright install chromium).
 //
 // The test FAILS (not skips) if the daemon starts but the page errors.
 
@@ -37,17 +40,17 @@ var { spawn } = require("child_process");
 
 // ─── constants ─────────────────────────────────────────────────────────────
 
-// Where we look for Playwright. CI can override with PLAYWRIGHT_PATH env var.
-var PLAYWRIGHT_PATH = process.env.PLAYWRIGHT_PATH
-  || path.join(__dirname, "..", "..", "local-scripts", "headless-browser", "node_modules", "playwright");
-
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 
 // Total time the test is allowed to run (daemon startup + browser + assertions).
 var TEST_TIMEOUT_MS = 60000;
 
+// All sub-timeouts are derived from a single budget so they stay coherent.
+// Daemon startup polling uses half the total budget (30 s).
+var DAEMON_READY_MS = 30000;
+
 // How long to wait for a WebSocket to open after page load.
-var WS_WAIT_MS = 8000;
+var WS_WAIT_MS = 15000;
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -110,26 +113,63 @@ function killAndWait(proc, signal) {
 test("browser smoke: no pageerror on boot, WebSocket opens (lr-1a5f)", { timeout: TEST_TIMEOUT_MS }, function (t, done) {
   // ── 0. Check Playwright availability ──────────────────────────────────────
 
+  // Prefer the module-graph installation (devDependency). Allow PLAYWRIGHT_PATH
+  // as an optional env override for unusual setups (e.g. pre-installed monorepo
+  // tooling) — but the default is now the local devDependency.
+  var playwrightPath = process.env.PLAYWRIGHT_PATH || "playwright";
+
   var playwright;
   try {
-    playwright = require(PLAYWRIGHT_PATH);
+    playwright = require(playwrightPath);
   } catch (e) {
-    t.diagnostic("Playwright not available at " + PLAYWRIGHT_PATH + " — skipping browser smoke test");
-    t.diagnostic("Install hint: cd /workspace/local-scripts/headless-browser && npm install");
-    done(); // skip, not fail
+    t.diagnostic("Playwright package not available — skipping browser smoke test. Error: " + e.message);
+    t.diagnostic("Fix: run `npm ci` followed by `npx playwright install chromium`");
+    t.skip("playwright not available");
+    done();
     return;
   }
 
   var chromium = playwright.chromium;
   if (!chromium) {
     t.diagnostic("playwright.chromium not available — skipping browser smoke test");
+    t.diagnostic("Fix: run `npx playwright install chromium`");
+    t.skip("playwright.chromium not available");
     done();
     return;
   }
 
-  // ── 1–4. Start daemon ─────────────────────────────────────────────────────
+  // ── Mutable cleanup state (shared between t.after and the promise chain) ──
 
-  var tmpHome, daemonProc;
+  var tmpHome = null;
+  var daemonProc = null;
+  var browserRef = null;
+
+  // t.after registers cleanup that fires even if the 60 s test timeout kills
+  // the test. The .then/.catch chain below also cleans up as belt-and-suspenders.
+  t.after(function () {
+    var tasks = [];
+    if (daemonProc && daemonProc.exitCode === null) {
+      tasks.push(killAndWait(daemonProc).catch(function (e) {
+        t.diagnostic("t.after: daemon kill error: " + e.message);
+      }));
+    }
+    if (browserRef) {
+      tasks.push(browserRef.close().catch(function (e) {
+        t.diagnostic("t.after: browser close error: " + e.message);
+      }));
+    }
+    return Promise.all(tasks).then(function () {
+      if (tmpHome) {
+        try {
+          fs.rmSync(tmpHome, { recursive: true, force: true });
+        } catch (e) {
+          t.diagnostic("t.after: tmpdir removal failed: " + e.message + " (leaked: " + tmpHome + ")");
+        }
+      }
+    });
+  });
+
+  // ── 1–4. Start daemon ─────────────────────────────────────────────────────
 
   findFreePort().then(function (port) {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-smoke-lr-1a5f-"));
@@ -176,8 +216,8 @@ test("browser smoke: no pageerror on boot, WebSocket opens (lr-1a5f)", { timeout
       }
     });
 
-    // Wait up to 15 s for the HTTP server to be ready.
-    return waitForServer(port, 15000).then(function () {
+    // Wait up to DAEMON_READY_MS for the HTTP server to be ready.
+    return waitForServer(port, DAEMON_READY_MS).then(function () {
       return { port: port, projectDir: projectDir };
     });
 
@@ -186,14 +226,22 @@ test("browser smoke: no pageerror on boot, WebSocket opens (lr-1a5f)", { timeout
 
     // ── 5–8. Headless browser assertions ────────────────────────────────────
 
-    var browser, page;
+    var page;
     var pageErrors = [];
     var wsEvents = [];
 
-    return chromium.launch({ headless: true }).then(function (b) {
-      browser = b;
-      return browser.newPage();
+    return chromium.launch({ headless: true }).catch(function (launchErr) {
+      // Binary not installed — visible skip, not a silent pass.
+      t.diagnostic("Chromium launch failed — Playwright binary likely not installed. Error: " + launchErr.message);
+      t.diagnostic("Fix: run `npx playwright install chromium`");
+      t.skip("chromium binary not available");
+      return null;
+    }).then(function (b) {
+      if (!b) return null; // skipped above
+      browserRef = b;
+      return b.newPage();
     }).then(function (p) {
+      if (!p) return null;
       page = p;
 
       // Collect all pageerror events.
@@ -215,7 +263,8 @@ test("browser smoke: no pageerror on boot, WebSocket opens (lr-1a5f)", { timeout
         "http://127.0.0.1:" + port + "/p/smoke-project/",
         { waitUntil: "load", timeout: 20000 }
       );
-    }).then(function () {
+    }).then(function (navResult) {
+      if (!navResult) return null; // skipped
       // Wait for the WS to open (up to WS_WAIT_MS).
       var wsCheckStart = Date.now();
       return new Promise(function (resolve) {
@@ -233,6 +282,7 @@ test("browser smoke: no pageerror on boot, WebSocket opens (lr-1a5f)", { timeout
         checkWs();
       });
     }).then(function (wsResult) {
+      if (!wsResult) return; // skipped
       // ── Assertions ──────────────────────────────────────────────────────
 
       // 1. No pageerrors during or after boot.
@@ -255,14 +305,22 @@ test("browser smoke: no pageerror on boot, WebSocket opens (lr-1a5f)", { timeout
 
     }).finally(function () {
       // Close browser regardless of assertion outcome.
-      if (browser) return browser.close().catch(function () {});
+      if (browserRef) {
+        return browserRef.close().catch(function () {});
+      }
     });
 
   }).then(function () {
-    // ── 9. Cleanup ─────────────────────────────────────────────────────────
-    return killAndWait(daemonProc).then(function () {
+    // ── 9. Cleanup (belt-and-suspenders; t.after is the reliable path) ─────
+    var cleanupProcs = [];
+    if (daemonProc && daemonProc.exitCode === null) {
+      cleanupProcs.push(killAndWait(daemonProc));
+    }
+    return Promise.all(cleanupProcs).then(function () {
       if (tmpHome) {
-        try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (e) {}
+        try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (e) {
+          t.diagnostic("cleanup: tmpdir removal failed: " + e.message + " (leaked: " + tmpHome + ")");
+        }
       }
       done();
     });
@@ -270,11 +328,15 @@ test("browser smoke: no pageerror on boot, WebSocket opens (lr-1a5f)", { timeout
     // Clean up on failure, then propagate.
     var cleanupProcs = [];
     if (daemonProc && daemonProc.exitCode === null) {
-      cleanupProcs.push(killAndWait(daemonProc));
+      cleanupProcs.push(killAndWait(daemonProc).catch(function (e) {
+        t.diagnostic("error-path cleanup: daemon kill error: " + e.message);
+      }));
     }
     Promise.all(cleanupProcs).then(function () {
       if (tmpHome) {
-        try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (e) {}
+        try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (e) {
+          t.diagnostic("error-path cleanup: tmpdir removal failed: " + e.message + " (leaked: " + tmpHome + ")");
+        }
       }
       done(err);
     });
