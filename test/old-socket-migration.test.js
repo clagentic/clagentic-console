@@ -69,7 +69,7 @@ function startMockOldDaemon(sockPath) {
 
 // ─── tests ─────────────────────────────────────────────────────────────────
 
-test("oldSocketPath() is under CONFIG_DIR, not CONFIG_DIR/console/", function () {
+test("oldSocketPath() is under CLAGENTIC_HOME (brand root), not CONFIG_DIR (console subdir)", function () {
   // Skip on Windows — old path is undefined there
   if (process.platform === "win32") return;
 
@@ -77,13 +77,13 @@ test("oldSocketPath() is under CONFIG_DIR, not CONFIG_DIR/console/", function ()
   var newSock = config.socketPath();
 
   assert.ok(old, "oldSocketPath() should return a path on Unix");
-  // Must be directly under CONFIG_DIR (not in the console/ subdir)
-  assert.strictEqual(path.dirname(old), config.CONFIG_DIR,
-    "oldSocketPath() should be directly under CONFIG_DIR, got: " + old);
+  // Must be directly under CLAGENTIC_HOME (the brand root, one level above CONFIG_DIR)
+  assert.strictEqual(path.dirname(old), config.CLAGENTIC_HOME,
+    "oldSocketPath() should be directly under CLAGENTIC_HOME, got: " + old);
   // Must NOT equal the current socket path
   assert.notStrictEqual(old, newSock,
     "oldSocketPath() and socketPath() must differ: " + old);
-  // New socket must live inside the console/ subdir
+  // New socket must live inside CONFIG_DIR (which is the console/ subdir)
   assert.ok(newSock.includes(path.join("console", "daemon.sock")),
     "socketPath() should contain console/daemon.sock, got: " + newSock);
 });

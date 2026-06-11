@@ -75,7 +75,7 @@ test("4a: saveSessionFile flushes buffer — no duplicate lines after async time
   // buffer is empty when the 50ms async timer would otherwise fire.
   sm.saveSessionFile(sess);
 
-  var sessionsBase = path.join(tmpHome, "sessions");
+  var sessionsBase = path.join(tmpHome, "console", "sessions");
   var sessionFile = findSessionFile(sessionsBase, "sess-4a-dedup");
   assert.ok(sessionFile, "session file should exist after saveSessionFile");
 
@@ -112,7 +112,7 @@ test("4a: regression — without flushSessionBuffer, async timer duplicates buff
   // Buggy path: rewrite the file from session.history WITHOUT calling
   // flushSessionBuffer.  The buffer still holds the record; the timer fires
   // and appends it a second time.
-  var sessionsBase = path.join(tmpHome, "sessions");
+  var sessionsBase = path.join(tmpHome, "console", "sessions");
   var dirs = fs.existsSync(sessionsBase) ? fs.readdirSync(sessionsBase) : [];
   if (dirs.length === 0) {
     fs.rmSync(tmpHome, { recursive: true, force: true });

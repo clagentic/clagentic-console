@@ -41,8 +41,8 @@ test("detectLite returns installed=false when CLAGENTIC_HOME points to an empty 
 
 test("detectLite returns installed=false when lite dir exists but binary does not", function () {
   var tmpDir = mktemp("clagentic-detect-dir-no-bin-");
-  // Create the lite subdirectory
-  fs.mkdirSync(path.join(tmpDir, "lite"), { recursive: true });
+  // Create the lite subdirectory under console/ (CONFIG_DIR = CLAGENTIC_HOME/console)
+  fs.mkdirSync(path.join(tmpDir, "console", "lite"), { recursive: true });
   process.env.CLAGENTIC_HOME = tmpDir;
   // Override PATH so `which clagentic-lite` cannot find anything
   var savedPath = process.env.PATH;
@@ -61,8 +61,8 @@ test("detectLite returns installed=false when lite dir exists but binary does no
 
 test("detectLite returns installed=true when both lite dir and binary candidate exist", function () {
   var tmpDir = mktemp("clagentic-detect-full-");
-  // Create the lite subdirectory
-  var liteDir = path.join(tmpDir, "lite");
+  // Create the lite subdirectory under console/ (CONFIG_DIR = CLAGENTIC_HOME/console)
+  var liteDir = path.join(tmpDir, "console", "lite");
   fs.mkdirSync(liteDir, { recursive: true });
   // Create a fake clagentic-lite binary in a candidate path (~/.local/bin or ~/bin).
   // We can't patch REAL_HOME easily (it comes from process.env.HOME or os.homedir()),
@@ -80,12 +80,13 @@ test("detectLite returns installed=true when both lite dir and binary candidate 
   process.env.PATH = savedPath;
 });
 
-test("getLiteHome respects CLAGENTIC_HOME", function () {
+test("getLiteHome respects CLAGENTIC_HOME (returns console/lite subdir)", function () {
   var tmpDir = mktemp("clagentic-home-test-");
   process.env.CLAGENTIC_HOME = tmpDir;
   var ld = requireFresh("../lib/lite-detect");
   var home = ld.getLiteHome();
-  assert.strictEqual(home, path.join(tmpDir, "lite"));
+  // CONFIG_DIR = CLAGENTIC_HOME/console, so getLiteHome() returns CLAGENTIC_HOME/console/lite
+  assert.strictEqual(home, path.join(tmpDir, "console", "lite"));
 });
 
 // ---- isProjectEnrolled ----
