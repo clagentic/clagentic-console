@@ -1168,3 +1168,202 @@ test("push addSubscription: only removes replaceEndpoint when caller owns it", f
   // Either way, user-a-final must be set with user-a ownership.
   assert.strictEqual(userAFinal._userId, "user-a", "user-a's replacement sub tagged correctly");
 });
+
+// ============================================================
+// 17. DM path traversal prevention (lr-6849)
+//     Calls the real isValidDmKey logic and dmFilePath from production modules.
+//     Removing the validation or the dmFilePath guard will break these tests.
+// ============================================================
+
+// Re-export the DM_KEY_RE pattern by testing via the same regex the module uses.
+// We do not expose isValidDmKey publicly; test its behavior by calling the real
+// dm.js and server-dm.js modules through a thin integration harness below, and
+// additionally validate the regex contract directly.
+
+var DM_KEY_RE_TEST = /^[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/;
+
+test("dm key pattern: accepts valid userId:otherId keys", function () {
+  var valid = [
+    "alice:bob",
+    "user-1:user-2",
+    "user_a:user_b",
+    "ABC:XYZ",
+    "default:user-42",
+    "a1B2_c-d:x9Y8_z-w",
+  ];
+  for (var i = 0; i < valid.length; i++) {
+    assert.ok(DM_KEY_RE_TEST.test(valid[i]), valid[i] + " should be accepted");
+  }
+});
+
+test("dm key pattern: rejects traversal and malformed keys", function () {
+  var invalid = [
+    "alice:../../../../etc/passwd",
+    "alice:../dm/other",
+    "alice:/etc/shadow",
+    "alice:bob:extra",
+    ":bob",
+    "alice:",
+    "alice",
+    "",
+    "alice bob:carol",
+    "alice\x00bob:carol",
+    "alice:bob/carol",
+  ];
+  for (var i = 0; i < invalid.length; i++) {
+    assert.ok(!DM_KEY_RE_TEST.test(invalid[i]), invalid[i] + " should be rejected");
+  }
+});
+
+test("dm.js dmFilePath: throws on path traversal key that bypasses caller validation", function () {
+  // Directly test the defense-in-depth guard in dmFilePath.
+  // We bypass the strict server-side validation by calling dmFilePath directly
+  // with a key that contains traversal segments after colon-to-underscore replace.
+  // The guard must throw before any file I/O occurs.
+  var dm = require("../lib/dm");
+
+  // The attack vector: the replace only converts ':' to '_', leaving '/' intact.
+  // A key like "alice:b/../../etc/x" → after replace → "alice_b/../../etc/x".
+  // path.join(DM_DIR, "alice_b/../../etc/x.jsonl") resolves:
+  //   DM_DIR/alice_b/../../etc/x.jsonl → two levels up from alice_b inside DM_DIR,
+  //   escaping DM_DIR entirely.
+  var slashTraversal = "alice:b/../../etc/x";
+  assert.throws(function () {
+    dm.dmFilePath(slashTraversal);
+  }, /path traversal detected/, "dmFilePath must throw on traversal key with slash");
+});
+
+test("dm.js dmFilePath: accepts a normal key without throwing", function () {
+  var dm = require("../lib/dm");
+  assert.doesNotThrow(function () {
+    var p = dm.dmFilePath("alice:bob");
+    assert.ok(p.endsWith("alice_bob.jsonl"), "normal key maps to expected filename");
+  });
+});
+
+test("server-dm.js dm_send handler: silently drops traversal dmKey (no write)", function () {
+  // Exercise the real attachDm handler with a crafted traversal dmKey.
+  // We stub dm.sendMessage to detect whether it was called — it must NOT be called
+  // for an invalid key.
+  var { attachDm } = require("../lib/server-dm");
+
+  var sendMessageCalled = false;
+  var fakeDm = {
+    getDmList: function () { return []; },
+    openDm: function () { return { dmKey: "a:b", messages: [] }; },
+    sendMessage: function () {
+      sendMessageCalled = true;
+      return { type: "dm_message", ts: Date.now(), from: "alice", text: "x" };
+    },
+  };
+
+  var fakeUsers = {
+    isMultiUser: function () { return true; },
+    findUserById: function () { return null; },
+  };
+
+  var sentMessages = [];
+  var fakeWs = {
+    _clayUser: { id: "alice", role: "user" },
+    readyState: 1,
+    send: function (msg) { sentMessages.push(msg); },
+  };
+
+  var fakeProjects = [];
+
+  var handler = attachDm({
+    users: fakeUsers,
+    dm: fakeDm,
+    projects: fakeProjects,
+    pushModule: null,
+  }).handleMessage;
+
+  // Traversal key where the caller is a listed participant but the key is malformed.
+  handler(fakeWs, {
+    type: "dm_send",
+    dmKey: "alice:../../../../etc/passwd",
+    text: "pwn",
+  });
+
+  assert.strictEqual(sendMessageCalled, false, "dm.sendMessage must not be called for traversal key");
+  assert.strictEqual(sentMessages.length, 0, "no response sent for traversal key");
+});
+
+test("server-dm.js dm_typing handler: silently drops traversal dmKey", function () {
+  var { attachDm } = require("../lib/server-dm");
+
+  var fakeUsers = {
+    isMultiUser: function () { return true; },
+    findUserById: function () { return null; },
+  };
+
+  var forEachClientCalled = false;
+  var fakeWs = {
+    _clayUser: { id: "alice", role: "user" },
+    readyState: 1,
+    send: function () {},
+  };
+
+  var fakeProjects = [{
+    forEachClient: function () { forEachClientCalled = true; },
+  }];
+
+  var handler = attachDm({
+    users: fakeUsers,
+    dm: {},
+    projects: fakeProjects,
+    pushModule: null,
+  }).handleMessage;
+
+  handler(fakeWs, {
+    type: "dm_typing",
+    dmKey: "alice:../../../etc/passwd",
+    typing: true,
+  });
+
+  assert.strictEqual(forEachClientCalled, false, "forEachClient must not be called for traversal key");
+});
+
+test("server-dm.js dm_send handler: allows valid key and calls dm.sendMessage", function () {
+  var { attachDm } = require("../lib/server-dm");
+
+  var sendMessageCalled = false;
+  var fakeDm = {
+    sendMessage: function (key, from, text) {
+      sendMessageCalled = true;
+      return { type: "dm_message", ts: Date.now(), from: from, text: text };
+    },
+  };
+
+  var fakeUsers = {
+    isMultiUser: function () { return true; },
+  };
+
+  var sentMessages = [];
+  var fakeWs = {
+    _clayUser: { id: "alice", role: "user" },
+    readyState: 1,
+    send: function (msg) { sentMessages.push(msg); },
+  };
+
+  var fakeProjects = [{
+    forEachClient: function () {},
+    getNotificationsModule: null,
+  }];
+
+  var handler = attachDm({
+    users: fakeUsers,
+    dm: fakeDm,
+    projects: fakeProjects,
+    pushModule: null,
+  }).handleMessage;
+
+  handler(fakeWs, {
+    type: "dm_send",
+    dmKey: "alice:bob",
+    text: "hello",
+  });
+
+  assert.strictEqual(sendMessageCalled, true, "dm.sendMessage called for valid key");
+  assert.strictEqual(sentMessages.length, 1, "confirmation sent to sender");
+});
