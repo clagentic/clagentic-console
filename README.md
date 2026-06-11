@@ -63,7 +63,7 @@ npx @clagentic/console
 
 ## Getting Started
 
-On first run you'll be asked for a port and whether you're running solo or multi-user. Open the URL from any device on your network.
+On first run you'll be asked for a port and prompted to create your admin account. Open the URL from any device on your network.
 
 For remote access, use a tunnel — Tailscale, Cloudflare Tunnel, or your existing VPN.
 
