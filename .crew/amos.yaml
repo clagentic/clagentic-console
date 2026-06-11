@@ -7,6 +7,8 @@ scope:
     - deploy/**
     - scripts/**
     - package.json
+    - README.md
+    - docs/**
 
 branch_conventions:
   feat: "feat/lr-{task_id}-{slug}"
