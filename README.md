@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/logo/console-lockup-256.png" alt="clagentic:console" width="260" />
+  <img src="media/logo/console-lockup-256.png" alt="Clagentic: Console" width="260" />
 </p>
 
 <h4 align="center">AI tooling. Built for builders.</h4>
@@ -13,7 +13,7 @@
   <a href="https://ko-fi.com/clagentic"><img src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white&label=support" alt="Support on Ko-fi" /></a>
 </p>
 
-A self-hosted control plane for your AI runtimes. Clagentic:Console runs as a daemon on your machine and serves a full browser and mobile interface to Claude Code and ChatGPT Codex. Every project, every session, every tool approval — reachable from any device, all data staying on disk.
+A self-hosted control plane for your AI runtimes. Clagentic: Console runs as a daemon on your machine and serves a full browser and mobile interface to Claude Code and ChatGPT Codex. Every project, every session, every tool approval — reachable from any device, all data staying on disk.
 
 ## Install
 
@@ -41,11 +41,11 @@ npx @clagentic/console
 
 - **Context injection.** Pin running terminals, live browser tabs, and sticky notes as active context sources. Their content flows into every message automatically: terminal output as a delta since your last message, browser tabs as full snapshots. No manual copy-paste. No extra prompting.
 
-- **Loop automation.** Write a `PROMPT.md`, start a loop. Clagentic:Console runs the prompt, evaluates the result, and retries until done or capped. Schedule loops with standard cron syntax to run unattended.
+- **Loop automation.** Write a `PROMPT.md`, start a loop. Clagentic: Console runs the prompt, evaluates the result, and retries until done or capped. Schedule loops with standard cron syntax to run unattended.
 
 - **External triggers.** Drop a JSON file into `~/.clagentic/external-triggers/` to spawn a new AI session or inject a message into an existing one. Use this to wire Claude into scripts, CI pipelines, or other AI processes — no API, no polling, just a file drop.
 
-- **Cross-vendor instruction injection.** YOKE (the vendor adapter layer) scans `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, and `.github/copilot-instructions.md` and cross-injects whichever ones the active vendor doesn't read natively. Switch from Claude to Codex in a session — your project instructions still reach the model.
+- **Cross-vendor instruction injection.** YOKE (the vendor adapter layer) scans `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `COPILOT.md`, and `.github/copilot-instructions.md` and cross-injects whichever ones the active vendor doesn't read natively. Switch from Claude to Codex in a session — your project instructions still reach the model.
 
 - **Multi-project dashboard.** Every repo registered with the daemon in one sidebar. Jump between projects, run sessions in parallel, see live status at a glance.
 
@@ -85,7 +85,7 @@ Also available as `clagentic-console` if installed globally.
 
 ## Architecture
 
-Clagentic:Console is a self-hosted daemon. It drives Claude Code via the Claude Agent SDK and Codex via the `codex app-server` JSON-RPC protocol through a vendor-agnostic adapter layer (YOKE), and serves a multi-user web workspace over HTTP/WS. Sessions and settings live as plain JSONL/JSON/Markdown on disk.
+Clagentic: Console is a self-hosted daemon. It drives Claude Code via the Claude Agent SDK and Codex via the `codex app-server` JSON-RPC protocol through a vendor-agnostic adapter layer (YOKE), and serves a multi-user web workspace over HTTP/WS. Sessions and settings live as plain JSONL/JSON/Markdown on disk.
 
 ```mermaid
 graph LR
@@ -95,7 +95,7 @@ graph LR
       Phone["Phone PWA + Push"]
     end
 
-    subgraph Daemon["Clagentic:Console Daemon (your machine)"]
+    subgraph Daemon["Clagentic: Console Daemon (your machine)"]
       Auth["Auth + RBAC"]
       Server["HTTP / WS Server"]
       Project["Project Context"]
@@ -127,7 +127,7 @@ For architecture details, sequence diagrams, and key design decisions, see [docs
 ## FAQ
 
 **"Is this a Claude Code wrapper?"**
-No. Clagentic:Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, context injection, external triggers, and a full browser UI on top.
+No. Clagentic: Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, context injection, external triggers, and a full browser UI on top.
 
 **"What are named agents?"**
 Agents defined in your Claude Code config (`.claude/agents/` or `~/.claude/agents/`) become first-class sessions. Type `@` in the session input to see every installed agent and launch one directly — its own conversation history, context window, and session state.
@@ -135,13 +135,13 @@ Agents defined in your Claude Code config (`.claude/agents/` or `~/.claude/agent
 Named agents are **currently Claude Code only.** The Codex adapter has no equivalent API for per-session agent identity injection. When you're in a Codex session, the agent entry point is hidden. Partial Codex parity (system-prompt prepend) is planned.
 
 **"How does context injection work?"**
-Open the Context panel in the session input area. Pin a running terminal, a browser tab (requires the Clagentic Chrome extension), or a sticky note. From that point on, every message you send automatically includes the latest content from those sources — terminal output as a delta since the last message, browser tabs as a full page snapshot. The injection happens before your message reaches the model; you don't need to mention the sources in your prompt.
+Open the Context panel in the session input area. Pin a running terminal, a browser tab (requires the Clagentic: Console Chrome extension), or a sticky note. From that point on, every message you send automatically includes the latest content from those sources — terminal output as a delta since the last message, browser tabs as a full page snapshot. The injection happens before your message reaches the model; you don't need to mention the sources in your prompt.
 
 **"What's the external trigger system?"**
 Drop a JSON file into `~/.clagentic/external-triggers/`. The daemon picks it up within seconds. A v1 trigger spawns a new session with an `initialPrompt`. A v2 trigger can either spawn a session or inject a message into an existing session by `sessionId`. The file is archived to `processed/` on success. Unprocessed files survive daemon restarts. Use this to wire Claude into scripts, CI pipelines, cron jobs, or other AI processes.
 
 **"What instruction files does it read?"**
-YOKE scans the project directory for `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, and `.github/copilot-instructions.md`. Each vendor reads some of these natively — Claude reads `CLAUDE.md`, Codex reads `AGENTS.md`. Files the active vendor doesn't read natively are merged and injected as additional context, so your project instructions reach the model regardless of which vendor is running.
+YOKE scans the project directory for `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `COPILOT.md`, and `.github/copilot-instructions.md`. Each vendor reads some of these natively — Claude reads `CLAUDE.md`, Codex reads `AGENTS.md`. Files the active vendor doesn't read natively are merged and injected as additional context, so your project instructions reach the model regardless of which vendor is running.
 
 **"Is feature parity between Claude Code and Codex complete?"**
 Not yet. Named agents are the main gap — the Claude Agent SDK exposes agent identity injection directly; Codex does not. Claude Code has been the primary development target. Codex support covers sessions, tool approvals, model selection, MCP servers, loop, and most UI surfaces. Features that depend on Claude Agent SDK internals have no Codex equivalent today.
@@ -172,7 +172,7 @@ Yes, optionally. [Clagentic: Lite](https://clagentic.ai/tools) adds agentic gate
 
 ## Support
 
-If clagentic:console is useful to you: [ko-fi.com/clagentic](https://ko-fi.com/clagentic)
+If Clagentic: Console is useful to you: [ko-fi.com/clagentic](https://ko-fi.com/clagentic)
 
 ## Credits
 
