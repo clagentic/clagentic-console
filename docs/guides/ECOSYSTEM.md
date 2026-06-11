@@ -1,4 +1,4 @@
-# Clagentic:Console Ecosystem
+# Clagentic: Console Ecosystem
 
 > Repositories, their roles, and how they connect.
 
@@ -18,7 +18,7 @@
 
 ```mermaid
 graph TD
-    subgraph console ["Clagentic:Console Daemon"]
+    subgraph console ["Clagentic: Console Daemon"]
         direction TB
         YOKE["YOKE Multi-Vendor\nClaude | Codex"]
         MCP_IN["Built-in MCP Servers\nask-user, browser"]
