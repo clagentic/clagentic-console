@@ -198,3 +198,35 @@ test("readProjectAgents: description defaults to empty string when absent", func
     rmDir(dir);
   }
 });
+
+// ============================================================
+// Traversal-style projectDir — belt-and-suspenders safety
+// ============================================================
+
+test("readProjectAgents: returns [] for traversal-style path (e.g. ../../etc)", function () {
+  // The input is server-controlled, but this locks the contract: a path that
+  // looks like a traversal attempt must never throw and must return [].
+  //
+  // We use absolute paths to nonexistent directories so the test is
+  // deterministic regardless of cwd or what happens to exist on the host.
+  // path.join("/nonexistent-lr-c1a2-traversal/../../etc", ".claude", "agents")
+  // normalises to a path under a nonexistent root, so readdirSync throws ENOENT
+  // and readProjectAgents returns [] without propagating the error.
+  // path.join() normalises traversal segments before readdirSync sees the path,
+  // so these inputs exercise the traversal code path without any existing
+  // .claude/agents/ directory to accidentally read. All resolved targets are
+  // guaranteed non-existent by using a unique sentinel prefix.
+  var traversalPaths = [
+    "/nonexistent-lr-c1a2-sentinel-xq7/../../nonexistent-lr-c1a2-sentinel-xq7",
+    "/nonexistent-lr-c1a2-sentinel-xq7/../../../nonexistent-lr-c1a2-sentinel-xq7",
+  ];
+  for (var i = 0; i < traversalPaths.length; i++) {
+    var result;
+    var tpath = traversalPaths[i];
+    assert.doesNotThrow(function () {
+      result = readProjectAgents(tpath);
+    }, "readProjectAgents must not throw for traversal-style path: " + tpath);
+    assert.deepStrictEqual(result, [],
+      "readProjectAgents must return [] for traversal-style path: " + tpath);
+  }
+});
