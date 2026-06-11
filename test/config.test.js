@@ -59,4 +59,17 @@ test("configPath returns path inside ~/.clagentic/console/", function () {
     cp.includes(path.join("console", "daemon.json")),
     "expected configPath() to contain console/daemon.json, got: " + cp
   );
+  assert.ok(
+    !cp.includes(path.join("console", "console")),
+    "expected configPath() not to contain double-nested console/console, got: " + cp
+  );
+});
+
+test("CONFIG_DIR is the console subdir, not the brand root", function () {
+  var consoleDir = path.join(tmpHome, "console");
+  assert.strictEqual(
+    config.CONFIG_DIR,
+    consoleDir,
+    "expected CONFIG_DIR to equal " + consoleDir + ", got: " + config.CONFIG_DIR
+  );
 });
