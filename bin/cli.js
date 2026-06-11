@@ -1408,21 +1408,11 @@ function setup(callback) {
           }
           port = p;
           log(sym.bar);
-          askMode();
+          // Single-user mode removed (lr-bd9f). All new installs are multi-user.
+          // Existing single-user installs continue to work until the full removal
+          // lands — see task lr-bd9f-redux.
+          askOsUsers("multi");
         });
-      });
-    }
-
-    function askMode() {
-      promptSelect("How will you use Clagentic: Console?", [
-        { label: "Just me (single user)", value: "single" },
-        { label: "Multiple users", value: "multi" },
-      ], function (mode) {
-        if (mode === "single") {
-          finishSetup(mode, false);
-        } else {
-          askOsUsers(mode);
-        }
       });
     }
 
