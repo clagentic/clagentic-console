@@ -29,3 +29,26 @@ test("socketPath dev mode returns path inside ~/.clagentic/console/", function (
     "expected socketPath() to contain 'console' subdir in all modes, got: " + sock
   );
 });
+
+test("logPath returns path inside ~/.clagentic/console/", function () {
+  var log = config.logPath();
+  assert.ok(
+    log.includes(path.join("console", "daemon.log")),
+    "expected logPath() to contain console/daemon.log, got: " + log
+  );
+});
+
+test("crashInfoPath returns path inside ~/.clagentic/console/", function () {
+  var crash = config.crashInfoPath();
+  assert.ok(
+    crash.includes(path.join("console", "crash.json")),
+    "expected crashInfoPath() to contain console/crash.json, got: " + crash
+  );
+});
+
+test("EXTERNAL_TRIGGERS_DIR is inside ~/.clagentic/console/", function () {
+  assert.ok(
+    config.EXTERNAL_TRIGGERS_DIR.includes(path.join("console", "external-triggers")),
+    "expected EXTERNAL_TRIGGERS_DIR to contain console/external-triggers, got: " + config.EXTERNAL_TRIGGERS_DIR
+  );
+});

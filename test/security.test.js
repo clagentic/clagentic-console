@@ -578,7 +578,9 @@ test("context_sources_save filters out term: IDs the caller does not own", funct
 
 test("audit.log: writes a valid JSON line to the audit log file", function (t, done) {
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-"));
-  var auditPath = path.join(tmpDir, "audit.log");
+  // audit.js now writes to CONFIG_DIR/console/audit.log — create the subdir so openSync succeeds.
+  fs.mkdirSync(path.join(tmpDir, "console"), { recursive: true });
+  var auditPath = path.join(tmpDir, "console", "audit.log");
 
   // Temporarily override CONFIG_DIR by patching the loaded module's path resolution.
   // We re-require a fresh audit module with a patched config so it writes to tmpDir.
