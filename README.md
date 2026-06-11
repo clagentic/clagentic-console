@@ -46,6 +46,7 @@ npx @clagentic/console
 - **Loop automation.** Write a `PROMPT.md`, hit go. Clagentic:Console iterates: run, evaluate, retry until done or capped. Schedule with standard cron.
 - **Vendor flexibility.** Supports Claude Code (Claude Agent SDK) and ChatGPT Codex (codex app-server protocol). Switch per session.
 - **Your data, your machine.** Sessions are JSONL, settings are JSON, knowledge is Markdown. No cloud relay, no proprietary database.
+- **Clagentic: Lite integration (optional).** If [Clagentic: Lite](https://clagentic.ai) is installed, project settings surfaces per-project enrollment and a global auto-enroll toggle appears in system settings. Console detects Lite passively — nothing changes if it isn't present.
 
 ## Getting Started
 
@@ -116,7 +117,7 @@ For architecture details, sequence diagrams, and key design decisions, see [docs
 No. Clagentic:Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, and a full browser UI on top.
 
 **"What are named agents?"**
-Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state.
+Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state. Type `@` in the session input to see a list of installed agents and start one directly.
 
 Named agents are **currently Claude Code only.** The Codex adapter has no equivalent API for per-session agent identity injection — the Claude Agent SDK exposes this directly, Codex does not. When you're in a Codex session, the Agent Chat entry point is hidden automatically. Partial Codex parity (system-prompt prepend) is planned; until then, agents only apply when the session vendor is Claude Code.
 
@@ -143,6 +144,9 @@ Yes. User-configured MCPs from `~/.clagentic/mcp.json` plus built-in ask-user an
 
 **"Multi-user support?"**
 Yes. On Linux, opt in to OS-level isolation: each user maps to a real Linux account, file ACLs via `setfacl`, processes spawn under the correct UID/GID.
+
+**"Does it integrate with Clagentic: Lite?"**
+Yes, optionally. [Clagentic: Lite](https://clagentic.ai) is a companion tool that adds agentic gates, session memory, and audit trails to any repo. If Lite is installed (`~/.clagentic/lite/`), Console detects it automatically and shows an enrollment panel in each project's settings. You can also enable auto-enroll in system settings to wire up every project on add. Lite is never required — Console works normally without it.
 
 ## Support
 
