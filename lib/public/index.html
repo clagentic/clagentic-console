@@ -1031,7 +1031,7 @@
           <button class="settings-nav-item" data-section="claudemd"><span>Instructions</span></button>
           <button class="settings-nav-item" data-section="environment"><span>Environment</span></button>
           <button class="settings-nav-item" data-section="storage"><span>Storage</span></button>
-          <button class="settings-nav-item hidden" data-section="lite" id="settings-lite-nav"><span>Lite</span></button>
+          <button class="settings-nav-item" data-section="lite" id="settings-lite-nav"><span>Lite</span></button>
           <div class="settings-nav-separator settings-admin-only"></div>
           <div class="settings-nav-category settings-admin-only">Admin</div>
           <button class="settings-nav-item settings-admin-only" data-section="admin-users"><span>Users</span></button>
@@ -1286,19 +1286,36 @@
             </label>
           </div>
         </div>
-        <!-- Clagentic: Lite (hidden when not installed) -->
+        <!-- Clagentic: Lite — always rendered; JS toggles installed vs not-installed sub-states -->
         <div class="server-settings-section hidden" data-section="lite" id="settings-lite-section">
           <h2>Clagentic: Lite</h2>
-          <p class="settings-hint" style="margin-bottom: 20px;">Automatically enroll projects in Clagentic: Lite when they are added.</p>
-          <div class="settings-card">
-            <label class="settings-toggle-row">
-              <div>
-                <span class="settings-label">Auto-enroll new projects</span>
-                <div class="settings-hint">Automatically enroll projects in Clagentic: Lite when they are added.</div>
+          <!-- shown when Lite is installed -->
+          <div id="settings-lite-installed">
+            <p class="settings-hint" style="margin-bottom: 20px;">Automatically enroll projects in Clagentic: Lite when they are added.</p>
+            <div class="settings-card">
+              <label class="settings-toggle-row">
+                <div>
+                  <span class="settings-label">Auto-enroll new projects</span>
+                  <div class="settings-hint">Automatically enroll projects in Clagentic: Lite when they are added.</div>
+                </div>
+                <input type="checkbox" id="settings-lite-auto-enroll">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+          </div>
+          <!-- shown when Lite is not installed -->
+          <div id="settings-lite-not-installed" class="hidden">
+            <p class="settings-hint" style="margin-bottom: 16px;">Clagentic: Lite adds agentic gates, session memory, and audit trails to any repo.</p>
+            <div class="settings-card" style="opacity:0.8;">
+              <div class="settings-field">
+                <label class="settings-label">Install</label>
+                <code class="settings-mono" style="display:block;margin:6px 0 4px;font-size:12px;user-select:all;">curl -sSL https://clagentic.ai/lite/install.sh | sh</code>
               </div>
-              <input type="checkbox" id="settings-lite-auto-enroll">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </label>
+              <div class="settings-field" style="border-top:none;padding-top:0;">
+                <a href="https://clagentic.ai" target="_blank" rel="noopener" class="settings-hint" style="color:var(--accent);">Learn more at clagentic.ai</a>
+              </div>
+            </div>
+            <p class="settings-hint" style="margin-top:12px;">After installing, restart the daemon to enable enrollment controls.</p>
           </div>
         </div>
         <!-- Auto-continue moved to User Settings > Behavior -->
