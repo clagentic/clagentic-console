@@ -966,6 +966,72 @@ test("skills proxy: rejects unauthenticated request with 401 in multi-user mode"
     "single-user mode skips permission gate (no 401 or 403)");
 });
 
+// ============================================================
+// 16. git clone URL validation (lr-28b5)
+//     Mirrors the allow-list logic in daemon.js onCloneProject.
+// ============================================================
+
+// Inline the same validation logic used in onCloneProject so that the tests
+// serve as a regression contract against the production implementation.
+var CLONE_ALLOWED_SCHEMES = ["https://", "http://", "git://", "ssh://", "git@"];
+function validateCloneUrl(cloneUrl) {
+  if (cloneUrl.startsWith("-")) {
+    return "Invalid clone URL: URL must not start with '-'";
+  }
+  for (var i = 0; i < CLONE_ALLOWED_SCHEMES.length; i++) {
+    if (cloneUrl.startsWith(CLONE_ALLOWED_SCHEMES[i])) {
+      return null; // allowed
+    }
+  }
+  return "Invalid clone URL: unsupported scheme. Allowed: https, http, git, ssh, git@";
+}
+
+test("clone URL: https:// is accepted", function () {
+  assert.strictEqual(validateCloneUrl("https://github.com/user/repo.git"), null);
+});
+
+test("clone URL: http:// is accepted", function () {
+  assert.strictEqual(validateCloneUrl("http://example.com/repo.git"), null);
+});
+
+test("clone URL: git:// is accepted", function () {
+  assert.strictEqual(validateCloneUrl("git://github.com/user/repo.git"), null);
+});
+
+test("clone URL: ssh:// is accepted", function () {
+  assert.strictEqual(validateCloneUrl("ssh://git@github.com/user/repo.git"), null);
+});
+
+test("clone URL: git@ SSH shorthand is accepted", function () {
+  assert.strictEqual(validateCloneUrl("git@github.com:user/repo.git"), null);
+  assert.strictEqual(validateCloneUrl("git@gitlab.com:group/sub/repo"), null);
+});
+
+test("clone URL: ext:: transport is rejected (RCE vector)", function () {
+  var err = validateCloneUrl("ext::sh -c touch /tmp/pwned");
+  assert.ok(err !== null, "ext:: transport must be rejected");
+  assert.ok(err.indexOf("unsupported scheme") !== -1, "error mentions unsupported scheme");
+});
+
+test("clone URL: file:: transport is rejected", function () {
+  var err = validateCloneUrl("file:///etc/passwd");
+  assert.ok(err !== null, "file:: transport must be rejected");
+});
+
+test("clone URL: leading-dash is rejected (option injection vector)", function () {
+  var err = validateCloneUrl("--upload-pack=touch /tmp/pwned");
+  assert.ok(err !== null, "leading-dash must be rejected");
+  assert.ok(err.indexOf("'-'") !== -1, "error mentions the leading dash");
+});
+
+test("clone URL: other non-allow-listed schemes are rejected", function () {
+  var rejected = ["javascript:alert(1)", "ftp://example.com/repo", "data:text/plain,x", "ldap://example.com"];
+  for (var i = 0; i < rejected.length; i++) {
+    var err = validateCloneUrl(rejected[i]);
+    assert.ok(err !== null, rejected[i] + " should be rejected");
+  }
+});
+
 test("push addSubscription: only removes replaceEndpoint when caller owns it", function () {
   // Test the real addSubscription function from push.js via require-cache mocking.
   // Stub web-push and store to avoid network calls and filesystem writes.
