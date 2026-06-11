@@ -1031,13 +1031,15 @@
           <button class="settings-nav-item" data-section="claudemd"><span>Instructions</span></button>
           <button class="settings-nav-item" data-section="environment"><span>Environment</span></button>
           <button class="settings-nav-item" data-section="storage"><span>Storage</span></button>
-          <button class="settings-nav-item" data-section="lite" id="settings-lite-nav"><span>Lite</span></button>
           <div class="settings-nav-separator settings-admin-only"></div>
           <div class="settings-nav-category settings-admin-only">Admin</div>
           <button class="settings-nav-item settings-admin-only" data-section="admin-users"><span>Users</span></button>
           <button class="settings-nav-item settings-admin-only" data-section="admin-invites"><span>Invites</span></button>
           <button class="settings-nav-item settings-admin-only" data-section="admin-projects"><span>Projects</span></button>
           <button class="settings-nav-item settings-admin-only" data-section="admin-smtp"><span>Email</span></button>
+          <div class="settings-nav-separator"></div>
+          <div class="settings-nav-category">Clagentic</div>
+          <button class="settings-nav-item" data-section="lite" id="settings-clagentic-nav"><span>Lite</span></button>
           <div class="settings-nav-separator"></div>
           <div class="settings-nav-category">Server</div>
           <button class="settings-nav-item hidden" data-section="keep-awake" id="settings-keep-awake-nav"><span>Keep Awake</span></button>
@@ -1287,11 +1289,10 @@
           </div>
         </div>
         <!-- Clagentic: Lite — always rendered; JS toggles installed vs not-installed sub-states -->
-        <div class="server-settings-section hidden" data-section="lite" id="settings-lite-section">
+        <div class="server-settings-section" data-section="lite" id="settings-clagentic-section">
           <h2>Clagentic: Lite</h2>
           <!-- shown when Lite is installed -->
-          <div id="settings-lite-installed">
-            <p class="settings-hint" style="margin-bottom: 20px;">Automatically enroll projects in Clagentic: Lite when they are added.</p>
+          <div id="settings-clagentic-installed" class="hidden">
             <div class="settings-card">
               <label class="settings-toggle-row">
                 <div>
@@ -1304,7 +1305,7 @@
             </div>
           </div>
           <!-- shown when Lite is not installed -->
-          <div id="settings-lite-not-installed" class="hidden">
+          <div id="settings-clagentic-not-installed">
             <p class="settings-hint" style="margin-bottom: 16px;">Clagentic: Lite adds agentic gates, session memory, and audit trails to any repo.</p>
             <div class="settings-card" style="opacity:0.8;">
               <div class="settings-field">
@@ -1316,6 +1317,12 @@
               </div>
             </div>
             <p class="settings-hint" style="margin-top:12px;">After installing, restart the daemon to enable enrollment controls.</p>
+          </div>
+          <div class="settings-card" style="margin-top:20px;">
+            <div class="settings-field">
+              <span class="settings-label">Discover more</span>
+              <a href="https://clagentic.ai/tools" target="_blank" rel="noopener" class="settings-value" style="color:var(--accent);text-decoration:none;font-size:13px;">clagentic.ai/tools ↗</a>
+            </div>
           </div>
         </div>
         <!-- Auto-continue moved to User Settings > Behavior -->
