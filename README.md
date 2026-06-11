@@ -13,9 +13,7 @@
   <a href="https://ko-fi.com/clagentic"><img src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white&label=support" alt="Support on Ko-fi" /></a>
 </p>
 
-A self-hosted browser console for Claude Code and ChatGPT Codex. Part of the [clagentic](https://clagentic.ai) suite. Run AI sessions from any browser or phone — tool approvals, model selection, context management, session history — without leaving your own machine.
-
-No extras bolted on. No opinionated workflows. The floor is solid; you build what you need on top.
+A self-hosted control plane for your AI runtimes. Clagentic:Console runs as a daemon on your machine and serves a full browser and mobile interface to Claude Code and ChatGPT Codex. Every project, every session, every tool approval — reachable from any device, all data staying on disk.
 
 ## Install
 
@@ -23,13 +21,13 @@ No extras bolted on. No opinionated workflows. The floor is solid; you build wha
 npm install -g @clagentic/console
 ```
 
-Then run from anywhere:
+Then start the daemon:
 
 ```bash
 clagentic-console
 ```
 
-Or try it without installing:
+Or try without installing:
 
 ```bash
 npx @clagentic/console
@@ -39,14 +37,29 @@ npx @clagentic/console
 
 ## What it does
 
-- **Browser access to your AI runtimes.** The goal is full parity with the CLI for both Claude Code and Codex — tool approvals, model selection, context management, session history. Most things work; see the FAQ for current gaps.
-- **Named agent sessions (Claude Code).** Talk directly to any agent defined in your Claude Code config. Agents get their own sessions, context, and history. This feature is currently Claude Code only — see FAQ for details and what's planned for Codex.
-- **Multi-project dashboard.** Every repo on your machine in one sidebar. Jump between projects, run sessions in parallel, see live status at a glance.
-- **Mobile PWA + push notifications.** Installable on iOS and Android. Your phone buzzes when Claude needs approval or finishes a long task — tap to respond from anywhere.
-- **Loop automation.** Write a `PROMPT.md`, hit go. Clagentic:Console iterates: run, evaluate, retry until done or capped. Schedule with standard cron.
-- **Vendor flexibility.** Supports Claude Code (Claude Agent SDK) and ChatGPT Codex (codex app-server protocol). Switch per session.
+- **Named agent sessions.** Type `@` in the session input to launch any agent defined in `.claude/agents/` or `~/.claude/agents/` into its own session — with its own conversation history, context window, and state. Pick agents by name, switch mid-conversation.
+
+- **Context injection.** Pin running terminals, live browser tabs, and sticky notes as active context sources. Their content flows into every message automatically: terminal output as a delta since your last message, browser tabs as full snapshots. No manual copy-paste. No extra prompting.
+
+- **Loop automation.** Write a `PROMPT.md`, start a loop. Clagentic:Console runs the prompt, evaluates the result, and retries until done or capped. Schedule loops with standard cron syntax to run unattended.
+
+- **External triggers.** Drop a JSON file into `~/.clagentic/external-triggers/` to spawn a new AI session or inject a message into an existing one. Use this to wire Claude into scripts, CI pipelines, or other AI processes — no API, no polling, just a file drop.
+
+- **Cross-vendor instruction injection.** YOKE (the vendor adapter layer) scans `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, and `.github/copilot-instructions.md` and cross-injects whichever ones the active vendor doesn't read natively. Switch from Claude to Codex in a session — your project instructions still reach the model.
+
+- **Multi-project dashboard.** Every repo registered with the daemon in one sidebar. Jump between projects, run sessions in parallel, see live status at a glance.
+
+- **Mobile PWA + push notifications.** Installable on iOS and Android. Approve tool calls from your phone. Push fires on approval requests, errors, and task completion.
+
+- **Multi-user with OS isolation.** On Linux, opt in: each user maps to a real system account, file ACLs via `setfacl`, processes spawn under the correct UID/GID.
+
+- **Vendor flexibility.** Claude Code (Claude Agent SDK) and ChatGPT Codex (codex app-server protocol). Switch per session. Sessions remember their vendor.
+
+- **MCP servers.** Built-in ask-user and browser servers. User-configured MCPs via `~/.clagentic/mcp.json`. Works in both Claude and Codex sessions.
+
 - **Your data, your machine.** Sessions are JSONL, settings are JSON, knowledge is Markdown. No cloud relay, no proprietary database.
-- **Clagentic: Lite integration (optional).** If [Clagentic: Lite](https://clagentic.ai) is installed, project settings surfaces per-project enrollment and a global auto-enroll toggle appears in system settings. Console detects Lite passively — nothing changes if it isn't present.
+
+- **Clagentic: Lite (optional).** If [Clagentic: Lite](https://clagentic.ai/tools) is installed, project settings surface per-project enrollment controls and system settings add a global auto-enroll toggle. Console detects it passively — nothing changes if it isn't present.
 
 ## Getting Started
 
@@ -114,15 +127,24 @@ For architecture details, sequence diagrams, and key design decisions, see [docs
 ## FAQ
 
 **"Is this a Claude Code wrapper?"**
-No. Clagentic:Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, and a full browser UI on top.
+No. Clagentic:Console drives Claude Code through the Claude Agent SDK and Codex through the Codex app-server protocol. It adds multi-session orchestration, named agent sessions, scheduled agents, multi-user support, built-in MCP servers, context injection, external triggers, and a full browser UI on top.
 
 **"What are named agents?"**
-Agents defined in your Claude Code config (`.claude/agents/`) become first-class sessions. You talk to them directly — their own conversation history, context window, and session state. Type `@` in the session input to see a list of installed agents and start one directly.
+Agents defined in your Claude Code config (`.claude/agents/` or `~/.claude/agents/`) become first-class sessions. Type `@` in the session input to see every installed agent and launch one directly — its own conversation history, context window, and session state.
 
-Named agents are **currently Claude Code only.** The Codex adapter has no equivalent API for per-session agent identity injection — the Claude Agent SDK exposes this directly, Codex does not. When you're in a Codex session, the Agent Chat entry point is hidden automatically. Partial Codex parity (system-prompt prepend) is planned; until then, agents only apply when the session vendor is Claude Code.
+Named agents are **currently Claude Code only.** The Codex adapter has no equivalent API for per-session agent identity injection. When you're in a Codex session, the agent entry point is hidden. Partial Codex parity (system-prompt prepend) is planned.
+
+**"How does context injection work?"**
+Open the Context panel in the session input area. Pin a running terminal, a browser tab (requires the Clagentic Chrome extension), or a sticky note. From that point on, every message you send automatically includes the latest content from those sources — terminal output as a delta since the last message, browser tabs as a full page snapshot. The injection happens before your message reaches the model; you don't need to mention the sources in your prompt.
+
+**"What's the external trigger system?"**
+Drop a JSON file into `~/.clagentic/external-triggers/`. The daemon picks it up within seconds. A v1 trigger spawns a new session with an `initialPrompt`. A v2 trigger can either spawn a session or inject a message into an existing session by `sessionId`. The file is archived to `processed/` on success. Unprocessed files survive daemon restarts. Use this to wire Claude into scripts, CI pipelines, cron jobs, or other AI processes.
+
+**"What instruction files does it read?"**
+YOKE scans the project directory for `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, and `.github/copilot-instructions.md`. Each vendor reads some of these natively — Claude reads `CLAUDE.md`, Codex reads `AGENTS.md`. Files the active vendor doesn't read natively are merged and injected as additional context, so your project instructions reach the model regardless of which vendor is running.
 
 **"Is feature parity between Claude Code and Codex complete?"**
-Not yet. The goal is full parity, but there are gaps. Named agents (above) are the main one. Claude Code has been the primary development target; Codex support covers sessions, tool approvals, model selection, MCP servers, loop, and most UI surfaces. Features that depend on Claude Agent SDK internals (agent identity, extended thinking, some beta flags) have no Codex equivalent today.
+Not yet. Named agents are the main gap — the Claude Agent SDK exposes agent identity injection directly; Codex does not. Claude Code has been the primary development target. Codex support covers sessions, tool approvals, model selection, MCP servers, loop, and most UI surfaces. Features that depend on Claude Agent SDK internals have no Codex equivalent today.
 
 **"Can I run Claude Code and Codex in the same workspace?"**
 Yes. Pick a vendor when you open a session. Switch per session — sessions remember their vendor.
@@ -131,7 +153,7 @@ Yes. Pick a vendor when you open a session. Switch per session — sessions reme
 Only as model API calls — the same as using the CLI directly. Sessions, settings, and knowledge all stay on disk.
 
 **"Does my existing CLAUDE.md / AGENTS.md work?"**
-Yes. Native instruction files are loaded per vendor and merged automatically.
+Yes. Native instruction files are loaded per vendor and merged automatically. Non-native files are cross-injected by YOKE.
 
 **"Can I continue a CLI session in the browser?"**
 Yes. CLI sessions appear in the sidebar and can be picked up in the CLI.
@@ -146,7 +168,7 @@ Yes. User-configured MCPs from `~/.clagentic/mcp.json` plus built-in ask-user an
 Yes. On Linux, opt in to OS-level isolation: each user maps to a real Linux account, file ACLs via `setfacl`, processes spawn under the correct UID/GID.
 
 **"Does it integrate with Clagentic: Lite?"**
-Yes, optionally. [Clagentic: Lite](https://clagentic.ai) is a companion tool that adds agentic gates, session memory, and audit trails to any repo. If Lite is installed (`~/.clagentic/lite/`), Console detects it automatically and shows an enrollment panel in each project's settings. You can also enable auto-enroll in system settings to wire up every project on add. Lite is never required — Console works normally without it.
+Yes, optionally. [Clagentic: Lite](https://clagentic.ai/tools) adds agentic gates, session memory, and audit trails to any repo. If Lite is installed (`~/.clagentic/lite/`), Console detects it automatically and shows an enrollment panel in each project's settings. Enable auto-enroll in system settings to wire up every project on add. Lite is never required — Console works normally without it.
 
 ## Support
 
