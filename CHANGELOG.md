@@ -1,3 +1,65 @@
+# [1.5.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.4.1...v1.5.0-beta.1) (2026-06-11)
+
+
+### Bug Fixes
+
+* **agents:** use config.js REAL_HOME in agents.js (Peaches nit) ([0bc3c08](https://github.com/clagentic/clagentic-console/commit/0bc3c08b8b9bb574b15404b4d1d7ea6844703b1d))
+* **brand:** replace bare 'clagentic' with correct product name in user-facing strings ([e33d621](https://github.com/clagentic/clagentic-console/commit/e33d621192845642f8df6faf2b129d6a5de8123d))
+* **daemon:** bootstrap minimal config on fresh install, ensureConfigDir at startup ([471196d](https://github.com/clagentic/clagentic-console/commit/471196dc2ea9121b73f74e843820143d7799d35f))
+* **daemon:** guard bootstrap config write against disk-full crash ([25e5af9](https://github.com/clagentic/clagentic-console/commit/25e5af99d7fba23bada74ef6c195f082bc9665a0))
+* **deploy:** RestartPreventExitStatus=78 so EX_CONFIG guard halts instead of restart-looping (lr-dec3) ([b628be5](https://github.com/clagentic/clagentic-console/commit/b628be577a4933e9c4700a7721ee4dd668fd847d))
+* **docs:** brand form, COPILOT.md, Chrome extension name — Peaches nits ([3002461](https://github.com/clagentic/clagentic-console/commit/300246190c222c4f9d8730227f51e9a978fea8d4))
+* **ipc:** ensure socket parent dir exists before bind — daemon crash-loop on fresh install (lr-88fe) ([4eea0e2](https://github.com/clagentic/clagentic-console/commit/4eea0e244dbccf5af37e9af263a35b2e8c6e4c5d))
+* **lr-0cb0:** guard parseCronField against step=0 (infinite loop) ([3a2cc7f](https://github.com/clagentic/clagentic-console/commit/3a2cc7f319362dcb591f58a894dc3dc679576ed8))
+* **lr-1a5f:** address Peaches blocking findings on browser smoke test ([4bb103a](https://github.com/clagentic/clagentic-console/commit/4bb103af9e8b83379364208cd71c5dc7ecc1d5e9))
+* **lr-1a5f:** correct scope claims in boot-smoke test (Peaches B4) ([8dbf66d](https://github.com/clagentic/clagentic-console/commit/8dbf66d6f51f503b7a1c18617e04b11c58dffb76))
+* **lr-28b5:** extract clone validation to lib/clone-validate.js; rewrite section 16 tests to drive real code ([a53000f](https://github.com/clagentic/clagentic-console/commit/a53000f8f598f328f3332e220ba6773f7e69674a))
+* **lr-6ed3:** address Peaches review — resp.ok check, dev-mode shim, live-socket guard ([f893b58](https://github.com/clagentic/clagentic-console/commit/f893b589f51d3d1270fbaf4df4483a13ccb2e8fc))
+* **lr-6ed3:** migration shim for pre-1.5 daemon on old socket path ([94f307f](https://github.com/clagentic/clagentic-console/commit/94f307fa9fdf546974aec4a450ca0a5e50eef05c))
+* **lr-7b07:** XSS — sticky-note href breakout + escapeHtml quote encoding and null coercion ([c5654f1](https://github.com/clagentic/clagentic-console/commit/c5654f11c7cfb8e66ef5c19d00a712ca1493cd15)), closes [#39](https://github.com/clagentic/clagentic-console/issues/39)
+* **lr-8657:** repoint stale getPendingNavigate/peekPendingNavigate imports to pending-navigate.js ([1c1d5ba](https://github.com/clagentic/clagentic-console/commit/1c1d5bae535502e3f414d72a6fa8e17d212037f1)), closes [#217](https://github.com/clagentic/clagentic-console/issues/217)
+* **lr-8e4f:** resolve Peaches nits — liteInstalled in WS info, auto-enroll on create, CONFIG_DIR alignment ([da1b9a0](https://github.com/clagentic/clagentic-console/commit/da1b9a0de639e2b4b54d73a5a3f38c5369602f29))
+* **lr-a3ca:** extract pendingNavigate state to pending-navigate.js, add regression tests ([e246b94](https://github.com/clagentic/clagentic-console/commit/e246b94ecdffc6b7a1f894184a0703260c172dc8))
+* **lr-a3ca:** replace double getPendingNavigate() with peekPendingNavigate() in history_meta ([0d8db00](https://github.com/clagentic/clagentic-console/commit/0d8db00d7aa40cf741d57460731654c29f034350))
+* **lr-a7e7:** replace inlined test copies with real exported seams ([39ff57f](https://github.com/clagentic/clagentic-console/commit/39ff57f4dc1bf085451864f5ccbf417c18911ef3))
+* **lr-a7e7:** YOKE adapter robustness — four independent defects ([5531ebd](https://github.com/clagentic/clagentic-console/commit/5531ebdc8cd8b19551aa38e2983b417682d1e561))
+* **lr-c1a2:** attach at-agents menu to #input-wrapper not #input-area ([2ac5c1f](https://github.com/clagentic/clagentic-console/commit/2ac5c1fac78b9dc694b86e039cc7625a0f0cf652)), closes [#input-wrapper](https://github.com/clagentic/clagentic-console/issues/input-wrapper) [#input-area](https://github.com/clagentic/clagentic-console/issues/input-area) [#input-area](https://github.com/clagentic/clagentic-console/issues/input-area) [#input-wrapper](https://github.com/clagentic/clagentic-console/issues/input-wrapper) [#mention-menu](https://github.com/clagentic/clagentic-console/issues/mention-menu) [#slash-menu](https://github.com/clagentic/clagentic-console/issues/slash-menu)
+* **lr-c1a2:** resolve Peaches nits — mutually exclusive menus, Codex dedup, traversal test ([2840d8a](https://github.com/clagentic/clagentic-console/commit/2840d8a263ff33b002a1c9c34ba3196837622596))
+* **lr-d049:** close two missed path-traversal sinks and rewrite tautological tests ([725adbe](https://github.com/clagentic/clagentic-console/commit/725adbe38787c7696e63f6d3221e5df713561758))
+* **lr-d049:** document LOOP_ID_RE duplication in scheduler.js (Peaches nit) ([c3e0e88](https://github.com/clagentic/clagentic-console/commit/c3e0e882128d4f2f550f2837b37576f1c5c37e3b))
+* **lr-d049:** validate loop registry ID before using as filesystem path ([14f7cda](https://github.com/clagentic/clagentic-console/commit/14f7cda8a31b028756c3a32920bfd6a0487a71af))
+* **lr-d857:** add isRequestAuthed gates to 5 sibling mutation routes and rewrite security tests to call real handlers ([0844189](https://github.com/clagentic/clagentic-console/commit/08441892f749d2467bb74bc268c48dff254e00c2))
+* **lr-d857:** gate four pre-auth HTTP routes that leaked or mutated without auth ([f6969b6](https://github.com/clagentic/clagentic-console/commit/f6969b6e1335cac49e9b20e40a4fe2bad2b5bbed))
+* **lr-dec3:** guard daemon bootstrap when CLAGENTIC_HOME mis-pointed at socket subdir ([221f418](https://github.com/clagentic/clagentic-console/commit/221f41851158cb35b232602993c8d5a8d8e2e527)), closes [#202](https://github.com/clagentic/clagentic-console/issues/202)
+* **lr-e0de:** resolve session-history duplicate and stop_task session targeting defects ([da035a8](https://github.com/clagentic/clagentic-console/commit/da035a8def09bac3b5677c5aed57faed4a732ce0))
+* **lr-e0de:** rewrite regression tests to drive real createSessionManager and attachSessions ([32027b2](https://github.com/clagentic/clagentic-console/commit/32027b229ff60d10067801a4b18b87490ec43f16))
+* **lr-eb1a:** add missing permission gates on schedule_move, set_session_visibility, kill_process ([ddca1d3](https://github.com/clagentic/clagentic-console/commit/ddca1d3926972c2fcd95820337d70db5925d1322))
+* **lr-eb1a:** move kill_process admin gate inline; add regression tests for all three WS permission gates ([6ebd932](https://github.com/clagentic/clagentic-console/commit/6ebd932d1b90444944cb3b9e9e26d6d8b4353cb9))
+* remove single-user option from setup wizard, fix README ([8985122](https://github.com/clagentic/clagentic-console/commit/898512278a93575e505a0b665c56170b4a8e3334))
+* rename settings-lite-* IDs to settings-clagentic-*, add tools link ([6756b73](https://github.com/clagentic/clagentic-console/commit/6756b734c73d57f4be8ba51cab312b954c75d411))
+* scan global ~/.claude/agents/ in readProjectAgents + Lite discovery section ([4a761e8](https://github.com/clagentic/clagentic-console/commit/4a761e82bd43bf73f39825022a23a42c4e7675ad))
+* **security:** block path traversal in dm_send and dm_typing via dmKey validation (lr-6849) ([961f2a7](https://github.com/clagentic/clagentic-console/commit/961f2a7db9377bf489fbacba1bea6d19faa64cc1))
+* **security:** reject dangerous git clone URLs to prevent argument/transport injection (lr-28b5) ([e72dda9](https://github.com/clagentic/clagentic-console/commit/e72dda967494b4f94e5f9f79f10891da053c20e7))
+* **xss:** escape quote chars in sticky-note renderer before URL auto-linking ([182ffb5](https://github.com/clagentic/clagentic-console/commit/182ffb542aa24b181f2fe9e004dab16539a8f2cc)), closes [#220](https://github.com/clagentic/clagentic-console/issues/220) [#39](https://github.com/clagentic/clagentic-console/issues/39)
+
+
+### Features
+
+* always-visible Clagentic section in system settings with Lite discovery ([97c8dbe](https://github.com/clagentic/clagentic-console/commit/97c8dbe1c08f0fe50badc223d6eac869b6a75512))
+* **cli:** add --no-restart flag to suppress crash-supervisor auto-restart ([0ba7b55](https://github.com/clagentic/clagentic-console/commit/0ba7b55532677100116c9c2fc2814c80c4933d8a))
+* **config:** move daemon.sock to ~/.clagentic/console/ subdir (lr-88fe) ([5955695](https://github.com/clagentic/clagentic-console/commit/5955695609820ea0725aa3936c7daf3538107bc7))
+* **external-trigger:** schema v2 — mid-session inject via sessionId (lr-1688) ([b6769ca](https://github.com/clagentic/clagentic-console/commit/b6769ca37f0fed65272a2a6f7186fa5be7624878))
+* **external-trigger:** schema v2 — mid-session inject via sessionId (lr-1688) ([c927c25](https://github.com/clagentic/clagentic-console/commit/c927c257d41eb67876195f614ce5cfb3d6fa1a85))
+* **ipc:** add push_message case to daemon IPC switch ([04f26af](https://github.com/clagentic/clagentic-console/commit/04f26af44d0d0a3c21ecf397fdaf03221a88777c))
+* **lr-8e4f:** add Clagentic: Lite integration ([2d0861f](https://github.com/clagentic/clagentic-console/commit/2d0861f6b735b5ead1b1b4ee2e76d6e760ea305b))
+* **lr-c1a2:** @ mention shows project-local agents in session input ([541fd27](https://github.com/clagentic/clagentic-console/commit/541fd27060cc8b0122a59692568b177d21803d15))
+* **relay:** pass daemon_sock_path in live claim register (lr-f0ca) ([f3707b6](https://github.com/clagentic/clagentic-console/commit/f3707b61dd5d30576a8528e45b5884afd176a0ff))
+
+
+### Performance Improvements
+
+* **lr-8e4f:** cache detectLite() per project context, not per WS connect ([f6cd877](https://github.com/clagentic/clagentic-console/commit/f6cd877aa9d936e3cd06b7270e5fab93c1256161))
+
 ## [Unreleased]
 
 ### Breaking Changes
