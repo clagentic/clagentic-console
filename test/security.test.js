@@ -968,23 +968,16 @@ test("skills proxy: rejects unauthenticated request with 401 in multi-user mode"
 
 // ============================================================
 // 16. git clone URL validation (lr-28b5)
-//     Mirrors the allow-list logic in daemon.js onCloneProject.
+//     Calls the real exported functions from lib/clone-validate.js, which are
+//     the same functions invoked by daemon.js onCloneProject. Tests drive real
+//     daemon code paths — removing any mitigation from clone-validate.js will
+//     break the corresponding test here.
 // ============================================================
 
-// Inline the same validation logic used in onCloneProject so that the tests
-// serve as a regression contract against the production implementation.
-var CLONE_ALLOWED_SCHEMES = ["https://", "http://", "git://", "ssh://", "git@"];
-function validateCloneUrl(cloneUrl) {
-  if (cloneUrl.startsWith("-")) {
-    return "Invalid clone URL: URL must not start with '-'";
-  }
-  for (var i = 0; i < CLONE_ALLOWED_SCHEMES.length; i++) {
-    if (cloneUrl.startsWith(CLONE_ALLOWED_SCHEMES[i])) {
-      return null; // allowed
-    }
-  }
-  return "Invalid clone URL: unsupported scheme. Allowed: https, http, git, ssh, git@";
-}
+// Import the real production functions used by onCloneProject (not a copy).
+var { validateCloneUrl, buildCloneArgs } = require("../lib/clone-validate");
+
+// --- Mitigation 1: scheme allow-list ---
 
 test("clone URL: https:// is accepted", function () {
   assert.strictEqual(validateCloneUrl("https://github.com/user/repo.git"), null);
@@ -1018,18 +1011,56 @@ test("clone URL: file:: transport is rejected", function () {
   assert.ok(err !== null, "file:: transport must be rejected");
 });
 
-test("clone URL: leading-dash is rejected (option injection vector)", function () {
-  var err = validateCloneUrl("--upload-pack=touch /tmp/pwned");
-  assert.ok(err !== null, "leading-dash must be rejected");
-  assert.ok(err.indexOf("'-'") !== -1, "error mentions the leading dash");
-});
-
 test("clone URL: other non-allow-listed schemes are rejected", function () {
   var rejected = ["javascript:alert(1)", "ftp://example.com/repo", "data:text/plain,x", "ldap://example.com"];
   for (var i = 0; i < rejected.length; i++) {
     var err = validateCloneUrl(rejected[i]);
     assert.ok(err !== null, rejected[i] + " should be rejected");
   }
+});
+
+// --- Mitigation 2: leading-dash (option injection) ---
+
+test("clone URL: leading-dash is rejected (option injection vector)", function () {
+  var err = validateCloneUrl("--upload-pack=touch /tmp/pwned");
+  assert.ok(err !== null, "leading-dash must be rejected");
+  assert.ok(err.indexOf("'-'") !== -1, "error mentions the leading dash");
+});
+
+// --- Mitigation 3: '--' argv terminator position in spawn args ---
+// buildCloneArgs must place '--' at argv[1] so git never interprets the URL
+// as an option, even if validateCloneUrl is bypassed in the future.
+
+test("clone spawn args: '--' terminator is at argv[1]", function () {
+  var url = "https://github.com/user/repo.git";
+  var targetDir = "/tmp/test-target";
+  var spec = buildCloneArgs(url, targetDir);
+  assert.strictEqual(spec.args[0], "clone", "argv[0] is 'clone'");
+  assert.strictEqual(spec.args[1], "--", "argv[1] is '--' (terminator)");
+  assert.strictEqual(spec.args[2], url, "argv[2] is the clone URL");
+  assert.strictEqual(spec.args[3], targetDir, "argv[3] is the target directory");
+});
+
+// --- Mitigation 4: GIT_ALLOW_PROTOCOL env restriction ---
+// buildCloneArgs must set GIT_ALLOW_PROTOCOL to the safe-transport list so that
+// ext:: and file:: transports are blocked at the git level even if URL validation
+// is somehow bypassed.
+
+test("clone spawn args: GIT_ALLOW_PROTOCOL restricts transports", function () {
+  var spec = buildCloneArgs("https://github.com/user/repo.git", "/tmp/target");
+  assert.ok(
+    spec.envOverrides && typeof spec.envOverrides.GIT_ALLOW_PROTOCOL === "string",
+    "envOverrides must include GIT_ALLOW_PROTOCOL"
+  );
+  var allowed = spec.envOverrides.GIT_ALLOW_PROTOCOL;
+  // The four safe protocols must be present.
+  assert.ok(allowed.indexOf("https") !== -1, "https must be in GIT_ALLOW_PROTOCOL");
+  assert.ok(allowed.indexOf("http") !== -1, "http must be in GIT_ALLOW_PROTOCOL");
+  assert.ok(allowed.indexOf("git") !== -1, "git must be in GIT_ALLOW_PROTOCOL");
+  assert.ok(allowed.indexOf("ssh") !== -1, "ssh must be in GIT_ALLOW_PROTOCOL");
+  // ext and file transports must NOT appear, verifying they are excluded.
+  assert.ok(allowed.indexOf("ext") === -1, "ext must NOT be in GIT_ALLOW_PROTOCOL");
+  assert.ok(allowed.indexOf("file") === -1, "file must NOT be in GIT_ALLOW_PROTOCOL");
 });
 
 test("push addSubscription: only removes replaceEndpoint when caller owns it", function () {
