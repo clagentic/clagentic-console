@@ -17,16 +17,19 @@ var EventEmitter = require("events");
 // ---------------------------------------------------------------------------
 // Test 7a — worker readyPromise rejects on early exit
 //
-// Strategy: reproduce the exact pattern from spawnWorker() in claude.js.
-// We cannot require claude.js directly (it calls ensurePackageReadable() on
-// load and spawns real processes). Instead we inline the minimal worker-object
-// construction and exit-handler logic, matching the source verbatim so that
-// reverting the fix causes this test to fail.
+// Strategy: import the real _test_handleWorkerEarlyExit seam from claude.js
+// and call it against a minimal worker stub. This means reverting the
+// _readyReject call inside _test_handleWorkerEarlyExit in claude.js will
+// cause this test to fail — the test no longer holds an inlined copy.
 // ---------------------------------------------------------------------------
 
+var claudeAdapter = require("../lib/yoke/adapters/claude");
+var _test_handleWorkerEarlyExit = claudeAdapter._test_handleWorkerEarlyExit;
+
 /**
- * Build a minimal worker object with the same readyPromise/_readyReject
- * structure used in spawnWorker() and register the same exit handler.
+ * Build a minimal worker stub with the same readyPromise/_readyReject
+ * structure used in spawnWorker(). Call _test_handleWorkerEarlyExit to
+ * simulate what the real exit handler does.
  * Returns { worker, simulateExit } so tests can trigger exit at will.
  */
 function buildWorkerWithExitHandler() {
@@ -37,7 +40,6 @@ function buildWorkerWithExitHandler() {
     _readyReject: null,
     _stderrBuf: "",
     messageHandlers: [],
-    // Simulate process handle
     process: new EventEmitter(),
   };
 
@@ -46,46 +48,11 @@ function buildWorkerWithExitHandler() {
     worker._readyReject = reject;
   });
 
-  // Mirror the exit handler from spawnWorker() verbatim.
-  worker.process.on("exit", function(code, signal) {
-    if (!worker.ready && worker._readyReject) {
-      var readyErr = new Error(
-        "Worker exited before ready (code=" + code + ", signal=" + signal + ")" +
-        (worker._stderrBuf ? ". stderr: " + worker._stderrBuf.trim() : "")
-      );
-      worker._readyReject(readyErr);
-      worker._readyResolve = null;
-      worker._readyReject = null;
-    }
-    if (code === 0 && !worker.ready) {
-      for (var h = 0; h < worker.messageHandlers.length; h++) {
-        worker.messageHandlers[h]({
-          type: "query_error",
-          error: "Worker exited before ready (code=0). stderr: " + (worker._stderrBuf || "(none)"),
-          exitCode: 0,
-          stderr: worker._stderrBuf || null,
-        });
-      }
-    } else if (code !== 0 || code === null || signal) {
-      var stderrText = worker._stderrBuf || "";
-      var exitReason = signal
-        ? "Worker killed by " + signal
-        : (stderrText || "Worker exited with code " + code);
-      for (var h = 0; h < worker.messageHandlers.length; h++) {
-        worker.messageHandlers[h]({
-          type: "query_error",
-          error: exitReason,
-          exitCode: code,
-          stderr: stderrText || null,
-        });
-      }
-    }
-  });
-
   return {
     worker: worker,
     simulateExit: function(code, signal) {
-      worker.process.emit("exit", code !== undefined ? code : 1, signal || null);
+      // Call the real exported seam from claude.js — not an inlined copy.
+      _test_handleWorkerEarlyExit(worker, code !== undefined ? code : 1, signal || null);
     },
   };
 }
@@ -229,69 +196,49 @@ test("7b: removeFavorite works for v1 entries that were migrated (kind still pre
 // ---------------------------------------------------------------------------
 // Test 7c — codex queryHandle uses queryOpts.defaultModel when model is falsy
 //
-// createCodexQueryHandle is not exported directly.  The fix lives in the state
-// initializer inside that closure:
-//
-//   model: queryOpts.model || queryOpts.defaultModel || "gpt-5.5",
-//
-// We test the exported module surface by inspecting the state embedded in
-// the handle returned from createCodexAdapter's createQuery() pathway — but
-// since createQuery() requires a running app-server, we instead extract the
-// minimum testable unit: the model selection expression itself.
-//
-// The strategy: write a tiny inline factory that mirrors the exact line in
-// codex.js. If the fix is reverted (so that `queryOpts.model` is used without
-// the `|| queryOpts.defaultModel` fallback), the test fails.
+// We import the real _test_resolveModel seam exported from codex.js.
+// That function is defined in codex.js and called by the real
+// createCodexQueryHandle for both state.model and threadParams.model, so
+// reverting the || queryOpts.defaultModel term in codex.js breaks this test.
 // ---------------------------------------------------------------------------
 
-// Mirror the exact state initialization line from createCodexQueryHandle()
-function buildStateModel(queryOpts) {
-  return {
-    model: queryOpts.model || queryOpts.defaultModel || "gpt-5.5",
-  };
-}
+var codexAdapter = require("../lib/yoke/adapters/codex");
+var _test_resolveModel = codexAdapter._test_resolveModel;
 
 test("7c: state.model uses defaultModel when queryOpts.model is undefined", function() {
-  var state = buildStateModel({ model: undefined, defaultModel: "test-model" });
-  assert.strictEqual(state.model, "test-model",
+  var model = _test_resolveModel({ model: undefined, defaultModel: "test-model" });
+  assert.strictEqual(model, "test-model",
     "state.model must fall back to defaultModel when model is undefined");
 });
 
 test("7c: state.model uses defaultModel when queryOpts.model is null", function() {
-  var state = buildStateModel({ model: null, defaultModel: "test-model" });
-  assert.strictEqual(state.model, "test-model",
+  var model = _test_resolveModel({ model: null, defaultModel: "test-model" });
+  assert.strictEqual(model, "test-model",
     "state.model must fall back to defaultModel when model is null");
 });
 
 test("7c: state.model uses defaultModel when queryOpts.model is empty string", function() {
-  var state = buildStateModel({ model: "", defaultModel: "test-model" });
-  assert.strictEqual(state.model, "test-model",
+  var model = _test_resolveModel({ model: "", defaultModel: "test-model" });
+  assert.strictEqual(model, "test-model",
     "state.model must fall back to defaultModel when model is empty string");
 });
 
 test("7c: state.model uses queryOpts.model when it is truthy (defaultModel ignored)", function() {
-  var state = buildStateModel({ model: "gpt-5.5", defaultModel: "should-not-appear" });
-  assert.strictEqual(state.model, "gpt-5.5",
+  var model = _test_resolveModel({ model: "gpt-5.5", defaultModel: "should-not-appear" });
+  assert.strictEqual(model, "gpt-5.5",
     "state.model must use queryOpts.model when it is truthy");
 });
 
 test("7c: state.model falls back to hardcoded default when both model and defaultModel are falsy", function() {
-  var state = buildStateModel({ model: null, defaultModel: null });
-  assert.strictEqual(state.model, "gpt-5.5",
+  var model = _test_resolveModel({ model: null, defaultModel: null });
+  assert.strictEqual(model, "gpt-5.5",
     "state.model must use the hardcoded fallback gpt-5.5 when both are falsy");
 });
 
-// Verify the same expression appears in the runQueryLoop threadParams as well
-// (the fix applied to both state init and threadParams).
-function buildThreadParamsModel(queryOpts) {
-  return {
-    model: queryOpts.model || queryOpts.defaultModel || "gpt-5.5",
-  };
-}
-
+// Verify the same seam covers threadParams.model (both callers use _test_resolveModel).
 test("7c: threadParams.model uses defaultModel when queryOpts.model is falsy (runQueryLoop path)", function() {
-  var params = buildThreadParamsModel({ model: undefined, defaultModel: "from-adapter" });
-  assert.strictEqual(params.model, "from-adapter",
+  var model = _test_resolveModel({ model: undefined, defaultModel: "from-adapter" });
+  assert.strictEqual(model, "from-adapter",
     "threadParams.model must also fall back to defaultModel");
 });
 
