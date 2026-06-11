@@ -1326,129 +1326,150 @@ test("server-dm.js dm_typing handler: silently drops traversal dmKey", function 
 
 // ============================================================
 // 18. Loop registry path traversal prevention (lr-d049)
-//     Exercises the ID validation guard added to the loop_registry_files
-//     and loop_registry_save_files handlers in project-loop.js.
-//     The attachLoop function is not easily unit-testable in isolation
-//     (it requires a full ctx object), so we test the guard logic directly
-//     using the same regex and path.resolve double-check that production uses.
-//     Any regression that removes the guard will break these tests.
+//     Tests the REAL production validateLoopId exported from project-loop.js
+//     and drives the real handleLoopMessage handler through a minimal ctx stub
+//     to confirm the guard fires before any filesystem access.
 // ============================================================
 
-var LOOP_ID_RE = /^loop_[A-Za-z0-9_-]+$/;
+var { validateLoopId: prodValidateLoopId, attachLoop } = require("../lib/project-loop");
 
-// Simulate the guard logic as it appears in production (project-loop.js).
-function validateLoopId(recId, cwd) {
-  if (!LOOP_ID_RE.test(recId || "")) return "invalid_loop_id";
-  var loopBase = path.resolve(cwd, ".claude", "loops");
-  var lDir = path.resolve(loopBase, recId);
-  if (!lDir.startsWith(loopBase + path.sep)) return "invalid_loop_id";
-  return null; // valid
+// --- helpers ---
+
+// Build a minimal ctx stub sufficient for attachLoop.
+// The invalid-ID guard fires before any sm/sdk/fs access, so most
+// ctx fields can be no-ops for the invalid-ID tests.
+function makeLoopCtx(cwd, sendSpy) {
+  var sessions = new Map();
+  return {
+    cwd: cwd,
+    slug: "test",
+    sm: {
+      sessions: sessions,
+      createSession: function () { return { localId: "s1", history: [], loop: null }; },
+      saveSessionFile: function () {},
+      appendToSessionFile: function () {},
+      switchSession: function () {},
+      broadcastSessionList: function () {},
+      deleteSessionQuiet: function () {},
+      setResolveLoopInfo: function () {},
+    },
+    sdk: { startQuery: function () {} },
+    send: sendSpy,
+    sendTo: function (_ws, msg) { sendSpy(msg); },
+    sendToSession: function () {},
+    pushModule: null,
+    notificationsModule: null,
+    getHubSchedules: function () { return []; },
+    getAllProjectSessions: function () { return []; },
+    getStatus: function () { return null; },
+    getLinuxUserForSession: function () { return null; },
+    onProcessingChanged: function () {},
+    hydrateImageRefs: function () {},
+  };
 }
 
-test("loop_registry_files: rejects path traversal payload in msg.id", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-test-"));
-  try {
-    var result = validateLoopId("../../../etc/passwd", tmpDir);
-    assert.strictEqual(result, "invalid_loop_id",
-      "../../../etc/passwd must be rejected by the loop ID guard");
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true });
+// --- validateLoopId unit tests (call the REAL production export) ---
+
+test("validateLoopId: rejects path traversal payload", function () {
+  assert.strictEqual(prodValidateLoopId("../../../etc/passwd"), false,
+    "../../../etc/passwd must be rejected");
+});
+
+test("validateLoopId: rejects null/undefined/empty id", function () {
+  assert.strictEqual(prodValidateLoopId(null), false, "null must be rejected");
+  assert.strictEqual(prodValidateLoopId(undefined), false, "undefined must be rejected");
+  assert.strictEqual(prodValidateLoopId(""), false, "empty string must be rejected");
+});
+
+test("validateLoopId: rejects id without loop_ prefix", function () {
+  assert.strictEqual(prodValidateLoopId("abc123"), false, "no prefix must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop"), false, "bare 'loop' must be rejected");
+});
+
+test("validateLoopId: rejects id with dots or slashes", function () {
+  assert.strictEqual(prodValidateLoopId("loop_abc/../../../etc/shadow"), false,
+    "id with ../ must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc/subdir"), false,
+    "id with embedded slash must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc.evil"), false,
+    "id with dot must be rejected");
+});
+
+test("validateLoopId: rejects null byte and shell metacharacters", function () {
+  assert.strictEqual(prodValidateLoopId("loop_abc\x00def"), false, "null byte must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc;whoami"), false, "semicolon must be rejected");
+  assert.strictEqual(prodValidateLoopId("loop_abc def"), false, "space must be rejected");
+});
+
+test("validateLoopId: accepts well-formed loop IDs", function () {
+  var valid = [
+    "loop_abc",
+    "loop_ABC123",
+    "loop_my-task",
+    "loop_task_2025",
+    "loop_A-b_C-d",
+  ];
+  for (var i = 0; i < valid.length; i++) {
+    assert.strictEqual(prodValidateLoopId(valid[i]), true,
+      valid[i] + " should be accepted");
   }
 });
 
-test("loop_registry_files: rejects null/undefined msg.id", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-test-"));
-  try {
-    assert.strictEqual(validateLoopId(null, tmpDir), "invalid_loop_id",
-      "null id must be rejected");
-    assert.strictEqual(validateLoopId(undefined, tmpDir), "invalid_loop_id",
-      "undefined id must be rejected");
-    assert.strictEqual(validateLoopId("", tmpDir), "invalid_loop_id",
-      "empty string must be rejected");
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true });
-  }
-});
+// --- handleLoopMessage integration tests ---
+// Drive the REAL handler dispatch path through a minimal ctx stub.
+// For invalid IDs the guard fires before any fs operation; we assert the
+// correct error is emitted and no exception propagates.
 
-test("loop_registry_files: rejects id without loop_ prefix", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-test-"));
+test("loop_registry_files handler: sends loop_registry_error for invalid id via real handleLoopMessage", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-h-test-"));
   try {
-    assert.strictEqual(validateLoopId("abc123", tmpDir), "invalid_loop_id",
-      "id without loop_ prefix must be rejected");
-    assert.strictEqual(validateLoopId("loop", tmpDir), "invalid_loop_id",
-      "bare 'loop' without trailing content must be rejected");
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true });
-  }
-});
+    var sent = [];
+    var ctx = makeLoopCtx(tmpDir, function (msg) { sent.push(msg); });
+    var loop = attachLoop(ctx);
 
-test("loop_registry_files: rejects id with dots or slashes", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-test-"));
-  try {
-    var dotDot = validateLoopId("loop_abc/../../../etc/shadow", tmpDir);
-    assert.strictEqual(dotDot, "invalid_loop_id",
-      "id with ../ must be rejected");
-    var withSlash = validateLoopId("loop_abc/subdir", tmpDir);
-    assert.strictEqual(withSlash, "invalid_loop_id",
-      "id with embedded slash must be rejected");
-    var withDot = validateLoopId("loop_abc.evil", tmpDir);
-    assert.strictEqual(withDot, "invalid_loop_id",
-      "id with dot must be rejected (dots not in allowlist)");
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true });
-  }
-});
-
-test("loop_registry_files: rejects id with null byte or shell metacharacters", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-test-"));
-  try {
-    var nullByte = validateLoopId("loop_abc\x00def", tmpDir);
-    assert.strictEqual(nullByte, "invalid_loop_id", "null byte must be rejected");
-    var semi = validateLoopId("loop_abc;whoami", tmpDir);
-    assert.strictEqual(semi, "invalid_loop_id", "semicolon must be rejected");
-    var space = validateLoopId("loop_abc def", tmpDir);
-    assert.strictEqual(space, "invalid_loop_id", "space must be rejected");
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true });
-  }
-});
-
-test("loop_registry_files: accepts well-formed loop IDs", function () {
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-test-"));
-  try {
-    var valid = [
-      "loop_abc",
-      "loop_ABC123",
-      "loop_my-task",
-      "loop_task_2025",
-      "loop_A-b_C-d",
+    var attackIds = [
+      "../../../etc/passwd",
+      "loop_ok/../../../tmp/evil",
+      "loop_ok%2F..%2F..%2Fetc%2Fpasswd",
+      null,
+      "",
+      "abc123",
     ];
-    for (var i = 0; i < valid.length; i++) {
-      assert.strictEqual(validateLoopId(valid[i], tmpDir), null,
-        valid[i] + " should be accepted");
+    for (var i = 0; i < attackIds.length; i++) {
+      sent = [];
+      loop.handleLoopMessage({}, { type: "loop_registry_files", id: attackIds[i] });
+      assert.ok(sent.length >= 1, "handler must emit a message for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].type, "loop_registry_error",
+        "must emit loop_registry_error for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].text, "invalid_loop_id",
+        "error text must be invalid_loop_id for id=" + attackIds[i]);
     }
   } finally {
     fs.rmSync(tmpDir, { recursive: true });
   }
 });
 
-test("loop_registry_save_files: path-traversal id does not reach filesystem", function () {
-  // Drive the production handler indirectly: verify that an id accepted by the
-  // regex cannot escape the base directory via path.resolve.
-  // This acts as the defense-in-depth check (the second guard in the handler).
-  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-traversal-"));
+test("loop_registry_save_files handler: sends loop_registry_error for invalid id via real handleLoopMessage", function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-h-test-"));
   try {
-    // Hypothetical attacker id that passes naive prefix check but uses traversal.
-    // None of these should pass LOOP_ID_RE, but even if they did the resolve
-    // check would catch them.
+    var sent = [];
+    var ctx = makeLoopCtx(tmpDir, function (msg) { sent.push(msg); });
+    var loop = attachLoop(ctx);
+
     var attackIds = [
+      "../../../etc/passwd",
       "loop_ok/../../../tmp/evil",
-      "loop_ok%2F..%2F..%2Fetc%2Fpasswd", // URL-encoded slash — remains literal
+      null,
+      "",
     ];
     for (var i = 0; i < attackIds.length; i++) {
-      var result = validateLoopId(attackIds[i], tmpDir);
-      assert.strictEqual(result, "invalid_loop_id",
-        "attack payload '" + attackIds[i] + "' must be rejected");
+      sent = [];
+      loop.handleLoopMessage({}, { type: "loop_registry_save_files", id: attackIds[i] });
+      assert.ok(sent.length >= 1, "handler must emit a message for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].type, "loop_registry_error",
+        "must emit loop_registry_error for id=" + attackIds[i]);
+      assert.strictEqual(sent[0].text, "invalid_loop_id",
+        "error text must be invalid_loop_id for id=" + attackIds[i]);
     }
   } finally {
     fs.rmSync(tmpDir, { recursive: true });
