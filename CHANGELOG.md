@@ -1,3 +1,16 @@
+# [1.5.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.5.0-beta.1...v1.5.0-beta.2) (2026-06-12)
+
+
+### Bug Fixes
+
+* **config:** fix cpSync self-copy in console/ migration, sync package-lock.json ([18c4d9b](https://github.com/clagentic/clagentic-console/commit/18c4d9b52dc05010a0261f88ff6f2444220144c0))
+* **config:** move CONFIG_DIR to ~/.clagentic/console/ — complete Console data isolation (lr-12d0) ([63d8b02](https://github.com/clagentic/clagentic-console/commit/63d8b028aaa898bfb85da91c3ad6ba1d4924ed4a)), closes [lr-5dca/#238](https://github.com/clagentic/clagentic-console/issues/238)
+* **config:** move daemon.json to console/ subdir, decouple CLAGENTIC_HOME from CLAGENTIC_CONFIG (lr-eb5a) ([a9a5eed](https://github.com/clagentic/clagentic-console/commit/a9a5eed0d5e1a7beaa784ae9ce7d74aa23c7293d))
+* **config:** move daemon.log, crash.json, audit.log, external-triggers/ to console/ subdir (lr-5dca) ([dad934b](https://github.com/clagentic/clagentic-console/commit/dad934bc58d828f7686ae94e5de455822cec6fe6))
+* **config:** preserve file timestamps in all data-dir migrations ([553c437](https://github.com/clagentic/clagentic-console/commit/553c43708f1e1fbc2a2c9c403db218b2f0d1a26b))
+* **config:** use .migrated marker as console/ migration sentinel (lr-12d0) ([d6850a3](https://github.com/clagentic/clagentic-console/commit/d6850a3f5291f1c5390993c19a981ae5a17b836d))
+* **lr-5dca:** ensure console/ exists before audit migration, drop wrong 0o600 on daemon.log ([c8c1449](https://github.com/clagentic/clagentic-console/commit/c8c14491c95403536a715ea8b0cb100afd318650))
+
 # [1.5.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.4.1...v1.5.0-beta.1) (2026-06-11)
 
 
