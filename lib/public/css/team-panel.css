@@ -1,0 +1,149 @@
+/* team-panel.css - Live team activity panel styles */
+
+.team-panel-body {
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+.team-section-header {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dimmer);
+  margin: 14px 0 6px;
+}
+
+.team-section-header:first-child {
+  margin-top: 0;
+}
+
+.team-member-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.team-member-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-dimmer);
+}
+
+.team-member-status-dot.alive {
+  background: #4caf50;
+}
+
+.team-member-status-dot.idle {
+  background: #ff9800;
+}
+
+.team-member-status-dot.gone,
+.team-member-status-dot.unknown {
+  background: var(--text-dimmer);
+}
+
+.team-member-name {
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.team-member-activity {
+  color: var(--text-dim);
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-task-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.team-task-status {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.team-task-status.completed {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.team-task-status.in_progress {
+  background: rgba(33, 150, 243, 0.15);
+  color: #2196f3;
+}
+
+.team-task-status.pending {
+  background: rgba(158, 158, 158, 0.15);
+  color: var(--text-dim);
+}
+
+.team-task-status.blocked {
+  background: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+}
+
+.team-message-item {
+  border-left: 2px solid var(--border-subtle);
+  padding-left: 8px;
+  margin-bottom: 8px;
+}
+
+.team-message-from {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.team-message-body {
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.beta-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #ff9800;
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 4px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.team-empty-state {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 24px 16px;
+}
+
+.team-empty-state p {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.team-empty-hint {
+  font-size: 12px;
+  color: var(--text-dimmer);
+}
