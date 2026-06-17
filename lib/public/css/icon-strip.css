@@ -832,6 +832,56 @@
    bottom of the strip. Groups the \u2318M hint pill with the users
    list so the hint sits directly above the mate avatars rather than
    floating up in the project section's flex flow. */
+/* --- Permanent Teams button (always visible, above icon-strip-team) --- */
+.icon-strip-team-btn {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.icon-strip-team-btn::before {
+  content: "";
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--bg-alt);
+  transition: background 0.2s ease;
+  z-index: -1;
+}
+
+.icon-strip-team-btn:hover::before {
+  background: var(--accent);
+}
+
+.icon-strip-team-btn:hover {
+  color: #fff;
+}
+
+.icon-strip-team-btn.active::before {
+  background: var(--accent);
+}
+
+.icon-strip-team-btn.active {
+  color: #fff;
+}
+
+.icon-strip-team-btn .lucide {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  z-index: 1;
+}
+
 /* --- Team section: human users + agent favorites --- */
 /* Sits immediately after icon-strip-home, before the separator. */
 .icon-strip-team {
