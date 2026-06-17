@@ -4,6 +4,9 @@
 
 schema_version: 1
 
+# Required by crew_merge.py to identify the PEACHES bot reviewer on GitHub.
+reviewer_bot_login: "clagentic-reviewer[bot]"
+
 reviewer:
   rules:
     - id: clagentic-console.no-bare-clagentic
