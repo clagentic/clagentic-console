@@ -1,3 +1,28 @@
+# [1.5.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.5.0-beta.2...v1.5.0-beta.3) (2026-06-17)
+
+
+### Bug Fixes
+
+* add permanent Teams button to desktop icon strip ([cfe5487](https://github.com/clagentic/clagentic-console/commit/cfe5487ec941afb0df7c51063e9187383bc26e4b))
+* fix external-triggers migration guard to handle both-dirs-exist case ([5fd73d5](https://github.com/clagentic/clagentic-console/commit/5fd73d5270c7598c29fcd741e234a5ad4b501c3f))
+* grouped low-severity backend & frontend correctness fixes (lr-129b) ([3e3a633](https://github.com/clagentic/clagentic-console/commit/3e3a6332a9ab6f333beef3f711b86a6ba2946b4f))
+* **lr-9dab:** remove dead renderSearchResults helper ([16d5ad2](https://github.com/clagentic/clagentic-console/commit/16d5ad24e1a0a14952492f8fb38ccff0be4391f5))
+* **lr-9dab:** remove orphaned .icon-strip-users CSS and dead renderSheetSearch ([92e8c51](https://github.com/clagentic/clagentic-console/commit/92e8c510c91bc7b5e7a625308983cd16aefccdec))
+* **settings:** consolidate Keep Awake + Advanced Memory under top-level Advanced nav ([402c8bf](https://github.com/clagentic/clagentic-console/commit/402c8bf9cc24c2f2079bd6c453d27dbd94bbfda6))
+* **staleness:** move stale warn to daemon startup; remove incorrect postinstall probe (lr-22e8) ([9b4fa21](https://github.com/clagentic/clagentic-console/commit/9b4fa21ffe905d844dd1eb628bbac8912a17036c))
+* **team-panel:** add #team-panel to info-panels pointer-events and hidden rules ([d1b5b98](https://github.com/clagentic/clagentic-console/commit/d1b5b988cdce923186eafe13462710a7e25e6c53)), closes [#team-panel](https://github.com/clagentic/clagentic-console/issues/team-panel)
+* **updater:** persist Early Access toggle to disk ([29eef89](https://github.com/clagentic/clagentic-console/commit/29eef8991fbdfd721c489b289b634497473e9dc4))
+
+
+### Features
+
+* **health:** add stale-inode probe to /api/health + postinstall warn (lr-22e8) ([68e3256](https://github.com/clagentic/clagentic-console/commit/68e3256e91df1afe0d8813ac0eba576cc2460bba))
+* **lr-717d:** add live team-activity panel for agent team sessions ([5d45a51](https://github.com/clagentic/clagentic-console/commit/5d45a514cb2ec4482b9cc8c4a7feac4fc413370c))
+* **lr-9dab:** Team tab on mobile, Team section in icon strip, search in hub ([9b44f45](https://github.com/clagentic/clagentic-console/commit/9b44f45947e5eac5319cd991ec441b8189fadf8a))
+* **lr-9dab:** Team tab on mobile, Team section in icon strip, search in hub ([3a9b3b6](https://github.com/clagentic/clagentic-console/commit/3a9b3b6156131fe53a4ed1e9f432974bf516ca30)), closes [#icon-strip-team](https://github.com/clagentic/clagentic-console/issues/icon-strip-team) [#icon-strip-users](https://github.com/clagentic/clagentic-console/issues/icon-strip-users) [#icon-strip-team](https://github.com/clagentic/clagentic-console/issues/icon-strip-team) [#home-hub-mates](https://github.com/clagentic/clagentic-console/issues/home-hub-mates)
+* **memory:** cgroup-aware context token guard + advanced memory settings (lr-2d91) ([ad722b2](https://github.com/clagentic/clagentic-console/commit/ad722b2535c7bf4ff8935e741bef6df7fa379058))
+* on-demand agent catalog refresh without restart ([6a88d61](https://github.com/clagentic/clagentic-console/commit/6a88d61a9c4ed9340efe7a0d62c8e61988ce8298))
+
 # [1.5.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.5.0-beta.1...v1.5.0-beta.2) (2026-06-12)
 
 
