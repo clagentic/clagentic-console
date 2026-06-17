@@ -832,8 +832,9 @@
    bottom of the strip. Groups the \u2318M hint pill with the users
    list so the hint sits directly above the mate avatars rather than
    floating up in the project section's flex flow. */
-/* --- User avatars (circle, inside the mate section) --- */
-.icon-strip-users {
+/* --- Team section: human users + agent favorites --- */
+/* Sits immediately after icon-strip-home, before the separator. */
+.icon-strip-team {
   width: 56px;
   display: flex;
   flex-direction: column;
@@ -842,8 +843,38 @@
   padding: 4px 0;
 }
 
-.icon-strip-users.hidden {
+.icon-strip-team.hidden {
   display: none;
+}
+
+/* Agent favorite icon — rounded square, visually distinct from circular user avatars */
+.icon-strip-agent {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  flex-shrink: 0;
+  margin: 3px 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  opacity: 0.75;
+}
+
+.icon-strip-agent:hover {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.icon-strip-agent-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  user-select: none;
+  line-height: 1;
 }
 
 /* "Invite" mini button at bottom of user strip */

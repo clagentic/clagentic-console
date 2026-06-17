@@ -125,6 +125,7 @@
         <line x1="29" y1="55" x2="46" y2="55" stroke="url(#cg-strip)" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
     </div>
+    <div class="icon-strip-team" id="icon-strip-team"></div>
     <div class="icon-strip-separator"></div>
     <button type="button" class="icon-strip-hint" id="icon-strip-hint-project" data-switcher-mode="project" aria-label="Switch project"></button>
     <div class="icon-strip-projects" id="icon-strip-projects">
@@ -132,7 +133,6 @@
       <div class="skeleton-icon-strip-item"></div>
     </div>
     <button class="icon-strip-add" id="icon-strip-add" title="Add project"><i data-lucide="plus"></i></button>
-    <div class="icon-strip-users hidden" id="icon-strip-users"></div>
     <div class="icon-strip-me" id="icon-strip-me"></div>
   </div>
 
@@ -144,12 +144,14 @@
         <span>ESC</span>
       </button>
       <div class="home-hub-inner">
+        <div class="hub-search-bar">
+          <i data-lucide="search"></i>
+          <input type="text" id="hub-search-input" placeholder="Search sessions, projects, commands…" autocomplete="off" spellcheck="false" />
+        </div>
         <div class="hub-greeting">
           <h1 id="hub-greeting-text"></h1>
           <p id="hub-greeting-date"></p>
         </div>
-
-        <div id="home-hub-mates" class="home-hub-mates hidden"></div>
 
         <div class="hub-card hub-recent-sessions">
           <div class="hub-card-header">
@@ -532,7 +534,7 @@
         <line x1="29" y1="55" x2="46" y2="55" stroke="url(#cg-mobile)" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
     </button>
-    <button class="mobile-tab" data-tab="search" id="mob-tab-search"><i data-lucide="search"></i><span class="mobile-tab-label">Search</span></button>
+    <button class="mobile-tab" data-tab="team" id="mob-tab-team"><i data-lucide="users"></i><span class="mobile-tab-label">Team</span></button>
     <button class="mobile-tab" data-tab="more" id="mob-tab-more"><i data-lucide="ellipsis"></i><span class="mobile-tab-label">More</span></button>
   </div>
 
