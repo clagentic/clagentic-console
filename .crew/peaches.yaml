@@ -1,1 +1,29 @@
-reviewer_bot_login: "clagentic-reviewer[bot]"
+# .crew/peaches.yaml — PEACHES per-project configuration for clagentic-console
+#
+# Schema: schemas/crew-config.schema.json (schema_version: 1)
+
+schema_version: 1
+
+reviewer:
+  rules:
+    - id: clagentic-console.no-bare-clagentic
+      severity: blocking
+      description: >-
+        The bare string "clagentic" must not appear as a standalone product name
+        or CLI command in user-facing output. Use "Clagentic: Console" (product
+        name) or "clagentic-console" (CLI/binary). Technical identifiers
+        (CLAGENTIC_*, ~/.clagentic/, clagentic-*) are exempt.
+      pattern: '"clagentic[^-_/@\.]'
+      applies_to:
+        - "bin/**"
+        - "lib/**"
+
+    - id: clagentic-console.no-anthropic-sdk
+      severity: blocking
+      description: >-
+        LLM calls must use the claude CLI, not the Anthropic SDK. Any import
+        of @anthropic-ai/sdk or require('anthropic') is a violation.
+      pattern: "(require\\('@anthropic-ai/sdk'\\)|require\\('anthropic'\\)|from '@anthropic-ai/sdk'|from 'anthropic')"
+      applies_to:
+        - "**/*.js"
+        - "**/*.ts"
