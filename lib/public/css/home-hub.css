@@ -79,6 +79,42 @@
 }
 
 
+/* --- Hub search bar (delegates to command palette on interaction) --- */
+.hub-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: text;
+  animation: hubCardIn 0.35s ease;
+}
+
+.hub-search-bar .lucide {
+  width: 16px;
+  height: 16px;
+  color: var(--text-dimmer);
+  flex-shrink: 0;
+}
+
+.hub-search-bar input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  cursor: text;
+}
+
+.hub-search-bar input::placeholder {
+  color: var(--text-dimmer);
+}
+
 /* --- Greeting --- */
 .hub-greeting {
   text-align: center;
