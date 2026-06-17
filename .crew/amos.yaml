@@ -1,3 +1,20 @@
+# .crew/amos.yaml — AMoS per-project configuration for clagentic-console
+#
+# Schema: schemas/crew-config.schema.json (schema_version: 1)
+
+schema_version: 1
+
+merge_allowed: false
+
+branch_conventions:
+  allowed_prefixes:
+    - feat/
+    - fix/
+    - chore/
+    - docs/
+    - refactor/
+  # include_task_id: true
+
 scope:
   allowed_paths:
     - bin/**
@@ -6,28 +23,25 @@ scope:
     - test/**
     - deploy/**
     - scripts/**
+    - docs/**
     - package.json
     - README.md
-    - docs/**
+    - CHANGELOG.md
 
-branch_conventions:
-  feat: "feat/lr-{task_id}-{slug}"
-  fix: "fix/lr-{task_id}-{slug}"
-  chore: "chore/lr-{task_id}-{slug}"
+focus:
+  - "Product name in user-facing text: 'Clagentic: Console' (capital C, colon, space, capital C)"
+  - "CLI binary / command: clagentic-console (never bare 'clagentic')"
+  - "npm package: @clagentic/console"
+  - "Before committing changes to bin/cli.js or lib/**/*.js, grep for brand violations: grep -n '\"clagentic[^-_/@]' bin/cli.js lib/**/*.js"
+  - "LLM calls must use the claude CLI, not the Anthropic SDK"
 
+avoid:
+  - "Do not use bare 'clagentic' as a product name or CLI command in any user-facing string"
+  - "Do not add Anthropic SDK dependencies — use the claude CLI instead"
 
-brand_rules:
-  # MANDATORY — violating these is a hard error, not a style note.
-  #
-  # Product name (user-facing text, help strings, log output): "Clagentic: Console"
-  # CLI binary / command:                                       clagentic-console
-  # npm package:                                                @clagentic/console
-  # NEVER use bare "clagentic" as a product name or command.
-  #
-  # Technical identifiers that ARE correct:
-  #   CLAGENTIC_*   (env var prefix)
-  #   ~/.clagentic/ (home dir)
-  #   clagentic-*   (hyphenated service names: clagentic-relay, clagentic-router, etc.)
-  #
-  # Before committing any change to bin/cli.js or lib/**/*.js, grep for violations:
-  #   grep -n '"clagentic[^-_/@]' bin/cli.js lib/**/*.js
+# Builder bot identity for commit re-authoring (lr-66c2).
+# crew_push.py rewrites branch commits to this identity before push so that
+# AMoS-authored commits are attributed to the builder App, not the operator.
+builder_identity:
+  name: "clagentic-builder[bot]"
+  email: "290147524+clagentic-builder[bot]@users.noreply.github.com"
