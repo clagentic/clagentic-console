@@ -147,4 +147,45 @@ if (selfUpdate) {
   log(`skipping start (daemon was not running or is already running — operator controls restarts)`);
 }
 
+// Staleness check: warn if the running daemon is still serving old code after this install.
+// Only runs on Linux, only when not a self-update (self-updates manage their own handoff).
+// Entirely wrapped in try/catch — must never break postinstall.
+if (process.platform === 'linux' && !selfUpdate) {
+  try {
+    var installedVersion = require('../package.json').version;
+    var clagenHome = process.env.CLAGENTIC_HOME ||
+      path.join(process.env.HOME || process.env.REAL_HOME || '/root', '.clagentic');
+    var cfgPath = path.join(clagenHome, 'config.json');
+    var daemonPid = null;
+    try {
+      var cfgRaw = fs.readFileSync(cfgPath, 'utf8');
+      var cfg = JSON.parse(cfgRaw);
+      if (cfg && cfg.pid) {
+        daemonPid = cfg.pid;
+      }
+    } catch (_) {}
+
+    if (daemonPid) {
+      var mapsPath = '/proc/' + daemonPid + '/maps';
+      var isStale = false;
+      try {
+        var mapsRaw = fs.readFileSync(mapsPath, 'utf8');
+        isStale = mapsRaw.split('\n').some(function(line) {
+          return line.includes(' (deleted)');
+        });
+      } catch (_) {
+        // Daemon not running or /proc not available — nothing to warn about.
+      }
+
+      if (isStale) {
+        console.warn(`${PREFIX} WARNING: running daemon is serving STALE code`);
+        console.warn(`${PREFIX} WARNING: installed version: ${installedVersion} — daemon is still on the old build`);
+        console.warn(`${PREFIX} WARNING: Restart the daemon to load the new code:`);
+        console.warn(`${PREFIX} WARNING:   systemctl restart clagentic-console`);
+        console.warn(`${PREFIX} WARNING:   — or — clagentic-console --restart`);
+      }
+    }
+  } catch (_) {}
+}
+
 log('done');
