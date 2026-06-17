@@ -877,20 +877,6 @@
   line-height: 1;
 }
 
-/* --- User avatars (circle, inside the team section) --- */
-.icon-strip-users {
-  width: 56px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 4px 0;
-}
-
-.icon-strip-users.hidden {
-  display: none;
-}
-
 /* "Invite" mini button at bottom of user strip */
 .icon-strip-invite {
   position: relative;
