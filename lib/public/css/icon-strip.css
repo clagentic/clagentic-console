@@ -828,61 +828,12 @@
   height: 22px;
 }
 
-/* Mate section wrapper — pinned just above the user-island at the
-   bottom of the strip. Groups the \u2318M hint pill with the users
-   list so the hint sits directly above the mate avatars rather than
-   floating up in the project section's flex flow. */
-/* --- Team section: human users + agent favorites --- */
-/* Sits immediately after icon-strip-home, before the separator. */
-.icon-strip-team {
-  width: 56px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 4px 0;
-}
-
-.icon-strip-team.hidden {
-  display: none;
-}
-
-/* Agent favorite icon — rounded square, visually distinct from circular user avatars */
-.icon-strip-agent {
+/* --- Permanent Teams button (always visible, opens team panel) --- */
+.icon-strip-team-btn {
   position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: default;
-  flex-shrink: 0;
-  margin: 3px 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  opacity: 0.75;
-}
-
-.icon-strip-agent:hover {
-  opacity: 1;
-  transform: scale(1.08);
-}
-
-.icon-strip-agent-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
-  pointer-events: none;
-  user-select: none;
-  line-height: 1;
-}
-
-/* "Invite" mini button at bottom of user strip */
-.icon-strip-invite {
-  position: relative;
-  width: 40px;
-  height: 32px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 0;
   background: transparent;
   border: none;
   display: flex;
@@ -890,102 +841,43 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  color: var(--text-dimmer);
-  transition: color 0.2s, background 0.2s;
+  color: var(--text-secondary);
 }
 
-.icon-strip-invite:hover {
-  color: var(--accent);
-  background: rgba(var(--overlay-rgb), 0.08);
-}
-
-.icon-strip-invite .lucide {
-  width: 16px;
-  height: 16px;
-}
-
-.icon-strip-user {
-  position: relative;
-  width: 42px;
-  height: 42px;
-  border-radius: 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.icon-strip-user-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  opacity: 0.7;
-}
-
-.icon-strip-user:hover .icon-strip-user-avatar {
-  opacity: 1;
-  transform: scale(1.08);
-}
-
-.icon-strip-user.active .icon-strip-user-avatar {
-  opacity: 1;
-  box-shadow: 0 0 0 2px var(--accent);
-}
-
-/* Primary mate: full color (no desaturate), no ring */
-.icon-strip-primary-mate {
-  opacity: 1;
-  border-radius: 8px;
-  filter: saturate(1) !important;
-}
-
-/* Online status dot (bottom-right on avatar, like project blink dot) */
-.icon-strip-user-online {
+.icon-strip-team-btn::before {
+  content: "";
   position: absolute;
-  bottom: 5px;
-  right: 5px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text-dimmer);
-  border: 2px solid var(--sidebar-bg);
-  opacity: 1;
-  transition: opacity 0.2s, background 0.3s;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--bg-alt);
+  transition: background 0.2s ease;
+  z-index: -1;
 }
 
-.icon-strip-user.online .icon-strip-user-online {
-  background: var(--success);
+.icon-strip-team-btn:hover::before {
+  background: var(--accent);
 }
 
-/* DM unread badge */
-.icon-strip-user-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  background: #e74c3c;
+.icon-strip-team-btn:hover {
   color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
-  line-height: 18px;
-  text-align: center;
-  box-shadow: 0 0 0 2px var(--bg);
-  z-index: 2;
 }
 
-.icon-strip-user-badge.has-unread {
-  display: flex;
+.icon-strip-team-btn.active::before {
+  background: var(--accent);
 }
+
+.icon-strip-team-btn.active {
+  color: #fff;
+}
+
+.icon-strip-team-btn .lucide {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  z-index: 1;
+}
+
 
 /* Project unread badge */
 .icon-strip-project-badge {
@@ -1012,19 +904,6 @@
 .icon-strip-project-badge.has-unread {
   display: flex;
 }
-
-/* Pill for user icons */
-.icon-strip-user:hover .icon-strip-pill {
-  opacity: 1;
-  height: 20px;
-}
-
-.icon-strip-user.active .icon-strip-pill {
-  opacity: 1;
-  height: 32px;
-}
-
-/* DM mode: keep same position (user-island gone but layout stays) */
 
 /* --- My avatar at bottom of icon strip (always present, behind user-island) --- */
 /* Positioned to align with icon-strip center (72px / 2 = 36px) */
@@ -1523,14 +1402,6 @@ select.wt-modal-input {
   border-radius: 12px;
   background: var(--text-muted, #888);
   margin: 5px auto;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
-}
-.skeleton-icon-strip-user {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--text-muted, #888);
-  margin: 4px auto;
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
