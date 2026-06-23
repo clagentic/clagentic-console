@@ -5,44 +5,51 @@ var fs = require("fs");
 var path = require("path");
 var os = require("os");
 
-var { generateAuthToken, verifyPin } = require("../lib/server");
 var { safePath, validateEnvString } = require("../lib/project");
 var { chmodSafe } = require("../lib/config");
 
-// ============================================================
-// 1. PIN scrypt hashing / verification
-// ============================================================
-
-test("generateAuthToken returns scrypt format (salt:hash)", function () {
-  var token = generateAuthToken("123456");
-  assert.ok(token.indexOf(":") !== -1, "Token should contain a colon separator");
-  var parts = token.split(":");
-  assert.strictEqual(parts.length, 2, "Token should have exactly two parts");
-  assert.strictEqual(parts[0].length, 32, "Salt should be 16 bytes = 32 hex chars");
-  assert.strictEqual(parts[1].length, 128, "Hash should be 64 bytes = 128 hex chars");
+// users-auth is the internal module backing PIN operations (lr-ec2d)
+var usersAuthModule = require("../lib/users-auth");
+var usersAuth = usersAuthModule.attachAuth({
+  loadUsers: function () { return { multiUser: true, setupCode: null, users: [], invites: [], smtp: null }; },
+  saveUsers: function () {},
+  findAdmin: function () { return null; },
 });
 
-test("generateAuthToken produces different tokens for same PIN (random salt)", function () {
-  var token1 = generateAuthToken("123456");
-  var token2 = generateAuthToken("123456");
+// ============================================================
+// 1. PIN scrypt hashing / verification (via users-auth, lr-ec2d)
+// ============================================================
+
+test("hashPin returns scrypt format (scrypt:salt:hash)", function () {
+  var token = usersAuth.hashPin("123456");
+  assert.ok(token.startsWith("scrypt:"), "Hash should start with scrypt:");
+  var parts = token.split(":");
+  assert.strictEqual(parts.length, 3, "Hash should have three parts");
+  assert.strictEqual(parts[1].length, 32, "Salt should be 16 bytes = 32 hex chars");
+  assert.strictEqual(parts[2].length, 128, "Hash should be 64 bytes = 128 hex chars");
+});
+
+test("hashPin produces different tokens for same PIN (random salt)", function () {
+  var token1 = usersAuth.hashPin("123456");
+  var token2 = usersAuth.hashPin("123456");
   assert.notStrictEqual(token1, token2, "Each call should produce a unique salt");
 });
 
 test("verifyPin correctly validates scrypt hash", function () {
-  var token = generateAuthToken("mypin");
-  assert.strictEqual(verifyPin("mypin", token), true, "Correct PIN should verify");
-  assert.strictEqual(verifyPin("wrongpin", token), false, "Wrong PIN should not verify");
+  var token = usersAuth.hashPin("mypin");
+  assert.strictEqual(usersAuth.verifyPin("mypin", token), true, "Correct PIN should verify");
+  assert.strictEqual(usersAuth.verifyPin("wrongpin", token), false, "Wrong PIN should not verify");
 });
 
-test("verifyPin handles legacy SHA256 format", function () {
-  var legacyHash = crypto.createHash("sha256").update("clay:123456").digest("hex");
-  assert.strictEqual(verifyPin("123456", legacyHash), true, "Correct PIN should verify with legacy hash");
-  assert.strictEqual(verifyPin("000000", legacyHash), false, "Wrong PIN should not verify with legacy hash");
+test("verifyPin handles legacy SHA256 format (clay-user: prefix)", function () {
+  var legacyHash = crypto.createHash("sha256").update("clay-user:123456").digest("hex");
+  assert.strictEqual(usersAuth.verifyPin("123456", legacyHash), true, "Correct PIN should verify with legacy hash");
+  assert.strictEqual(usersAuth.verifyPin("000000", legacyHash), false, "Wrong PIN should not verify with legacy hash");
 });
 
 test("verifyPin returns false for null/empty stored hash", function () {
-  assert.strictEqual(verifyPin("123456", null), false);
-  assert.strictEqual(verifyPin("123456", ""), false);
+  assert.strictEqual(usersAuth.verifyPin("123456", null), false);
+  assert.strictEqual(usersAuth.verifyPin("123456", ""), false);
 });
 
 // ============================================================
@@ -240,18 +247,18 @@ test("chmodSafe does not throw on nonexistent file", function () {
 });
 
 // ============================================================
-// 7. PIN hash migration detection
+// 7. PIN hash migration detection (lr-ec2d)
 // ============================================================
 
-test("legacy SHA256 hash is detected (no colon)", function () {
-  var legacyHash = crypto.createHash("sha256").update("clay:123456").digest("hex");
-  assert.strictEqual(legacyHash.indexOf(":"), -1, "Legacy hash should not contain colon");
+test("legacy SHA256 hash is detected (no scrypt: prefix)", function () {
+  var legacyHash = crypto.createHash("sha256").update("clay-user:123456").digest("hex");
+  assert.ok(!legacyHash.startsWith("scrypt:"), "Legacy hash should not start with scrypt:");
   assert.strictEqual(legacyHash.length, 64, "SHA256 hex should be 64 chars");
 });
 
-test("scrypt hash is detected (contains colon)", function () {
-  var scryptHash = generateAuthToken("123456");
-  assert.ok(scryptHash.indexOf(":") !== -1, "Scrypt hash should contain colon");
+test("scrypt hash is detected (starts with scrypt:)", function () {
+  var scryptHash = usersAuth.hashPin("123456");
+  assert.ok(scryptHash.startsWith("scrypt:"), "Scrypt hash should start with scrypt:");
 });
 
 // ============================================================
@@ -275,17 +282,16 @@ function makeNullPtyManager() {
   return null;
 }
 
-test("terminal manager: single-user mode allows any ws to attach", function () {
+test("terminal manager: unauthenticated caller (system context) is handled gracefully (lr-ec2d)", function () {
+  // Always multi-user now; system-context callers (null _clayUser) are still allowed to
+  // call the terminal manager without an authenticated ws — they simply get full access.
   var tm = createTerminalManager({
     cwd: "/tmp",
     send: function () {},
     sendTo: function () {},
-    isMultiUser: false,
+    isMultiUser: true,
   });
-  // In single-user mode, create() will call createTerminal which may not have node-pty.
-  // We only test that the attach/write/close/rename signatures accept the new callerWs
-  // parameter without throwing (no actual PTY required).
-  var ws = makeWs(null);
+  var ws = makeWs(null); // no _clayUser
   // attach to non-existent terminal returns false gracefully
   assert.strictEqual(tm.attach(99, ws), false, "attach to missing id returns false");
   assert.doesNotThrow(function () { tm.write(99, "data", ws); }, "write to missing id does not throw");
@@ -381,7 +387,7 @@ test("terminal manager: list() filters by caller userId in multi-user mode", fun
   assert.ok(!listForB.some(function (s) { return s.id === 1; }), "user-B does not see user-A terminal");
 
   assert.strictEqual(listForAdmin.length, 3, "admin sees all terminals");
-  assert.strictEqual(listForNoUser.length, 3, "unauthenticated client sees all (single-user compat)");
+  assert.strictEqual(listForNoUser.length, 3, "unauthenticated client (system context) sees all terminals");
 });
 
 // ============================================================
@@ -418,13 +424,6 @@ test("push routing: sendPushToUser is called for user-specific events in multi-u
   assert.strictEqual(broadcastCalls.length, 0, "no broadcast pushes in multi-user mode");
   assert.strictEqual(userCalls[0].userId, "user-A", "done notification routed to owner");
   assert.strictEqual(userCalls[1].userId, "user-A", "ask_user notification routed to owner");
-
-  // Single-user mode — should broadcast
-  broadcastCalls.length = 0;
-  userCalls.length = 0;
-  routePush(false, null, fakePush, donePayload);
-  assert.strictEqual(broadcastCalls.length, 1, "broadcast in single-user mode");
-  assert.strictEqual(userCalls.length, 0, "no user-targeted push in single-user mode");
 });
 
 test("push routing: falls back to sendPush when no ownerId in multi-user mode", function () {
@@ -454,22 +453,23 @@ test("push routing: falls back to sendPush when no ownerId in multi-user mode", 
 // 10. dangerouslySkipPermissions scope gate (lr-4d6a)
 // ============================================================
 
-test("dangerouslySkipPermissions is disabled in multi-user mode regardless of config", function () {
+test("dangerouslySkipPermissions is always disabled — single-user mode removed (lr-ec2d)", function () {
+  // isMultiUser() always returns true; the flag is always suppressed.
   // Mirrors the gate in project.js:
   //   var dangerouslySkipPermissions = dangerouslySkipPermissionsConfigured && !usersModule.isMultiUser();
-  function computeFlag(configured, isMultiUser) {
+  function computeFlag(configured) {
+    var isMultiUser = true; // always, lr-ec2d
     return configured && !isMultiUser;
   }
 
-  assert.strictEqual(computeFlag(true, false), true,  "single-user: flag active when configured");
-  assert.strictEqual(computeFlag(false, false), false, "single-user: flag inactive when not configured");
-  assert.strictEqual(computeFlag(true, true), false,  "multi-user: flag suppressed even when configured");
-  assert.strictEqual(computeFlag(false, true), false,  "multi-user: flag inactive when not configured");
+  assert.strictEqual(computeFlag(true), false,  "flag suppressed even when configured (always multi-user)");
+  assert.strictEqual(computeFlag(false), false, "flag inactive when not configured");
 });
 
-test("dangerouslySkipPermissionsBlocked is set in info message only when configured+multi-user", function () {
-  // Mirrors the gate in project-connection.js
-  function buildInfoFields(configured, isMultiUser) {
+test("dangerouslySkipPermissionsBlocked is always set when configured (lr-ec2d)", function () {
+  // isMultiUser() always returns true after lr-ec2d; blocked is always true when configured.
+  function buildInfoFields(configured) {
+    var isMultiUser = true; // always, lr-ec2d
     var active = configured && !isMultiUser;
     var fields = { dangerouslySkipPermissions: active };
     if (configured && !active) {
@@ -478,17 +478,13 @@ test("dangerouslySkipPermissionsBlocked is set in info message only when configu
     return fields;
   }
 
-  var singleConfigured = buildInfoFields(true, false);
-  assert.strictEqual(singleConfigured.dangerouslySkipPermissions, true, "single-user configured: active=true");
-  assert.ok(!singleConfigured.dangerouslySkipPermissionsBlocked, "single-user configured: blocked field absent");
+  var configured = buildInfoFields(true);
+  assert.strictEqual(configured.dangerouslySkipPermissions, false, "configured: active=false (multi-user always on)");
+  assert.strictEqual(configured.dangerouslySkipPermissionsBlocked, true, "configured: blocked=true");
 
-  var multiConfigured = buildInfoFields(true, true);
-  assert.strictEqual(multiConfigured.dangerouslySkipPermissions, false, "multi-user configured: active=false");
-  assert.strictEqual(multiConfigured.dangerouslySkipPermissionsBlocked, true, "multi-user configured: blocked=true");
-
-  var multiNotConfigured = buildInfoFields(false, true);
-  assert.strictEqual(multiNotConfigured.dangerouslySkipPermissions, false, "multi-user not configured: active=false");
-  assert.ok(!multiNotConfigured.dangerouslySkipPermissionsBlocked, "multi-user not configured: blocked field absent");
+  var notConfigured = buildInfoFields(false);
+  assert.strictEqual(notConfigured.dangerouslySkipPermissions, false, "not configured: active=false");
+  assert.ok(!notConfigured.dangerouslySkipPermissionsBlocked, "not configured: blocked field absent");
 });
 
 // ============================================================
@@ -526,7 +522,7 @@ test("getScrollback returns null for unauthorized caller in multi-user mode", fu
   assert.ok(isAuthorizedLocal(session, wsOwner, true), "owner can read their own scrollback");
   assert.ok(!isAuthorizedLocal(session, wsOther, true), "non-owner cannot read scrollback in multi-user mode");
   assert.ok(isAuthorizedLocal(session, wsAdmin, true), "admin can read any scrollback");
-  assert.ok(isAuthorizedLocal(session, wsOther, false), "non-owner can read in single-user mode");
+  // lr-ec2d: single-user mode removed; isMultiUser is always true — no single-user branch tested
 });
 
 // ============================================================
@@ -775,16 +771,19 @@ test("switchSession: rejects unauthorized access in multi-user mode", function (
 // These call the real handler functions — tests fail if isRequestAuthed
 // checks are removed from production code.
 
+// makeSettingsCtx: isAuthed controls whether getMultiUserFromReq returns a user.
+// isMultiUser param is kept for backward compatibility but ignored (always true, lr-ec2d).
 function makeSettingsCtx(isAuthed, isMultiUser) {
+  var fakeUser = isAuthed ? { id: "test-user", username: "testuser", role: "user", pinHash: null, profile: {} } : null;
   return {
     users: {
-      isMultiUser: function () { return !!isMultiUser; },
-      enableMultiUser: function () { return { setupCode: "ABC123" }; },
+      isMultiUser: function () { return true; },
+      updateUserProfile: function () { return { ok: true, profile: {} }; },
     },
-    getMultiUserFromReq: function () { return null; },
+    getMultiUserFromReq: function () { return fakeUser; },
     isRequestAuthed: function () { return !!isAuthed; },
-    projects: [],
-    opts: { pinHash: "fakehash" },
+    projects: { forEach: function () {} },
+    opts: {},
     CONFIG_DIR: os.tmpdir(),
   };
 }
@@ -807,92 +806,51 @@ function makeRes() {
   return result;
 }
 
-test("enable-multiuser: rejects unauthenticated request with 401 in single-user PIN mode", function () {
+test("enable-multiuser: endpoint removed — single-user mode no longer exists (lr-ec2d)", function () {
+  // POST /api/settings/enable-multiuser was removed along with single-user mode (lr-ec2d).
+  // The handler returns false (not handled) for this route, so status stays null.
   var { attachSettings } = require("../lib/server-settings");
-
-  // Unauthenticated: isRequestAuthed returns false
-  var ctx = makeSettingsCtx(false, false);
+  var ctx = makeSettingsCtx(true, true);
   var handler = attachSettings(ctx).handleRequest;
 
   var req = makeReq("POST", "/api/settings/enable-multiuser");
   var res = makeRes();
-  handler(req, res, "/api/settings/enable-multiuser");
+  var handled = handler(req, res, "/api/settings/enable-multiuser");
 
-  assert.strictEqual(res.status, 401, "unauthenticated caller gets 401");
-  assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
-
-  // Authenticated: isRequestAuthed returns true — proceeds past auth gate
-  var ctx2 = makeSettingsCtx(true, false);
-  var handler2 = attachSettings(ctx2).handleRequest;
-
-  var req2 = makeReq("POST", "/api/settings/enable-multiuser");
-  var res2 = makeRes();
-  handler2(req2, res2, "/api/settings/enable-multiuser");
-
-  assert.strictEqual(res2.status, 200, "authenticated caller gets 200");
-
-  // Already multi-user: gets 400 before reaching auth check
-  var ctx3 = makeSettingsCtx(false, true);
-  var handler3 = attachSettings(ctx3).handleRequest;
-
-  var req3 = makeReq("POST", "/api/settings/enable-multiuser");
-  var res3 = makeRes();
-  handler3(req3, res3, "/api/settings/enable-multiuser");
-
-  assert.strictEqual(res3.status, 400, "already multi-user returns 400 regardless of auth");
+  assert.strictEqual(handled, false, "removed endpoint returns false from handleRequest");
+  assert.strictEqual(res.status, null, "no response written for removed endpoint");
 });
 
-test("PUT /api/profile: rejects unauthenticated request with 401 in single-user mode", function (t, done) {
+test("GET /api/profile: rejects unauthenticated request with 401 (multi-user, lr-ec2d)", function () {
   var { attachSettings } = require("../lib/server-settings");
 
-  // Unauthenticated: isRequestAuthed returns false
-  var ctx = makeSettingsCtx(false, false);
+  // Unauthenticated: getMultiUserFromReq returns null
+  var ctx = makeSettingsCtx(false, true);
   var handler = attachSettings(ctx).handleRequest;
 
-  var req = makeReq("PUT", "/api/profile");
+  var req = makeReq("GET", "/api/profile");
   var res = makeRes();
   handler(req, res, "/api/profile");
 
-  // Emit a valid JSON body so parse succeeds and the auth check is reached
-  req._emit("data", '{"name":"test"}');
-  req._end();
+  assert.strictEqual(res.status, 401, "unauthenticated GET /api/profile gets 401");
+  assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
 
-  setImmediate(function () {
-    assert.strictEqual(res.status, 401, "unauthenticated PUT /api/profile gets 401 in single-user mode");
-    assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
+  // Authenticated: getMultiUserFromReq returns a user → returns profile
+  var ctx2 = makeSettingsCtx(true, true);
+  var handler2 = attachSettings(ctx2).handleRequest;
 
-    // Authenticated: isRequestAuthed returns true — write proceeds
-    var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "profile-test-"));
-    var ctx2 = makeSettingsCtx(true, false);
-    ctx2.CONFIG_DIR = tmpDir;
-    var handler2 = attachSettings(ctx2).handleRequest;
+  var req2 = makeReq("GET", "/api/profile");
+  var res2 = makeRes();
+  handler2(req2, res2, "/api/profile");
 
-    var req2 = makeReq("PUT", "/api/profile");
-    var res2 = makeRes();
-    handler2(req2, res2, "/api/profile");
-    req2._emit("data", '{"name":"alice"}');
-    req2._end();
-
-    setImmediate(function () {
-      try {
-        assert.strictEqual(res2.status, 200, "authenticated PUT /api/profile succeeds");
-        var written = fs.existsSync(path.join(tmpDir, "profile.json"));
-        assert.ok(written, "authenticated caller triggers profile.json write");
-        fs.rmSync(tmpDir, { recursive: true });
-        done();
-      } catch (e) {
-        try { fs.rmSync(tmpDir, { recursive: true }); } catch (_) {}
-        done(e);
-      }
-    });
-  });
+  assert.strictEqual(res2.status, 200, "authenticated GET /api/profile succeeds");
 });
 
-test("POST /api/avatar: rejects unauthenticated request with 401 in single-user mode", function (t, done) {
+test("POST /api/avatar: rejects unauthenticated request with 401 (multi-user, lr-ec2d)", function (t, done) {
   var { attachSettings } = require("../lib/server-settings");
 
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "avatar-test-"));
-  var ctx = makeSettingsCtx(false, false);
+  var ctx = makeSettingsCtx(false, true);
   ctx.CONFIG_DIR = tmpDir;
   var handler = attachSettings(ctx).handleRequest;
 
@@ -907,7 +865,7 @@ test("POST /api/avatar: rejects unauthenticated request with 401 in single-user 
 
   setImmediate(function () {
     try {
-      assert.strictEqual(res.status, 401, "unauthenticated POST /api/avatar gets 401 in single-user mode");
+      assert.strictEqual(res.status, 401, "unauthenticated POST /api/avatar gets 401");
       assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
       var avatarDir = path.join(tmpDir, "avatars");
       var written = fs.existsSync(avatarDir) && fs.readdirSync(avatarDir).length > 0;
@@ -951,20 +909,23 @@ test("skills proxy: rejects unauthenticated request with 401 in multi-user mode"
   handler403(req403, res403, "/api/skills");
   assert.strictEqual(res403.status, 403, "authenticated user without skills permission gets 403");
 
-  // Single-user mode — gate skipped, proceeds past auth to fetch (status not 401/403)
-  var ctx200 = {
-    users: { isMultiUser: function () { return false; } },
+  // lr-ec2d: single-user mode removed; authenticated user with skills permission proceeds
+  var ctxOk = {
+    users: {
+      isMultiUser: function () { return true; },
+      getEffectivePermissions: function () { return { skills: true }; },
+    },
     osUsers: [],
-    getMultiUserFromReq: function () { return null; },
+    getMultiUserFromReq: function () { return { id: "u2" }; },
   };
-  var handler200 = attachSkills(ctx200).handleRequest;
-  var req200 = makeReq("GET", "/api/skills?tab=all");
-  req200.url = "/api/skills?tab=all";
-  var res200 = makeRes();
-  handler200(req200, res200, "/api/skills");
-  // Response will be async (fetch); status is null now — just verify it's not 401/403
-  assert.ok(res200.status !== 401 && res200.status !== 403,
-    "single-user mode skips permission gate (no 401 or 403)");
+  var handlerOk = attachSkills(ctxOk).handleRequest;
+  var reqOk = makeReq("GET", "/api/skills?tab=all");
+  reqOk.url = "/api/skills?tab=all";
+  var resOk = makeRes();
+  handlerOk(reqOk, resOk, "/api/skills");
+  // Response is async (fetch); status is null now — just verify it's not 401/403
+  assert.ok(resOk.status !== 401 && resOk.status !== 403,
+    "authenticated user with skills permission is not rejected (no 401 or 403)");
 });
 
 // ============================================================
