@@ -236,23 +236,26 @@ test("3c: kill_process allowed for admin in multi-user mode", function() {
   }
 });
 
-test("3c: kill_process allowed in single-user mode (no auth required)", function() {
+test("3c: kill_process denied for unauthenticated caller (single-user mode removed, lr-ec2d)", function() {
   var killed = [];
   var origKill = process.kill.bind(process);
   process.kill = function(pid, sig) { killed.push({ pid: pid, sig: sig }); };
 
-  var stub = makeCtx();
-  // Single-user mode
-  stub.ctx.usersModule.isMultiUser = function() { return false; };
+  var errors = [];
+  var stub = makeCtx({
+    sendTo: function(target, msg) { if (msg.type === "error") errors.push(msg); },
+  });
   stub.ctx.sdk.isClaudeProcess = function() { return true; };
 
   try {
     var h = attachSessions(stub.ctx);
-    var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+    // No _clayUser — unauthenticated caller
+    var ws = { _session: stub.wsSession, _clayUser: null };
     h.handleSessionsMessage(ws, { type: "kill_process", pid: 99999 });
 
-    assert.equal(killed.length, 1,
-      "kill_process should work without auth in single-user mode");
+    assert.equal(killed.length, 0,
+      "kill_process must not fire without authentication");
+    assert.equal(errors.length, 1, "an error should be returned to caller");
   } finally {
     process.kill = origKill;
   }
