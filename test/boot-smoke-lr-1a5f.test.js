@@ -52,16 +52,20 @@ function findFreePort() {
 }
 
 function waitForServer(port, timeoutMs) {
+  // Probe GET / as a boot liveness indicator — the daemon always handles this route
+  // (redirects to login page or serves admin setup). Any HTTP response means it is up.
+  // lr-ec2d: /info now requires auth; use / as a protocol-level liveness probe instead.
   var start = Date.now();
   return new Promise(function (resolve, reject) {
     function attempt() {
       if (Date.now() - start > timeoutMs) {
-        reject(new Error("daemon did not respond on /info within " + timeoutMs + " ms"));
+        reject(new Error("daemon did not respond within " + timeoutMs + " ms"));
         return;
       }
-      var req = http.get("http://127.0.0.1:" + port + "/info", function (res) {
+      var req = http.get("http://127.0.0.1:" + port + "/", function (res) {
         res.resume();
-        if (res.statusCode === 200) { resolve(); }
+        // Any response (200, 302, 401, 404) means the daemon is up
+        if (res.statusCode) { resolve(); }
         else { setTimeout(attempt, 250); }
       });
       req.on("error", function () { setTimeout(attempt, 250); });
@@ -98,6 +102,35 @@ function killAndWait(proc) {
 
 // ── test ─────────────────────────────────────────────────────────────────────
 
+// Perform an HTTP POST and return { status, body, headers }.
+function httpPost(url, body) {
+  return new Promise(function (resolve, reject) {
+    var parsed = new (require("url").URL)(url);
+    var bodyStr = typeof body === "string" ? body : JSON.stringify(body);
+    var opts = {
+      hostname: parsed.hostname,
+      port: parseInt(parsed.port, 10),
+      path: parsed.pathname + (parsed.search || ""),
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(bodyStr),
+      },
+    };
+    var req = http.request(opts, function (res) {
+      var b = "";
+      res.setEncoding("utf8");
+      res.on("data", function (c) { b += c; });
+      res.on("end", function () {
+        resolve({ status: res.statusCode, body: b, headers: res.headers });
+      });
+    });
+    req.on("error", reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
 test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TEST_TIMEOUT_MS }, function (t, done) {
   var tmpHome    = null;
   var daemonProc = null;
@@ -116,6 +149,10 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
     });
   });
 
+  var SMOKE_SETUP_CODE = "SMOKETEST";
+  var SMOKE_PIN = "123456";
+  var SMOKE_USERNAME = "smokeadmin";
+
   findFreePort().then(function (port) {
     // ── 1. Isolated home + minimal config ────────────────────────────────────
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-smoke-"));
@@ -127,11 +164,20 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
       port:            port,
       host:            "127.0.0.1",
       tls:             false,
-      pinHash:         null,
-      mode:            "single",
-      setupCompleted:  true,
       debug:           false,
-      projects: [{ path: projectDir, slug: "smoke-project", addedAt: Date.now() }],
+      projects: [{ path: projectDir, slug: "smoke-project", addedAt: Date.now(), visibility: "public" }],
+    }, null, 2), { mode: 0o600 });
+
+    // Pre-seed users.json with a known setup code so the smoke test can authenticate.
+    // lr-ec2d: single-user mode removed; system always runs in multi-user mode.
+    var usersFile = path.join(tmpHome, "console", "users.json");
+    fs.mkdirSync(path.dirname(usersFile), { recursive: true });
+    fs.writeFileSync(usersFile, JSON.stringify({
+      multiUser: true,
+      setupCode: SMOKE_SETUP_CODE,
+      users: [],
+      invites: [],
+      smtp: null,
     }, null, 2), { mode: 0o600 });
 
     // ── 2. Spawn daemon ───────────────────────────────────────────────────────
@@ -151,27 +197,99 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
       }
     });
 
-    // ── 3. Check 1 — HTTP /info responds ─────────────────────────────────────
+    // ── 3. Check 1 — wait for daemon (uses /auth/setup GET as liveness probe) ─
+    // /auth/setup is served without auth so it is a reliable boot indicator.
     return waitForServer(port, DAEMON_READY_MS).then(function () { return port; });
 
   }).then(function (port) {
-    // ── 4. Check 2 — frontend HTML served with 200 ───────────────────────────
-    return httpGet("http://127.0.0.1:" + port + "/p/smoke-project/").then(function (res) {
-      assert.strictEqual(res.status, 200,
-        "Expected HTTP 200 for frontend page, got " + res.status);
-      assert.ok(
-        res.body.includes("<html") || res.body.includes("<!DOCTYPE"),
-        "Expected HTML response for frontend page"
-      );
-      return port;
+    // ── 4. Authenticate: create admin via /auth/setup ─────────────────────────
+    return httpPost("http://127.0.0.1:" + port + "/auth/setup", {
+      setupCode: SMOKE_SETUP_CODE,
+      username:  SMOKE_USERNAME,
+      pin:       SMOKE_PIN,
+    }).then(function (setupRes) {
+      assert.strictEqual(setupRes.status, 200, "admin setup should succeed, got: " + setupRes.status + " " + setupRes.body.slice(0, 200));
+      var setCookie = setupRes.headers["set-cookie"];
+      assert.ok(setCookie, "setup should set a session cookie");
+      // Extract the cookie value (first cookie in the array)
+      var cookieHeader = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+      return cookieHeader;
+    }).then(function (cookieHeader) {
+      // Give the daemon a moment to finish writing users.json to disk.
+      // The setup handler calls saveUsers() asynchronously via store.js; findUserById()
+      // reads from disk, so there is a brief window where the user is in memory
+      // but not yet on disk. A 150ms pause is enough for the atomic write to complete.
+      // TODO(lr-ec2d): convert findUserById to use an in-memory user cache so this delay is unnecessary.
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve({ port: port, cookieHeader: cookieHeader }); }, 150);
+      });
     });
 
-  }).then(function (port) {
-    // ── 5. Check 3 — WebSocket upgrade succeeds ───────────────────────────────
-    // Single-user mode with pinHash:null means no auth token is required.
+  }).then(function (ctx) {
+    var port = ctx.port;
+    var cookieHeader = ctx.cookieHeader;
+
+    // ── 5. Check 2 — /info responds 200 with valid cookie ────────────────────
+    return new Promise(function (resolve, reject) {
+      var req = http.get({
+        hostname: "127.0.0.1",
+        port: port,
+        path: "/info",
+        headers: { "Cookie": cookieHeader.split(";")[0] },
+      }, function (res) {
+        var b = "";
+        res.setEncoding("utf8");
+        res.on("data", function (c) { b += c; });
+        res.on("end", function () {
+          try {
+            assert.strictEqual(res.statusCode, 200, "Expected HTTP 200 for /info, got " + res.statusCode);
+            resolve({ port: port, cookieHeader: cookieHeader });
+          } catch (e) { reject(e); }
+        });
+      });
+      req.on("error", reject);
+    });
+
+  }).then(function (ctx) {
+    var port = ctx.port;
+    var cookieHeader = ctx.cookieHeader;
+    var cookieValue = cookieHeader.split(";")[0]; // strip Path, HttpOnly etc.
+
+    // ── 6. Check 3 — frontend HTML served with 200 ───────────────────────────
+    return new Promise(function (resolve, reject) {
+      var req = http.get({
+        hostname: "127.0.0.1",
+        port: port,
+        path: "/p/smoke-project/",
+        headers: { "Cookie": cookieValue },
+      }, function (res) {
+        var b = "";
+        res.setEncoding("utf8");
+        res.on("data", function (c) { b += c; });
+        res.on("end", function () {
+          try {
+            assert.strictEqual(res.statusCode, 200,
+              "Expected HTTP 200 for frontend page, got " + res.statusCode);
+            assert.ok(
+              b.includes("<html") || b.includes("<!DOCTYPE"),
+              "Expected HTML response for frontend page"
+            );
+            resolve({ port: port, cookieValue: cookieValue });
+          } catch (e) { reject(e); }
+        });
+      });
+      req.on("error", reject);
+    });
+
+  }).then(function (ctx) {
+    var port = ctx.port;
+    var cookieValue = ctx.cookieValue;
+
+    // ── 7. Check 4 — WebSocket upgrade succeeds (authenticated) ──────────────
+    // lr-ec2d: single-user mode removed; WS requires a valid auth cookie.
     return new Promise(function (resolve, reject) {
       var wsUrl = "ws://127.0.0.1:" + port + "/p/smoke-project/ws";
-      var ws = new WebSocket(wsUrl);
+      var ws = new WebSocket(wsUrl, { headers: { "Cookie": cookieValue } });
       var timer = setTimeout(function () {
         ws.terminate();
         reject(new Error(
@@ -188,12 +306,14 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
       });
       ws.once("error", function (err) {
         clearTimeout(timer);
+        t.diagnostic("WS cookieValue: " + cookieValue.slice(0, 60));
+        t.diagnostic("daemon log tail:\n" + daemonLog.slice(-10).join(""));
         reject(new Error("WebSocket error: " + err.message + " — URL: " + wsUrl));
       });
     });
 
   }).then(function () {
-    t.diagnostic("boot smoke passed: /info OK, frontend HTTP 200, WS connected");
+    t.diagnostic("boot smoke passed: daemon up, admin setup OK, /info 200, frontend 200, WS connected");
 
     // ── 6. Cleanup ────────────────────────────────────────────────────────────
     var p = daemonProc ? killAndWait(daemonProc) : Promise.resolve();
