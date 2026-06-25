@@ -130,7 +130,6 @@ for (var i = 0; i < args.length; i++) {
     console.log("  --host <address>   Address to bind to (default: 0.0.0.0)");
     console.log("  --no-https         Disable HTTPS (enabled by default)");
     console.log("  --local-cert       Use local certificate (mkcert), suppress migration notice");
-    console.log("  --builtin-cert    Use builtin certificate even if mkcert is installed");
     console.log("  --no-update        Skip auto-update check on startup");
     console.log("  --debug            Enable debug panel in the web UI");
     console.log("  -y, --yes          Skip interactive prompts (accept defaults)");
