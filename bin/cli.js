@@ -51,7 +51,6 @@ var args = process.argv.slice(2);
 var port = _isDev ? 2635 : 2633;
 var useHttps = true;
 var forceMkcert = false;
-var forceBuiltin = false;
 var skipUpdate = false;
 var debugMode = false;
 var autoYes = false;
@@ -84,8 +83,6 @@ for (var i = 0; i < args.length; i++) {
     useHttps = false;
   } else if (args[i] === "--local-cert") {
     forceMkcert = true;
-  } else if (args[i] === "--builtin-cert") {
-    forceBuiltin = true;
   } else if (args[i] === "--no-update" || args[i] === "--skip-update") {
     skipUpdate = true;
   } else if (args[i] === "--dev") {
@@ -632,44 +629,7 @@ function getAllIPs() {
   return ips;
 }
 
-function getBuiltinCert() {
-  try {
-    var certDir = path.join(__dirname, "..", "lib", "certs");
-    var keyPath = path.join(certDir, "privkey.pem");
-    var certPath = path.join(certDir, "fullchain.pem");
-    if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) return null;
-
-    // Check expiry
-    var certText = execFileSync("openssl", [
-      "x509", "-in", certPath, "-noout", "-enddate"
-    ], { encoding: "utf8" });
-    var m = certText.match(/notAfter=(.+)/);
-    if (m) {
-      var expiry = new Date(m[1]);
-      var now = new Date();
-      // Skip if expiring within 7 days
-      if (expiry.getTime() - now.getTime() < 7 * 24 * 60 * 60 * 1000) return null;
-    }
-
-    return { key: keyPath, cert: certPath, caRoot: null, builtin: true };
-  } catch (e) {
-    return null;
-  }
-}
-
-function toClayStudioUrl(ip, port, protocol) {
-  var dashed = ip.replace(/\./g, "-");
-  return protocol + "://" + dashed + ".d.clay.studio:" + port;
-}
-
 function ensureCerts(ip) {
-  // --builtin-cert: skip mkcert entirely, go straight to builtin
-  if (forceBuiltin) {
-    var builtin = getBuiltinCert();
-    if (builtin) return builtin;
-    return null;
-  }
-
   var certDir = path.join(process.env.CLAGENTIC_HOME || process.env.CLAY_HOME || path.join(REAL_HOME, ".clagentic"), "certs");
   var keyPath = path.join(certDir, "key.pem");
   var certPath = path.join(certDir, "cert.pem");
@@ -726,18 +686,12 @@ function ensureCerts(ip) {
       var mkcertArgs = ["-key-file", keyPath, "-cert-file", certPath].concat(domains);
       execFileSync("mkcert", mkcertArgs, { stdio: "pipe" });
     } catch (err) {
-      // mkcert generation failed, fall through to builtin
+      // mkcert generation failed
     }
 
     if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
       return { key: keyPath, cert: certPath, caRoot: caRoot, mkcertDetected: !forceMkcert };
     }
-  }
-
-  // Fallback: builtin cert (unless --local-cert forces mkcert-only)
-  if (!forceMkcert) {
-    var builtin = getBuiltinCert();
-    if (builtin) return builtin;
   }
 
   return null;
@@ -1503,14 +1457,12 @@ function setup(callback) {
 async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
   var ip = getLocalIP();
   var hasTls = false;
-  var hasBuiltinCert = false;
   var mkcertDetected = false;
 
   if (useHttps) {
     var certPaths = ensureCerts(ip);
     if (certPaths) {
       hasTls = true;
-      if (certPaths.builtin) hasBuiltinCert = true;
       if (certPaths.mkcertDetected) mkcertDetected = true;
     } else {
       log(sym.warn + "  " + a.yellow + "HTTPS unavailable" + a.reset + a.dim + " · mkcert not installed" + a.reset);
@@ -1606,7 +1558,6 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     host: host,
     pinHash: mode === "multi" && cliPin ? generateAuthToken(cliPin) : (prevConfig && prevConfig.pinHash) || null,
     tls: hasTls,
-    builtinCert: hasBuiltinCert,
     mkcertDetected: mkcertDetected,
     debug: debugMode,
     headless: headlessMode,
@@ -1682,12 +1633,9 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
   // Headless mode — print status and exit immediately
   if (headlessMode) {
     var protocol = config.tls ? "https" : "http";
-    var url = config.builtinCert
-      ? toClayStudioUrl(ip, config.port, protocol)
-      : protocol + "://" + ip + ":" + config.port;
+    var url = protocol + "://" + ip + ":" + config.port;
     console.log("  " + sym.done + "  Daemon started (PID " + config.pid + ")");
     console.log("  " + sym.done + "  " + url);
-    if (config.mkcertDetected) console.log("  " + sym.warn + "  Clagentic: Console now ships with a builtin HTTPS certificate. To use it, pass --builtin-cert or uninstall mkcert.");
     if (_pendingSetupCode) {
       console.log("");
       console.log("  " + sym.done + "  " + a.green + "Multi-user mode enabled." + a.reset);
@@ -1709,14 +1657,12 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
 async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
   var ip = getLocalIP();
   var hasTls = false;
-  var hasBuiltinCert = false;
   var mkcertDetected = false;
 
   if (useHttps) {
     var certPaths = ensureCerts(ip);
     if (certPaths) {
       hasTls = true;
-      if (certPaths.builtin) hasBuiltinCert = true;
       if (certPaths.mkcertDetected) mkcertDetected = true;
     }
   }
@@ -1797,7 +1743,6 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
     host: host,
     pinHash: existingPinHash || null,
     tls: hasTls,
-    builtinCert: hasBuiltinCert,
     mkcertDetected: mkcertDetected,
     debug: true,
     keepAwake: keepAwake || false,
@@ -1954,7 +1899,6 @@ async function restartDaemonWithTLS(config, callback) {
     callback(config);
     return;
   }
-  var hasBuiltinCert = !!(certPaths && certPaths.builtin);
   var mkcertDetected = !!(certPaths && certPaths.mkcertDetected);
 
   // Shut down old daemon
@@ -1977,7 +1921,6 @@ async function restartDaemonWithTLS(config, callback) {
   var newConfig = Object.assign({}, config, {
     pid: null,
     tls: true,
-    builtinCert: hasBuiltinCert,
     mkcertDetected: mkcertDetected,
   });
 
@@ -2055,9 +1998,7 @@ function showServerStarted(config, ip, setupCode) {
 function showMainMenu(config, ip, setupCode) {
   startDaemonWatcher();
   var protocol = config.tls ? "https" : "http";
-  var url = config.builtinCert
-    ? toClayStudioUrl(ip, config.port, protocol)
-    : protocol + "://" + ip + ":" + config.port;
+  var url = protocol + "://" + ip + ":" + config.port;
 
   sendIPCCommand(socketPath(), { cmd: "get_status" }).then(function (status) {
     var projs = (status && status.projects) || [];
@@ -2085,13 +2026,6 @@ function showMainMenu(config, ip, setupCode) {
       log("  " + a.dim + "~/.clagentic → " + path.join(REAL_HOME, ".clagentic") + a.reset);
       log("  Press " + a.bold + "o" + a.reset + " to open in browser");
       log("");
-
-      if (config.mkcertDetected) {
-        log("  " + sym.warn + "  " + a.yellow + "Clagentic: Console now ships with a builtin HTTPS certificate." + a.reset);
-        log("     " + a.dim + "No more CA setup on each device." + a.reset);
-        log("     " + a.dim + "To use it, pass --builtin-cert or uninstall mkcert." + a.reset);
-        log("");
-      }
 
       showMenuItems();
     }
