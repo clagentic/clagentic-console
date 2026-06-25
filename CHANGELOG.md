@@ -1,3 +1,23 @@
+# [1.5.0-beta.4](https://github.com/clagentic/clagentic-console/compare/v1.5.0-beta.3...v1.5.0-beta.4) (2026-06-25)
+
+
+### Bug Fixes
+
+* add reviewer_bot_login to .crew/peaches.yaml for crew_merge gate ([3b3c586](https://github.com/clagentic/clagentic-console/commit/3b3c586ce3a2ecde2765667db4305c84179264de))
+* **agent-picker:** show loading state instead of "No agents discovered" on mobile ([0c7acc6](https://github.com/clagentic/clagentic-console/commit/0c7acc6890cc13049d31a0c99bb7877e7eece600))
+* **cli-sessions:** cap and concurrency-limit listCliSessions to prevent OOM (lr-efc8) ([61741cd](https://github.com/clagentic/clagentic-console/commit/61741cd3fcb069597c1077fafdad946eb32dd50c))
+* deny unauthenticated ws access to owned terminals in terminal-manager ([2702f2d](https://github.com/clagentic/clagentic-console/commit/2702f2de8879e9d85712d3ec450c56b1ec17b998))
+* deny unauthenticated ws access to owned terminals in terminal-manager ([d8f1d09](https://github.com/clagentic/clagentic-console/commit/d8f1d0924c6242780500b450980e1cf8b220b9e1))
+* **sdk-bridge:** inject AGENT.md body as system prompt via agents map (lr-5bd7) ([5cebe4f](https://github.com/clagentic/clagentic-console/commit/5cebe4fe920d20089aeaa870dc94da0d0d52fcc2))
+* **sdk-bridge:** use systemPrompt + agent model for named-agent sessions (lr-5bd7) ([0f2391f](https://github.com/clagentic/clagentic-console/commit/0f2391fd2a41d3f9a6a94ae04e2e0e34cd9fdfe1)), closes [#264](https://github.com/clagentic/clagentic-console/issues/264)
+
+
+### Features
+
+* **lr-ec2d:** remove isMultiUser() stub and simplify all callers (PR 2 of 3) ([dca60a7](https://github.com/clagentic/clagentic-console/commit/dca60a7e65370571b55ae4039a8eabbe0eb4f3d1))
+* **lr-ec2d:** remove single-user mode — backend and migration (PR 1 of 3) ([f0ab471](https://github.com/clagentic/clagentic-console/commit/f0ab471fea999c59cda1d8aad5101296edd76c2d))
+* **lr-ec2d:** remove single-user UI paths from frontend (PR 3 of 3) ([37e8be2](https://github.com/clagentic/clagentic-console/commit/37e8be296918e38e1bab25ee33eab631212119d9))
+
 # [1.5.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.5.0-beta.2...v1.5.0-beta.3) (2026-06-17)
 
 
