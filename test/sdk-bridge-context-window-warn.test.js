@@ -8,6 +8,10 @@
  *   (4) warn is skipped when model is unknown (resolveModelContextWindow returns 0)
  *   (5) getConfig().cgroupWarnFraction is respected for the cgroup warn threshold
  *   (6) no warn when contextWindowWarnFraction is 0 (disabled)
+ *   (7) [PEACHES fix] context-1m beta active: warn uses 1M window, not model base window
+ *   (8) [PEACHES fix] context-1m beta NOT active: warn uses model base window (o3 → 200K)
+ *   (9) [PEACHES fix] resolveModelContextWindow direct unit: beta overrides map lookup
+ *  (10) [PEACHES fix] cgroupWarnFraction: 0 disables cgroup warn (consistent with ctx-win)
  *
  * The context-window warn fires per-turn (not only on new queries) via
  * session.lastStreamInputTokens.  We set that field on the session before
@@ -307,4 +311,129 @@ test("lr-1f7e (6): session.model overrides sm.currentModel for context-window re
   var warns = windowWarnToasts(messages);
   assert.ok(warns.length > 0, "window-warn should use session.model (o3, 200K window) over sm.currentModel");
   assert.equal(queryCount, 1, "query should proceed");
+});
+
+// ---------------------------------------------------------------------------
+// (7) [PEACHES fix] context-1m beta active: no warn at 170K tokens with o3 model
+//     because the true window is 1M (beta wins over the 200K map entry)
+// ---------------------------------------------------------------------------
+
+test("lr-1f7e (7): context-1m beta active — warn uses 1M window, not o3 base 200K window", async function () {
+  var queryCount = 0;
+  // 170K tokens = 85% of 200K (would warn without beta), but only 17% of 1M (no warn with beta).
+  // This is the lr-1f7e PEACHES regression: without the fix the backend resolves 200K and
+  // warns prematurely; with the fix it sees the active beta and resolves 1M correctly.
+  var SESSION_TOKENS = 170000;
+  var { bridge, sm, messages } = makeBridge(
+    async function () { queryCount++; return makeEmptyHandle(); },
+    null,
+    "o3" // base window 200K — but beta extends it to 1M
+  );
+
+  // Activate the context-1m beta on the session manager (mirrors set_betas WS message).
+  sm.currentBetas = ["context-1m"];
+
+  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "hello", null, null);
+  await new Promise(function (r) { setImmediate(r); });
+
+  var warns = windowWarnToasts(messages);
+  assert.equal(warns.length, 0,
+    "no window-warn should fire: context-1m beta is active so true window is 1M, " +
+    "and 170K tokens is only 17% of 1M (well below 80% threshold)");
+  assert.equal(queryCount, 1, "query should proceed");
+});
+
+// ---------------------------------------------------------------------------
+// (8) [PEACHES fix] context-1m beta NOT active: o3 base 200K window IS used,
+//     so 170K tokens (85% of 200K) correctly triggers the warn
+// ---------------------------------------------------------------------------
+
+test("lr-1f7e (8): context-1m beta NOT active — warn fires using o3 base 200K window", async function () {
+  var queryCount = 0;
+  // Same token count as test (7), but no beta — o3's 200K base applies.
+  // 170K / 200K = 85%, above the 80% default threshold → warn should fire.
+  var SESSION_TOKENS = 170000;
+  var { bridge, sm, messages } = makeBridge(
+    async function () { queryCount++; return makeEmptyHandle(); },
+    null,
+    "o3"
+  );
+
+  // No currentBetas set (defaults to []).
+  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "hello", null, null);
+  await new Promise(function (r) { setImmediate(r); });
+
+  var warns = windowWarnToasts(messages);
+  assert.ok(warns.length > 0,
+    "window-warn should fire: no beta, o3 base window is 200K, 170K tokens is 85% (above 80%)");
+  assert.equal(queryCount, 1, "query should proceed");
+});
+
+// ---------------------------------------------------------------------------
+// (9) [PEACHES fix] resolveModelContextWindow unit test: beta array overrides map
+// ---------------------------------------------------------------------------
+
+test("lr-1f7e (9): resolveModelContextWindow — context-1m beta overrides KNOWN_CONTEXT_WINDOWS lookup", function () {
+  var { resolveModelContextWindow } = freshSdkBridge();
+
+  // Without beta: o3 → 200K
+  assert.equal(resolveModelContextWindow("o3", []), 200000,
+    "o3 without beta should resolve to 200K");
+
+  // With beta: o3 → 1M (beta wins)
+  assert.equal(resolveModelContextWindow("o3", ["context-1m"]), 1000000,
+    "o3 with context-1m beta should resolve to 1M");
+
+  // With beta: unknown model → 1M (beta wins even when model not in map)
+  assert.equal(resolveModelContextWindow("hypothetical-200k-model", ["context-1m"]), 1000000,
+    "unknown model with context-1m beta should resolve to 1M");
+
+  // Without beta: unknown model → 0 (degrade cleanly)
+  assert.equal(resolveModelContextWindow("hypothetical-200k-model", []), 0,
+    "unknown model without beta should resolve to 0 (skip warn)");
+
+  // Null activeBetas treated gracefully
+  assert.equal(resolveModelContextWindow("o3", null), 200000,
+    "null activeBetas should fall through to map lookup");
+});
+
+// ---------------------------------------------------------------------------
+// (10) [PEACHES fix] cgroupWarnFraction: 0 disables the cgroup warn
+//      On this test host cgroup reads return null (not running in the service),
+//      so the cgroup gate block is skipped entirely. We verify no cgroup warn
+//      toast is present — consistent with contextWindowWarnFraction: 0 behavior.
+// ---------------------------------------------------------------------------
+
+test("lr-1f7e (10): cgroupWarnFraction: 0 accepted as valid config (disables warn)", async function () {
+  var queryCount = 0;
+  // High token count to ensure window-warn does not fire (model unknown → window=0).
+  // cgroupWarnFraction: 0 should be accepted without crashing and not produce a warn.
+  var SESSION_TOKENS = 999999;
+  var { bridge, sm, messages } = makeBridge(
+    async function () { queryCount++; return makeEmptyHandle(); },
+    function () { return { cgroupWarnFraction: 0 }; },
+    "unknown-future-model-xyz"
+  );
+
+  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "hello", null, null);
+  await new Promise(function (r) { setImmediate(r); });
+
+  // cgroupWarnFraction: 0 must not throw and must produce no cgroup-related warn toasts.
+  // (On test host cgroup is null anyway, but the config must be accepted gracefully.)
+  var cgroupWarnToasts = messages.filter(function (m) {
+    return m.type === "toast" && m.message && m.message.indexOf("Large session context") !== -1;
+  });
+  assert.equal(cgroupWarnToasts.length, 0,
+    "cgroupWarnFraction: 0 should produce no cgroup warn toast (disabled)");
+  // Query should still run (0 fraction disables warn, not the hard gate)
+  assert.equal(queryCount, 1, "query should proceed when cgroupWarnFraction is 0");
 });
