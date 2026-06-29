@@ -61,7 +61,7 @@ npm install -g @clagentic/console --ignore-scripts
 
 - **Loop automation.** Write a `PROMPT.md`, start a loop. Clagentic: Console runs the prompt, evaluates the result, and retries until done or capped. Schedule loops with standard cron syntax to run unattended.
 
-- **External triggers.** Drop a JSON file into `~/.clagentic/external-triggers/` to spawn a new AI session or inject a message into an existing one. Use this to wire agents into scripts, CI pipelines, or other AI processes — no API, no polling, just a file drop.
+- **External triggers.** Drop a JSON file into `~/.clagentic/console/external-triggers/` to spawn a new AI session or inject a message into an existing one. Use this to wire agents into scripts, CI pipelines, or other AI processes — no API, no polling, just a file drop.
 
 - **Mobile PWA + push notifications.** Installable on iOS and Android. Approve tool calls from your phone. Push fires on approval requests, errors, and task completion.
 
@@ -146,7 +146,7 @@ These are implementation-level properties, not configuration options — they ap
 
 - **Atomic writes, mode 0o600.** All config and state files (`users.json`, `auth-tokens.json`, and similar) are written via rename-after-write: data goes to a `.tmp.<pid>` path, then `rename()` atomically replaces the target. After rename, `chmod 0o600` is applied. Concurrent writes to the same file are serialized in call order.
 
-- **Append-only audit log.** Privileged actions — user creation, lockouts, token revocation, multi-user enable/disable — are written as newline-delimited JSON to `~/.clagentic/audit.log` (mode 0o600, opened with `O_APPEND`).
+- **Append-only audit log.** Privileged actions — user creation, lockouts, token revocation, multi-user enable/disable — are written as newline-delimited JSON to `~/.clagentic/console/audit.log` (mode 0o600, opened with `O_APPEND`).
 
 - **Progressive lockout.** Failed login attempts trigger escalating per-username backoff: 1s, 5s, 30s, 5 min. Reaching the threshold results in permanent lockout until an admin explicitly unlocks the account. Per-IP rate limiting runs in parallel.
 
@@ -185,7 +185,7 @@ Named agents are **currently Claude Code only.** The Codex adapter has no equiva
 Open the Context panel in the session input area. Pin a running terminal, a browser tab (requires the Clagentic: Console Chrome extension), or a sticky note. From that point on, every message you send automatically includes the latest content from those sources — terminal output as a delta since the last message, browser tabs as a full page snapshot. The injection happens before your message reaches the model; you don't need to mention the sources in your prompt.
 
 **"What's the external trigger system?"**
-Drop a JSON file into `~/.clagentic/external-triggers/`. The daemon picks it up within seconds. A v1 trigger spawns a new session with an `initialPrompt`. A v2 trigger can either spawn a session or inject a message into an existing session by `sessionId`. The file is archived to `processed/` on success. Unprocessed files survive daemon restarts. Use this to wire Claude into scripts, CI pipelines, cron jobs, or other AI processes.
+Drop a JSON file into `~/.clagentic/console/external-triggers/`. The daemon picks it up within seconds. A v1 trigger spawns a new session with an `initialPrompt`. A v2 trigger can either spawn a session or inject a message into an existing session by `sessionId`. The file is archived to `processed/` on success. Unprocessed files survive daemon restarts. Use this to wire Claude into scripts, CI pipelines, cron jobs, or other AI processes.
 
 **"What instruction files does it read?"**
 YOKE scans the project directory for `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `COPILOT.md`, and `.github/copilot-instructions.md`. Each vendor reads some of these natively — Claude reads `CLAUDE.md`, Codex reads `AGENTS.md`. Files the active vendor doesn't read natively are merged and injected as additional context, so your project instructions reach the model regardless of which vendor is running.
@@ -209,7 +209,7 @@ Yes. CLI sessions appear in the sidebar and can be picked up in the CLI.
 Yes. Install as a PWA on iOS or Android. Push notifications for approvals, errors, and task completion.
 
 **"Does it work with MCP servers?"**
-Yes. User-configured MCPs from `~/.clagentic/mcp.json` plus built-in ask-user and browser servers work in both Claude and Codex sessions.
+Yes. User-configured MCPs from `~/.clagentic/console/mcp.json` plus built-in ask-user and browser servers work in both Claude and Codex sessions.
 
 **"Multi-user support?"**
 Yes — it is a core design goal, not an add-on. Real accounts, independent session history, and a Team panel that shows every human user and agent connected to the Console. On Linux, enable OS-level isolation: each user maps to a real Linux account, file ACLs via `setfacl`, processes spawn under the correct UID/GID.

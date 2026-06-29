@@ -629,7 +629,9 @@ function getAllIPs() {
 }
 
 function ensureCerts(ip) {
-  var certDir = path.join(process.env.CLAGENTIC_HOME || process.env.CLAY_HOME || path.join(REAL_HOME, ".clagentic"), "certs");
+  // certs/ now lives under CONFIG_DIR (= ~/.clagentic/console/).
+  // Old location was ~/.clagentic/certs/ — migration runs in daemon.js on startup.
+  var certDir = path.join(CONFIG_DIR, "certs");
   var keyPath = path.join(certDir, "key.pem");
   var certPath = path.join(certDir, "cert.pem");
 
