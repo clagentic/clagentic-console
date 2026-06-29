@@ -1,13 +1,13 @@
 # Codex Integration Guide
 
-How Clay integrates with the OpenAI Codex CLI via the `codex app-server` protocol. Read this before changing anything in `lib/yoke/adapters/codex.js` or `lib/yoke/codex-app-server.js`.
+How Clagentic: Console integrates with the OpenAI Codex CLI via the `codex app-server` protocol. Read this before changing anything in `lib/yoke/adapters/codex.js` or `lib/yoke/codex-app-server.js`.
 
 ---
 
 ## Architecture Overview
 
 ```
-Clay session (vendor=codex)
+Clagentic: Console session (vendor=codex)
     |
     v
 YOKE Codex Adapter  (lib/yoke/adapters/codex.js)
@@ -56,7 +56,7 @@ Do not go back to the SDK exec mode. It is a one-shot pipe wrapper, not a real S
 |------|---------|
 | `lib/yoke/adapters/codex.js` | YOKE adapter. Init, createQuery, event flattening, approval routing, skill injection. |
 | `lib/yoke/codex-app-server.js` | Child process manager. Spawn, stdin/stdout JSON-RPC, request ID tracking, pending callbacks. |
-| `lib/yoke/mcp-bridge-server.js` | Stdio MCP server spawned by Codex. Proxies tool list/call to Clay via HTTP. |
+| `lib/yoke/mcp-bridge-server.js` | Stdio MCP server spawned by Codex. Proxies tool list/call to Clagentic: Console via HTTP. |
 | `lib/server.js` (`/api/mcp-bridge`) | Global HTTP endpoint. Aggregates MCP servers from all project contexts. |
 | `lib/project.js` (`getMcpBridgeHandler`) | Builds per-project MCP tool list + call handler. |
 | `lib/project-mcp.js` | Remote MCP proxy server builder (extension-bridged). |
@@ -101,7 +101,7 @@ See `serializeConfig()` in `codex-app-server.js`. Values must be valid TOML lite
 
 The bridge server (`mcp-bridge-server.js`) is spawned by Codex at app-server init time. It captures the project slug at spawn and keeps it forever. Codex adapter is a **singleton** across sessions, so if the user switches projects, the bridge still uses the old slug.
 
-**Solution**: bridge calls the global endpoint `/api/mcp-bridge` (not `/p/{slug}/api/mcp-bridge`). The global endpoint picks any project context with a bridge handler. This works because a single Clay server usually has one active project doing Codex work at a time.
+**Solution**: bridge calls the global endpoint `/api/mcp-bridge` (not `/p/{slug}/api/mcp-bridge`). The global endpoint picks any project context with a bridge handler. This works because a single Clagentic: Console server usually has one active project doing Codex work at a time.
 
 Do not revert to project-scoped URLs unless you also redesign the Codex adapter lifecycle.
 
@@ -161,7 +161,7 @@ App-server is singleton but sessions can switch mid-turn. Filter events by `para
 
 ### 10. Skills
 
-Codex skills live at `~/.codex/skills/<name>/SKILL.md`. Clay also reads Claude skills at `~/.claude/skills/<name>/SKILL.md`.
+Codex skills live at `~/.codex/skills/<name>/SKILL.md`. Clagentic: Console also reads Claude skills at `~/.claude/skills/<name>/SKILL.md`.
 
 At init, the adapter calls `skills/list` with `perCwdExtraUserRoots` pointing to the Claude skills directory. At turn start, if the user text contains `$<skill-name>`, the adapter injects an extra input item:
 
