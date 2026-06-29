@@ -41,8 +41,9 @@ test("detectLite returns installed=false when CLAGENTIC_HOME points to an empty 
 
 test("detectLite returns installed=false when lite dir exists but binary does not", function () {
   var tmpDir = mktemp("clagentic-detect-dir-no-bin-");
-  // Create the lite subdirectory under console/ (CONFIG_DIR = CLAGENTIC_HOME/console)
-  fs.mkdirSync(path.join(tmpDir, "console", "lite"), { recursive: true });
+  // Lite home is now a sibling of console/ under CLAGENTIC_HOME (lr-6204, lr-dc6c).
+  // Create ~/.clagentic/lite/ (= CLAGENTIC_HOME/lite) — NOT under console/.
+  fs.mkdirSync(path.join(tmpDir, "lite"), { recursive: true });
   process.env.CLAGENTIC_HOME = tmpDir;
   // Override PATH so `which clagentic-lite` cannot find anything
   var savedPath = process.env.PATH;
@@ -61,8 +62,8 @@ test("detectLite returns installed=false when lite dir exists but binary does no
 
 test("detectLite returns installed=true when both lite dir and binary candidate exist", function () {
   var tmpDir = mktemp("clagentic-detect-full-");
-  // Create the lite subdirectory under console/ (CONFIG_DIR = CLAGENTIC_HOME/console)
-  var liteDir = path.join(tmpDir, "console", "lite");
+  // Lite home is at CLAGENTIC_HOME/lite (sibling of console/, not nested under it).
+  var liteDir = path.join(tmpDir, "lite");
   fs.mkdirSync(liteDir, { recursive: true });
   // Create a fake clagentic-lite binary in a candidate path (~/.local/bin or ~/bin).
   // We can't patch REAL_HOME easily (it comes from process.env.HOME or os.homedir()),
@@ -80,13 +81,28 @@ test("detectLite returns installed=true when both lite dir and binary candidate 
   process.env.PATH = savedPath;
 });
 
-test("getLiteHome respects CLAGENTIC_HOME (returns console/lite subdir)", function () {
+test("getLiteHome respects CLAGENTIC_HOME (returns lite/ sibling, NOT console/lite)", function () {
   var tmpDir = mktemp("clagentic-home-test-");
   process.env.CLAGENTIC_HOME = tmpDir;
   var ld = requireFresh("../lib/lite-detect");
   var home = ld.getLiteHome();
-  // CONFIG_DIR = CLAGENTIC_HOME/console, so getLiteHome() returns CLAGENTIC_HOME/console/lite
-  assert.strictEqual(home, path.join(tmpDir, "console", "lite"));
+  // Lite is a sibling of console/ under CLAGENTIC_HOME (lr-6204, lr-dc6c).
+  // getLiteHome() returns CLAGENTIC_HOME/lite (NOT CLAGENTIC_HOME/console/lite).
+  assert.strictEqual(home, path.join(tmpDir, "lite"));
+});
+
+test("getLiteHome respects CLAGENTIC_LITE_HOME env override", function () {
+  var tmpDir = mktemp("clagentic-lite-home-override-");
+  var savedLiteHome = process.env.CLAGENTIC_LITE_HOME;
+  process.env.CLAGENTIC_LITE_HOME = tmpDir;
+  var ld = requireFresh("../lib/lite-detect");
+  var home = ld.getLiteHome();
+  assert.strictEqual(home, tmpDir);
+  if (savedLiteHome !== undefined) {
+    process.env.CLAGENTIC_LITE_HOME = savedLiteHome;
+  } else {
+    delete process.env.CLAGENTIC_LITE_HOME;
+  }
 });
 
 // ---- isProjectEnrolled ----

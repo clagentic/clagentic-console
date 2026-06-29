@@ -209,13 +209,13 @@ Yes. CLI sessions appear in the sidebar and can be picked up in the CLI.
 Yes. Install as a PWA on iOS or Android. Push notifications for approvals, errors, and task completion.
 
 **"Does it work with MCP servers?"**
-Yes. User-configured MCPs from `~/.clagentic/mcp.json` plus built-in ask-user and browser servers work in both Claude and Codex sessions.
+Yes. User-configured MCPs from `~/.clagentic/console/mcp.json` plus built-in ask-user and browser servers work in both Claude and Codex sessions.
 
 **"Multi-user support?"**
 Yes — it is a core design goal, not an add-on. Real accounts, independent session history, and a Team panel that shows every human user and agent connected to the Console. On Linux, enable OS-level isolation: each user maps to a real Linux account, file ACLs via `setfacl`, processes spawn under the correct UID/GID.
 
 **"Does it integrate with Clagentic: Lite?"**
-Yes, optionally. [Clagentic: Lite](https://clagentic.ai/tools) adds agentic gates, session memory, and audit trails to any repo. If Lite is installed (`~/.clagentic/console/lite/`), Console detects it automatically and shows an enrollment panel in each project's settings. Enable auto-enroll in system settings to wire up every project on add. Lite is never required — Console works normally without it.
+Yes, optionally. [Clagentic: Lite](https://clagentic.ai/tools) adds agentic gates, session memory, and audit trails to any repo. If Lite is installed (`~/.clagentic/lite/`), Console detects it automatically and shows an enrollment panel in each project's settings. Enable auto-enroll in system settings to wire up every project on add. Lite is never required — Console works normally without it.
 
 ## Support
 
