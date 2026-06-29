@@ -1563,7 +1563,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     keepAwake: keepAwake,
     dangerouslySkipPermissions: dangerouslySkipPermissions,
     osUsers: wantOsUsers || osUsersMode,
-    mode: mode || "single",
+    mode: mode || "multi",
     setupCompleted: true,
     projects: allProjects,
   });
@@ -1746,7 +1746,7 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
     debug: true,
     keepAwake: keepAwake || false,
     dangerouslySkipPermissions: dangerouslySkipPermissions,
-    mode: mode || "single",
+    mode: mode || "multi",
     setupCompleted: true,
     projects: allProjects,
     osUsers: wantOsUsers || (prevDevConfig ? (prevDevConfig.osUsers || false) : false),
