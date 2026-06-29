@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://clagentic.ai"><img src="https://img.shields.io/badge/-clagentic.ai-00CFFF?style=flat&logoColor=white" alt="clagentic.ai" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat" alt="License: MIT" /></a>
+  <a href="https://github.com/clagentic/clagentic-console/actions/workflows/pr-checks.yml"><img src="https://github.com/clagentic/clagentic-console/actions/workflows/pr-checks.yml/badge.svg?branch=main" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat&logo=node.js&logoColor=white" alt="Node.js 20+" />
   <a href="https://www.npmjs.com/package/@clagentic/console"><img src="https://img.shields.io/npm/v/@clagentic/console?style=flat&label=npm" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/@clagentic/console"><img src="https://img.shields.io/npm/dw/@clagentic/console?style=flat&label=downloads" alt="npm downloads" /></a>
