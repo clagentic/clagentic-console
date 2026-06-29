@@ -225,6 +225,45 @@ The service worker (`lib/public/sw.js`) handles incoming pushes and routes the u
 | Slug-based routing | Many projects, one port, predictable URLs |
 | `0.0.0.0` + PIN | LAN access by default; use a tunnel for remote |
 
+## Memory Limits (Linux / systemd)
+
+The shipped `deploy/clagentic-console.service` unit sets percentage-based cgroup limits:
+
+```
+MemoryHigh=70%   # soft ceiling — kernel begins reclaiming early
+MemoryMax=85%    # hard ceiling — triggers per-service OOM (systemd kills and restarts)
+OOMPolicy=kill   # kill all cgroup members on OOM; systemd Restart=always handles the restart
+```
+
+**Percentage defaults auto-scale when RAM is added.** No action needed after a RAM upgrade if you are using the defaults.
+
+### Optional daemon.json overrides (lr-de07)
+
+Operators who need to pin explicit byte or percentage values can add `memoryHigh` and/or `memoryMax` to `~/.clagentic/console/daemon.json`. These are applied via a systemd drop-in at `/etc/systemd/system/clagentic-console.service.d/memory-overrides.conf` during `npm install -g` (root required).
+
+```json
+{
+  "memoryHigh": "6G",
+  "memoryMax":  "8G"
+}
+```
+
+Accepted formats: `NNN%` (whole number, 1–100) or `NG` / `NM` / `NK` / bare bytes.
+
+When neither key is set (the default), the drop-in is absent and the shipped percentage defaults win. The percentage path is preferred for most deployments — it requires no reconfiguration when RAM changes.
+
+**If you pinned an absolute override and added RAM:** update `memoryHigh` / `memoryMax` in `daemon.json` and re-run `npm install -g @clagentic/console` as root (or write the drop-in manually and run `systemctl daemon-reload`). Operators using the default percentage values need not do anything.
+
+### MemoryHigh watermark log (lr-de07)
+
+The daemon polls for MemoryHigh crossings (every 5 s) using either the cgroup v2 `memory.events high` counter (preferred) or process RSS vs. the resolved threshold (fallback). When a crossing is detected, a single structured log event is emitted to stderr (captured by journald):
+
+```
+[memory-limits] WARN memory_high_watermark {"event":"memory_high_watermark","source":"cgroup.memory.events","timestamp":"...","highCounter":1}
+```
+
+This signal is what lr-6b30 (graceful drain) will consume. The watcher de-duplicates: it does not spam if the counter stays elevated; it re-alerts only when the counter advances again (strategy A) or when RSS drops back below the threshold by 5% and rises again (strategy B).
+
 ## See Also
 
 - [MODULE_MAP.md](./MODULE_MAP.md) — where every module lives and what it owns
