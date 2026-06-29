@@ -357,21 +357,21 @@ Better permission dialog UX with human-readable labels instead of raw tool names
 
 ## Parity Divergences
 
-Decisions where Clay deliberately deviates from the Claude Code reference, beyond the per-API "Skip" judgments above. Captured here because the reasoning is product-level, not SDK-version-bound, and easy to forget. Add new rows when divergences are made; don't delete entries even if they later converge.
+Decisions where Clagentic: Console deliberately deviates from the Claude Code reference, beyond the per-API "Skip" judgments above. Captured here because the reasoning is product-level, not SDK-version-bound, and easy to forget. Add new rows when divergences are made; don't delete entries even if they later converge.
 
-| Area | Claude Code behavior | Clay behavior | Why |
+| Area | Claude Code behavior | Clagentic: Console behavior | Why |
 |------|---------------------|---------------|-----|
 | Session tagging | SDK supports 1 tag per session (`tagSession()`) | Multi-tag system (GitHub-style labels with colors), stored in relay metadata. SDK tag used as auxiliary sync only | Single tag is too restrictive for multi-axis organization (project + status + priority) |
-| Session rename | `SDKControlRenameSessionRequest` | Clay's own rename system, syncs back to SDK via `renameSession()` | Predates SDK API. Already integrated into relay session model |
-| AskUserQuestion preview | `ToolConfig` HTML mode option | Always monospace `<pre>` rendering | HTML mode adds XSS risk and Claude compliance is best-effort. Monospace is clean for ASCII diagrams/code |
+| Session rename | `SDKControlRenameSessionRequest` | Clagentic: Console's own rename system, syncs back to SDK via `renameSession()` | Predates SDK API. Already integrated into relay session model |
+| AskUserQuestion preview | `ToolConfig` HTML mode option | Always monospace `<pre>` rendering | HTML mode adds XSS risk and Clagentic: Console compliance is best-effort. Monospace is clean for ASCII diagrams/code |
 | Permission UX | SDK permission classification (`user_temporary`/`user_permanent`) | Relay handles permission UX itself | Relay tracks permission lifecycle independently. SDK classification adds no actionable signal |
 | Sub-agent type selection | `supportedAgents()` exposes list | Not surfaced in UI | Sub-agent type is chosen by Claude, not user. Listing it would be informational only |
 | Native dialogs | `alert()`/`confirm()`/`prompt()` allowed in browser hosts | All dialogs are custom JS modals (CLAUDE.md rule) | Consistent styling, mobile-friendly, theme-aware |
 | User settings storage | Per-browser via `localStorage` for client preferences | All user settings server-side via WebSocket/REST (CLAUDE.md rule) | Persists across devices and browsers |
 | Session state messages | `SDKSessionStateChangedMessage` (idle/running/requires_action) | Not consumed | Relay tracks state more accurately via Socket.IO. SDK notification lags behind relay's own tracking |
 | Context usage popover | SDK exposes `getContextUsage()` raw data | Custom hover popover over header bar | Hides "Free space"/"Autocompact buffer" categories (noise, not actionable). Disambiguates duplicate basenames (e.g. multiple `CLAUDE.md`) by parent dir. Grayscale emoji that color on hover for legibility |
-| `defaultShell` setting | User-configurable shell | Not exposed | Clay targets macOS/Linux, bash always. Reduces config surface |
-| Channel/teams settings | `channelsEnabled`, `allowedChannelPlugins`, `strictPluginOnlyCustomization` | Not exposed | Teams/Enterprise admin features. Out of scope for Clay |
+| `defaultShell` setting | User-configurable shell | Not exposed | Clagentic: Console targets macOS/Linux, bash always. Reduces config surface |
+| Channel/teams settings | `channelsEnabled`, `allowedChannelPlugins`, `strictPluginOnlyCustomization` | Not exposed | Teams/Enterprise admin features. Out of scope for Clagentic: Console |
 | Hook events | Various HookEvent types (`TaskCreated`, `CwdChanged`, `FileChanged`, `PostToolBatch`, etc.) | Hooks not adopted | Relay does its own observability. Hook adoption is a larger architectural decision deferred until concrete need |
 
 

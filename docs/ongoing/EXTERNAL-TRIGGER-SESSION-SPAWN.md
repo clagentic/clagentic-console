@@ -12,7 +12,7 @@ Clagentic:Console sessions today start in two ways: a user opens one manually fr
 
 The gap is not just missing UI — the underlying session-spawn primitive does not accept an initial prompt, and there is no watched directory or event bus that an external writer can push to. Clagentic:Console has no inbox for the outside world.
 
-This matters for any workflow where an event happens outside Clay (a deploy finishes, an alert fires, a queue fills up, another agent hits a decision it cannot resolve) and the right response is a human-with-context, not another automated step. The current options are: (1) open Clagentic:Console manually and reconstruct context by hand; (2) use a scheduled loop that polls — which wastes sessions on nothing and cannot carry event-specific context; or (3) use neither.
+This matters for any workflow where an event happens outside Clagentic: Console (a deploy finishes, an alert fires, a queue fills up, another agent hits a decision it cannot resolve) and the right response is a human-with-context, not another automated step. The current options are: (1) open Clagentic:Console manually and reconstruct context by hand; (2) use a scheduled loop that polls — which wastes sessions on nothing and cannot carry event-specific context; or (3) use neither.
 
 The feature requested is: a generic "external trigger → session" primitive covering two cases:
 - **Spawn:** open a new session pre-loaded with context (v1 and v2 without `sessionId`)
@@ -172,7 +172,7 @@ The message lands in the session as if the operator typed it. If the session is 
 
 ---
 
-## 3. Existing Clay Surfaces This Builds On
+## 3. Existing Clagentic: Console Surfaces This Builds On
 
 ### 3.1 Session creation — `sm.createSession()`
 

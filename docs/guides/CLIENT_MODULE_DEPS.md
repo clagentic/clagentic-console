@@ -6,7 +6,7 @@
 
 ## Architecture overview
 
-Clay's client follows a **zustand-like vanilla store** pattern:
+The Clagentic: Console client follows a **zustand-like vanilla store** pattern:
 
 ```
 store.js          -- single source of truth for all mutable UI state
