@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PREFIX = '[clagentic-console postinstall]';
+const { applyDropIn, parseMemoryLimit } = require('../lib/memory-limits');
 
 function log(msg) {
   console.log(`${PREFIX} ${msg}`);
@@ -146,5 +147,45 @@ if (selfUpdate) {
 } else {
   log(`skipping start (daemon was not running or is already running — operator controls restarts)`);
 }
+
+// Step 6: Apply memory-limit drop-in if operator set overrides in daemon.json.
+// When neither memoryHigh nor memoryMax is set (the default), any previously
+// written drop-in is removed and the shipped percentage defaults take effect.
+(function applyMemoryDropIn() {
+  const { loadConfig } = require('../lib/config');
+  const cfg = loadConfig();
+  const memoryHigh = cfg && cfg.memoryHigh ? String(cfg.memoryHigh) : null;
+  const memoryMax  = cfg && cfg.memoryMax  ? String(cfg.memoryMax)  : null;
+
+  // Validate before writing — reject garbage values early.
+  if (memoryHigh) {
+    const vr = parseMemoryLimit(memoryHigh);
+    if (!vr.ok) {
+      log(`WARNING: ignoring invalid memoryHigh value in daemon.json: ${vr.error}`);
+      return;
+    }
+  }
+  if (memoryMax) {
+    const vr = parseMemoryLimit(memoryMax);
+    if (!vr.ok) {
+      log(`WARNING: ignoring invalid memoryMax value in daemon.json: ${vr.error}`);
+      return;
+    }
+  }
+
+  try {
+    applyDropIn({ memoryHigh, memoryMax }, (msg) => log(msg.replace(/^\[memory-limits\] /, '')));
+    if (memoryHigh || memoryMax) {
+      log('running systemctl daemon-reload (memory drop-in updated)');
+      try {
+        runCmd('systemctl', ['daemon-reload']);
+      } catch (err) {
+        log(`WARNING: daemon-reload (memory drop-in) failed: ${errMsg(err)}`);
+      }
+    }
+  } catch (err) {
+    log(`WARNING: memory drop-in apply failed: ${err.message}`);
+  }
+})();
 
 log('done');
