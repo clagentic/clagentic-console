@@ -84,6 +84,7 @@
       <div id="skip-perms-pill" class="top-bar-pill pill-error hidden"><i data-lucide="shield-off"></i> <span>Skip perms</span></div>
       <div id="client-count" class="top-bar-pill pill-accent hidden"><i data-lucide="users"></i> <span id="client-count-text"></span></div>
       <button id="share-pill" title="Share"><i data-lucide="share-2"></i></button>
+      <button id="diagnostics-panel-btn" title="Diagnostics" aria-label="Diagnostics" aria-expanded="false"><i data-lucide="activity"></i><span id="diagnostics-panel-badge" class="diagnostics-panel-badge hidden" aria-hidden="true">0</span></button>
       <button id="notif-center-btn" title="Notifications"><i data-lucide="bell"></i><span id="notif-center-badge" class="notif-badge hidden">0</span></button>
       <button id="server-settings-btn" title="Server settings"><i data-lucide="settings"></i></button>
     </div>
@@ -336,6 +337,18 @@
           <button id="team-panel-close" aria-label="Close"><i data-lucide="x"></i></button>
         </div>
         <div id="team-panel-body" class="usage-panel-body team-panel-body"></div>
+      </div>
+      <!-- Diagnostics panel (lr-8294, epic lr-1a52) -->
+      <div id="diagnostics-panel" class="hidden" role="region" aria-label="Diagnostics" aria-expanded="false" tabindex="-1">
+        <div class="usage-panel-header">
+          <span>Diagnostics</span>
+          <button class="diagnostics-panel-close" aria-label="Close diagnostics panel"><i data-lucide="x"></i></button>
+        </div>
+        <div class="usage-panel-body diagnostics-panel-body">
+          <div id="diagnostics-panel-list">
+            <div class="diagnostics-empty">No diagnostics this session.</div>
+          </div>
+        </div>
       </div>
       <div id="context-panel" class="hidden">
         <div class="usage-panel-header">
