@@ -1481,3 +1481,415 @@ test("server-dm.js dm_send handler: allows valid key and calls dm.sendMessage", 
   assert.strictEqual(sendMessageCalled, true, "dm.sendMessage called for valid key");
   assert.strictEqual(sentMessages.length, 1, "confirmation sent to sender");
 });
+
+// ============================================================
+// 21. Custom emoji routes (lr-a68f)
+// ============================================================
+
+// Helper: make a makeSettingsCtx with a real temp dir for custom-emoji tests.
+function makeCustomEmojiCtx(isAuthed) {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ce-test-"));
+  var fakeUser = isAuthed
+    ? { id: "test-user", username: "testuser", role: "user", pinHash: null, profile: {} }
+    : null;
+  return {
+    tmpDir: tmpDir,
+    ctx: {
+      users: { isMultiUser: function () { return true; } },
+      getMultiUserFromReq: function () { return fakeUser; },
+      isRequestAuthed: function () { return !!isAuthed; },
+      projects: { forEach: function () {} },
+      opts: {},
+      CONFIG_DIR: tmpDir,
+    },
+  };
+}
+
+var SLUG_RE_TEST = /^[a-z0-9_-]{1,64}$/;
+
+test("custom emoji slug: valid slugs accepted by SLUG_RE", function () {
+  var valid = ["my_icon", "my-icon", "icon1", "a", "a".repeat(64)];
+  for (var i = 0; i < valid.length; i++) {
+    assert.ok(SLUG_RE_TEST.test(valid[i]), valid[i] + " should be valid");
+  }
+});
+
+test("custom emoji slug: invalid slugs rejected by SLUG_RE", function () {
+  var invalid = [
+    "MyIcon",          // uppercase
+    "a".repeat(65),    // too long
+    "",                // empty
+    "a:b",             // embedded colon
+    "a/b",             // slash
+    "../evil",         // path traversal chars
+    "a.png",           // dot
+  ];
+  for (var i = 0; i < invalid.length; i++) {
+    assert.ok(!SLUG_RE_TEST.test(invalid[i]), invalid[i] + " should be invalid");
+  }
+});
+
+test("POST /api/custom-emoji/:slug: returns 401 for unauthenticated caller", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(false);
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  var req = makeReq("POST", "/api/custom-emoji/myicon");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/myicon");
+
+  var pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  req._emit("data", pngMagic);
+  req._end();
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 401, "unauthenticated POST gets 401");
+      var ceDir = path.join(env.tmpDir, "custom-emoji");
+      var written = fs.existsSync(ceDir) && fs.readdirSync(ceDir).length > 0;
+      assert.ok(!written, "no file written for unauthenticated caller");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("POST /api/custom-emoji/:slug: returns 400 for invalid slug", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  var req = makeReq("POST", "/api/custom-emoji/BAD_SLUG");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/BAD_SLUG");
+
+  var pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  req._emit("data", pngMagic);
+  req._end();
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 400, "invalid slug returns 400");
+      var body = JSON.parse(res.body);
+      assert.ok(body.error, "error message present");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("POST /api/custom-emoji/:slug: rejects path traversal via URL (../evil)", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  // Slug with path traversal chars is blocked by SLUG_RE at the start
+  var traversalUrl = "/api/custom-emoji/..%2Fevil";
+  var req = makeReq("POST", traversalUrl);
+  var res = makeRes();
+  handler(req, res, traversalUrl);
+
+  var pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  req._emit("data", pngMagic);
+  req._end();
+
+  setImmediate(function () {
+    try {
+      // Decoded slug would be "../evil" which fails SLUG_RE
+      assert.strictEqual(res.status, 400, "path traversal slug is rejected with 400");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("POST /api/custom-emoji/:slug: returns 413 for oversize payload", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  var req = makeReq("POST", "/api/custom-emoji/bigfile");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/bigfile");
+
+  // Build a 513 KB PNG-magic-prefixed buffer
+  var oversize = Buffer.alloc(513 * 1024, 0);
+  oversize[0] = 0x89; oversize[1] = 0x50; // PNG magic
+  req._emit("data", oversize);
+  req._end();
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 413, "oversized file returns 413");
+      var ceDir = path.join(env.tmpDir, "custom-emoji");
+      var written = fs.existsSync(ceDir) && fs.readdirSync(ceDir).length > 0;
+      assert.ok(!written, "no file written when oversize");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("POST /api/custom-emoji/:slug: returns 400 for non-image payload", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  var req = makeReq("POST", "/api/custom-emoji/myslug");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/myslug");
+
+  // Plain text payload (no image magic bytes)
+  req._emit("data", Buffer.from("hello world"));
+  req._end();
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 400, "non-image payload returns 400");
+      var body = JSON.parse(res.body);
+      assert.ok(/unsupported/i.test(body.error), "error mentions unsupported format");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("POST /api/custom-emoji/:slug: PNG magic bytes accepted, file written at 200", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  var req = makeReq("POST", "/api/custom-emoji/myicon");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/myicon");
+
+  var pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
+  req._emit("data", pngMagic);
+  req._end();
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 200, "valid PNG upload returns 200");
+      var body = JSON.parse(res.body);
+      assert.strictEqual(body.slug, "myicon");
+      var ceDir = path.join(env.tmpDir, "custom-emoji");
+      var files = fs.readdirSync(ceDir);
+      assert.ok(files.some(function (f) { return f === "myicon.png"; }), "myicon.png written");
+      var stat = fs.statSync(path.join(ceDir, "myicon.png"));
+      var mode = stat.mode & 0o777;
+      assert.strictEqual(mode, 0o644, "file has 0o644 permissions");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("POST /api/custom-emoji/:slug: JPEG magic bytes accepted", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  var req = makeReq("POST", "/api/custom-emoji/jpegicon");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/jpegicon");
+
+  var jpegMagic = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]);
+  req._emit("data", jpegMagic);
+  req._end();
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 200, "JPEG upload returns 200");
+      var ceDir = path.join(env.tmpDir, "custom-emoji");
+      var files = fs.readdirSync(ceDir);
+      assert.ok(files.some(function (f) { return f === "jpegicon.jpg"; }), "jpegicon.jpg written");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("GET /api/custom-emoji/:slug: returns image bytes with immutable Cache-Control", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+
+  // Pre-seed a file
+  var ceDir = path.join(env.tmpDir, "custom-emoji");
+  fs.mkdirSync(ceDir, { recursive: true });
+  var pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  fs.writeFileSync(path.join(ceDir, "testslug.png"), pngBytes);
+
+  // GET handler: make a res that captures headers
+  var capturedHeaders = {};
+  var capturedBody = null;
+  var capturedStatus = null;
+  var resGet = {
+    writeHead: function (code, hdrs) { capturedStatus = code; capturedHeaders = hdrs || {}; },
+    end: function (body) { capturedBody = body; },
+  };
+
+  var handler = attachSettings(env.ctx).handleRequest;
+  var reqGet = makeReq("GET", "/api/custom-emoji/testslug");
+  handler(reqGet, resGet, "/api/custom-emoji/testslug");
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(capturedStatus, 200, "GET returns 200");
+      assert.ok(capturedHeaders["Content-Type"] === "image/png", "Content-Type is image/png");
+      assert.ok((capturedHeaders["Cache-Control"] || "").indexOf("immutable") !== -1,
+        "Cache-Control contains immutable");
+      assert.ok(Buffer.isBuffer(capturedBody) || capturedBody, "body is non-empty");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("GET /api/custom-emoji/:slug: returns 404 for unknown slug", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(false); // auth not needed for GET
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  var req = makeReq("GET", "/api/custom-emoji/nosuchslug");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/nosuchslug");
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 404, "unknown slug returns 404");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("DELETE /api/custom-emoji/:slug: returns 401 for unauthenticated caller", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(false);
+
+  // Pre-seed a file
+  var ceDir = path.join(env.tmpDir, "custom-emoji");
+  fs.mkdirSync(ceDir, { recursive: true });
+  fs.writeFileSync(path.join(ceDir, "todel.png"), Buffer.from([0x89, 0x50]));
+
+  var handler = attachSettings(env.ctx).handleRequest;
+  var req = makeReq("DELETE", "/api/custom-emoji/todel");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji/todel");
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 401, "unauthenticated DELETE returns 401");
+      assert.ok(fs.existsSync(path.join(ceDir, "todel.png")), "file not deleted for unauthed caller");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("DELETE then GET /api/custom-emoji/:slug: file removed, GET returns 404", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(true);
+
+  // Pre-seed a file
+  var ceDir = path.join(env.tmpDir, "custom-emoji");
+  fs.mkdirSync(ceDir, { recursive: true });
+  fs.writeFileSync(path.join(ceDir, "myicon.png"), Buffer.from([0x89, 0x50]));
+
+  var handler = attachSettings(env.ctx).handleRequest;
+
+  // DELETE
+  var delReq = makeReq("DELETE", "/api/custom-emoji/myicon");
+  var delRes = makeRes();
+  handler(delReq, delRes, "/api/custom-emoji/myicon");
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(delRes.status, 200, "DELETE returns 200");
+      assert.ok(!fs.existsSync(path.join(ceDir, "myicon.png")), "file removed after DELETE");
+
+      // GET after delete
+      var getReq = makeReq("GET", "/api/custom-emoji/myicon");
+      var getRes = makeRes();
+      handler(getReq, getRes, "/api/custom-emoji/myicon");
+
+      setImmediate(function () {
+        try {
+          assert.strictEqual(getRes.status, 404, "GET after DELETE returns 404");
+          fs.rmSync(env.tmpDir, { recursive: true });
+          done();
+        } catch (e2) {
+          try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+          done(e2);
+        }
+      });
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
+
+test("GET /api/custom-emoji: returns array with seeded slugs", function (t, done) {
+  var { attachSettings } = require("../lib/server-settings");
+  var env = makeCustomEmojiCtx(false); // listing is unauthenticated
+
+  var ceDir = path.join(env.tmpDir, "custom-emoji");
+  fs.mkdirSync(ceDir, { recursive: true });
+  fs.writeFileSync(path.join(ceDir, "cat.png"), Buffer.from([0x89, 0x50]));
+  fs.writeFileSync(path.join(ceDir, "dog.gif"), Buffer.from([0x47, 0x49]));
+  // Invalid extension should be ignored
+  fs.writeFileSync(path.join(ceDir, "bad.txt"), Buffer.from("text"));
+
+  var handler = attachSettings(env.ctx).handleRequest;
+  var req = makeReq("GET", "/api/custom-emoji");
+  var res = makeRes();
+  handler(req, res, "/api/custom-emoji");
+
+  setImmediate(function () {
+    try {
+      assert.strictEqual(res.status, 200, "list returns 200");
+      var body = JSON.parse(res.body);
+      assert.ok(Array.isArray(body), "body is array");
+      var slugs = body.map(function (e) { return e.slug; });
+      assert.ok(slugs.indexOf("cat") !== -1, "cat in list");
+      assert.ok(slugs.indexOf("dog") !== -1, "dog in list");
+      assert.ok(slugs.indexOf("bad") === -1, "bad.txt excluded");
+      fs.rmSync(env.tmpDir, { recursive: true });
+      done();
+    } catch (e) {
+      try { fs.rmSync(env.tmpDir, { recursive: true }); } catch (_) {}
+      done(e);
+    }
+  });
+});
