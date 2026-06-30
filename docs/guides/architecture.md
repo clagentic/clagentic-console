@@ -264,6 +264,39 @@ The daemon polls for MemoryHigh crossings (every 5 s) using either the cgroup v2
 
 This signal is what lr-6b30 (graceful drain) will consume. The watcher de-duplicates: it does not spam if the counter stays elevated; it re-alerts only when the counter advances again (strategy A) or when RSS drops back below the threshold by 5% and rises again (strategy B).
 
+## Custom emoji icons (lr-a68f)
+
+Projects can use uploaded images as icons instead of Unicode emoji. The icon value stored in `config.projects[].icon` is a `:slug:` sentinel string (pattern `^:[a-z0-9_-]{1,64}:$`) when a custom image is selected.
+
+### Server routes (`lib/server-settings.js`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/custom-emoji` | none | List all uploads: `[{slug, url}]` |
+| `POST` | `/api/custom-emoji/:slug` | required | Upload image (PNG/JPEG/GIF/WebP, max 512 KB) |
+| `GET` | `/api/custom-emoji/:slug` | none | Serve image bytes with immutable `Cache-Control` |
+| `DELETE` | `/api/custom-emoji/:slug` | required | Remove an uploaded image |
+
+All routes validate the slug against `/^[a-z0-9_-]{1,64}$/` before any filesystem operation. The POST handler uses magic-byte detection (same pattern as the avatar handler) to determine the file extension; `safePath()` is used as defence-in-depth on GET and DELETE where the file already exists.
+
+### Storage
+
+`CONFIG_DIR/custom-emoji/{slug}.{ext}` where `CONFIG_DIR = ~/.clagentic/console/` (migrated path per lr-12d0). Files are written with `0o644` permissions.
+
+### Frontend render path (`lib/public/modules/project-icon.js`)
+
+`renderProjectIcon(iconStr, el, parseEmojisFn)` is the single shared helper. It:
+
+- Calls `isCustomIcon(iconStr)` (tests `^:[a-z0-9_-]{1,64}:$`).
+- If true: creates `<img src="/api/custom-emoji/{slug}" class="project-emoji-img">` via DOM API (no innerHTML).
+- Otherwise: sets `el.textContent = iconStr` and calls `parseEmojisFn(el)`.
+
+The helper is wired into every icon render site: `sidebar-projects.js`, `app-home-hub.js`, `project-settings.js`, `sidebar-mobile.js`, `project-switcher.js`, and `app-projects.js` (title bar + input indicator).
+
+### XSS fix
+
+`app-home-hub.js` previously interpolated `proj.icon` directly into `innerHTML`. That site now uses DOM API with `renderProjectIcon`, eliminating the stored-XSS vector.
+
 ## See Also
 
 - [MODULE_MAP.md](./MODULE_MAP.md) — where every module lives and what it owns

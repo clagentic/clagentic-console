@@ -149,3 +149,68 @@ test("fmt: plain text with no URL is returned HTML-escaped (no anchors)", () => 
   assert.equal(out, "hello &lt;world&gt; &amp; friends");
   assert.ok(!out.includes("<a"), "no anchor for plain text");
 });
+
+// ============================================================
+// lr-a68f — isCustomIcon classification and XSS regression
+// ============================================================
+
+import { isCustomIcon, customIconSlug } from "../lib/public/modules/project-icon.js";
+
+test("isCustomIcon: recognises valid :slug: sentinel", () => {
+  assert.ok(isCustomIcon(":my_icon:"), ":my_icon: is a custom icon");
+  assert.ok(isCustomIcon(":icon-1:"), ":icon-1: is a custom icon");
+  assert.ok(isCustomIcon(":a:"), ":a: is a custom icon");
+});
+
+test("isCustomIcon: rejects non-sentinel values", () => {
+  assert.ok(!isCustomIcon("😀"), "emoji is not a custom icon");
+  assert.ok(!isCustomIcon("📁"), "emoji folder is not a custom icon");
+  assert.ok(!isCustomIcon(""), "empty string is not a custom icon");
+  assert.ok(!isCustomIcon(null), "null is not a custom icon");
+  assert.ok(!isCustomIcon(undefined), "undefined is not a custom icon");
+  assert.ok(!isCustomIcon(":"), "bare colon is not a custom icon");
+  assert.ok(!isCustomIcon("::"), "empty slug is not a custom icon");
+});
+
+test("isCustomIcon: rejects strings containing script tags", () => {
+  assert.ok(!isCustomIcon('<script>alert(1)</script>'), "script tag is not a custom icon");
+  assert.ok(!isCustomIcon(':foo<script>:'), "slug with html is not a custom icon");
+  assert.ok(!isCustomIcon(':<img onerror=alert(1)>:'), "slug with img tag is not a custom icon");
+});
+
+test("customIconSlug: strips leading and trailing colons", () => {
+  assert.equal(customIconSlug(":my_icon:"), "my_icon");
+  assert.equal(customIconSlug(":icon-1:"), "icon-1");
+});
+
+test("customIconSlug: returns null for non-custom-icon values", () => {
+  assert.equal(customIconSlug("😀"), null);
+  assert.equal(customIconSlug(""), null);
+  assert.equal(customIconSlug(null), null);
+});
+
+// XSS regression: app-home-hub.js must not interpolate raw proj.icon into innerHTML.
+// We verify structurally by reading the source and asserting the old dangerous pattern
+// is absent. The real fix is in the DOM API path that calls renderProjectIcon.
+test("app-home-hub.js: does not interpolate raw proj.icon into innerHTML (lr-a68f XSS fix)", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(
+    path.resolve("lib/public/modules/app-home-hub.js"),
+    "utf8"
+  );
+  // The old pattern: string-concatenating proj.icon directly into an innerHTML
+  // assignment. Any of these substrings would indicate the vulnerability is back.
+  var dangerous = [
+    "proj.icon +",
+    "+ proj.icon",
+    "proj.icon}",
+    "${proj.icon}",
+  ];
+  for (var i = 0; i < dangerous.length; i++) {
+    assert.ok(
+      !src.includes(dangerous[i]),
+      "app-home-hub.js must not contain '" + dangerous[i] + "' (raw icon interpolation)"
+    );
+  }
+});

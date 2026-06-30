@@ -171,11 +171,35 @@
     font-weight: 600;
     color: var(--text-secondary);
     flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  /* Custom-image icons rendered via renderProjectIcon inside mobile abbrev box */
+  .mobile-project-abbrev .project-emoji-img {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    border-radius: 4px;
   }
 
   .mobile-project-item.active .mobile-project-abbrev {
     background: var(--accent);
     color: #fff;
+  }
+
+  /* mobile-chat-project-icon: icon in the chat header title area */
+  .mobile-chat-project-icon .project-emoji-img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+
+  /* mobile-folder-emoji-overlay: icon overlaid on folder icon */
+  .mobile-folder-emoji-overlay .project-emoji-img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
   }
 
   .mobile-project-name {
