@@ -1,3 +1,34 @@
+# [1.6.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.5.0...v1.6.0-beta.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **cli:** default config mode to 'multi' instead of 'single' (lr-4e50) ([7a63608](https://github.com/clagentic/clagentic-console/commit/7a636082d341438b0e50804788a310bcf55c0225))
+* **cli:** replace upstream CLAY ASCII banner with Clagentic: Console banner (lr-5e26) ([585818a](https://github.com/clagentic/clagentic-console/commit/585818abb144105810a7ff9bf3ac57e11a6961ab))
+* **diagnostics:** restore focus to toggle btn on close-button click (lr-8294) ([fc868d5](https://github.com/clagentic/clagentic-console/commit/fc868d5f8ac580c3d20d3c1939b8bebf9c17191e))
+* **loop:** guard stop fallback timer against stop/restart race (lr-e823) ([4385708](https://github.com/clagentic/clagentic-console/commit/438570869464722a638b7cfb821117df0b57e36d))
+* **paths:** enforce ~/.clagentic/console/ contract for all Console data (lr-6204) ([bfe63ec](https://github.com/clagentic/clagentic-console/commit/bfe63ecb388939a99ead48ea8681b64780204f78))
+* **project:** shut down _localMcp on destroy() to prevent zombie processes (lr-4078) ([ffa81e2](https://github.com/clagentic/clagentic-console/commit/ffa81e2e5d9a4efd0cd9d37a580b7928293f783f))
+* **sdk-bridge:** resolve context window using active betas; fix cgroup-warn disable (lr-1f7e PEACHES) ([0a327a5](https://github.com/clagentic/clagentic-console/commit/0a327a54869b39d9f387809b22555d4a65bc83ea))
+* **sessions:** deregister process exit listener on session manager destroy (lr-daca) ([10bc04b](https://github.com/clagentic/clagentic-console/commit/10bc04b78a1a28916358fe2fa00ed71ed7b5c041))
+* **tls:** remove pre-fork builtin cert (*.d.clay.studio key) (lr-8406) ([bf3e594](https://github.com/clagentic/clagentic-console/commit/bf3e59468f4efdf66acb85c9b23295f11d2fed2e))
+
+
+### Features
+
+* **daemon:** start MemoryHigh watcher on Linux after server is listening (lr-de07) ([4cb66d9](https://github.com/clagentic/clagentic-console/commit/4cb66d9513be98a1095f32b5f49feb2ea0cf950e))
+* **diagnostics:** render diagnostic events in UI — toast + panel (lr-8294, epic lr-1a52) ([f725ba8](https://github.com/clagentic/clagentic-console/commit/f725ba86a7148ec51f87ae6c0577dbef3a354767)), closes [#diagnostics-panel](https://github.com/clagentic/clagentic-console/issues/diagnostics-panel) [#info-panels](https://github.com/clagentic/clagentic-console/issues/info-panels) [#diagnostics-panel-btn](https://github.com/clagentic/clagentic-console/issues/diagnostics-panel-btn) [#diagnostics-panel](https://github.com/clagentic/clagentic-console/issues/diagnostics-panel) [#info-panels](https://github.com/clagentic/clagentic-console/issues/info-panels)
+* **drain:** graceful drain on memory pressure (lr-6b30) ([7104654](https://github.com/clagentic/clagentic-console/commit/7104654fe0dd88e66a608632d4801bb3b115359b))
+* **loop:** Ralph Loop boundary compaction / handoff-to-disk (lr-ed10) ([98ea47f](https://github.com/clagentic/clagentic-console/commit/98ea47ff4f90a950c68ef663095aa6daa4bac071)), closes [#654](https://github.com/clagentic/clagentic-console/issues/654)
+* **memory:** add memory-limits module with drop-in renderer and MemoryHigh watcher (lr-de07) ([8becb58](https://github.com/clagentic/clagentic-console/commit/8becb585e7427edf19d2349cff7dd42619038d31))
+* **postinstall:** apply memory drop-in from daemon.json memoryHigh/memoryMax overrides (lr-de07) ([fe57021](https://github.com/clagentic/clagentic-console/commit/fe57021c7f57de0f68106bae579832afa7528a2a))
+* **preflight:** Console-side settings.json preflight validator (lr-1a26, epic lr-1a52 stage 5/5) ([94a8e8e](https://github.com/clagentic/clagentic-console/commit/94a8e8ea99815c4319c36aa521d1dba3244d45eb))
+* **sdk-bridge:** configurable context-window warn + make cgroup warn fraction configurable (lr-1f7e) ([b8bee08](https://github.com/clagentic/clagentic-console/commit/b8bee0899efae44cfb4741bc4c5c5a0ae689e291)), closes [#268](https://github.com/clagentic/clagentic-console/issues/268)
+* **shared:** extract model context-window map to shared modules (lr-336f) ([94eda5d](https://github.com/clagentic/clagentic-console/commit/94eda5db5aa04bff7566c6b5a1cb866f2226a773))
+* **yoke:** add diagnostic event type to YOKE interface contract (lr-8c43) ([1cae1b5](https://github.com/clagentic/clagentic-console/commit/1cae1b5391d17ca7bbee2e885c7959349d07be04))
+* **yoke:** capture CLI stderr diagnostics in claude-worker, emit diagnostic events (lr-28ee) ([28c5685](https://github.com/clagentic/clagentic-console/commit/28c568532b9d061c42dc5911a524d601b24f827a))
+* **yoke:** flatten and route diagnostic events end-to-end (lr-0868, epic lr-1a52 stage 3/5) ([e84f3dc](https://github.com/clagentic/clagentic-console/commit/e84f3dc9379a8d8ee9e7b43c80013208801028c6))
+
 # [1.5.0](https://github.com/clagentic/clagentic-console/compare/v1.4.1...v1.5.0) (2026-06-25)
 
 
