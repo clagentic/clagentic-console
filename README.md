@@ -172,6 +172,24 @@ The test suite covers 12 areas across 26 test files:
 
 Run the suite: `npm test`
 
+### Local install for manual testing (developers only)
+
+> **Warning:** This is a manual, developer-only convenience. Do not call it from CI, automated scripts, systemd units, or any other tooling. It is not a release or deploy mechanism.
+
+To install the current working-tree build globally and test it as a real end-user install would behave:
+
+```bash
+npm run install:local-test
+```
+
+This runs `npm pack` (which respects the `files` list in `package.json`, so you get exactly what would ship to npm), installs the resulting tarball globally with `npm install -g`, and removes the tarball. The result is indistinguishable from `npm install -g @clagentic/console` — no symlinks, no `node_modules` shortcuts.
+
+When done testing, uninstall with:
+
+```bash
+npm uninstall -g @clagentic/console
+```
+
 ## FAQ
 
 **"Is this a Claude Code wrapper?"**
