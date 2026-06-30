@@ -399,3 +399,260 @@ test("7d: browser_click with normal selector still works (no regression)", funct
     assert.ok(script.indexOf('"#submit-btn"') !== -1, "normal selector must appear in script");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Test 8 — YOKE interface contract: 'diagnostic' event type (lr-8c43)
+//
+// Validates validateDiagnosticEvent against the shape documented in
+// interface.js. Every acceptance test proves the validator passes a valid
+// object; every rejection test proves the validator throws on a specific
+// violation. Tests are independent of any adapter — the validator is
+// vendor-agnostic by design.
+// ---------------------------------------------------------------------------
+
+var yokeIface = require("../lib/yoke/interface");
+var validateDiagnosticEvent = yokeIface.validateDiagnosticEvent;
+var DIAGNOSTIC_SEVERITIES = yokeIface.DIAGNOSTIC_SEVERITIES;
+var DIAGNOSTIC_SOURCES = yokeIface.DIAGNOSTIC_SOURCES;
+var INTERFACE_VERSION = yokeIface.INTERFACE_VERSION;
+
+// --- exports surface ---
+
+test("8: INTERFACE_VERSION is exported and is a semver string", function() {
+  assert.strictEqual(typeof INTERFACE_VERSION, "string",
+    "INTERFACE_VERSION must be a string");
+  assert.ok(
+    /^\d+\.\d+\.\d+$/.test(INTERFACE_VERSION),
+    "INTERFACE_VERSION must match semver x.y.z, got: " + INTERFACE_VERSION
+  );
+});
+
+test("8: INTERFACE_VERSION is 0.2.0 after diagnostic event migration", function() {
+  assert.strictEqual(INTERFACE_VERSION, "0.2.0",
+    "INTERFACE_VERSION must be 0.2.0 after lr-8c43 migration");
+});
+
+test("8: DIAGNOSTIC_SEVERITIES contains info, warning, error", function() {
+  assert.ok(Array.isArray(DIAGNOSTIC_SEVERITIES), "must be array");
+  assert.ok(DIAGNOSTIC_SEVERITIES.indexOf("info") !== -1, "must include 'info'");
+  assert.ok(DIAGNOSTIC_SEVERITIES.indexOf("warning") !== -1, "must include 'warning'");
+  assert.ok(DIAGNOSTIC_SEVERITIES.indexOf("error") !== -1, "must include 'error'");
+});
+
+test("8: DIAGNOSTIC_SOURCES documents well-known source identifiers", function() {
+  assert.ok(Array.isArray(DIAGNOSTIC_SOURCES), "must be array");
+  ["settings", "mcp", "cli", "hook"].forEach(function(src) {
+    assert.ok(DIAGNOSTIC_SOURCES.indexOf(src) !== -1,
+      "DIAGNOSTIC_SOURCES must include '" + src + "'");
+  });
+});
+
+// --- acceptance: minimal valid event ---
+
+test("8: validateDiagnosticEvent accepts minimal valid event (no actionable)", function() {
+  assert.doesNotThrow(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "warning",
+      source: "settings",
+      message: "settings.json has an unknown key",
+    });
+  });
+});
+
+test("8: validateDiagnosticEvent accepts all three severity levels", function() {
+  ["info", "warning", "error"].forEach(function(sev) {
+    assert.doesNotThrow(function() {
+      validateDiagnosticEvent({
+        type: "diagnostic",
+        severity: sev,
+        source: "cli",
+        message: "test message",
+      });
+    }, "should accept severity: " + sev);
+  });
+});
+
+test("8: validateDiagnosticEvent accepts well-known source strings", function() {
+  ["settings", "mcp", "cli", "hook"].forEach(function(src) {
+    assert.doesNotThrow(function() {
+      validateDiagnosticEvent({
+        type: "diagnostic",
+        severity: "info",
+        source: src,
+        message: "test",
+      });
+    }, "should accept source: " + src);
+  });
+});
+
+test("8: validateDiagnosticEvent accepts a custom (non-listed) source string", function() {
+  // Source is intentionally free-form; adapters may emit vendor-specific values.
+  assert.doesNotThrow(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "info",
+      source: "permissions",
+      message: "custom source allowed",
+    });
+  });
+});
+
+test("8: validateDiagnosticEvent accepts fully populated event with actionable", function() {
+  assert.doesNotThrow(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "error",
+      source: "mcp",
+      message: "MCP server failed to load: connection refused",
+      actionable: {
+        label: "Open settings",
+        action: "open:settings:mcp",
+      },
+    });
+  });
+});
+
+// --- rejection: wrong type discriminant ---
+
+test("8: validateDiagnosticEvent rejects null", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent(null);
+  }, /diagnostic event must be a non-null object/);
+});
+
+test("8: validateDiagnosticEvent rejects non-object", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent("diagnostic");
+  }, /diagnostic event must be a non-null object/);
+});
+
+test("8: validateDiagnosticEvent rejects wrong type field", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "system",
+      severity: "warning",
+      source: "cli",
+      message: "oops",
+    });
+  }, /type === 'diagnostic'/);
+});
+
+// --- rejection: severity ---
+
+test("8: validateDiagnosticEvent rejects invalid severity", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "critical",
+      source: "cli",
+      message: "bad severity",
+    });
+  }, /severity must be one of/);
+});
+
+test("8: validateDiagnosticEvent rejects missing severity", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      source: "cli",
+      message: "missing severity",
+    });
+  }, /severity must be one of/);
+});
+
+// --- rejection: source ---
+
+test("8: validateDiagnosticEvent rejects missing source", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "warning",
+      message: "no source",
+    });
+  }, /source must be a non-empty string/);
+});
+
+test("8: validateDiagnosticEvent rejects empty source", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "warning",
+      source: "",
+      message: "empty source",
+    });
+  }, /source must be a non-empty string/);
+});
+
+// --- rejection: message ---
+
+test("8: validateDiagnosticEvent rejects missing message", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "info",
+      source: "cli",
+    });
+  }, /message must be a non-empty string/);
+});
+
+test("8: validateDiagnosticEvent rejects empty message", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "info",
+      source: "cli",
+      message: "",
+    });
+  }, /message must be a non-empty string/);
+});
+
+// --- rejection: actionable ---
+
+test("8: validateDiagnosticEvent rejects actionable that is not an object", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "warning",
+      source: "hook",
+      message: "hook load failed",
+      actionable: "fix it",
+    });
+  }, /actionable must be an object/);
+});
+
+test("8: validateDiagnosticEvent rejects actionable with missing label", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "error",
+      source: "mcp",
+      message: "failed",
+      actionable: { action: "open:settings" },
+    });
+  }, /actionable\.label must be a non-empty string/);
+});
+
+test("8: validateDiagnosticEvent rejects actionable with missing action", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "error",
+      source: "mcp",
+      message: "failed",
+      actionable: { label: "Fix" },
+    });
+  }, /actionable\.action must be a non-empty string/);
+});
+
+test("8: validateDiagnosticEvent rejects actionable with empty label", function() {
+  assert.throws(function() {
+    validateDiagnosticEvent({
+      type: "diagnostic",
+      severity: "error",
+      source: "mcp",
+      message: "failed",
+      actionable: { label: "", action: "open:settings" },
+    });
+  }, /actionable\.label must be a non-empty string/);
+});
