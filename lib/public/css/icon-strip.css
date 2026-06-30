@@ -499,6 +499,203 @@
     drop-shadow(0 0 4px rgba(255,255,255,0.35));
 }
 
+/* Custom-image icon rendered as <img> (project-icon.js) */
+.project-emoji-img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* Hub project icon rendered via renderProjectIcon */
+.hub-project-icon .project-emoji-img {
+  width: 18px;
+  height: 18px;
+}
+
+/* --- Custom emoji picker panel --- */
+.emoji-picker-custom-panel {
+  width: 100%;
+}
+
+.emoji-picker-slug-confirm {
+  padding: 6px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emoji-picker-slug-confirm.hidden {
+  display: none;
+}
+
+.emoji-picker-slug-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.emoji-picker-slug-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--input-bg, var(--bg-secondary));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.emoji-picker-slug-input:focus {
+  border-color: var(--accent, #7c6cf8);
+}
+
+.emoji-picker-slug-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.emoji-picker-slug-actions button {
+  padding: 4px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text-secondary);
+  transition: background 0.15s;
+}
+
+.emoji-picker-slug-actions button:hover {
+  background: var(--bg-hover, var(--bg-alt));
+  color: var(--text);
+}
+
+.emoji-picker-slug-actions button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.emoji-picker-slug-actions button.primary:hover {
+  opacity: 0.9;
+}
+
+/* Upload tile in the custom emoji grid */
+.emoji-picker-upload-tile {
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--text-dimmer);
+  border: 1.5px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.emoji-picker-upload-tile:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb, 124, 58, 237), 0.06);
+  transform: none;
+}
+
+/* Individual custom-emoji tile (image + delete button) */
+.emoji-picker-custom-tile {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.emoji-picker-custom-tile:hover {
+  background: rgba(var(--overlay-rgb), 0.08);
+}
+
+.emoji-picker-custom-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 4px;
+  display: block;
+}
+
+.emoji-picker-custom-delete {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--error, #ef4444);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  border: none;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 2;
+}
+
+.emoji-picker-custom-tile:hover .emoji-picker-custom-delete {
+  display: flex;
+}
+
+.emoji-picker-custom-empty {
+  font-size: 12px;
+  color: var(--text-tertiary, var(--text-dimmer));
+  padding: 8px 4px;
+  text-align: center;
+}
+
+/* --- Mobile-responsive emoji picker --- */
+@media (max-width: 768px) {
+  .emoji-picker {
+    /* On mobile, stretch to fill most of the viewport width */
+    width: calc(100vw - 24px);
+    max-width: 340px;
+    /* Ensure picker doesn't overflow the right edge */
+    left: 12px !important;
+    right: 12px;
+    /* Limit height so it doesn't cover the entire screen */
+    max-height: 70vh;
+    overflow: hidden;
+  }
+
+  .emoji-picker-scroll {
+    max-height: calc(70vh - 120px);
+  }
+
+  .emoji-picker-grid {
+    /* Reduce from 8 to 6 columns on narrow screens */
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  /* Custom panel on mobile: upload tile + grid both need to fit the narrower layout */
+  .emoji-picker-custom-tile,
+  .emoji-picker-upload-tile {
+    width: 40px;
+    height: 40px;
+  }
+
+  .emoji-picker-custom-img {
+    width: 40px;
+    height: 40px;
+  }
+}
+
 /* --- Project context menu --- */
 .project-ctx-menu {
   position: fixed;
