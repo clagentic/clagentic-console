@@ -669,7 +669,7 @@
 #info-panels:empty { display: none; }
 
 /* --- Usage panel --- */
-#usage-panel, #status-panel, #context-panel, #team-panel {
+#usage-panel, #status-panel, #context-panel, #team-panel, #diagnostics-panel {
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -678,7 +678,7 @@
   pointer-events: auto;
 }
 
-#usage-panel.hidden, #status-panel.hidden, #context-panel.hidden, #team-panel.hidden { display: none; }
+#usage-panel.hidden, #status-panel.hidden, #context-panel.hidden, #team-panel.hidden, #diagnostics-panel.hidden { display: none; }
 
 .usage-panel-header {
   display: flex;
