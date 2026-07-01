@@ -1076,7 +1076,20 @@
 .custom-icons-header {
   display: flex;
   align-items: center;
+  gap: 8px;
   margin-bottom: 14px;
+}
+/* lr-0847: slug filter box — grows to fill the row, Upload stays fixed width */
+.custom-icons-filter-input {
+  flex: 1;
+  min-width: 0;
+  cursor: text;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+}
+.custom-icons-filter-input::placeholder {
+  color: var(--text-dimmer);
 }
 .custom-icons-list {
   display: flex;
