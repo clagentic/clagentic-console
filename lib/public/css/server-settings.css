@@ -1072,3 +1072,90 @@
   margin-top: 2px;
 }
 
+/* ===== Custom Icons settings section (lr-d1d9) ===== */
+.custom-icons-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.custom-icons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.custom-icons-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+}
+.custom-icons-thumb {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+.custom-icons-thumb .project-emoji-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--overlay-rgb), 0.1);
+  object-fit: cover;
+  background: var(--bg);
+}
+.custom-icons-meta {
+  flex: 1;
+  min-width: 0;
+}
+.custom-icons-slug {
+  font-family: "Roboto Mono", monospace;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.custom-icons-detail {
+  margin-top: 2px;
+}
+.custom-icons-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+}
+.custom-icons-actions .settings-btn-sm .lucide {
+  width: 14px;
+  height: 14px;
+}
+.custom-icons-rename-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.custom-icons-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Roboto Mono", monospace;
+  font-size: 13px;
+  outline: none;
+}
+.custom-icons-rename-input:focus {
+  border-color: var(--accent);
+}
+.custom-icons-rename-error {
+  color: var(--error);
+  margin-top: 4px;
+}
+

@@ -1053,6 +1053,7 @@
           <button class="settings-nav-item" data-section="claudemd"><span>Instructions</span></button>
           <button class="settings-nav-item" data-section="environment"><span>Environment</span></button>
           <button class="settings-nav-item" data-section="storage"><span>Storage</span></button>
+          <button class="settings-nav-item" data-section="custom-icons"><span>Custom Icons</span></button>
           <div class="settings-nav-separator settings-admin-only"></div>
           <div class="settings-nav-category settings-admin-only">Admin</div>
           <button class="settings-nav-item settings-admin-only" data-section="admin-users"><span>Users</span></button>
@@ -1319,6 +1320,17 @@
                 <option value="90">90 days</option>
               </select>
             </label>
+          </div>
+        </div>
+        <div class="server-settings-section" data-section="custom-icons">
+          <h2>Custom Icons</h2>
+          <p class="settings-hint" style="margin-bottom: 16px;">Manage uploaded custom icons available to any project or folder across this server. Uploads are stored server-wide, not per-project.</p>
+          <div class="custom-icons-header">
+            <button class="settings-btn-sm" id="custom-icons-upload-btn"><i data-lucide="upload"></i> Upload</button>
+            <input type="file" id="custom-icons-file-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
+          </div>
+          <div id="custom-icons-list">
+            <!-- rows rendered by JS (custom-icons-settings.js) -->
           </div>
         </div>
         <!-- Clagentic: Lite — always rendered; JS toggles installed vs not-installed sub-states -->
