@@ -110,6 +110,33 @@ test("'below-right-aligned' placement aligns the popover's right edge to the anc
 });
 
 // ============================================================
+// Explicit `gap` option — regression coverage for per-call-site gaps
+// dropped during the lr-a10a consolidation (amos.code-craft.1). Several
+// call sites had a non-default gap (8px, 4px, 2px) before routing through
+// this shared util; those values must be passed explicitly since the
+// util's own default (6px) is unrelated to any one call site's original
+// spacing.
+// ============================================================
+
+test("explicit gap overrides the default for 'right' placement (e.g. project-access-popover: 8px)", () => {
+  var anchor = { top: 100, left: 200, right: 240, bottom: 140 };
+  var pos = computePopoverPosition({ width: 180, height: 120 }, anchor, DESKTOP_VIEWPORT, { placement: "right", gap: 8, mobile: false });
+  assert.equal(pos.left, 240 + 8);
+});
+
+test("explicit gap overrides the default for 'below' placement (e.g. project-ctx-menu/move-folder-menu below variant: 4px)", () => {
+  var anchor = { top: 100, left: 50, right: 90, bottom: 130 };
+  var pos = computePopoverPosition({ width: 150, height: 100 }, anchor, DESKTOP_VIEWPORT, { placement: "below", gap: 4, mobile: false });
+  assert.equal(pos.top, 130 + 4);
+});
+
+test("explicit gap overrides the default for 'below-right-aligned' placement (e.g. session/loop ctx menu: 2px)", () => {
+  var anchor = { top: 40, left: 900, right: 950, bottom: 70 };
+  var pos = computePopoverPosition({ width: 180, height: 120 }, anchor, DESKTOP_VIEWPORT, { placement: "below-right-aligned", gap: 2, mobile: false });
+  assert.equal(pos.top, 70 + 2);
+});
+
+// ============================================================
 // Low-anchor flip-then-clamp — the core lr-a10a / lr-149e regression
 // ============================================================
 
