@@ -297,6 +297,16 @@ The helper is wired into every icon render site: `sidebar-projects.js`, `app-hom
 
 `app-home-hub.js` previously interpolated `proj.icon` directly into `innerHTML`. That site now uses DOM API with `renderProjectIcon`, eliminating the stored-XSS vector.
 
+## Server Settings mobile parity (lr-87ca)
+
+**Rule:** any Server Settings section or affordance that ships on desktop MUST ship with first-class mobile parity in the same change. "Reachable via the command palette" or "reachable via a synthetic click on a hidden desktop button" is NOT parity — it is a discoverability defect.
+
+**Root cause this rule fixes:** `#server-settings-btn` lives inside `#top-bar`, which is `display:none` at `<=768px` (`lib/public/css/title-bar.css`). Before lr-87ca, the mobile "More" sheet (`lib/public/modules/sidebar-mobile.js`) opened Server Settings by synthetic-clicking that hidden button (`document.getElementById("server-settings-btn").click()`), which only worked because the click handler still fired despite the element being invisible. This left every Server Settings section (Storage, Custom Icons, etc.) technically reachable but not a first-class, discoverable nav path.
+
+**Fix pattern:** `server-settings.js` exports `openServerSettings()` — a public entry point independent of the desktop button element — mirroring the existing `openProjectSettings()` pattern already used by Project Settings. `sidebar-mobile.js`'s "More" sheet imports and calls `openServerSettings()` directly instead of dispatching a synthetic click. Once the panel is open, per-section navigation is already shared code between desktop and mobile: the `.server-settings-nav-items` sidebar list is desktop-only (hidden at `<=768px`), replaced by `#settings-nav-pill` → the settings command palette (`openSettingsPalette()`), which lists every entry in `SETTINGS_SECTIONS` (the same registry used to render the desktop sidebar) — so no separate mobile section audit is needed as long as new sections are added to `SETTINGS_SECTIONS`.
+
+**When adding a new Server Settings section:** add it to `SETTINGS_SECTIONS` in `server-settings.js`, add the corresponding nav item + `.server-settings-section` panel markup in `index.html`, and verify it renders and functions at `<=768px` (mobile nav pill → palette → section). Do not add a desktop-only entry point (e.g. wiring a new button that only lives in `#top-bar`).
+
 ## See Also
 
 - [MODULE_MAP.md](./MODULE_MAP.md) — where every module lives and what it owns
