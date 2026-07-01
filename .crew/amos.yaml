@@ -27,6 +27,7 @@ scope:
     - package.json
     - README.md
     - CHANGELOG.md
+    - .gitignore
 
 focus:
   - "Product name in user-facing text: 'Clagentic: Console' (capital C, colon, space, capital C)"
