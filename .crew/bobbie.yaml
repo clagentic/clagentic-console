@@ -1,0 +1,50 @@
+# .crew/bobbie.yaml — BOBBIE per-project configuration for clagentic-console
+#
+# Schema: schemas/crew-config.schema.json (security block, lr-4d7c)
+# Scaffolded by: amos lr-a68f
+
+schema_version: 1
+
+security:
+  rules:
+    # WebSocket relay and push-notification subsystems handle tokens and
+    # subscription endpoints. Any token or key written to source is a blocker.
+    - id: clagentic-console.no-push-token-in-source
+      severity: blocking
+      description: >-
+        Web-push VAPID private keys, subscription endpoints, or authentication
+        tokens must never appear in committed source. Use env vars or
+        ~/.clagentic/ config files resolved at runtime.
+      pattern: "vapid|VAPID|privateKey|authToken|p256dh|auth[\"']\\s*:\\s*[\"'][A-Za-z0-9+/=_-]{20,}"
+      applies_to:
+        - "lib/**/*.js"
+        - "bin/**/*.js"
+        - "scripts/**/*.js"
+
+    # YOKE adapter mediates vendor-agnostic agent sessions. Vendor API keys
+    # (OpenAI, Anthropic) must not be hardcoded in adapter code.
+    - id: clagentic-console.no-api-key-in-yoke
+      severity: blocking
+      description: >-
+        Vendor API keys (OpenAI, Anthropic) must not be hardcoded in the YOKE
+        adapter or any relay code. Keys are read from the user's environment at
+        session spawn time.
+      pattern: "(sk-[A-Za-z0-9_-]{20,}|ANTHROPIC_API_KEY\\s*=\\s*[\"'][^\"']+[\"'])"
+      applies_to:
+        - "lib/yoke/**/*.js"
+        - "lib/relay*.js"
+
+    # node_modules is excluded from normal scope but a mis-scoped postinstall
+    # script that exfiltrates data would be a critical issue.
+    - id: clagentic-console.postinstall-safe
+      severity: blocking
+      description: >-
+        scripts/postinstall.js must not make outbound network calls or read
+        user credentials. It runs in install context with potentially elevated
+        permissions.
+      applies_to:
+        - "scripts/postinstall.js"
+
+  # BOBBIE default scanners are appropriate for this Node.js project.
+  # No scanner overrides needed: gitleaks for secrets, semgrep for SAST,
+  # osv-scanner for dependency vulnerability scanning.
