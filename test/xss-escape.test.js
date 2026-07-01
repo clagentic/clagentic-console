@@ -214,3 +214,120 @@ test("app-home-hub.js: does not interpolate raw proj.icon into innerHTML (lr-a68
     );
   }
 });
+
+// ============================================================
+// lr-a6da — projectIconHtml() (string-composition render sites)
+// ============================================================
+
+import { projectIconHtml } from "../lib/public/modules/project-icon.js";
+
+test("projectIconHtml: custom icon renders as safe <img> markup, not literal ':slug:' text", () => {
+  var html = projectIconHtml(":my_icon:");
+  assert.ok(html.includes('src="/api/custom-emoji/my_icon"'), "img src points at the custom-emoji endpoint");
+  assert.ok(html.includes('class="project-emoji-img"'), "carries the shared project-emoji-img class");
+  // The whole thing must be a single self-contained <img> tag: ':my_icon:' is
+  // only present inside the alt="" attribute (mirrors renderProjectIcon()'s
+  // img.alt), never as visible text content outside the tag.
+  assert.ok(/^<img\b[^>]*>$/.test(html), "output is a single self-contained <img> tag, no trailing literal text");
+  assert.ok(html.includes('alt=":my_icon:"'), "slug appears only inside the alt attribute, as accessible text");
+});
+
+test("projectIconHtml: custom icon markup includes an onerror fallback (delete-in-use parity)", () => {
+  var html = projectIconHtml(":deleted_icon:");
+  assert.ok(html.includes("onerror="), "string-built <img> carries a fallback for a 404'd (deleted-in-use) custom icon");
+});
+
+test("projectIconHtml: unicode emoji still renders as escaped text, unchanged", () => {
+  assert.equal(projectIconHtml("🚀"), "🚀");
+  assert.equal(projectIconHtml("📁"), "📁");
+});
+
+test("projectIconHtml: null/empty icon falls back to caller-supplied placeholder markup", () => {
+  var fallback = '<i data-lucide="box"></i>';
+  assert.equal(projectIconHtml(null, fallback), fallback);
+  assert.equal(projectIconHtml("", fallback), fallback);
+  assert.equal(projectIconHtml(undefined), "");
+});
+
+test("projectIconHtml: does not raw-interpolate a script-bearing non-sentinel icon value", () => {
+  // Not a valid :slug: sentinel (isCustomIcon rejects it), so it falls through
+  // to the escaped-text branch — must not appear unescaped in the output.
+  var html = projectIconHtml('<script>alert(1)</script>');
+  assert.ok(!html.includes("<script>"), "script tag must be HTML-escaped, not passed through raw");
+  assert.ok(html.includes("&lt;script&gt;"), "escaped form is present instead");
+});
+
+// ============================================================
+// lr-a6da — no-raw-interpolation regressions at the newly-wired render sites
+// ============================================================
+
+test("command-palette.js: recent sessions / search results / project list route icons through projectIconHtml, not raw interpolation", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/command-palette.js"), "utf8");
+
+  assert.ok(src.includes("projectIconHtml"), "command-palette.js imports/uses projectIconHtml");
+
+  var dangerous = [
+    "s.projectIcon ||",
+    "r.projectIcon ||",
+    "proj.icon ||",
+  ];
+  for (var i = 0; i < dangerous.length; i++) {
+    assert.ok(
+      !src.includes(dangerous[i]),
+      "command-palette.js must not contain '" + dangerous[i] + "' (raw icon interpolation bypassing projectIconHtml)"
+    );
+  }
+});
+
+test("app-notifications.js: banner icon routes through projectIconHtml, not raw interpolation", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/app-notifications.js"), "utf8");
+
+  assert.ok(src.includes("projectIconHtml"), "app-notifications.js imports/uses projectIconHtml");
+  assert.ok(
+    !src.includes("'<span class=\"notif-banner-emoji\">' + projectIcon +"),
+    "app-notifications.js must not raw-interpolate projectIcon into the banner markup"
+  );
+});
+
+test("app-projects.js: removed-projects list routes icons through renderProjectIcon, not raw textContent", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/app-projects.js"), "utf8");
+
+  assert.ok(
+    !src.includes('iconEl.textContent = rp.icon'),
+    "app-projects.js must not assign rp.icon directly to textContent (shows ':slug:' literally)"
+  );
+  assert.ok(
+    src.includes("renderProjectIcon(rp.icon"),
+    "app-projects.js routes the removed-projects icon through renderProjectIcon"
+  );
+});
+
+test("sidebar-projects.js: folder render sites (header + move-to-folder menu) route custom icons through the shared helper", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/sidebar-projects.js"), "utf8");
+
+  assert.ok(
+    !src.includes("emojiSpan.textContent = fmeta.icon"),
+    "sidebar-projects.js desktop folder header must not assign fmeta.icon directly to textContent"
+  );
+  assert.ok(
+    src.includes("renderProjectIcon(fmeta.icon"),
+    "sidebar-projects.js desktop folder header routes fmeta.icon through renderProjectIcon"
+  );
+
+  assert.ok(
+    !src.includes("'<span style=\"margin-right:4px\">' + fmeta2.icon +"),
+    "sidebar-projects.js move-to-folder menu must not raw-interpolate fmeta2.icon"
+  );
+  assert.ok(
+    src.includes("projectIconHtml(fmeta2.icon)"),
+    "sidebar-projects.js move-to-folder menu routes fmeta2.icon through projectIconHtml"
+  );
+});
