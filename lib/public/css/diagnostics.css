@@ -264,6 +264,14 @@
     right: 16px;
     transform: translateY(8px);
     max-width: none;
+    /* lr-2fdd: bottom:80px (inherited from base .toast) occludes the
+       bottom-nav / input box / content on mobile (iOS screenshot showed
+       the PREFLIGHT WARNING toast covering the UPCOMING card just above
+       the Projects/Chat/Team/More nav). Top-anchor instead, matching the
+       base .toast / .sw-update-banner mobile fix so the whole toast
+       family lands the same way. */
+    top: calc(var(--safe-top) + 12px);
+    bottom: auto;
   }
   .toast-diagnostic.visible {
     transform: translateY(0);

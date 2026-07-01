@@ -285,3 +285,21 @@ html, body {
   color: var(--text);
 }
 
+/* Mobile (lr-2fdd): bottom:80px occludes the bottom-nav / input box / content
+   on narrow viewports (iOS screenshot showed the toast covering content just
+   above the Projects/Chat/Team/More nav). Top-anchor instead — per Andy's
+   steer ("should top align more than bottom align") — clearing the notch /
+   status bar via the safe-area inset. Desktop placement is unchanged. */
+@media (max-width: 768px) {
+  .toast,
+  .sw-update-banner {
+    top: calc(var(--safe-top) + 12px);
+    bottom: auto;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  .toast.visible,
+  .sw-update-banner.visible {
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
