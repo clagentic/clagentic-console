@@ -1,3 +1,39 @@
+# [1.6.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.6.0-beta.1...v1.6.0-beta.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* **crew:** remove .crew/ from .gitignore so config is tracked normally (lr-a68f) ([02733d7](https://github.com/clagentic/clagentic-console/commit/02733d729946d4e98a0d3c7050758e5d534f88da))
+* **diagnostics:** stop panel from being unclickable and add outside-click dismiss (lr-b580) ([6054d45](https://github.com/clagentic/clagentic-console/commit/6054d4534376afa4deeb2caeb08e6786ca75e1d4)), closes [#diagnostics-panel](https://github.com/clagentic/clagentic-console/issues/diagnostics-panel) [#info-panels](https://github.com/clagentic/clagentic-console/issues/info-panels) [#usage-panel](https://github.com/clagentic/clagentic-console/issues/usage-panel) [#status-panel](https://github.com/clagentic/clagentic-console/issues/status-panel) [#context-panel](https://github.com/clagentic/clagentic-console/issues/context-panel) [#team-panel](https://github.com/clagentic/clagentic-console/issues/team-panel) [#diagnostics-panel](https://github.com/clagentic/clagentic-console/issues/diagnostics-panel)
+* **icons:** bring folder icon render to parity with project icons (lr-a6da) ([b8ac2c3](https://github.com/clagentic/clagentic-console/commit/b8ac2c372ffa581f314bedb4037b7bec9d551f5e))
+* **icons:** route Add Project removed-list icon through renderProjectIcon (lr-a6da) ([4f34859](https://github.com/clagentic/clagentic-console/commit/4f348593a02a8cdea6495b3d8097d192169211be))
+* **icons:** route command-palette icon rendering through projectIconHtml (lr-a6da) ([df36128](https://github.com/clagentic/clagentic-console/commit/df36128b4e4e961a36321cf84adf64e39a472637))
+* **icons:** route recent-sessions + notification banners through projectIconHtml (lr-a6da) ([8c86dd3](https://github.com/clagentic/clagentic-console/commit/8c86dd32199ed9a5a92a5a9ff23dba47d2ee8f1e))
+* **mobile:** keep custom-icon emoji picker on-screen (lr-149e) ([2548a91](https://github.com/clagentic/clagentic-console/commit/2548a91e282c1cb52f6c2bf1f22b5104bb805139))
+* **picker:** surface upload errors via toast, add hyphen-segment search (lr-0847) ([f96e90e](https://github.com/clagentic/clagentic-console/commit/f96e90ee8ddbd89add1c733fb4d8fbd0fcffceb8))
+* **positioning:** restore per-call gap params dropped in lr-a10a consolidation ([d4695ed](https://github.com/clagentic/clagentic-console/commit/d4695ed85f596ac9fd0d14515cca90e9d40b0fad)), closes [#293](https://github.com/clagentic/clagentic-console/issues/293)
+* **security:** add X-Content-Type-Options: nosniff to user-content serve routes (lr-587c) ([af43f53](https://github.com/clagentic/clagentic-console/commit/af43f53f8bb034217b89ac6a5bd2c380388e73a4)), closes [#288](https://github.com/clagentic/clagentic-console/issues/288)
+* **sessions:** restore live-render for no-auth connections (lr-690b) ([dd1cb53](https://github.com/clagentic/clagentic-console/commit/dd1cb5360151cdf6621ff103a74e9da31cc2f630))
+* **sidebar-projects:** route ctx menus + popovers through shared clamp (lr-a10a) ([5835795](https://github.com/clagentic/clagentic-console/commit/583579564509f9b6e14d05dca65e48c218cc8028)), closes [#1](https://github.com/clagentic/clagentic-console/issues/1)
+* **sidebar-sessions,app-header,scheduler-config:** clamp bottom-flip dropdowns (lr-a10a) ([de3ec89](https://github.com/clagentic/clagentic-console/commit/de3ec89674dd18bee8d76708934c6bd6aceeceff))
+* **terminal,scheduler,sticky-notes:** route popups through shared clamp (lr-a10a) ([c858acf](https://github.com/clagentic/clagentic-console/commit/c858acf83e9e14a63e01607223baf535392df843))
+* **toast:** top-anchor toast family on mobile to clear bottom-nav (lr-2fdd) ([76c0e25](https://github.com/clagentic/clagentic-console/commit/76c0e258d9e2667fed13ab75e2a4858bbfb39e3a))
+
+
+### Features
+
+* **custom-emoji:** add /api/custom-emoji route family (lr-a68f) ([2416954](https://github.com/clagentic/clagentic-console/commit/2416954243a8b63400ddb347fd7fdd42d37cf175))
+* **custom-emoji:** add Custom tab to emoji picker (lr-a68f) ([acd8923](https://github.com/clagentic/clagentic-console/commit/acd892368f692410c2ebfea954d5a64dce6a49fe))
+* **custom-emoji:** add project-icon.js helper; fix XSS in app-home-hub (lr-a68f) ([432d080](https://github.com/clagentic/clagentic-console/commit/432d080872480f9609f96d349684841497b66479))
+* **custom-emoji:** add size/ext/contentType to GET /api/custom-emoji list (lr-d1d9) ([be305f9](https://github.com/clagentic/clagentic-console/commit/be305f94d265c561b8a512cf82e473b6762615db))
+* **custom-emoji:** CSS for project-emoji-img and custom picker panel (lr-a68f) ([45fdc25](https://github.com/clagentic/clagentic-console/commit/45fdc25d45718335094e1f85267ba9fd3d9666e4))
+* **custom-emoji:** wire renderProjectIcon into all icon render sites (lr-a68f) ([40cd9bd](https://github.com/clagentic/clagentic-console/commit/40cd9bda3e82ef3bc10e416d87c48c2477eb4e10))
+* **daemon:** add rename_custom_icon WS op (lr-d1d9) ([30d13f2](https://github.com/clagentic/clagentic-console/commit/30d13f27297949e1ecf22c194fda9919ecb34f9c))
+* **icons:** add projectIconHtml() string-composition helper (lr-a6da) ([b07cfd5](https://github.com/clagentic/clagentic-console/commit/b07cfd572d423a5e809de398749cc428f17ac1c2))
+* **positioning:** add shared viewport-clamp util (lr-a10a) ([9c9a938](https://github.com/clagentic/clagentic-console/commit/9c9a93891f49b393bfbc9264e7a1456a81c83bf4))
+* **settings:** add Custom Icons management surface to Server Settings (lr-d1d9) ([6b3c07f](https://github.com/clagentic/clagentic-console/commit/6b3c07fb782600b55729182d6e7e1da8f7c8268c))
+* **settings:** add slug filter to Custom Icons management list (lr-0847) ([71508be](https://github.com/clagentic/clagentic-console/commit/71508bef21c82898f425d2ed2f6cf9c196bf114b))
+
 # [1.6.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.5.0...v1.6.0-beta.1) (2026-06-30)
 
 
