@@ -45,6 +45,42 @@ test("formatDiagnosticSource: 'preflight' maps to 'Preflight' (stage 5/5 lr-1a26
   assert.strictEqual(formatDiagnosticSource("preflight"), "Preflight");
 });
 
+// ============================================================
+// formatDiagnosticSource + scope (lr-7e22)
+// ============================================================
+//
+// runPreflight validates BOTH ~/.claude/settings.json and the project's
+// .claude/settings.json independently, emitting one diagnostic per unknown
+// hook key per file. Without a scope suffix, two legitimate, distinct
+// warnings render an identical "Preflight" header and visually stack as
+// apparent duplicates (lr-5db5 investigation). scope distinguishes them.
+
+test("formatDiagnosticSource: 'preflight' + scope:'user' appends a terse user suffix", () => {
+  assert.strictEqual(formatDiagnosticSource("preflight", "user"), "Preflight · user");
+});
+
+test("formatDiagnosticSource: 'preflight' + scope:'project' appends a terse project suffix", () => {
+  assert.strictEqual(formatDiagnosticSource("preflight", "project"), "Preflight · project");
+});
+
+test("formatDiagnosticSource: 'preflight' + scope:'user' and scope:'project' render different labels", () => {
+  var userLabel = formatDiagnosticSource("preflight", "user");
+  var projectLabel = formatDiagnosticSource("preflight", "project");
+  assert.notStrictEqual(userLabel, projectLabel, "labels must be visually distinguishable");
+});
+
+test("formatDiagnosticSource: scope omitted falls back to the bare source label (no regression)", () => {
+  assert.strictEqual(formatDiagnosticSource("preflight"), "Preflight");
+});
+
+test("formatDiagnosticSource: unrecognized scope value is ignored (no suffix appended)", () => {
+  assert.strictEqual(formatDiagnosticSource("preflight", "bogus-scope"), "Preflight");
+});
+
+test("formatDiagnosticSource: scope suffix also applies to non-preflight sources", () => {
+  assert.strictEqual(formatDiagnosticSource("hook", "project"), "Hook · project");
+});
+
 test("formatDiagnosticSource: unknown source passes through unchanged", () => {
   assert.strictEqual(formatDiagnosticSource("mcp-server"), "mcp-server");
 });
