@@ -9,5 +9,11 @@ ref/
 TODO.md
 publish.sh
 docs/roadmaps/planned/PILOT-MCP-SERVER.md
-.crew/
+# .crew/ contains crew dispatch config (naomi.yaml, amos.yaml, etc.) and IS
+# intentionally tracked. Do not ignore the whole directory. If a specific
+# crew artifact that contains secrets ever needs ignoring, add it by name
+# (e.g. .crew/secrets.yaml), not by ignoring the whole .crew/ tree.
+# Transient crew working files (PR bodies, temp payloads) are not config.
+.crew/*.txt
+.crew/*.json
 

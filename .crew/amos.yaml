@@ -1,0 +1,48 @@
+# .crew/amos.yaml — AMoS per-project configuration for clagentic-console
+#
+# Schema: schemas/crew-config.schema.json (schema_version: 1)
+
+schema_version: 1
+
+merge_allowed: false
+
+branch_conventions:
+  allowed_prefixes:
+    - feat/
+    - fix/
+    - chore/
+    - docs/
+    - refactor/
+  # include_task_id: true
+
+scope:
+  allowed_paths:
+    - bin/**
+    - lib/**
+    - .crew/**
+    - test/**
+    - deploy/**
+    - scripts/**
+    - docs/**
+    - package.json
+    - README.md
+    - CHANGELOG.md
+    - .gitignore
+
+focus:
+  - "Product name in user-facing text: 'Clagentic: Console' (capital C, colon, space, capital C)"
+  - "CLI binary / command: clagentic-console (never bare 'clagentic')"
+  - "npm package: @clagentic/console"
+  - "Before committing changes to bin/cli.js or lib/**/*.js, grep for brand violations: grep -n '\"clagentic[^-_/@]' bin/cli.js lib/**/*.js"
+  - "LLM calls must use the claude CLI, not the Anthropic SDK"
+
+avoid:
+  - "Do not use bare 'clagentic' as a product name or CLI command in any user-facing string"
+  - "Do not add Anthropic SDK dependencies — use the claude CLI instead"
+
+# Builder bot identity for commit re-authoring (lr-66c2).
+# crew_push.py rewrites branch commits to this identity before push so that
+# AMoS-authored commits are attributed to the builder App, not the operator.
+builder_identity:
+  name: "clagentic-builder[bot]"
+  email: "290147524+clagentic-builder[bot]@users.noreply.github.com"

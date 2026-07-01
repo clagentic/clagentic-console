@@ -1,0 +1,64 @@
+# .crew/peaches.yaml — PEACHES per-project configuration for clagentic-console
+#
+# Schema: schemas/crew-config.schema.json (reviewer block, lr-840a)
+# Scaffolded by: amos lr-a68f
+
+schema_version: 1
+
+reviewer:
+  rules:
+    # Enforce product name in user-facing strings. Bare "clagentic" (without a
+    # hyphen, slash, or valid suffix) in output strings or help text is a brand
+    # violation per CLAUDE.md §BRAND RULES.
+    - id: clagentic-console.brand-product-name
+      severity: blocking
+      description: >-
+        User-facing strings must use "Clagentic: Console" (product name) or
+        "clagentic-console" (CLI command), never bare "clagentic". Applies to
+        bin/cli.js usage/help text and any lib/**/*.js string presented to users.
+      pattern: "(?<![/@-])\\bclagentic\\b(?![-_/:@]|\\[bot\\])"
+      applies_to:
+        - "bin/**/*.js"
+        - "lib/**/*.js"
+
+    # LLM calls in this repo must use the claude CLI, not the Anthropic SDK
+    # directly (workspace CLAUDE.md rule 17; echoed in repo CLAUDE.md).
+    # New require('anthropic') or import from '@anthropic-ai/sdk' in app code
+    # (outside of existing wired usage in lib/) is a violation.
+    - id: clagentic-console.no-new-sdk-direct-require
+      severity: blocking
+      description: >-
+        New code must not add direct Anthropic SDK (anthropic / @anthropic-ai/sdk)
+        require() or import statements in app code. Use the claude CLI instead
+        (workspace CLAUDE.md rule 17). Flag any new require/import not present
+        in main before this PR.
+      applies_to:
+        - "bin/**/*.js"
+        - "lib/**/*.js"
+
+    # The daemon socket path is ~/.clagentic/daemon.sock; hardcoding any
+    # absolute path or hostname makes the package non-portable.
+    - id: clagentic-console.no-hardcoded-paths
+      severity: blocking
+      description: >-
+        No absolute paths, machine names, or personal identifiers in committed
+        code. Config and paths must be resolved at runtime from env vars or
+        user home directory. (workspace CLAUDE.md rule 10)
+      pattern: "/home/[a-zA-Z0-9_]+/"
+      applies_to:
+        - "bin/**/*.js"
+        - "lib/**/*.js"
+        - "scripts/**/*.js"
+
+    # Client-side ES modules live in lib/public/ and must not import from
+    # server-side CommonJS modules. The CI check (check-client-imports.js)
+    # enforces resolution but PEACHES can catch intent-level issues in review.
+    - id: clagentic-console.no-cross-layer-import
+      severity: nit
+      description: >-
+        Client-side files in lib/public/ must not import from server-side
+        lib/ modules (CommonJS). Flag any new import that crosses this boundary.
+        Nit because CI check-client-imports.js covers resolution; PEACHES catches
+        intent before CI runs.
+      applies_to:
+        - "lib/public/**/*.js"

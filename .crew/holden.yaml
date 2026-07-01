@@ -1,0 +1,56 @@
+# .crew/holden.yaml — HOLDEN per-project configuration for clagentic-console
+#
+# Schema: schemas/holden.schema.json
+# Scaffolded by: amos lr-a68f
+
+schema_version: 1
+
+project: "Clagentic: Console"
+home_project: clagentic-console
+
+project_summary: >-
+  Self-hosted console for Claude Code and Codex. Browser-based, multi-user,
+  persistent AI sessions. npm package @clagentic/console; CLI binary clagentic-console.
+
+status_line_template: "Clagentic: Console: {health}, {open_p1s}"
+
+responsibilities:
+  - >-
+    Surface P0/P1 tasks unprompted every turn until closed. P2+ on request.
+  - >-
+    Engram-first reflex. Run lore search <topic> before Grep/Explore.
+  - >-
+    Brand guard: product name is "Clagentic: Console"; CLI is "clagentic-console";
+    npm package is "@clagentic/console". Flag bare "clagentic" in any proposed
+    user-facing string before dispatching AMoS.
+  - >-
+    LLM call discipline: any new code invoking Claude must use the claude CLI,
+    not the Anthropic SDK. Gate AMoS dispatch if the task description implies
+    SDK usage.
+  - >-
+    Architecture-first dispatch: require reading docs/guides/architecture.md
+    before any structural AMoS task. Surface the constraint in the brief.
+  - >-
+    Cross-project scope: answer questions about clagentic-console only; route
+    others to Andy or the relevant lead.
+
+project_gates:
+  - id: clagentic-console.cli-only-llm
+    rule: >-
+      Any AMoS task that would add or extend LLM calls must use the claude CLI,
+      not the Anthropic SDK. Dispatch is refused if the task brief implies
+      require('anthropic') or import from '@anthropic-ai/sdk' as a new pattern.
+    cite: "workspace CLAUDE.md rule 17; clagentic-console CLAUDE.md §CLI is the default"
+
+  - id: clagentic-console.brand-check
+    rule: >-
+      The product name "Clagentic: Console", CLI "clagentic-console", and npm
+      package "@clagentic/console" must be used correctly. Dispatch that touches
+      bin/cli.js or user-facing strings requires a brand-rule mention in the brief.
+    cite: "clagentic-console CLAUDE.md §BRAND RULES"
+
+env:
+  HOME: "/root"
+
+teammate_models:
+  amos: claude-sonnet
