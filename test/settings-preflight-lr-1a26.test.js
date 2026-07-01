@@ -31,6 +31,7 @@ var path = require("path");
 var preflight = require("../lib/settings-preflight");
 var validateSettingsObject = preflight.validateSettingsObject;
 var validateSettingsFile = preflight.validateSettingsFile;
+var runPreflight = preflight.runPreflight;
 var VALID_HOOK_EVENTS = preflight.VALID_HOOK_EVENTS;
 
 // ============================================================
@@ -52,6 +53,37 @@ test("VALID_HOOK_EVENTS contains known hook names", function() {
   assert.ok(VALID_HOOK_EVENTS.indexOf("PreToolUse") !== -1, "PreToolUse must be valid");
   assert.ok(VALID_HOOK_EVENTS.indexOf("PostToolUse") !== -1, "PostToolUse must be valid");
   assert.ok(VALID_HOOK_EVENTS.indexOf("Stop") !== -1, "Stop must be valid");
+});
+
+test("VALID_HOOK_EVENTS: lr-7e22 sync adds events verified against code.claude.com/docs/en/hooks", function() {
+  // Fixes false-positive "unknown hook event" warnings for operators using
+  // these real, current Claude Code hook events that the older allowlist
+  // predates. See settings-preflight.js header comment for verification source.
+  var addedEvents = [
+    "PreCompact",
+    "PostCompact",
+    "SessionStart",
+    "UserPromptSubmit",
+    "PermissionRequest",
+    "TaskCreated",
+    "TeammateIdle",
+    "TaskCompleted",
+  ];
+  for (var i = 0; i < addedEvents.length; i++) {
+    assert.ok(VALID_HOOK_EVENTS.indexOf(addedEvents[i]) !== -1, addedEvents[i] + " must be valid (lr-7e22)");
+  }
+});
+
+test("validateSettingsObject: PreCompact hook key produces no diagnostic (lr-7e22 regression)", function() {
+  // Regression test for the operator's false-positive: PreCompact is a real
+  // Claude Code hook event and must not be flagged as unknown.
+  var settings = {
+    hooks: {
+      PreCompact: [{ hooks: [{ type: "command", command: "lore hook precompact-handler" }] }],
+    },
+  };
+  var diags = validateSettingsObject(settings, "/home/user/.claude/settings.json");
+  assert.strictEqual(diags.length, 0, "PreCompact must not produce a diagnostic");
 });
 
 // ============================================================
@@ -110,8 +142,28 @@ test("validateSettingsObject: multiple unknown hook keys produce one warning eac
   var messages = diags.map(function(d) { return d.message; });
   assert.ok(messages.some(function(m) { return m.indexOf("AgentTeams") !== -1; }), "AgentTeams mentioned");
   assert.ok(messages.some(function(m) { return m.indexOf("CustomHookXyz") !== -1; }), "CustomHookXyz mentioned");
-  // No diagnostic for PreToolUse
-  assert.ok(!messages.some(function(m) { return m.indexOf("PreToolUse") !== -1; }), "PreToolUse must not appear");
+  // No diagnostic entry names PreToolUse as the offending unknown key. Note:
+  // each diagnostic message legitimately echoes the full "Valid events: ..."
+  // list (by design, for operator guidance), so PreToolUse — a valid event —
+  // DOES appear as a substring of both messages. The correct assertion is
+  // that neither message's "unknown hook event '<key>'" quoted key is
+  // PreToolUse, not that the substring never appears anywhere (lr-7e22 fix —
+  // this assertion was checking the wrong thing prior to this change).
+  assert.ok(!messages.some(function(m) { return m.indexOf("unknown hook event 'PreToolUse'") !== -1; }), "PreToolUse must not be flagged as an unknown key");
+});
+
+test("validateSettingsObject: scope param is attached to each diagnostic (lr-7e22)", function() {
+  var settings = { hooks: { AgentTeams: [] } };
+  var diagsUser = validateSettingsObject(settings, "/home/user/.claude/settings.json", "user");
+  var diagsProject = validateSettingsObject(settings, "/repo/.claude/settings.json", "project");
+  assert.strictEqual(diagsUser[0].scope, "user", "scope must be 'user' when passed");
+  assert.strictEqual(diagsProject[0].scope, "project", "scope must be 'project' when passed");
+});
+
+test("validateSettingsObject: scope is omitted (undefined) when caller does not pass it", function() {
+  var settings = { hooks: { AgentTeams: [] } };
+  var diags = validateSettingsObject(settings, "settings.json");
+  assert.strictEqual(diags[0].scope, undefined, "scope must be undefined when not provided");
 });
 
 test("validateSettingsObject: hooks field is wrong type → warning diagnostic", function() {
@@ -210,4 +262,44 @@ test("validateSettingsFile: valid JSON with unknown hook key → warning naming 
   assert.strictEqual(diags.length, 1, "one unknown key → one diagnostic");
   assert.strictEqual(diags[0].severity, "warning", "must be warning");
   assert.ok(diags[0].message.indexOf("AgentTeams") !== -1, "message must name AgentTeams");
+});
+
+test("validateSettingsFile: scope param is attached to the resulting diagnostics (lr-7e22)", function() {
+  var settings = { hooks: { AgentTeams: [] } };
+  var filePath = writeTmp("settings.json", JSON.stringify(settings));
+  var diags = validateSettingsFile(filePath, "project");
+  assert.strictEqual(diags.length, 1);
+  assert.strictEqual(diags[0].scope, "project", "scope must propagate from validateSettingsFile to the diagnostic");
+});
+
+// ============================================================
+// runPreflight — scope tagging across user vs project files (lr-7e22)
+// ============================================================
+
+test("runPreflight: user settings diagnostics carry scope:'user', project diagnostics carry scope:'project'", function() {
+  var userDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-preflight-user-"));
+  fs.mkdirSync(path.join(userDir, ".claude"), { recursive: true });
+  fs.writeFileSync(
+    path.join(userDir, ".claude", "settings.json"),
+    JSON.stringify({ hooks: { AgentTeams: [] } }),
+    "utf8"
+  );
+
+  var projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-preflight-project-"));
+  fs.mkdirSync(path.join(projectDir, ".claude"), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectDir, ".claude", "settings.json"),
+    JSON.stringify({ hooks: { CustomHookXyz: [] } }),
+    "utf8"
+  );
+
+  var diags = runPreflight({ userHome: userDir, projectDir: projectDir });
+  assert.strictEqual(diags.length, 2, "one diagnostic per file");
+
+  var userDiag = diags.filter(function(d) { return d.message.indexOf("AgentTeams") !== -1; })[0];
+  var projectDiag = diags.filter(function(d) { return d.message.indexOf("CustomHookXyz") !== -1; })[0];
+  assert.ok(userDiag, "AgentTeams diagnostic must be present");
+  assert.ok(projectDiag, "CustomHookXyz diagnostic must be present");
+  assert.strictEqual(userDiag.scope, "user", "diagnostic from ~/.claude/settings.json must carry scope:'user'");
+  assert.strictEqual(projectDiag.scope, "project", "diagnostic from <project>/.claude/settings.json must carry scope:'project'");
 });
