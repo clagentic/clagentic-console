@@ -663,19 +663,23 @@
 /* --- Mobile-responsive emoji picker --- */
 @media (max-width: 768px) {
   .emoji-picker {
-    /* On mobile, stretch to fill most of the viewport width */
+    /* On mobile, stretch to fill most of the viewport width, but never
+       past it — clamp against 100vw/100vh so the picker can't overflow
+       regardless of where the anchor that triggered it was positioned. */
     width: calc(100vw - 24px);
-    max-width: 340px;
-    /* Ensure picker doesn't overflow the right edge */
-    left: 12px !important;
-    right: 12px;
-    /* Limit height so it doesn't cover the entire screen */
-    max-height: 70vh;
+    max-width: min(340px, calc(100vw - 24px));
+    /* Limit height so it doesn't cover the entire screen, and clamp the
+       same way vertically. sidebar-projects.js (positionEmojiPicker)
+       centers the picker in the viewport on mobile and sets inline
+       top/left in px — it intentionally does not use left/right, so
+       nothing here should set them (a prior !important left/right pair
+       fought the JS top clamp and pushed the picker off-screen; lr-149e). */
+    max-height: min(70vh, calc(100vh - 24px));
     overflow: hidden;
   }
 
   .emoji-picker-scroll {
-    max-height: calc(70vh - 120px);
+    max-height: calc(min(70vh, 100vh - 24px) - 120px);
   }
 
   .emoji-picker-grid {
