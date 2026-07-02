@@ -56,6 +56,38 @@
   min-height: 0;
 }
 
+/* Header actions group: Clear all + Close, side by side (parity with the
+   Notifications panel's .notif-banner-clear-all placement). */
+.diagnostics-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diagnostics-panel-clear-all {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.diagnostics-panel-clear-all:hover {
+  color: var(--text);
+  border-color: var(--border-bright, var(--border));
+}
+.diagnostics-panel-clear-all:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* --------------------------------------------------------
    Diagnostic items
    -------------------------------------------------------- */
@@ -113,6 +145,31 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+
+/* Per-entry dismiss (x) control, pushed to the end of the meta row. */
+.diagnostics-item-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.diagnostics-item-dismiss:hover {
+  color: var(--text);
+  background: rgba(var(--overlay-rgb), 0.06);
+}
+.diagnostics-item-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.diagnostics-item-dismiss .lucide { width: 12px; height: 12px; }
 
 /* Message text */
 .diagnostics-message {
