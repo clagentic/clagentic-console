@@ -31,8 +31,13 @@ var SEED_CASES = [
     expectedSource: "settings",
   },
   {
+    // lr-e901: PostToolUse is in VALID_HOOK_EVENTS (settings-preflight.js),
+    // so a CLI "Unknown hook event: PostToolUse" line is now reconciled away
+    // as a stale/false warning rather than forwarded (see 9g below). Use a
+    // genuinely-unknown event name here so this seed case still exercises
+    // the "Unknown hook event" pattern's happy path.
     label: "Unknown hook event → warning/hook",
-    line: "Unknown hook event: PostToolUse",
+    line: "Unknown hook event: SomeFutureHookEvent",
     expectedSeverity: "warning",
     expectedSource: "hook",
   },
@@ -179,4 +184,32 @@ test("9f: message is truncated to 500 chars for very long lines", function() {
   assert.ok(result !== null, "long Settings Warning line must still match");
   assert.ok(result.message.length <= 500,
     "message must be bounded to 500 chars, got: " + result.message.length);
+});
+
+// ---------------------------------------------------------------------------
+// Test 9g (lr-e901 regression) — CLI "Unknown hook event" reconciled against
+// VALID_HOOK_EVENTS (settings-preflight.js). A hook the Console's own
+// allowlist considers valid must NOT produce a diagnostic, even though the
+// CLI's stderr text says "Unknown" (installed-CLI-version lag, not a real
+// unknown-hook condition). Genuinely unknown events must still pass through.
+// ---------------------------------------------------------------------------
+
+var VALID_HOOK_EVENTS = require("../lib/settings-preflight").VALID_HOOK_EVENTS;
+
+test("9g: 'Unknown hook event' line for an event IN VALID_HOOK_EVENTS is suppressed (null)", function() {
+  for (var i = 0; i < VALID_HOOK_EVENTS.length; i++) {
+    var event = VALID_HOOK_EVENTS[i];
+    var result = parseDiagnosticLine("Unknown hook event: " + event);
+    assert.strictEqual(result, null,
+      "'Unknown hook event: " + event + "' must be suppressed — " + event +
+      " is in VALID_HOOK_EVENTS, so the CLI's warning is stale/false, not a real defect");
+  }
+});
+
+test("9g: 'Unknown hook event' line for an event NOT in VALID_HOOK_EVENTS still produces a diagnostic", function() {
+  var result = parseDiagnosticLine("Unknown hook event: TotallyMadeUpEvent");
+  assert.ok(result !== null,
+    "a genuinely unknown hook event must still produce a diagnostic");
+  assert.strictEqual(result.severity, "warning");
+  assert.strictEqual(result.source, "hook");
 });
