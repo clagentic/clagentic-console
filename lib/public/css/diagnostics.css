@@ -154,17 +154,38 @@
 }
 
 /* --------------------------------------------------------
+   Diagnostic Toast container (lr-e901)
+   Fixed top-right corner stack, off the composer/input box.
+   The base .toast family (base.css) is center-bottom over the
+   input — fine for a single transient message, but diagnostic
+   toasts can arrive concurrently (lr-e901 doubling defect) and
+   that spot has no stacking room. Follows the existing corner-
+   anchored, flex-column-stacked container precedent already
+   used by .notif-banner-container (notifications-center.css)
+   rather than introducing a third pattern: normal flow + gap
+   handles stacking with no per-toast JS offset math needed.
+   -------------------------------------------------------- */
+#diagnostic-toast-container {
+  position: fixed;
+  top: 48px;
+  right: 8px;
+  z-index: 450;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------
    Diagnostic Toast
-   Extends the base .toast with richer layout.
-   Sits above the regular toast z-index.
+   Extends the base .toast with richer layout; positioning now
+   comes from the parent #diagnostic-toast-container (lr-e901),
+   not from the element itself.
    -------------------------------------------------------- */
 .toast-diagnostic {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%) translateY(8px);
-  z-index: 450;
+  position: relative;
   opacity: 0;
+  transform: translateY(-8px);
   pointer-events: auto;
   transition: opacity 0.2s, transform 0.2s;
 
@@ -181,7 +202,7 @@
 }
 .toast-diagnostic.visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 /* Severity border accent */
@@ -259,19 +280,21 @@
    Mobile
    -------------------------------------------------------- */
 @media (max-width: 768px) {
-  .toast-diagnostic {
-    left: 16px;
-    right: 16px;
-    transform: translateY(8px);
-    max-width: none;
-    /* lr-2fdd: bottom:80px (inherited from base .toast) occludes the
-       bottom-nav / input box / content on mobile (iOS screenshot showed
-       the PREFLIGHT WARNING toast covering the UPCOMING card just above
-       the Projects/Chat/Team/More nav). Top-anchor instead, matching the
-       base .toast / .sw-update-banner mobile fix so the whole toast
-       family lands the same way. */
+  /* lr-2fdd: bottom:80px occluded the bottom-nav / input box / content on
+     mobile (iOS screenshot showed the PREFLIGHT WARNING toast covering the
+     UPCOMING card just above the Projects/Chat/Team/More nav). Top-anchor
+     instead, matching the base .toast / .sw-update-banner mobile fix so the
+     whole toast family lands the same way. lr-e901 keeps this top-anchor
+     intact — only widens the container to full-width since the desktop
+     top-right corner box is too narrow/cramped on small viewports. */
+  #diagnostic-toast-container {
     top: calc(var(--safe-top) + 12px);
-    bottom: auto;
+    right: 16px;
+    left: 16px;
+  }
+  .toast-diagnostic {
+    max-width: none;
+    transform: translateY(-8px);
   }
   .toast-diagnostic.visible {
     transform: translateY(0);
