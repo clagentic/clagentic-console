@@ -232,3 +232,148 @@ test("lr-8b2e: resumeSession() defaults to empty allowedTools when opts carries 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
+
+// --- Injection hardening (BOBBIE nit on PR #305, lr-8b2e) ---
+//
+// metaObj.allowedTools is read straight from the persisted .jsonl meta
+// record and hydrated into the live auto-approve table. Without shape/type
+// validation, a crafted record could auto-approve a tool with no operator
+// click. Sites hardened: lib/sessions.js:298 (loadSessions), lib/sessions.js
+// (resumeSession, sanitized defense-in-depth), lib/project-sessions.js
+// (persistedAllowedTools assignment feeding resumeSession's opts).
+
+test("lr-8b2e hardening: a legit persisted grant still hydrates and auto-approves (regression)", function () {
+  var tmpHome = makeTempHome();
+  try {
+    var sm1 = makeSessionManager(tmpHome);
+    var session = sm1.createSessionRaw({});
+    session.cliSessionId = "sess-lr-8b2e-hardening-legit";
+    session.allowedTools = {};
+    session.allowedTools["Write"] = true;
+    sm1.saveSessionFile(session);
+
+    var sm2 = makeSessionManager(tmpHome);
+    var rebuilt = null;
+    sm2.sessions.forEach(function (s) {
+      if (s.cliSessionId === "sess-lr-8b2e-hardening-legit") rebuilt = s;
+    });
+    assert.ok(rebuilt, "rebuilt session should be found after rehydration");
+    assert.deepEqual(rebuilt.allowedTools, { Write: true },
+      "a legitimately-granted tool must still round-trip exactly as before hardening");
+
+    var bridge = makeBridge(sm2);
+    rebuilt.pendingPermissions = {};
+    return bridge.handleCanUseTool(rebuilt, "Write", { file_path: "/tmp/x" }, makeOpts()).then(function (result) {
+      assert.equal(result.behavior, "allow", "legit grant must still auto-approve after hardening");
+    });
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("lr-8b2e hardening: a persisted allowedTools with a non-boolean value is rejected and does NOT auto-approve", function () {
+  var tmpHome = makeTempHome();
+  try {
+    // sm1 creates the sessions directory (and its encoded-cwd subdir) as a
+    // side effect of construction; the crafted meta record is then written
+    // directly to disk, bypassing saveSessionFile's own (trusted) writer, to
+    // simulate an injected/malformed persisted record matching BOBBIE's
+    // threat model: {"allowedTools":{"Bash":true}}-shaped tampering, here
+    // with non-boolean values ("yes" and 1).
+    var sm1 = makeSessionManager(tmpHome);
+    var sessionsBase = path.join(tmpHome, "console", "sessions");
+    var encodedDir = fs.readdirSync(sessionsBase)[0];
+    var sessDir = path.join(sessionsBase, encodedDir);
+    var metaObj = {
+      type: "meta",
+      cliSessionId: "sess-lr-8b2e-hardening-nonbool",
+      title: "Injected",
+      createdAt: Date.now(),
+      allowedTools: { Bash: "yes", Edit: 1 },
+    };
+    fs.writeFileSync(path.join(sessDir, "sess-lr-8b2e-hardening-nonbool.jsonl"), JSON.stringify(metaObj) + "\n");
+
+    // A fresh manager instance rehydrates from disk (loadSessions() runs at
+    // construction time) — this is what exercises the sanitizer.
+    var sm2 = makeSessionManager(tmpHome);
+    var rebuilt = null;
+    sm2.sessions.forEach(function (s) {
+      if (s.cliSessionId === "sess-lr-8b2e-hardening-nonbool") rebuilt = s;
+    });
+    assert.ok(rebuilt, "rebuilt session should be found after loading the crafted meta record");
+    assert.deepEqual(rebuilt.allowedTools, {},
+      "non-boolean-value entries must be dropped, not hydrated as truthy grants");
+
+    // Use "Edit" (not "Bash") so the assertion isolates the allowedTools
+    // sanitizer under test — Bash additionally runs through a separate
+    // safe-command whitelist in handleCanUseTool that is out of scope here.
+    var bridge = makeBridge(sm2);
+    rebuilt.pendingPermissions = {};
+    bridge.handleCanUseTool(rebuilt, "Edit", { file_path: "/tmp/z" }, makeOpts());
+    return new Promise(function (resolve) { setImmediate(resolve); }).then(function () {
+      assert.equal(Object.keys(rebuilt.pendingPermissions).length, 1,
+        "a malformed persisted entry must still prompt — not silently auto-approve");
+      sm2.flushSessionBuffer(rebuilt);
+    });
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("lr-8b2e hardening: a non-object allowedTools value hydrates as empty and does not throw", function () {
+  var tmpHome = makeTempHome();
+  try {
+    var sm1 = makeSessionManager(tmpHome);
+
+    var sessionsBase = path.join(tmpHome, "console", "sessions");
+    var encodedDir = fs.readdirSync(sessionsBase)[0];
+    var sessDir = path.join(sessionsBase, encodedDir);
+    var metaObj = {
+      type: "meta",
+      cliSessionId: "sess-lr-8b2e-hardening-nonobject",
+      title: "Injected",
+      createdAt: Date.now(),
+      allowedTools: "Bash",
+    };
+    fs.writeFileSync(path.join(sessDir, "sess-lr-8b2e-hardening-nonobject.jsonl"), JSON.stringify(metaObj) + "\n");
+
+    assert.doesNotThrow(function () {
+      var sm2 = makeSessionManager(tmpHome);
+      var rebuilt = null;
+      sm2.sessions.forEach(function (s) {
+        if (s.cliSessionId === "sess-lr-8b2e-hardening-nonobject") rebuilt = s;
+      });
+      assert.ok(rebuilt, "rebuilt session should be found after loading the crafted meta record");
+      assert.deepEqual(rebuilt.allowedTools, {},
+        "a non-object allowedTools value must hydrate as empty, never throw");
+    });
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("lr-8b2e hardening: sanitizeAllowedTools utility rejects arrays, null, and mixed-shape entries directly", function () {
+  var utils = require("../lib/utils");
+  assert.deepEqual(utils.sanitizeAllowedTools(null), {});
+  assert.deepEqual(utils.sanitizeAllowedTools(undefined), {});
+  assert.deepEqual(utils.sanitizeAllowedTools(["Bash"]), {});
+  assert.deepEqual(utils.sanitizeAllowedTools("Bash"), {});
+  assert.deepEqual(utils.sanitizeAllowedTools({ Bash: true, Edit: false, Write: "true", Read: 1 }), { Bash: true });
+});
+
+test("lr-8b2e hardening: resumeSession() sanitizes a malformed allowedTools passed via opts", function () {
+  var tmpHome = makeTempHome();
+  try {
+    var sm = makeSessionManager(tmpHome);
+    var resumed = sm.resumeSession("sess-lr-8b2e-resume-malformed", {
+      history: [],
+      title: "Resumed",
+      allowedTools: { Bash: true, Edit: "yes" },
+    }, null);
+
+    assert.deepEqual(resumed.allowedTools, { Bash: true },
+      "resumeSession must sanitize opts.allowedTools defense-in-depth, dropping non-boolean entries");
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
