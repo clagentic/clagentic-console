@@ -10,6 +10,10 @@ on:
         options:
           - beta
           - release
+      beta_ref:
+        description: 'Beta version or tag to promote to stable (release type only, e.g. 1.6.0-beta.2 or v1.6.0-beta.2)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -99,18 +103,51 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Fetch all branches
-        run: git fetch --all
+      - name: Fetch all branches and tags
+        run: git fetch --all --tags
 
-      - name: Merge main to release
+      - name: Resolve beta_ref to a tag
+        id: resolve-beta
+        run: |
+          BETA_REF="${{ github.event.inputs.beta_ref }}"
+          if [ -z "$BETA_REF" ]; then
+            echo "::error::beta_ref input is required to promote a beta to stable"
+            exit 1
+          fi
+          # Accept either a bare version (1.6.0-beta.2) or a tag (v1.6.0-beta.2).
+          case "$BETA_REF" in
+            v*) TAG="$BETA_REF" ;;
+            *) TAG="v$BETA_REF" ;;
+          esac
+          if ! git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::tag ${TAG} (resolved from beta_ref='${BETA_REF}') does not exist — cannot promote an untagged beta"
+            exit 1
+          fi
+          BETA_SHA=$(git rev-parse "refs/tags/${TAG}^{commit}")
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha=${BETA_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Resolved beta_ref='${BETA_REF}' -> tag ${TAG} -> commit ${BETA_SHA}"
+
+      - name: Ensure release branch exists
+        run: |
+          if ! git rev-parse --verify origin/release >/dev/null 2>&1; then
+            echo "release branch missing — creating at the promoted beta commit"
+            git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git ${{ steps.resolve-beta.outputs.sha }}:refs/heads/release
+          fi
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Land the selected beta commit on release
         run: |
           git config user.name "clagentic-release-bot[bot]"
           git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
-          git checkout -B release origin/release
-          git merge main --no-edit -X theirs || true
-          git checkout main -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
-          git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
-          git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git release
+          # Stable must be built from the exact tested beta commit, not from a merge with
+          # whatever has since landed on main — so release is reset directly onto that commit
+          # rather than merged. No conflict-resolution strategy flags or force-checkout hacks
+          # are needed: there is nothing to reconcile, the beta commit's tree becomes release's
+          # tree outright.
+          git checkout -B release "${{ steps.resolve-beta.outputs.sha }}"
+          git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git release:refs/heads/release
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
 
@@ -157,15 +194,19 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: true
 
-      - name: Merge release back to main
+      - name: Sync stable version files back to main
         run: |
           git config user.name "clagentic-release-bot[bot]"
           git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
-          git fetch origin main
+          git fetch origin main release
           git checkout -B main origin/main
-          git merge release --no-edit -X theirs || true
-          git checkout release -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
-          git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
+          # Only the version bookkeeping files need to advance on main — take release's copy
+          # outright (semantic-release just wrote the authoritative clean X.Y.Z into them on
+          # the release branch). This is a deliberate ours-side file copy, not a branch merge,
+          # so it cannot produce a merge conflict regardless of what has landed on main since
+          # the promoted beta commit.
+          git checkout origin/release -- CHANGELOG.md package.json package-lock.json
+          git diff --quiet || git commit -am "chore: sync version files from release [skip ci]"
           git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git main
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
