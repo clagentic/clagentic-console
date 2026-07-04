@@ -17,17 +17,20 @@ branch_conventions:
 
 scope:
   allowed_paths:
-    - bin/**
-    - lib/**
-    - .crew/**
-    - test/**
-    - deploy/**
-    - scripts/**
-    - docs/**
-    - package.json
-    - README.md
-    - CHANGELOG.md
-    - .gitignore
+    - "bin/**"
+    - "lib/**"
+    - ".crew/**"
+    - "test/**"
+    - "deploy/**"
+    - "scripts/**"
+    - "docs/**"
+    - "package.json"
+    - "README.md"
+    - "CHANGELOG.md"
+    - ".gitignore"
+    - "release.config.js"
+    - ".github/workflows/pr-checks.yml"
+    - ".github/workflows/release.yml"
 
 focus:
   - "Product name in user-facing text: 'Clagentic: Console' (capital C, colon, space, capital C)"
