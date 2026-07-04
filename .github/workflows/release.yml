@@ -129,6 +129,52 @@ jobs:
           echo "sha=${BETA_SHA}" >> "$GITHUB_OUTPUT"
           echo "Resolved beta_ref='${BETA_REF}' -> tag ${TAG} -> commit ${BETA_SHA}"
 
+      - name: Preflight — reject a non-newer beta selection
+        run: |
+          # Strip the leading v (tag prefix) and the -beta.N (or any -prerelease)
+          # suffix to get the base X.Y.Z that semantic-release will actually
+          # publish to @latest. Sourced from resolve-beta's own output rather than
+          # the raw beta_ref input, so it reflects the actual resolved tag.
+          BASE_VERSION=$(echo "$SELECTED_TAG" | sed -E 's/^v//; s/-.*$//')
+          if [ -z "$BASE_VERSION" ]; then
+            echo "::error::could not resolve a base X.Y.Z version from resolved tag '${SELECTED_TAG}'"
+            exit 1
+          fi
+
+          CURRENT_LATEST=$(npm view "$NPM_PACKAGE" dist-tags.latest 2>/dev/null || true)
+
+          if [ -z "$CURRENT_LATEST" ]; then
+            echo "No published @latest stable found for ${NPM_PACKAGE} — treating as first release, guard passes."
+            exit 0
+          fi
+
+          # Both sides here are always plain X.Y.Z (stable releases only carry no
+          # prerelease suffix), so a numeric major/minor/patch comparison is exact —
+          # no external semver tool/dependency needed for this restricted shape.
+          IS_NEWER=$(awk -F. -v cur="$CURRENT_LATEST" -v sel="$BASE_VERSION" '
+            BEGIN {
+              split(cur, c, ".")
+              split(sel, s, ".")
+              for (i = 1; i <= 3; i++) {
+                cn = c[i] + 0
+                sn = s[i] + 0
+                if (sn > cn) { print "yes"; exit }
+                if (sn < cn) { print "no"; exit }
+              }
+              print "no"
+            }
+          ')
+
+          if [ "$IS_NEWER" != "yes" ]; then
+            echo "::error::selected beta resolves to version ${BASE_VERSION}, which is not strictly newer than the current published stable ${CURRENT_LATEST} (@latest). Select a beta cut after the current stable release."
+            exit 1
+          fi
+
+          echo "Preflight OK: ${BASE_VERSION} is newer than current stable ${CURRENT_LATEST} — proceeding."
+        env:
+          SELECTED_TAG: ${{ steps.resolve-beta.outputs.tag }}
+          NPM_PACKAGE: ${{ '@clagentic/console' }}
+
       - name: Ensure release branch exists
         run: |
           if ! git rev-parse --verify origin/release >/dev/null 2>&1; then
