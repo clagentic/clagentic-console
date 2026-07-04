@@ -50,7 +50,7 @@ jobs:
           git fetch origin
           if ! git rev-parse --verify origin/release >/dev/null 2>&1; then
             echo "release branch missing — creating at main HEAD"
-            git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git HEAD:refs/heads/release
+            git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/release
           fi
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -66,7 +66,7 @@ jobs:
               git merge origin/release --no-edit -X theirs || true
               git checkout origin/release -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
               git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
-              git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git main
+              git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
             fi
           fi
         env:
@@ -108,8 +108,9 @@ jobs:
 
       - name: Resolve beta_ref to a tag
         id: resolve-beta
+        env:
+          BETA_REF: ${{ github.event.inputs.beta_ref }}
         run: |
-          BETA_REF="${{ github.event.inputs.beta_ref }}"
           if [ -z "$BETA_REF" ]; then
             echo "::error::beta_ref input is required to promote a beta to stable"
             exit 1
@@ -132,10 +133,11 @@ jobs:
         run: |
           if ! git rev-parse --verify origin/release >/dev/null 2>&1; then
             echo "release branch missing — creating at the promoted beta commit"
-            git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git ${{ steps.resolve-beta.outputs.sha }}:refs/heads/release
+            git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BETA_SHA}:refs/heads/release"
           fi
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          BETA_SHA: ${{ steps.resolve-beta.outputs.sha }}
 
       - name: Land the selected beta commit on release
         run: |
@@ -146,10 +148,11 @@ jobs:
           # rather than merged. No conflict-resolution strategy flags or force-checkout hacks
           # are needed: there is nothing to reconcile, the beta commit's tree becomes release's
           # tree outright.
-          git checkout -B release "${{ steps.resolve-beta.outputs.sha }}"
-          git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git release:refs/heads/release
+          git checkout -B release "${BETA_SHA}"
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" release:refs/heads/release
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          BETA_SHA: ${{ steps.resolve-beta.outputs.sha }}
 
       - name: Trigger stable job on release branch
         run: gh workflow run release.yml --ref release --field type=release
@@ -207,6 +210,6 @@ jobs:
           # the promoted beta commit.
           git checkout origin/release -- CHANGELOG.md package.json package-lock.json
           git diff --quiet || git commit -am "chore: sync version files from release [skip ci]"
-          git push https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git main
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}

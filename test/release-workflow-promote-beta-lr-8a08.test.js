@@ -44,10 +44,17 @@ test("promote job resolves beta_ref to a tag before touching release", function 
 
 test("promote job checks out the resolved beta commit onto release, not main HEAD", function () {
   var promote = jobBody("promote");
+  // The resolved beta sha is passed through env: (not interpolated directly into the
+  // run: shell, per lr-8a08 injection remediation) and referenced as a quoted shell var.
   assert.match(
     promote,
-    /git checkout -B release "\$\{\{ steps\.resolve-beta\.outputs\.sha \}\}"/,
+    /git checkout -B release "\$\{BETA_SHA\}"/,
     "expected release to be built from the resolved beta commit sha, not a merge of main"
+  );
+  assert.match(
+    promote,
+    /BETA_SHA:\s*\$\{\{\s*steps\.resolve-beta\.outputs\.sha\s*\}\}/,
+    "expected BETA_SHA to be sourced from the resolve-beta step's output via env:"
   );
   assert.doesNotMatch(
     promote,
@@ -88,4 +95,47 @@ test("release.config.js branches array is untouched by the workflow change (beta
     return b.name === "main";
   });
   assert.strictEqual(mainBranch.channel, "beta");
+});
+
+test("security (lr-8a08): no ${{ }} expression is interpolated directly inside a run: shell block", function () {
+  // GHA run-shell-injection (semgrep: yaml.github-actions.security.run-shell-injection).
+  // Untrusted/operator-influenced expressions must be passed through a step's env: block
+  // and referenced as a quoted shell var, never interpolated straight into `run:`.
+  //
+  // Walk the file line by line: once inside a `run: |` block, every subsequent line
+  // indented MORE than the `run:` line itself is still shell body; the first line at
+  // or below that indentation ends the block (next key, next step, or dedent).
+  var lines = yml.split("\n");
+  var offenders = [];
+  var inRunBlock = false;
+  var runIndent = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var indentMatch = /^( *)/.exec(line);
+    var indent = indentMatch[1].length;
+    var trimmed = line.trim();
+
+    if (inRunBlock) {
+      if (trimmed.length > 0 && indent <= runIndent) {
+        inRunBlock = false;
+      } else {
+        var exprRe = /\$\{\{[^}]*\}\}/g;
+        var exprMatch;
+        while ((exprMatch = exprRe.exec(line)) !== null) {
+          offenders.push(exprMatch[0]);
+        }
+        continue;
+      }
+    }
+
+    if (/^run:\s*\|\s*$/.test(trimmed)) {
+      inRunBlock = true;
+      runIndent = indent;
+    }
+  }
+  assert.deepStrictEqual(
+    offenders,
+    [],
+    "found ${{ }} expression(s) interpolated directly inside a run: block: " + offenders.join(", ")
+  );
 });
