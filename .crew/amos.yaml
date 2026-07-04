@@ -16,18 +16,8 @@ branch_conventions:
   # include_task_id: true
 
 scope:
-  allowed_paths:
-    - bin/**
-    - lib/**
-    - .crew/**
-    - test/**
-    - deploy/**
-    - scripts/**
-    - docs/**
-    - package.json
-    - README.md
-    - CHANGELOG.md
-    - .gitignore
+  allow_all: true
+  blocked_paths: []
 
 focus:
   - "Product name in user-facing text: 'Clagentic: Console' (capital C, colon, space, capital C)"
