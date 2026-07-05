@@ -11,7 +11,7 @@ on:
           - beta
           - release
       beta_ref:
-        description: 'Beta version or tag to promote to stable (release type only, e.g. 1.6.0-beta.2 or v1.6.0-beta.2)'
+        description: 'Beta version or tag to promote to stable (release type only, e.g. 1.6.0-beta.2 or v1.6.0-beta.2). Optional — leave empty to default to the latest promotable beta above the current @latest.'
         required: false
         type: string
 
@@ -86,6 +86,75 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: true
 
+      - name: Generate .betas.json (promotable beta list)
+        # Non-fatal by design: if generation/commit fails for any reason, the beta
+        # publish above has already succeeded and must not be rolled back — the
+        # list just goes stale until the next successful beta run. This step never
+        # exits non-zero and never touches .github/workflows/** (generated data only).
+        run: |
+          set +e
+          git fetch origin --tags >/dev/null 2>&1
+
+          CURRENT_LATEST=$(npm view "$NPM_PACKAGE" dist-tags.latest 2>/dev/null)
+
+          # Collect all vX.Y.Z-beta.N tags strictly newer than @latest (or all of
+          # them, if no stable has published yet), newest first.
+          TAGS=$(git tag -l 'v*-beta.*' | awk -F'[v.-]' '{ printf "%05d.%05d.%05d.%05d\t%s\n", $2, $3, $4, $6, $0 }' | sort -r | cut -f2)
+
+          PROMOTABLE=""
+          for t in $TAGS; do
+            BASE_VERSION=$(echo "$t" | sed -E 's/^v//; s/-.*$//')
+            if [ -n "$CURRENT_LATEST" ]; then
+              IS_NEWER=$(awk -F. -v cur="$CURRENT_LATEST" -v sel="$BASE_VERSION" '
+                BEGIN {
+                  split(cur, c, ".")
+                  split(sel, s, ".")
+                  for (i = 1; i <= 3; i++) {
+                    cn = c[i] + 0
+                    sn = s[i] + 0
+                    if (sn > cn) { print "yes"; exit }
+                    if (sn < cn) { print "no"; exit }
+                  }
+                  print "no"
+                }
+              ')
+              [ "$IS_NEWER" != "yes" ] && continue
+            fi
+            PROMOTABLE="${PROMOTABLE}${PROMOTABLE:+,}\"${t}\""
+          done
+
+          # Guard against writing an empty/garbage file: only proceed once we have
+          # at least one entry and valid JSON.
+          if [ -z "$PROMOTABLE" ]; then
+            echo "No promotable betas found above @latest (${CURRENT_LATEST:-none published}) — skipping .betas.json write."
+            exit 0
+          fi
+
+          GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          printf '{\n  "generated_at": "%s",\n  "promotable_betas": [%s]\n}\n' "$GENERATED_AT" "$PROMOTABLE" > .betas.json
+
+          if ! node -e "JSON.parse(require('fs').readFileSync('.betas.json','utf8'))" >/dev/null 2>&1; then
+            echo "Generated .betas.json failed JSON validation — discarding, not committing."
+            rm -f .betas.json
+            exit 0
+          fi
+
+          git config user.name "clagentic-release-bot[bot]"
+          git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
+          git add .betas.json
+          if git diff --cached --quiet; then
+            echo ".betas.json unchanged — nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: update promotable beta list [skip ci]"
+          if ! git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main; then
+            echo "::warning::failed to push .betas.json update — list will be stale until next beta publish (non-fatal, beta publish already succeeded)"
+          fi
+          exit 0
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          NPM_PACKAGE: ${{ '@clagentic/console' }}
+
   promote:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.type == 'release'
     runs-on: ubuntu-latest
@@ -110,16 +179,53 @@ jobs:
         id: resolve-beta
         env:
           BETA_REF: ${{ github.event.inputs.beta_ref }}
+          NPM_PACKAGE: ${{ '@clagentic/console' }}
         run: |
           if [ -z "$BETA_REF" ]; then
-            echo "::error::beta_ref input is required to promote a beta to stable"
-            exit 1
+            # Default-to-latest: no beta_ref given, so resolve the newest promotable
+            # beta tag (highest X.Y.Z-beta.N above the currently published @latest)
+            # instead of hard-failing and forcing the operator to hand-type a tag.
+            CURRENT_LATEST=$(npm view "$NPM_PACKAGE" dist-tags.latest 2>/dev/null || true)
+            echo "beta_ref not provided — defaulting to the latest promotable beta above @latest (${CURRENT_LATEST:-none published yet})."
+
+            # List all vX.Y.Z-beta.N tags, key each by zero-padded numeric fields so a
+            # plain lexical sort orders them correctly (avoids a semver dependency),
+            # then take the highest.
+            TAG=$(git tag -l 'v*-beta.*' | awk -F'[v.-]' '{ printf "%05d.%05d.%05d.%05d\t%s\n", $2, $3, $4, $6, $0 }' | sort -r | head -n1 | cut -f2)
+
+            if [ -z "$TAG" ]; then
+              echo "::error::beta_ref was not provided and no v*-beta.* tags exist to default to — cut a beta first"
+              exit 1
+            fi
+
+            if [ -n "$CURRENT_LATEST" ]; then
+              BASE_VERSION=$(echo "$TAG" | sed -E 's/^v//; s/-.*$//')
+              IS_NEWER=$(awk -F. -v cur="$CURRENT_LATEST" -v sel="$BASE_VERSION" '
+                BEGIN {
+                  split(cur, c, ".")
+                  split(sel, s, ".")
+                  for (i = 1; i <= 3; i++) {
+                    cn = c[i] + 0
+                    sn = s[i] + 0
+                    if (sn > cn) { print "yes"; exit }
+                    if (sn < cn) { print "no"; exit }
+                  }
+                  print "no"
+                }
+              ')
+              if [ "$IS_NEWER" != "yes" ]; then
+                echo "::error::highest beta tag ${TAG} resolves to version ${BASE_VERSION}, which is not strictly newer than the current published stable ${CURRENT_LATEST} (@latest) — nothing promotable"
+                exit 1
+              fi
+            fi
+          else
+            # Accept either a bare version (1.6.0-beta.2) or a tag (v1.6.0-beta.2).
+            case "$BETA_REF" in
+              v*) TAG="$BETA_REF" ;;
+              *) TAG="v$BETA_REF" ;;
+            esac
           fi
-          # Accept either a bare version (1.6.0-beta.2) or a tag (v1.6.0-beta.2).
-          case "$BETA_REF" in
-            v*) TAG="$BETA_REF" ;;
-            *) TAG="v$BETA_REF" ;;
-          esac
+
           if ! git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "::error::tag ${TAG} (resolved from beta_ref='${BETA_REF}') does not exist — cannot promote an untagged beta"
             exit 1
@@ -128,6 +234,17 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "sha=${BETA_SHA}" >> "$GITHUB_OUTPUT"
           echo "Resolved beta_ref='${BETA_REF}' -> tag ${TAG} -> commit ${BETA_SHA}"
+
+          # Fat-finger mitigation: the monotonicity preflight only catches an OLDER
+          # selection, not a wrong-but-newer tag — so surface the resolved tag/SHA
+          # in the run summary as a visible confirm before anything is landed.
+          {
+            echo "### Promote: resolved beta"
+            echo ""
+            echo "| beta_ref input | resolved tag | resolved commit |"
+            echo "|---|---|---|"
+            echo "| \`${BETA_REF:-<empty, defaulted to latest>}\` | \`${TAG}\` | \`${BETA_SHA}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Preflight — reject a non-newer beta selection
         run: |
