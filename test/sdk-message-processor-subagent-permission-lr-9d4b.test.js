@@ -252,3 +252,124 @@ test("lr-9d4b: a sub-agent permission whose Task already completed (not in activ
     "a sub-agent permission whose owning Task is no longer active must not be preserved (avoids leaking dead entries forever)"
   );
 });
+
+// BOBBIE correctness finding (folded into the same lr-9d4b revision as
+// PEACHES' changes-requested): task_notification (sub-agent completion)
+// used to prune subagentToolOwners for the finished Task unconditionally.
+// If the sub-agent's own permission request is STILL pending when its
+// task_notification arrives (or arrives shortly after), pruning the
+// ownership record makes that entry look like an orphaned top-level
+// permission to a later 'result' handler or processQueryStream finally
+// block -- which would then clear it and re-orphan the resolver via a
+// different timing path than the original bug. Ownership must survive
+// until the permission itself actually resolves.
+test("lr-9d4b (BOBBIE): task_notification arriving while sub-agent permission still pending preserves ownership, and a later result still keeps the entry", function () {
+  var sm = makeSm();
+  var processor = makeProcessor(sm);
+  var session = makeSession();
+
+  var taskToolId = "toolu_task_notify_race";
+  var bashToolId = "toolu_sub_bash_notify_race";
+
+  processor.processSDKMessage(session, {
+    yokeType: "tool_start",
+    blockId: 0,
+    toolId: taskToolId,
+    toolName: "Task",
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "block_stop",
+    blockId: 0,
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "subagent_message",
+    parentToolUseId: taskToolId,
+    messageRole: "assistant",
+    content: [
+      { type: "tool_use", id: bashToolId, name: "Bash", input: { command: "true" } },
+    ],
+  });
+
+  var resolvedWith = null;
+  session.pendingPermissions["perm-notify-race"] = {
+    resolve: function (result) { resolvedWith = result; },
+    requestId: "perm-notify-race",
+    toolName: "Bash",
+    toolInput: { command: "true" },
+    toolUseId: bashToolId,
+    decisionReason: "",
+  };
+
+  // The sub-agent's task_notification (completion) arrives WHILE its own
+  // permission request is still pending -- the race BOBBIE flagged.
+  processor.processSDKMessage(session, {
+    yokeType: "task_notification",
+    parentToolId: taskToolId,
+    taskId: "task-id-1",
+    status: "completed",
+  });
+
+  assert.equal(
+    session.subagentToolOwners[bashToolId],
+    taskToolId,
+    "ownership record must survive task_notification while its permission is still pending"
+  );
+  assert.ok(
+    session.pendingPermissions["perm-notify-race"],
+    "the pending permission itself is untouched by task_notification"
+  );
+
+  // The operator's permission_response can still arrive and resolve normally
+  // after task_notification, regardless of what a subsequent result/finally
+  // cleanup does.
+  var pending = session.pendingPermissions["perm-notify-race"];
+  pending.resolve({ behavior: "allow", updatedInput: pending.toolInput });
+  assert.deepEqual(
+    resolvedWith,
+    { behavior: "allow", updatedInput: { command: "true" } },
+    "resolving after task_notification must still settle the original canUseTool Promise"
+  );
+});
+
+test("lr-9d4b (BOBBIE): task_notification prunes ownership normally once no pendingPermissions entry references it", function () {
+  var sm = makeSm();
+  var processor = makeProcessor(sm);
+  var session = makeSession();
+
+  var taskToolId = "toolu_task_notify_clean";
+  var bashToolId = "toolu_sub_bash_notify_clean";
+
+  processor.processSDKMessage(session, {
+    yokeType: "tool_start",
+    blockId: 0,
+    toolId: taskToolId,
+    toolName: "Task",
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "block_stop",
+    blockId: 0,
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "subagent_message",
+    parentToolUseId: taskToolId,
+    messageRole: "assistant",
+    content: [
+      { type: "tool_use", id: bashToolId, name: "Bash", input: { command: "true" } },
+    ],
+  });
+  // No pendingPermissions entry for bashToolId -- e.g. it already resolved
+  // and was deleted by the permission_response handler.
+
+  processor.processSDKMessage(session, {
+    yokeType: "task_notification",
+    parentToolId: taskToolId,
+    taskId: "task-id-2",
+    status: "completed",
+  });
+
+  assert.equal(
+    session.subagentToolOwners[bashToolId],
+    undefined,
+    "ownership record must still be pruned normally once nothing pending references it (no permanent leak)"
+  );
+});
