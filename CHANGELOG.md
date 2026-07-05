@@ -1,3 +1,32 @@
+# [1.6.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.6.0-beta.2...v1.6.0-beta.3) (2026-07-05)
+
+
+### Bug Fixes
+
+* cover second pendingPermissions clobber site + task_notification race (lr-9d4b) ([ab114ed](https://github.com/clagentic/clagentic-console/commit/ab114edbc47043768ec4caa7540f99c5e1a94eb1)), closes [#310](https://github.com/clagentic/clagentic-console/issues/310)
+* **diagnostics:** dedup duplicate toasts, corner-anchor off the input box (lr-e901) ([7e356fb](https://github.com/clagentic/clagentic-console/commit/7e356fb160a3d9d39a8df5146c1ed66af5e420a9)), closes [#diagnostic-toast-container](https://github.com/clagentic/clagentic-console/issues/diagnostic-toast-container)
+* **diagnostics:** distinguish preflight source label by settings-file scope (lr-7e22) ([b363384](https://github.com/clagentic/clagentic-console/commit/b363384299c9f508c122cd29161ba836d23b60a4))
+* **emoji-picker:** surface silent doUpload returns + fix stale grid refresh closure ([0b58f5e](https://github.com/clagentic/clagentic-console/commit/0b58f5e011052c32092d730b4091524782bb7345))
+* **preflight:** add 8 verified Claude Code hook events to VALID_HOOK_EVENTS (lr-7e22) ([d720542](https://github.com/clagentic/clagentic-console/commit/d7205423f5496ced5497e3c8d7e5212f218b966c))
+* preserve backgrounded sub-agent permission resolver across parent result (lr-9d4b) ([7b161e2](https://github.com/clagentic/clagentic-console/commit/7b161e22476386fee97ddaf2194cb9657e8238d0))
+* **release:** harden release.yml against run-shell-injection (lr-8a08) ([6bc04be](https://github.com/clagentic/clagentic-console/commit/6bc04be532a33baf5b150cf472bf46cc66cb1ce7)), closes [#308](https://github.com/clagentic/clagentic-console/issues/308)
+* **sdk-bridge:** guard state-reset finally block against replacement queries (lr-8355) ([49f3a68](https://github.com/clagentic/clagentic-console/commit/49f3a68587b0b3a138e38fe7b262c29236d377b1))
+* **sessions:** flush grant immediately + hydrate allowedTools on resume (lr-8b2e) ([a0589f9](https://github.com/clagentic/clagentic-console/commit/a0589f970a035561bcbc92a90c8f2e5ed02be5f4))
+* **sessions:** persist and restore allowedTools in durable session meta (lr-8b2e) ([c73a4ba](https://github.com/clagentic/clagentic-console/commit/c73a4ba855c5158fd3c3c2c70930b04a1905280e))
+* **sessions:** validate persisted allowedTools shape before hydration (lr-8b2e) ([b58a434](https://github.com/clagentic/clagentic-console/commit/b58a434d1e8b983fb707cb34327a37631a0d989c))
+* set BOBBIE reviewer_bot_login for clagentic-console (lr-9d4b) ([7485876](https://github.com/clagentic/clagentic-console/commit/7485876daa02371f91983b2be2022983ef4f9473)), closes [#310](https://github.com/clagentic/clagentic-console/issues/310) [#309](https://github.com/clagentic/clagentic-console/issues/309)
+* **yoke:** reconcile CLI-stderr hook warnings against VALID_HOOK_EVENTS (lr-e901) ([5f3f756](https://github.com/clagentic/clagentic-console/commit/5f3f7567baca2e6ebeebfcd209544bfcfaaea8cb))
+
+
+### Features
+
+* **diagnostics:** add per-entry dismiss + clear-all, parity with Notifications panel ([a31b2f4](https://github.com/clagentic/clagentic-console/commit/a31b2f400f4fb1898b463eeb5c627cafc31886d7))
+* **release:** fail-fast guard rejects non-newer beta promotion (lr-243b) ([f911bcf](https://github.com/clagentic/clagentic-console/commit/f911bcf2138c39721998d6f670b16a5cc227cf79))
+* **release:** promote a selected beta commit to stable (lr-8a08) ([dc40770](https://github.com/clagentic/clagentic-console/commit/dc40770b56ca8592ce5431cf713c43e8356317ca)), closes [483/#485](https://github.com/clagentic/clagentic-console/issues/485)
+* **release:** suppress beta success comments/labels, use status/released (lr-8a08, folds lr-cd86) ([d8e994d](https://github.com/clagentic/clagentic-console/commit/d8e994d06ac59bcac9d66638650f84232b94341a))
+* **sessions:** client-side auto-advance and solitary-sentinel guard (lr-c24b) ([546bc16](https://github.com/clagentic/clagentic-console/commit/546bc16de1e35f608f947536717072d66a18609c)), closes [#messages](https://github.com/clagentic/clagentic-console/issues/messages)
+* **sessions:** server-side visible-yield page window extension (lr-c24b) ([07bcc95](https://github.com/clagentic/clagentic-console/commit/07bcc9537798656bf91fcdeacac066ea7cfd9c11))
+
 # [1.6.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.6.0-beta.1...v1.6.0-beta.2) (2026-07-01)
 
 
