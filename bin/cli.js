@@ -48,6 +48,26 @@ function openUrl(url) {
 }
 
 var args = process.argv.slice(2);
+
+// --- `release` subcommand group (release-engineering helpers, lr-01c6) ---
+// Positional subcommand, handled before flag parsing: `clagentic-console release list-betas`.
+if (args[0] === "release") {
+  var releaseSub = args[1];
+  if (releaseSub === "list-betas") {
+    var releaseList = require("../lib/release-list");
+    var betasResult = releaseList.readBetasFile(process.cwd());
+    var betasLines = releaseList.formatBetasOutput(betasResult);
+    for (var bl = 0; bl < betasLines.length; bl++) {
+      console.log(betasLines[bl]);
+    }
+    process.exit(betasResult.ok ? 0 : 1);
+  } else {
+    console.error("Unknown release subcommand: " + (releaseSub || "(none)"));
+    console.error("Usage: clagentic-console release list-betas");
+    process.exit(1);
+  }
+}
+
 var port = _isDev ? 2635 : 2633;
 var useHttps = true;
 var forceMkcert = false;
@@ -124,6 +144,7 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --add <path>     Add a project to the running daemon");
   console.log("       clagentic-console --remove <path>  Remove a project from the running daemon");
   console.log("       clagentic-console --list            List registered projects");
+  console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");
     console.log("");
     console.log("Options:");
     console.log("  -p, --port <port>  Port to listen on (default: 2633)");
