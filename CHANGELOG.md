@@ -1,3 +1,11 @@
+# [1.6.0-beta.4](https://github.com/clagentic/clagentic-console/compare/v1.6.0-beta.3...v1.6.0-beta.4) (2026-07-06)
+
+
+### Features
+
+* **cli:** add 'release list-betas' subcommand (lr-01c6) ([72ae596](https://github.com/clagentic/clagentic-console/commit/72ae59615fd99c2f0c5cfd6eb2257f35c686ff44))
+* **release:** default-to-latest promotable beta + generate .betas.json (lr-01c6) ([ff478db](https://github.com/clagentic/clagentic-console/commit/ff478db6dc753498f84780b11b23d42c78a2a30f))
+
 # [1.6.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.6.0-beta.2...v1.6.0-beta.3) (2026-07-05)
 
 
