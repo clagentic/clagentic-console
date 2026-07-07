@@ -105,10 +105,16 @@
 #todo-sticky .todo-sticky-item.in-progress .todo-sticky-item-text { color: var(--text); }
 #todo-sticky .todo-sticky-item.completed .todo-sticky-item-text { color: var(--text-dimmer); text-decoration: line-through; }
 
-/* --- Scroll-to-bottom floating button --- */
+/* --- Scroll-to-bottom floating button ---
+   bottom is anchored above the composer's single-line resting height (80px,
+   unchanged from before) plus however far the textarea has grown past that
+   baseline. --input-growth is published by autoResize()/resetAutoResize()
+   in modules/input.js — the single existing place composer height changes —
+   so the button tracks multiline/expanded composers without a duplicate
+   ResizeObserver (lr-4a3d). */
 #new-msg-btn {
   position: absolute;
-  bottom: 80px;
+  bottom: calc(80px + var(--input-growth, 0px));
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-alt);
@@ -128,6 +134,19 @@
 }
 #new-msg-btn.hidden {
   display: none;
+}
+
+/* Mobile: the tab bar sits below the composer (56px, see input.css), so the
+   button needs the same extra clearance #input-area gets — and the same
+   keyboard-open exception once the tab bar is hidden behind the keyboard. */
+@media (max-width: 768px) {
+  #new-msg-btn {
+    bottom: calc(80px + var(--input-growth, 0px) + 56px);
+  }
+
+  body.keyboard-open #new-msg-btn {
+    bottom: calc(80px + var(--input-growth, 0px));
+  }
 }
 
 /* --- User message --- */
