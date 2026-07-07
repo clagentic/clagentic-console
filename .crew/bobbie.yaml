@@ -5,6 +5,16 @@
 
 schema_version: 1
 
+# BOBBIE's GitHub App bot login for reviewer-identity resolution in
+# crew_merge.py's _assert_bobbie_review gate. Unlike PEACHES (which has a
+# well-known _PEACHES_DEFAULT_BOT_LOGIN fallback), BOBBIE has no built-in
+# default, so this field is required for the gate to resolve a login and
+# inspect reviews rather than failing closed before it ever looks (lr-9d4b).
+# Value verified against the live GitHub reviews API: clagentic-security[bot]
+# (GitHub user id 296561794) has posted COMMENTED reviews on PR #310 and the
+# merged PR #309 in clagentic/clagentic-console.
+reviewer_bot_login: clagentic-security[bot]
+
 security:
   rules:
     # WebSocket relay and push-notification subsystems handle tokens and

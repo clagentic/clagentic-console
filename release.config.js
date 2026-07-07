@@ -14,8 +14,16 @@ var config = {
       message: "Release ${nextRelease.version}"
     }],
     ["@semantic-release/github", {
-      successComment: "This issue has been resolved in version ${nextRelease.version} (${nextRelease.channel || 'stable'}).\n\nTo update, run:\n```\nnpx @clagentic/console@${nextRelease.version}\n```",
-      releasedLabels: ["released: ${nextRelease.channel || 'stable'}"]
+      // A beta is not "released" (plan #670 lifecycle rule: awaiting-release != released) —
+      // successComment/releasedLabels must only fire on the stable channel. The github plugin
+      // has no inline per-channel toggle for these two options, so the supported mechanism is
+      // successCommentCondition: a lodash template evaluated with the full release context
+      // (including nextRelease.channel), gating whether success() comments/labels at all.
+      // Stable releases (the "release" branch) carry no channel, so `!nextRelease.channel`
+      // is true only on stable.
+      successCommentCondition: "<%= !nextRelease.channel %>",
+      successComment: "This issue has been resolved in version ${nextRelease.version}.\n\nTo update, run:\n```\nnpx @clagentic/console@${nextRelease.version}\n```",
+      releasedLabels: ["status/released"]
     }]
   ]
 }
