@@ -33,8 +33,7 @@ if (_isDev || process.argv.includes("--debug")) {
 var crypto = require("crypto");
 var { loadConfig, saveConfig, configPath, socketPath, oldSocketPath, logPath, ensureConfigDir, isDaemonAlive, isDaemonAliveAsync, checkOldDaemon, generateSlug, clearStaleConfig, loadClayrc, saveClayrc, readCrashInfo, REAL_HOME, CONFIG_DIR, CLAGENTIC_HOME } = require("../lib/config");
 var { sendIPCCommand } = require("../lib/ipc");
-var { generateAuthToken } = require("../lib/server");
-var { enableMultiUser, disableMultiUser, hasAdmin, isMultiUser, getSetupCode } = require("../lib/users");
+var { enableMultiUser, disableMultiUser, hasAdmin, isMultiUser, getSetupCode, hashPin } = require("../lib/users");
 
 function openUrl(url) {
   try {
@@ -1576,7 +1575,7 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     pid: null,
     port: port,
     host: host,
-    pinHash: mode === "multi" && cliPin ? generateAuthToken(cliPin) : (prevConfig && prevConfig.pinHash) || null,
+    pinHash: mode === "multi" && cliPin ? hashPin(cliPin) : (prevConfig && prevConfig.pinHash) || null,
     tls: hasTls,
     mkcertDetected: mkcertDetected,
     debug: debugMode,
@@ -2216,7 +2215,7 @@ function showSettingsMenu(config, ip) {
         log(sym.bar);
         promptPin(function (pin) {
           if (pin) {
-            var hash = generateAuthToken(pin);
+            var hash = hashPin(pin);
             sendIPCCommand(socketPath(), { cmd: "set_pin", pinHash: hash }).then(function () {
               config.pinHash = hash;
               log(sym.done + "  " + a.green + "PIN updated" + a.reset);
