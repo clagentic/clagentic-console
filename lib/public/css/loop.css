@@ -926,6 +926,17 @@
 #ralph-sticky .ralph-sticky-status { font-size: 12px; color: var(--accent); white-space: nowrap; }
 #ralph-sticky .ralph-sticky-status .lucide { width: 12px; height: 12px; }
 
+/* lr-e31b: "N queued" pill — human message(s) waiting for the next loop
+   iteration boundary. Sits next to the running-loop status text. */
+#ralph-sticky .ralph-sticky-pending {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(var(--overlay-rgb), 0.08);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
 /* Ready state — accent color with glow.
    Animate opacity on a pseudo-element instead of box-shadow to avoid
    triggering paint on every frame (box-shadow is a paint property). */
