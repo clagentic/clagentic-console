@@ -900,6 +900,12 @@
   gap: 0;
   padding: 2px 4px 2px 0;
   user-select: none;
+  /* lr-4a9c: .loop-pending-popover is appended here and uses
+     position:absolute; top:100%; right:0 to anchor under the pending pill.
+     Without this, #ralph-sticky (position:relative) is the nearest
+     positioned ancestor, so the popover anchors to the whole sticky
+     container instead of the header/pill. */
+  position: relative;
 }
 #ralph-sticky .ralph-sticky-inner {
   border-color: color-mix(in srgb, var(--accent, #6c5ce7) 40%, var(--border));
