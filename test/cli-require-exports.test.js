@@ -60,3 +60,52 @@ test("bin/cli.js: both PIN call sites use hashPin(pin)", function () {
     "expected exactly two hashPin() call sites (multi-user start with CLI PIN, settings-menu change PIN), found " + matches.length
   );
 });
+
+// Regression test for lr-e41f: bin/cli.js also destructured enableMultiUser,
+// disableMultiUser, and isMultiUser from lib/users — none of the three were
+// ever exported by that module (removed in lr-ec2d when single-user mode was
+// consolidated into an always-on multi-user model). Same failure shape as
+// lr-56df: the destructure silently resolved to undefined and only threw a
+// TypeError when a caller actually invoked one of them (daemon startup,
+// settings-menu multi-user toggle).
+test("bin/cli.js: does not destructure or invoke enableMultiUser/disableMultiUser/isMultiUser from lib/users", function () {
+  var source = fs.readFileSync(CLI_PATH, "utf8");
+  ["enableMultiUser", "disableMultiUser", "isMultiUser"].forEach(function (name) {
+    assert.ok(
+      source.indexOf(name) === -1,
+      "bin/cli.js still references " + name + ", which lib/users.js does not export (lr-e41f)"
+    );
+  });
+});
+
+test("bin/cli.js: no undefined export from lib/users is destructured or invoked (generic guard)", function () {
+  var source = fs.readFileSync(CLI_PATH, "utf8");
+  var usersMod = require("../lib/users");
+
+  var destructureMatch = source.match(/require\("\.\.\/lib\/users"\)/);
+  assert.ok(destructureMatch, "bin/cli.js should require ../lib/users");
+
+  // Find the destructure statement immediately preceding the require call and
+  // verify every named binding it pulls in is a real, defined export of
+  // lib/users.js. This generalizes the lr-56df / lr-e41f fix so a future
+  // lib/users.js export removal fails a test instead of shipping a live
+  // TypeError.
+  var destructureLine = source.split("\n").filter(function (line) {
+    return line.indexOf('require("../lib/users")') !== -1;
+  })[0];
+  assert.ok(destructureLine, "expected a destructuring require of ../lib/users in bin/cli.js");
+
+  var namesMatch = destructureLine.match(/\{([^}]+)\}/);
+  assert.ok(namesMatch, "expected a destructuring pattern for the ../lib/users require");
+
+  var names = namesMatch[1].split(",").map(function (n) { return n.trim(); }).filter(Boolean);
+  assert.ok(names.length > 0, "expected at least one destructured name from ../lib/users");
+
+  names.forEach(function (name) {
+    assert.notStrictEqual(
+      usersMod[name],
+      undefined,
+      "bin/cli.js destructures '" + name + "' from ../lib/users, but lib/users.js does not export it"
+    );
+  });
+});

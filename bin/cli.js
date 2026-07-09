@@ -33,7 +33,7 @@ if (_isDev || process.argv.includes("--debug")) {
 var crypto = require("crypto");
 var { loadConfig, saveConfig, configPath, socketPath, oldSocketPath, logPath, ensureConfigDir, isDaemonAlive, isDaemonAliveAsync, checkOldDaemon, generateSlug, clearStaleConfig, loadClayrc, saveClayrc, readCrashInfo, REAL_HOME, CONFIG_DIR, CLAGENTIC_HOME } = require("../lib/config");
 var { sendIPCCommand } = require("../lib/ipc");
-var { enableMultiUser, disableMultiUser, hasAdmin, isMultiUser, getSetupCode, hashPin } = require("../lib/users");
+var { hasAdmin, getSetupCode, hashPin } = require("../lib/users");
 
 function openUrl(url) {
   try {
@@ -1638,16 +1638,9 @@ async function forkDaemon(mode, keepAwake, extraProjects, addCwd, wantOsUsers) {
     return;
   }
 
-  // Enable/disable multi-user mode based on startup config
-  var _pendingSetupCode = null;
-  if (config.mode === "multi") {
-    var muResult = enableMultiUser();
-    if (muResult.setupCode) {
-      _pendingSetupCode = muResult.setupCode;
-    }
-  } else if (isMultiUser()) {
-    disableMultiUser();
-  }
+  // Multi-user mode is always on (single-user mode was removed, lr-ec2d).
+  // getSetupCode() auto-generates a code when there's no admin yet.
+  var _pendingSetupCode = hasAdmin() ? null : getSetupCode();
 
   // Headless mode — print status and exit immediately
   if (headlessMode) {
@@ -1775,14 +1768,13 @@ async function devMode(mode, keepAwake, existingPinHash, wantOsUsers) {
   ensureConfigDir();
   saveConfig(config);
 
-  // Enable/disable multi-user mode based on startup config
-  if (config.mode === "multi") {
-    var muResult = enableMultiUser();
-    if (muResult.setupCode) {
-      console.log("\x1b[38;2;0;183;133m[dev]\x1b[0m Multi-user mode enabled. Setup code: " + muResult.setupCode);
+  // Multi-user mode is always on (single-user mode was removed, lr-ec2d).
+  // getSetupCode() auto-generates a code when there's no admin yet.
+  if (!hasAdmin()) {
+    var devSetupCode = getSetupCode();
+    if (devSetupCode) {
+      console.log("\x1b[38;2;0;183;133m[dev]\x1b[0m Multi-user mode enabled. Setup code: " + devSetupCode);
     }
-  } else if (isMultiUser()) {
-    disableMultiUser();
   }
 
   var daemonScript = path.join(__dirname, "..", "lib", "daemon.js");
@@ -2152,24 +2144,14 @@ function showSettingsMenu(config, ip) {
       : a.dim + "Off" + a.reset;
 
     log(sym.bar + "  HTTPS        " + tlsStatus);
-    var muEnabled = isMultiUser();
-    var muStatus = muEnabled
-      ? a.green + "Enabled" + a.reset
-      : a.dim + "Off" + a.reset;
 
-    var modeLabel = config.mode === "multi" ? "Multi-user" : "Single user";
-    var modeStatus = config.mode === "multi"
-      ? a.indigo + modeLabel + a.reset
-      : a.dim + modeLabel + a.reset;
-    log(sym.bar + "  Mode         " + modeStatus);
+    // Multi-user mode is always on (single-user mode was removed, lr-ec2d).
+    log(sym.bar + "  Mode         " + a.indigo + "Multi-user" + a.reset);
     log(sym.bar + "  PIN          " + pinStatus);
-    log(sym.bar + "  Multi-user   " + muStatus);
     var osUsersStatus = isOsUsers
       ? a.green + "Enabled" + a.reset
       : a.dim + "Off" + a.reset;
-    if (muEnabled) {
-      log(sym.bar + "  OS users     " + osUsersStatus);
-    }
+    log(sym.bar + "  OS users     " + osUsersStatus);
     if (process.platform === "darwin") {
       log(sym.bar + "  Keep awake   " + awakeStatus);
     }
@@ -2178,28 +2160,13 @@ function showSettingsMenu(config, ip) {
     // Build items
     var items = [];
 
-    if (!muEnabled) {
-      if (config.pinHash) {
-        items.push({ label: "Change PIN", value: "pin" });
-        items.push({ label: "Remove PIN", value: "remove_pin" });
-      } else {
-        items.push({ label: "Set PIN", value: "pin" });
-      }
-    }
-    if (muEnabled) {
-      items.push({ label: "Disable multi-user mode", value: "disable_multi_user" });
-      if (isOsUsers) {
-        items.push({ label: "Disable OS-level user isolation", value: "disable_os_users" });
-      } else {
-        items.push({ label: "Enable OS-level user isolation", value: "os_users" });
-      }
+    if (isOsUsers) {
+      items.push({ label: "Disable OS-level user isolation", value: "disable_os_users" });
     } else {
-      items.push({ label: "Enable multi-user mode", value: "multi_user" });
+      items.push({ label: "Enable OS-level user isolation", value: "os_users" });
     }
-    if (muEnabled) {
-      items.push({ label: "Show setup code", value: "show_setup_code" });
-    }
-    if (muEnabled && hasAdmin()) {
+    items.push({ label: "Show setup code", value: "show_setup_code" });
+    if (hasAdmin()) {
       items.push({ label: "Recover admin password", value: "recover_admin" });
     }
     if (process.platform === "darwin") {
@@ -2233,54 +2200,6 @@ function showSettingsMenu(config, ip) {
           config.pinHash = null;
           log(sym.done + "  " + a.dim + "PIN removed" + a.reset);
           log("");
-          showSettingsMenu(config, ip);
-        });
-        break;
-
-      case "multi_user":
-        var muResult = enableMultiUser();
-        log(sym.bar);
-        log(sym.bar + "  " + a.yellow + sym.warn + " Experimental Feature" + a.reset);
-        log(sym.bar);
-        log(sym.bar + "  " + a.dim + "Multi-user mode is experimental and may change in future releases." + a.reset);
-        log(sym.bar + "  " + a.dim + "Sharing access to AI-powered tools may be subject to your provider's" + a.reset);
-        log(sym.bar + "  " + a.dim + "terms of service. Please review the applicable usage policies before" + a.reset);
-        log(sym.bar + "  " + a.dim + "granting access to other users." + a.reset);
-        log(sym.bar);
-        if (muResult.setupCode) {
-          log(sym.bar + "  " + a.green + "Multi-user mode enabled." + a.reset);
-          log(sym.bar);
-          log(sym.bar + "  Setup code:  " + a.bold + muResult.setupCode + a.reset);
-          log(sym.bar);
-          log(sym.bar + "  " + a.dim + "Open Clagentic: Console in your browser and enter this code to create the admin account." + a.reset);
-          log(sym.bar + "  " + a.dim + "The code is single-use and will be cleared once the admin is set up." + a.reset);
-        } else {
-          log(sym.bar + "  " + a.dim + "Multi-user mode is already enabled." + a.reset);
-        }
-        log(sym.bar);
-        promptSelect("Back?", [{ label: "Back", value: "back" }], function () {
-          showSettingsMenu(config, ip);
-        });
-        break;
-
-      case "disable_multi_user":
-        log(sym.bar);
-        log(sym.bar + "  " + a.yellow + sym.warn + " Disable multi-user mode?" + a.reset);
-        log(sym.bar);
-        log(sym.bar + "  " + a.dim + "Sessions created by other users will no longer be visible." + a.reset);
-        log(sym.bar + "  " + a.dim + "User accounts will be preserved and restored if re-enabled." + a.reset);
-        log(sym.bar);
-        promptSelect("Confirm", [
-          { label: "Disable multi-user mode", value: "confirm" },
-          { label: "Cancel", value: "cancel" },
-        ], function (confirmChoice) {
-          if (confirmChoice === "confirm") {
-            disableMultiUser();
-            log(sym.bar);
-            log(sym.done + "  " + a.green + "Multi-user mode disabled." + a.reset);
-            log(sym.bar + "  " + a.dim + "Restart the daemon for changes to take full effect." + a.reset);
-            log(sym.bar);
-          }
           showSettingsMenu(config, ip);
         });
         break;
