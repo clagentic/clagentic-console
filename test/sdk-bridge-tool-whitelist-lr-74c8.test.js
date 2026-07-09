@@ -23,6 +23,19 @@
  *       auto-allowed — the fix must not regress genuinely read-only tools
  *   (5) compound commands: a destructive segment anywhere in a `&&`/`;`/`|`
  *       chain denies the whole chain, even if other segments are safe
+ *   (6) BOBBIE follow-up (pullrequestreview-4666578193), three residual
+ *       bypasses closed in the same fix:
+ *       (a) command substitution ($(...) / backticks) embedded in an
+ *           otherwise-safe segment (e.g. `echo $(rm -rf x)`) is never
+ *           auto-allowed — the embedded command is unwhitelistable, not
+ *           independently re-validated
+ *       (b) `env` and `command` are execution primitives removed from the
+ *           flat whitelist outright — `env rm ...` / `command rm ...` no
+ *           longer launder an arbitrary tail command
+ *       (c) the git validator checks dangerous flags, not just args[0] —
+ *           `git show --output=<path>` / `git log --output=<path>` (file
+ *           write) fall through to the prompt even though show/log are
+ *           otherwise allowed subcommands
  */
 
 var test = require("node:test");
@@ -201,4 +214,69 @@ test("lr-74c8 (5): compound command with a destructive segment is never auto-all
 test("lr-74c8 (5): compound command with xargs anywhere is never auto-allowed", function () {
   var result = whitelistResult("cat list.txt | xargs rm -rf");
   assert.equal(result, null, "xargs segment must deny the whole pipeline");
+});
+
+// ---------------------------------------------------------------------------
+// (6a) Command substitution ($(...) / backticks) is never auto-allowed,
+//      even when the outer segment's first word is on the safe list.
+// ---------------------------------------------------------------------------
+
+var commandSubstitutionCommands = [
+  "echo $(rm -rf x)",
+  "echo `rm -rf x`",
+  "echo \"prefix $(rm -rf x) suffix\"",
+  "cat $(rm -rf x)",
+];
+
+commandSubstitutionCommands.forEach(function (cmd) {
+  test("lr-74c8 (6a): command substitution is never auto-allowed: " + cmd, function () {
+    var result = whitelistResult(cmd);
+    assert.equal(result, null, "expected checkToolWhitelist to return null (fall through to prompt) for: " + cmd);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (6b) `env` and `command` execution primitives are never auto-allowed.
+// ---------------------------------------------------------------------------
+
+var envCommandPrimitives = [
+  "env rm -rf /",
+  "env",
+  "command rm -rf /",
+  "command ls",
+];
+
+envCommandPrimitives.forEach(function (cmd) {
+  test("lr-74c8 (6b): env/command primitive is never auto-allowed: " + cmd, function () {
+    var result = whitelistResult(cmd);
+    assert.equal(result, null, "expected checkToolWhitelist to return null (fall through to prompt) for: " + cmd);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (6c) git validator checks dangerous flags, not just args[0].
+// ---------------------------------------------------------------------------
+
+var gitDangerousFlagCommands = [
+  "git show --output=x",
+  "git log --output=x",
+  "git show -o x",
+  "git log -o x",
+  "git show -c core.pager=id",
+  "git log --exec=id",
+  "git diff --ext-diff",
+];
+
+gitDangerousFlagCommands.forEach(function (cmd) {
+  test("lr-74c8 (6c): git with dangerous flag is never auto-allowed: " + cmd, function () {
+    var result = whitelistResult(cmd);
+    assert.equal(result, null, "expected checkToolWhitelist to return null (fall through to prompt) for: " + cmd);
+  });
+});
+
+test("lr-74c8 (6c): git show/log without dangerous flags remain auto-allowed (no regression)", function () {
+  ["git show", "git show HEAD", "git log -5", "git log --oneline"].forEach(function (cmd) {
+    var result = whitelistResult(cmd);
+    assert.ok(result && result.behavior === "allow", "expected allow for: " + cmd);
+  });
 });
