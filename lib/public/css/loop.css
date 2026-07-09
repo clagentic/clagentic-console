@@ -900,6 +900,12 @@
   gap: 0;
   padding: 2px 4px 2px 0;
   user-select: none;
+  /* lr-4a9c: .loop-pending-popover is appended here and uses
+     position:absolute; top:100%; right:0 to anchor under the pending pill.
+     Without this, #ralph-sticky (position:relative) is the nearest
+     positioned ancestor, so the popover anchors to the whole sticky
+     container instead of the header/pill. */
+  position: relative;
 }
 #ralph-sticky .ralph-sticky-inner {
   border-color: color-mix(in srgb, var(--accent, #6c5ce7) 40%, var(--border));
@@ -927,15 +933,92 @@
 #ralph-sticky .ralph-sticky-status .lucide { width: 12px; height: 12px; }
 
 /* lr-e31b: "N queued" pill — human message(s) waiting for the next loop
-   iteration boundary. Sits next to the running-loop status text. */
+   iteration boundary. Sits next to the running-loop status text. Now a
+   button (lr-4a9c) that opens a popover listing each queued message with a
+   per-item dismiss action. */
 #ralph-sticky .ralph-sticky-pending {
   font-size: 11px;
   color: var(--text-secondary);
   background: rgba(var(--overlay-rgb), 0.08);
+  border: none;
   border-radius: 999px;
   padding: 1px 8px;
   white-space: nowrap;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
+#ralph-sticky .ralph-sticky-pending:hover {
+  color: var(--text);
+  background: rgba(var(--overlay-rgb), 0.14);
+}
+
+/* lr-4a9c: Pending-message popover, anchored under the "N queued" pill. */
+.loop-pending-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  width: 280px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb, 0,0,0), 0.35);
+  z-index: 20;
+  padding: 8px;
+}
+.loop-pending-popover-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  padding: 2px 4px 6px;
+}
+.loop-pending-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.loop-pending-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+.loop-pending-item:hover {
+  background: rgba(var(--overlay-rgb), 0.06);
+}
+.loop-pending-item-text {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.loop-pending-item-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+.loop-pending-item-remove .lucide { width: 13px; height: 13px; }
+.loop-pending-item-remove:hover { color: var(--error, #ef4444); background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent); }
 
 /* Ready state — accent color with glow.
    Animate opacity on a pseudo-element instead of box-shadow to avoid
