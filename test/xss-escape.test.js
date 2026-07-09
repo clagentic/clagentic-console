@@ -249,6 +249,156 @@ test("projectIconHtml: null/empty icon falls back to caller-supplied placeholder
   assert.equal(projectIconHtml(undefined), "");
 });
 
+// ============================================================
+// lr-cc85 — scheduler.js stored XSS: month/week/popover sinks
+//
+// scheduler.js is DOM-coupled (initScheduler() reaches for
+// document.getElementById at module init), so it can't be imported and
+// exercised directly in Node the way escape-html.js can. Following the
+// existing app-home-hub.js / command-palette.js pattern above, these tests
+// read the source and assert the vulnerable raw-interpolation sinks are gone
+// and the escaping/validation call sites are present.
+// ============================================================
+
+test("scheduler.js: month view escapes ev.timeStr instead of interpolating it raw (lr-cc85 vector 1)", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/scheduler.js"), "utf8");
+
+  // The historical vulnerable pattern: raw ev.timeStr concatenated into the
+  // month-cell markup without esc().
+  assert.ok(
+    !src.includes("'<span class=\"scheduler-event-time\">' + ev.timeStr + '</span>"),
+    "month view must not interpolate raw ev.timeStr"
+  );
+  assert.ok(
+    src.includes("'<span class=\"scheduler-event-time\">' + esc(ev.timeStr) + '</span>"),
+    "month view must escape ev.timeStr via esc()"
+  );
+});
+
+test("scheduler.js: week view (non-badge) escapes ev.timeStr at the second sink (lr-cc85 vector 1, harden :1099)", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/scheduler.js"), "utf8");
+
+  assert.ok(
+    !src.includes("'<span class=\"scheduler-week-event-time\">' + ev.timeStr + '</span>'"),
+    "week view time span must not interpolate raw ev.timeStr"
+  );
+  // Both week-view time spans (interval-badge and regular event) must escape.
+  var matches = src.match(/'<span class="scheduler-week-event-time">' \+ esc\(ev\.timeStr\) \+ '<\/span>'/g) || [];
+  assert.equal(matches.length, 2, "both week-view time-span sinks call esc(ev.timeStr)");
+});
+
+test("scheduler.js: popover escapes cronToHuman(rec.cron) (lr-cc85 vector 1, popover :1320)", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/scheduler.js"), "utf8");
+
+  assert.ok(
+    !src.includes("'<div class=\"schedule-popover-meta\">' + cronToHuman(rec.cron) + '</div>'"),
+    "popover must not interpolate raw cronToHuman(rec.cron)"
+  );
+  assert.ok(
+    src.includes("'<div class=\"schedule-popover-meta\">' + esc(cronToHuman(rec.cron)) + '</div>'"),
+    "popover must escape cronToHuman(rec.cron) via esc()"
+  );
+});
+
+test("scheduler.js: esc() applied end-to-end renders a malicious cron fallback and time string inert", () => {
+  // Mirrors scheduler.js's esc()/cronToHuman() logic exactly (cronToHuman's
+  // fallback at :1673 returns the raw cron string verbatim when it can't
+  // parse a 5-field cron — that raw string is the attack surface).
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function cronToHuman(cron) {
+    if (!cron) return "";
+    var parts = cron.trim().split(/\s+/);
+    if (parts.length !== 5) return cron; // fallback: raw cron verbatim
+    return "n/a";
+  }
+
+  var maliciousTime = '<img src=x onerror=alert(1)>';
+  var maliciousCron = '<script>alert(1)</script>'; // not 5 fields -> fallback returns raw
+
+  assert.equal(esc(maliciousTime), "&lt;img src=x onerror=alert(1)&gt;");
+  assert.ok(!esc(maliciousTime).includes("<img"), "escaped time string carries no live tag");
+
+  var human = cronToHuman(maliciousCron);
+  assert.equal(human, maliciousCron, "fallback returns the raw cron (the vulnerability surface)");
+  assert.equal(esc(human), "&lt;script&gt;alert(1)&lt;/script&gt;");
+  assert.ok(!esc(human).includes("<script>"), "escaped cron fallback carries no live script tag");
+});
+
+// ============================================================
+// lr-cc85 — scheduler.js / sidebar-sessions.js stored XSS: color-into-style
+// attribute sinks (vector 2)
+// ============================================================
+
+test("scheduler.js: interval-badge and week-view background use safeColor() instead of raw ev.color (lr-cc85 vector 2)", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/scheduler.js"), "utf8");
+
+  assert.ok(
+    !src.includes('badgeStyle = "background:" + ev.color'),
+    "interval badge must not interpolate raw ev.color into style"
+  );
+  assert.ok(
+    !src.includes('var evColor = ev.color || ""'),
+    "week-view background must not interpolate raw ev.color into style"
+  );
+  assert.ok(src.includes("safeColor(ev.color)"), "color sinks route through safeColor()");
+  assert.ok(
+    src.includes("SAFE_HEX_COLOR_RE = /^#[0-9a-f]{3,8}$/i"),
+    "a strict hex-color allowlist regex guards the color sinks"
+  );
+});
+
+test("scheduler.js: safeColor() rejects an attribute-breakout payload and accepts a valid hex color", () => {
+  // Mirrors scheduler.js's safeColor() exactly.
+  var SAFE_HEX_COLOR_RE = /^#[0-9a-f]{3,8}$/i;
+  function safeColor(c) { return c && SAFE_HEX_COLOR_RE.test(c) ? c : null; }
+
+  var payload = 'x" onanimationstart=alert(1) x="';
+  assert.equal(safeColor(payload), null, "attribute-breakout color payload is rejected");
+  assert.equal(safeColor("#fff"), "#fff");
+  assert.equal(safeColor("#ff00aa"), "#ff00aa");
+  assert.equal(safeColor(null), null);
+  assert.equal(safeColor(""), null);
+});
+
+test("sidebar-sessions.js: countdown item validates u.color against a strict hex regex before building the style attribute (lr-cc85 vector 2)", async () => {
+  var fs = (await import("node:fs")).default;
+  var path = (await import("node:path")).default;
+  var src = fs.readFileSync(path.resolve("lib/public/modules/sidebar-sessions.js"), "utf8");
+
+  assert.ok(
+    !src.includes('var colorStyle = u.color ? " style=\\"border-left-color:" + u.color + "\\"" : "";'),
+    "countdown must not interpolate raw u.color into style"
+  );
+  assert.ok(
+    src.includes("safeCountdownColor"),
+    "countdown routes u.color through a validated variable before use"
+  );
+  assert.ok(
+    src.includes("/^#[0-9a-f]{3,8}$/i.test(u.color)"),
+    "countdown validates u.color with a strict hex-color regex"
+  );
+});
+
+test("sidebar-sessions.js: countdown color validation rejects an attribute-breakout payload, accepts hex", () => {
+  // Mirrors sidebar-sessions.js's inline validation exactly.
+  function safeCountdownColor(color) {
+    return color && /^#[0-9a-f]{3,8}$/i.test(color) ? color : null;
+  }
+
+  var payload = 'x" onanimationstart=alert(1) x="';
+  assert.equal(safeCountdownColor(payload), null, "attribute-breakout color payload is rejected");
+  assert.equal(safeCountdownColor("#123456"), "#123456");
+  assert.equal(safeCountdownColor(null), null);
+});
+
 test("projectIconHtml: does not raw-interpolate a script-bearing non-sentinel icon value", () => {
   // Not a valid :slug: sentinel (isCustomIcon rejects it), so it falls through
   // to the escaped-text branch — must not appear unescaped in the output.
