@@ -173,7 +173,7 @@
   text-align: start;
 }
 
-/* dm-bubble-*, wide-view, mate-dm-active layout → channel-layout.css */
+/* dm-bubble-*, wide-view layout → channel-layout.css */
 
 /* --- User message action bar --- */
 .msg-actions {
@@ -1782,7 +1782,7 @@ pre.mermaid-error {
   }
 }
 
-/* Wide-view, mate-dm-active, channel-thinking, pre-thinking, channel-scoped
+/* Wide-view, channel-thinking, pre-thinking, channel-scoped
    permission layout → channel-layout.css */
 
 .perm-ask {

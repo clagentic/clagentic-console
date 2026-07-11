@@ -526,7 +526,6 @@
   margin: 0 auto;
   position: relative;
 }
-body.mate-dm-active #input-wrapper,
 #main-column.dm-mode #input-wrapper {
   max-width: 100%;
 }
@@ -726,61 +725,6 @@ body.mate-dm-active #input-wrapper,
 #attach-image-btn:hover,
 #schedule-btn:hover,
 #input-more-btn:hover { background: rgba(var(--overlay-rgb), 0.06); color: var(--text); }
-
-#ask-mate-btn {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-  touch-action: manipulation;
-  position: relative;
-}
-
-#ask-mate-btn .lucide { width: 20px; height: 20px; flex-shrink: 0; }
-
-#ask-mate-btn:hover { background: rgba(var(--overlay-rgb), 0.06); color: var(--text); }
-#ask-mate-btn:active { transform: scale(0.95); }
-
-/* Mate avatar overlay on @ button.
-   Rendered desaturated and dim so it sits quietly in the corner of the
-   input area. Regains saturation on hover, so the user only sees the
-   actual mate identity when they're actively reaching for the button. */
-.ask-mate-avatar {
-  position: absolute;
-  bottom: 0;
-  right: -2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1.5px solid var(--input-bg);
-  pointer-events: none;
-  opacity: 0.45;
-  filter: grayscale(100%);
-  transition: opacity 0.3s, transform 0.3s, filter 0.3s;
-}
-
-#ask-mate-btn:hover .ask-mate-avatar {
-  opacity: 0.9;
-  filter: grayscale(0%);
-}
-
-.ask-mate-avatar.fade-out {
-  opacity: 0;
-  transform: scale(0.6);
-}
-
-.ask-mate-avatar.fade-in {
-  opacity: 0.45;
-  transform: scale(1);
-}
 
 #send-btn {
   flex-shrink: 0;

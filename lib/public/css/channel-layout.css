@@ -1,8 +1,8 @@
 /* ==========================================================================
    channel-layout.css
-   Layout rules that only apply in channel (wide-view) or human DM
-   (mate-dm-active) mode. Extracted from messages.css so the selectors
-   do not run on every style recalc in the default bubble view.
+   Layout rules that only apply in channel (wide-view) mode. Extracted
+   from messages.css so the selectors do not run on every style recalc
+   in the default bubble view.
 
    Default bubble view: dm-bubble-avatar, dm-bubble-header, dm-bubble-name,
    dm-bubble-time are present in the DOM but hidden / inert. This file
@@ -43,7 +43,6 @@
   display: none;
 }
 
-body.mate-dm-active .dm-bubble-avatar,
 body.wide-view .dm-bubble-avatar {
   display: block;
 }
@@ -130,18 +129,15 @@ body.wide-view .msg-assistant:hover {
 
 /* Grouped messages: same sender within same minute */
 body.wide-view .msg-user.grouped > .dm-bubble-avatar,
-body.wide-view .msg-assistant.grouped > .dm-bubble-avatar,
-body.mate-dm-active .msg-assistant.grouped > .dm-bubble-avatar {
+body.wide-view .msg-assistant.grouped > .dm-bubble-avatar {
   visibility: hidden;
 }
 body.wide-view .msg-user.grouped .dm-bubble-header,
-body.wide-view .msg-assistant.grouped .dm-bubble-header,
-body.mate-dm-active .msg-assistant.grouped .dm-bubble-header {
+body.wide-view .msg-assistant.grouped .dm-bubble-header {
   display: none;
 }
 body.wide-view .msg-user.grouped,
-body.wide-view .msg-assistant.grouped,
-body.mate-dm-active .msg-assistant.grouped {
+body.wide-view .msg-assistant.grouped {
   padding-top: 1px;
 }
 
@@ -185,10 +181,10 @@ body.wide-view .turn-meta {
   max-width: 100%;
 }
 
-/* Mobile: force bubble layout in wide-view (except mate-dm-active) */
+/* Mobile: force bubble layout in wide-view */
 @media (max-width: 768px) {
-  body.wide-view:not(.mate-dm-active) { --content-width: 720px; }
-  body.wide-view:not(.mate-dm-active) .msg-user {
+  body.wide-view { --content-width: 720px; }
+  body.wide-view .msg-user {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -199,7 +195,7 @@ body.wide-view .turn-meta {
     border-radius: initial;
     justify-content: initial;
   }
-  body.wide-view:not(.mate-dm-active) .msg-assistant {
+  body.wide-view .msg-assistant {
     display: block;
     flex-direction: initial;
     align-items: initial;
@@ -209,10 +205,10 @@ body.wide-view .turn-meta {
     margin: 0 auto 12px;
     border-radius: 12px;
   }
-  body.wide-view:not(.mate-dm-active) .msg-user:hover { background: initial; }
-  body.wide-view:not(.mate-dm-active) .msg-assistant:hover { background: rgba(var(--overlay-rgb), 0.02); }
-  body.wide-view:not(.mate-dm-active) .msg-user .dm-bubble-avatar-me { order: initial; }
-  body.wide-view:not(.mate-dm-active) .msg-user .bubble {
+  body.wide-view .msg-user:hover { background: initial; }
+  body.wide-view .msg-assistant:hover { background: rgba(var(--overlay-rgb), 0.02); }
+  body.wide-view .msg-user .dm-bubble-avatar-me { order: initial; }
+  body.wide-view .msg-user .bubble {
     background: var(--user-bubble);
     border-radius: 20px 20px 4px 20px;
     padding: 12px 18px;
@@ -222,17 +218,17 @@ body.wide-view .turn-meta {
     white-space: pre-wrap;
     word-wrap: break-word;
   }
-  body.wide-view:not(.mate-dm-active) .msg-user .msg-actions { align-self: initial; margin-left: initial; padding-top: initial; }
-  body.wide-view:not(.mate-dm-active) .msg-user .msg-actions .msg-action-time { display: initial; }
-  body.wide-view:not(.mate-dm-active) .msg-assistant .md-content {
+  body.wide-view .msg-user .msg-actions { align-self: initial; margin-left: initial; padding-top: initial; }
+  body.wide-view .msg-user .msg-actions .msg-action-time { display: initial; }
+  body.wide-view .msg-assistant .md-content {
     background: initial;
     border-radius: initial;
     padding: initial;
   }
-  body.wide-view:not(.mate-dm-active) .thinking-item,
-  body.wide-view:not(.mate-dm-active) .tool-item,
-  body.wide-view:not(.mate-dm-active) .tool-group { max-width: var(--content-width); }
-  body.wide-view:not(.mate-dm-active) .turn-meta { max-width: var(--content-width); }
+  body.wide-view .thinking-item,
+  body.wide-view .tool-item,
+  body.wide-view .tool-group { max-width: var(--content-width); }
+  body.wide-view .turn-meta { max-width: var(--content-width); }
 }
 
 /* ==========================================================================
@@ -280,8 +276,7 @@ body.wide-view .channel-thinking > .dm-bubble-content {
    Permission prompt in channel/DM layout
    ========================================================================== */
 
-body.wide-view .permission-container,
-body.mate-dm-active .permission-container {
+body.wide-view .permission-container {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
@@ -294,18 +289,15 @@ body.mate-dm-active .permission-container {
   margin: 0;
   padding: 4px 16px;
 }
-body.wide-view .permission-container:hover,
-body.mate-dm-active .permission-container:hover {
+body.wide-view .permission-container:hover {
   background: var(--bg-alt);
 }
-body.wide-view .permission-container > .dm-bubble-content,
-body.mate-dm-active .permission-container > .dm-bubble-content {
+body.wide-view .permission-container > .dm-bubble-content {
   flex: 1;
   min-width: 0;
 }
 
-body.wide-view .permission-container .permission-actions,
-body.mate-dm-active .permission-container .permission-actions {
+body.wide-view .permission-container .permission-actions {
   display: flex;
   gap: 6px;
   border: none;
@@ -313,130 +305,5 @@ body.mate-dm-active .permission-container .permission-actions {
   background: none;
   margin-top: 8px;
   border-radius: 0;
-}
-
-/* ==========================================================================
-   Human DM mode (body.mate-dm-active)
-   ========================================================================== */
-
-body.mate-dm-active .dm-bubble-content {
-  width: auto;
-  flex: 1;
-  min-width: 0;
-}
-body.mate-dm-active .msg-user .dm-bubble-content {
-  align-items: flex-start;
-}
-body.mate-dm-active .dm-bubble-header {
-  display: flex;
-}
-
-body.mate-dm-active .msg-user,
-body.mate-dm-active .msg-assistant {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 8px;
-  max-width: 100%;
-  padding: 4px 16px;
-  margin: 0;
-  border-radius: 0;
-}
-body.mate-dm-active .msg-user:hover,
-body.mate-dm-active .msg-assistant:hover {
-  background: var(--bg-alt);
-}
-
-body.mate-dm-active .msg-user {
-  justify-content: flex-start;
-}
-body.mate-dm-active .msg-user .dm-bubble-avatar-me {
-  order: -1;
-}
-body.mate-dm-active .msg-user .bubble {
-  background: none;
-  border-radius: 0;
-  padding: 0;
-  max-width: 100%;
-  font-size: 15px;
-  line-height: 1.46;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-body.mate-dm-active .msg-user .msg-actions {
-  display: none;
-}
-
-body.mate-dm-active .msg-assistant .dm-bubble-content {
-  flex: 1;
-  min-width: 0;
-}
-body.mate-dm-active .msg-assistant .md-content {
-  background: none;
-  border-radius: 0;
-  padding: 0;
-}
-
-body.mate-dm-active .turn-meta {
-  display: none;
-}
-
-/* Mobile: revert to bubble layout in DM mode */
-@media (max-width: 768px) {
-  body.mate-dm-active .msg-user,
-  body.mate-dm-active .msg-assistant {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: initial !important;
-    gap: initial !important;
-    max-width: var(--content-width) !important;
-    padding: 0 20px !important;
-    margin: 0 auto 8px !important;
-    border-radius: initial !important;
-  }
-  body.mate-dm-active .msg-user {
-    align-items: flex-end !important;
-  }
-  body.mate-dm-active .msg-assistant {
-    margin-bottom: 12px !important;
-    padding: 4px 20px !important;
-  }
-  body.mate-dm-active .msg-user:hover {
-    background: initial !important;
-  }
-  body.mate-dm-active .msg-user .dm-bubble-avatar-me {
-    display: none !important;
-  }
-  body.mate-dm-active .msg-user .dm-bubble-content {
-    align-items: flex-end !important;
-    flex: initial !important;
-    width: 100% !important;
-  }
-  body.mate-dm-active .msg-user .dm-bubble-header {
-    display: none !important;
-  }
-  body.mate-dm-active .msg-user .bubble {
-    background: var(--user-bubble) !important;
-    border-radius: 20px 20px 4px 20px !important;
-    padding: 12px 18px !important;
-    max-width: 85% !important;
-    width: fit-content !important;
-    font-size: 15px !important;
-    line-height: 1.55 !important;
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
-  }
-  body.mate-dm-active .msg-user .msg-actions {
-    display: flex !important;
-  }
-  body.mate-dm-active .msg-assistant .dm-bubble-content {
-    flex: initial !important;
-    width: 100% !important;
-  }
-  body.mate-dm-active .msg-assistant .md-content {
-    background: initial !important;
-    border-radius: initial !important;
-    padding: initial !important;
-  }
 }
 
