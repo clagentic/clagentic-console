@@ -27,18 +27,18 @@
 <style>
 @media(max-width:768px){
   /* User messages: vertical stack, avatar on top, right-aligned */
-  body.wide-view:not(.mate-dm-active) .msg-user{flex-direction:column!important;align-items:flex-end!important;gap:4px!important;max-width:100%!important;padding:0 16px!important;margin:0 0 8px!important;justify-content:initial!important}
-  body.wide-view:not(.mate-dm-active) .msg-user .dm-bubble-avatar-me{order:-1!important}
-  body.wide-view:not(.mate-dm-active) .msg-user .dm-bubble-content{display:flex!important;flex-direction:column!important;align-items:flex-end!important;width:100%!important;flex:initial!important}
-  body.wide-view:not(.mate-dm-active) .msg-user .bubble{background:var(--user-bubble)!important;border-radius:20px 20px 4px 20px!important;padding:12px 18px!important;max-width:85%!important;width:fit-content!important;font-size:15px!important;line-height:1.55!important;white-space:pre-wrap!important;word-wrap:break-word!important}
-  body.wide-view:not(.mate-dm-active) .msg-user:hover{background:initial!important}
+  body.wide-view .msg-user{flex-direction:column!important;align-items:flex-end!important;gap:4px!important;max-width:100%!important;padding:0 16px!important;margin:0 0 8px!important;justify-content:initial!important}
+  body.wide-view .msg-user .dm-bubble-avatar-me{order:-1!important}
+  body.wide-view .msg-user .dm-bubble-content{display:flex!important;flex-direction:column!important;align-items:flex-end!important;width:100%!important;flex:initial!important}
+  body.wide-view .msg-user .bubble{background:var(--user-bubble)!important;border-radius:20px 20px 4px 20px!important;padding:12px 18px!important;max-width:85%!important;width:fit-content!important;font-size:15px!important;line-height:1.55!important;white-space:pre-wrap!important;word-wrap:break-word!important}
+  body.wide-view .msg-user:hover{background:initial!important}
   /* Assistant messages: row (avatar left), keep channel style */
-  body.wide-view:not(.mate-dm-active) .msg-assistant{max-width:100%!important;padding:4px 16px!important;margin:0 0 12px!important}
-  body.wide-view:not(.mate-dm-active) .msg-assistant .md-content{background:initial!important;border-radius:initial!important;padding:initial!important}
-  body.wide-view:not(.mate-dm-active) .thinking-item,
-  body.wide-view:not(.mate-dm-active) .tool-item,
-  body.wide-view:not(.mate-dm-active) .tool-group{max-width:100%!important}
-  body.wide-view:not(.mate-dm-active) .turn-meta{max-width:100%!important}
+  body.wide-view .msg-assistant{max-width:100%!important;padding:4px 16px!important;margin:0 0 12px!important}
+  body.wide-view .msg-assistant .md-content{background:initial!important;border-radius:initial!important;padding:initial!important}
+  body.wide-view .thinking-item,
+  body.wide-view .tool-item,
+  body.wide-view .tool-group{max-width:100%!important}
+  body.wide-view .turn-meta{max-width:100%!important}
 }
 </style>
 </head>

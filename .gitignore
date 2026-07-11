@@ -17,3 +17,11 @@ docs/roadmaps/planned/PILOT-MCP-SERVER.md
 .crew/*.txt
 .crew/*.json
 
+# Scratch verification scripts/output left behind by AMoS build sessions —
+# never part of the shipped tree, but easy to accidentally leave untracked.
+scripts/__pycache__/
+scripts/_*
+scripts/pr-body-*.txt
+scripts/smoke.sh
+test-results/
+

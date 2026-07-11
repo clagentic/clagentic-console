@@ -247,41 +247,10 @@
 
 /* Pending permission shake */
 .icon-strip-item.has-pending-perm,
-.icon-strip-wt-item.has-pending-perm,
-.icon-strip-mate.has-pending-perm {
+.icon-strip-wt-item.has-pending-perm {
   animation: permShake 2s ease-in-out infinite;
 }
 
-/* Mate status dot (top-left) */
-.icon-strip-mate .icon-strip-status {
-  top: 3px;
-  left: 3px;
-  bottom: auto;
-  right: auto;
-  border-color: var(--sidebar-bg);
-  z-index: 3;
-}
-
-/* Mate vendor badge (bottom-right) */
-.icon-strip-mate .icon-strip-vendor-badge {
-  position: absolute;
-  bottom: 3px;
-  right: 3px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1.5px solid var(--sidebar-bg);
-  background: #fff;
-  object-fit: cover;
-  object-position: center;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.icon-strip-mate.active .icon-strip-status {
-  opacity: 1;
-  background: var(--success);
-}
 @keyframes permShake {
   0%, 8% { transform: translateX(0); }
   1% { transform: translateX(-2px); }

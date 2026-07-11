@@ -191,7 +191,6 @@ Slugs are auto-generated from the directory name. Duplicates get `-2`, `-3`, etc
 
 | Server | File | Provides |
 |---|---|---|
-| `ask-user` | `ask-user-mcp-server.js` | Pause execution and ask the human a question |
 | `browser` | `browser-mcp-server.js` | Open / navigate / click / screenshot / extract via the user's connected browser |
 
 User-defined MCP servers from `~/.clagentic/mcp.json` are loaded on top.
