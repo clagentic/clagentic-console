@@ -310,6 +310,19 @@ This signal feeds two independent consumers of `onCrossing` (`lib/daemon.js`), b
 
 Shedding and drain are independent: a shedding pass that fails, throws, or is rate-limited never blocks drain from entering, and drain entering never skips a shedding attempt.
 
+### Post-hardening consolidation audit (lr-b6fa)
+
+Fourth and final leg of the OOM-hardening chain (lr-2ea2a7 -> lr-c10f6d -> lr-5e70 -> lr-b6fa): an audit of every lazy-load/LRU/pagination mechanism added since the Clay fork, checking whether the bounded-history hardening above superseded any of it. Verdicts, one line each:
+
+- **Lazy history load, tail-window replay, scroll-up pagination** (`loadSessionHistory`, `replayHistory`, `load_more_history`) — KEEP (operator directive): fixes full-history scroll on resume, load-bearing for memory; Fix A bounds it, does not replace it.
+- **`findLastTurnStart` / `findTurnBoundary` / `extendWindowForVisibility`** (lr-c24b yield guarantees) — KEEP: boundary math re-verified against `_historyBaseIndex` translation post-Fix-A (`load_more_history` in `lib/project-sessions.js` correctly branches heap-relative vs. disk-absolute around `baseIndex`); still the only mechanism preventing all-invisible-yield pages.
+- **`_historyPersistedLength` / `historyMatchesDisk`** (lr-f940 N1) — KEEP: Fix A redefined the counter as an absolute on-disk count instead of heap length, but the single-helper length-mismatch invariant (rewind trim, fork wholesale assign) is exactly what the lr-f940 regression suite (`test/session-meta-only-save-loaded-lr-f940.test.js`) still asserts; no simplification found that preserves the guarantee.
+- **`LRU_HISTORY_LIMIT` (=50) session-count budget** — KEEP, number unchanged: worst case is now bounded (50 x `HISTORY_INMEM_MAX` instead of unbounded), and lr-5e70's `forceEvictToLimit()` added a second live consumer (`PRESSURE_LRU_FRACTION` halves it under memory pressure) — the budget is more load-bearing after Fix C than before, not less.
+- **Sticky-bottom quiet-window timer chain + ResizeObserver** (`lib/public/modules/app-rendering.js`) — KEEP: frontend UI concern, not memory/heap machinery; already minimal (one container-level observer, two timers) after a documented earlier fix for a per-child-observer callback storm; nothing in the Fix A/B/C chain touches it.
+- **Search paths** (`searchSessions`, `searchSessionContent`) — already cut by Fix A itself: both stream `readSessionHistoryFromDisk()` with zero heap/LRU retention; audited for residue of the pre-Fix-A `loadSessionHistory()`-based implementation and found none.
+
+No code deletions resulted from this pass — every candidate is either already-consolidated (search paths, eviction helper de-duplication) or independently justified as still load-bearing. Two gaps outside this audit's no-behavior-change scope were surfaced and left for lr-efd60f: `/api/palette/search` (`lib/server-palette.js` -> `lib/session-search.js`) reads `session.history` without a `loadSessionHistory()` call, so palette search is silently incomplete for lazy/unloaded sessions; and `session.messageUUIDs` is never trimmed or cleared on LRU eviction (unlike `session.history`), so it can hold a full-conversation array in heap indefinitely for a session that gets reloaded and evicted repeatedly.
+
 ## Custom emoji icons (lr-a68f)
 
 Projects can use uploaded images as icons instead of Unicode emoji. The icon value stored in `config.projects[].icon` is a `:slug:` sentinel string (pattern `^:[a-z0-9_-]{1,64}:$`) when a custom image is selected.
