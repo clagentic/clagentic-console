@@ -59,6 +59,12 @@ function makeCtx(cwd, opts) {
       saveSessionFile: noop,
       appendToSessionFile: noop,
       broadcastSessionList: noop,
+      // lr-2ea2a7: project-loop.js routes its history.push sites through
+      // sm.recordHistoryEntry() (single choke point for the bounded in-heap
+      // history cap) instead of calling session.history.push() directly --
+      // mirror just enough of the real behavior for this fake session
+      // manager to stay a drop-in stand-in.
+      recordHistoryEntry: function(sess, obj) { sess.history.push(obj); },
     },
     sdk: { startQuery: opts.startQuery || noop },
     send: function(msg) { sent.push(msg); },
