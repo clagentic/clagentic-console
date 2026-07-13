@@ -12,7 +12,16 @@ RestartPreventExitStatus=78
 KillMode=mixed
 TimeoutStopSec=20
 SendSIGKILL=yes
-# Soft ceiling — kernel begins reclaiming memory early (requires systemd 240+; host runs systemd 255)
+# Soft/hard ceilings below are DOCUMENTATION-ONLY FALLBACKS (requires systemd 240+; host runs
+# systemd 255). Do not trust a `%` memory directive inside a container: systemd resolves it
+# against the cgroup-visible MemTotal at the HOST layer, not the container's true RAM — only
+# userspace (via lxcfs) sees the container-true /proc/meminfo value. Inside an LXC container
+# these percentages are silently miscalibrated (lr-c10f6d). The postinstall step
+# (scripts/postinstall.js + lib/memory-limits.js) always overwrites these with a systemd
+# drop-in computed as ABSOLUTE bytes from /proc/meminfo MemTotal (floor(60%)/floor(75%), or an
+# explicit operator daemon.json override) — that drop-in, not the lines below, is what actually
+# applies on any host running the real installer.
+# Soft ceiling — kernel begins reclaiming memory early
 MemoryHigh=70%
 # Hard ceiling — triggers per-service OOM so OOMPolicy fires instead of host-level OOM killer
 MemoryMax=85%

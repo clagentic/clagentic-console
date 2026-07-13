@@ -226,7 +226,7 @@ The service worker (`lib/public/sw.js`) handles incoming pushes and routes the u
 
 ## Memory Limits (Linux / systemd)
 
-The shipped `deploy/clagentic-console.service` unit sets percentage-based cgroup limits:
+The shipped `deploy/clagentic-console.service` unit carries percentage-based cgroup limits as a **documentation-only fallback**:
 
 ```
 MemoryHigh=70%   # soft ceiling — kernel begins reclaiming early
@@ -234,11 +234,22 @@ MemoryMax=85%    # hard ceiling — triggers per-service OOM (systemd kills and 
 OOMPolicy=kill   # kill all cgroup members on OOM; systemd Restart=always handles the restart
 ```
 
-**Percentage defaults auto-scale when RAM is added.** No action needed after a RAM upgrade if you are using the defaults.
+**Never trust a systemd `%` memory directive inside a container (lr-c10f6d).** systemd resolves `MemoryHigh=70%` / `MemoryMax=85%` against the cgroup-visible MemTotal at the layer it runs — inside an LXC container that is the **host's** RAM, not the container's. Only userspace (via lxcfs) sees the container-true `/proc/meminfo`. On a 12G container behind a ~28G host, the applied cgroup ceiling silently resolved to `high=19.8G max=24.0G` — a "last line of defense" (OOMPolicy=kill) that could never fire before the kernel's host-level OOM killer wedged the whole box.
+
+### Computed absolute defaults (lr-c10f6d)
+
+Because of the above, the installer never relies on the unit file's `%` lines. On every `npm install -g @clagentic/console` (root required), `scripts/postinstall.js` (via `lib/memory-limits.js`) reads `/proc/meminfo` MemTotal directly in userspace and writes a systemd drop-in at `/etc/systemd/system/clagentic-console.service.d/memory-overrides.conf` with **absolute byte values**:
+
+```
+MemoryHigh = floor(60% of MemTotal)
+MemoryMax  = floor(75% of MemTotal)
+```
+
+This is recomputed and rewritten unconditionally on every postinstall, so it tracks RAM changes without any operator action — reinstalling after a RAM upgrade is sufficient (no manual edit needed, unlike a stale absolute pin).
 
 ### Optional daemon.json overrides (lr-de07)
 
-Operators who need to pin explicit byte or percentage values can add `memoryHigh` and/or `memoryMax` to `~/.clagentic/console/daemon.json`. These are applied via a systemd drop-in at `/etc/systemd/system/clagentic-console.service.d/memory-overrides.conf` during `npm install -g` (root required).
+Operators who need to pin explicit byte or percentage values can add `memoryHigh` and/or `memoryMax` to `~/.clagentic/console/daemon.json`. An explicit override always takes precedence over the computed default above.
 
 ```json
 {
@@ -247,9 +258,13 @@ Operators who need to pin explicit byte or percentage values can add `memoryHigh
 }
 ```
 
-Accepted formats: `NNN%` (whole number, 1–100) or `NG` / `NM` / `NK` / bare bytes.
+Accepted formats: `NNN%` (whole number, 1–100) or `NG` / `NM` / `NK` / bare bytes. Note that a `%` value here resolves through the same systemd `%`-inside-a-container caveat as the shipped unit file — prefer an absolute value (`NG`/`NM`) for any container deployment.
 
-When neither key is set (the default), the drop-in is absent and the shipped percentage defaults win. The percentage path is preferred for most deployments — it requires no reconfiguration when RAM changes.
+**If you pinned an absolute override and added RAM:** update `memoryHigh` / `memoryMax` in `daemon.json` and re-run `npm install -g @clagentic/console` as root (or write the drop-in manually and run `systemctl daemon-reload`).
+
+### Startup applied-ceiling sanity check (lr-c10f6d)
+
+On every Linux startup, the daemon compares the *applied* cgroup `memory.max` (read from `/sys/fs/cgroup/system.slice/clagentic-console.service/memory.max`) against `/proc/meminfo` MemTotal. If the applied ceiling is `max` (unset) or `>=` the container's true RAM, the daemon emits a structured stderr WARN (`event: memory_ceiling_inoperative`, captured by journald) and a UI toast diagnostic ("memory ceiling exceeds container RAM — OOM protection inoperative"). This turns a silent miscalibration — the exact failure mode that caused this task — into a visible fault on any future host, even if the drop-in is stale, hand-edited, or was never applied.
 
 ### Bounded in-heap session history (lr-2ea2a7)
 
