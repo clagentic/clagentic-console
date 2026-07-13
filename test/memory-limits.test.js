@@ -13,9 +13,30 @@ var {
   renderDropIn,
   applyDropIn,
   memoryValueToBytes,
+  readMemTotalBytes,
+  computeDefaultAbsoluteLimits,
+  checkAppliedMemoryCeiling,
   startMemoryHighWatcher,
   DROP_IN_FILE,
+  DEFAULT_MEMORY_HIGH_FRACTION,
+  DEFAULT_MEMORY_MAX_FRACTION,
 } = require('../lib/memory-limits');
+
+// ---------------------------------------------------------------------------
+// Test helpers — mocked /proc/meminfo and cgroup memory.max files (lr-c10f6d)
+// ---------------------------------------------------------------------------
+
+function writeMockMeminfo(dir, memTotalKb) {
+  var p = path.join(dir, 'meminfo');
+  fs.writeFileSync(p, 'MemTotal:       ' + memTotalKb + ' kB\nMemFree:        1000 kB\n');
+  return p;
+}
+
+function writeMockCgroupMax(dir, value) {
+  var p = path.join(dir, 'memory.max');
+  fs.writeFileSync(p, String(value) + '\n');
+  return p;
+}
 
 // ---------------------------------------------------------------------------
 // parseMemoryLimit
@@ -345,4 +366,175 @@ test('startMemoryHighWatcher: onCrossing receives event object with required fie
     }
     done();
   }, 200);
+});
+
+// ---------------------------------------------------------------------------
+// readMemTotalBytes / computeDefaultAbsoluteLimits — absolute-byte
+// computation from mocked /proc/meminfo (lr-c10f6d)
+// ---------------------------------------------------------------------------
+
+test('readMemTotalBytes: parses MemTotal kB line into bytes', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-meminfo-'));
+  var meminfoPath = writeMockMeminfo(tmpDir, 12 * 1024 * 1024); // 12G in kB
+  assert.strictEqual(readMemTotalBytes(meminfoPath), 12 * 1024 * 1024 * 1024);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('readMemTotalBytes: returns null when file is missing', function () {
+  assert.strictEqual(readMemTotalBytes('/nonexistent/path/meminfo'), null);
+});
+
+test('readMemTotalBytes: returns null when MemTotal line is absent', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-meminfo-'));
+  var p = path.join(tmpDir, 'meminfo');
+  fs.writeFileSync(p, 'MemFree:    1000 kB\n');
+  assert.strictEqual(readMemTotalBytes(p), null);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('computeDefaultAbsoluteLimits: computes floor(60%)/floor(75%) of MemTotal', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-meminfo-'));
+  var memTotalBytes = 12 * 1024 * 1024 * 1024; // 12G, matches the lr-2ea2a7/lr-c10f6d incident container
+  var meminfoPath = writeMockMeminfo(tmpDir, memTotalBytes / 1024);
+
+  var result = computeDefaultAbsoluteLimits(meminfoPath);
+  assert.ok(result !== null);
+  assert.strictEqual(result.memTotalBytes, memTotalBytes);
+  assert.strictEqual(result.memoryHigh, String(Math.floor(memTotalBytes * DEFAULT_MEMORY_HIGH_FRACTION)));
+  assert.strictEqual(result.memoryMax, String(Math.floor(memTotalBytes * DEFAULT_MEMORY_MAX_FRACTION)));
+  // Sanity: computed values are well below MemTotal (unlike the inoperative
+  // 19.8G/24.0G ceiling that lr-c10f6d observed on a 12G container).
+  assert.ok(Number(result.memoryHigh) < memTotalBytes);
+  assert.ok(Number(result.memoryMax) < memTotalBytes);
+  assert.ok(Number(result.memoryHigh) < Number(result.memoryMax));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('computeDefaultAbsoluteLimits: computed values pass parseMemoryLimit validation', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-meminfo-'));
+  var meminfoPath = writeMockMeminfo(tmpDir, 8 * 1024 * 1024); // 8G
+
+  var result = computeDefaultAbsoluteLimits(meminfoPath);
+  assert.ok(parseMemoryLimit(result.memoryHigh).ok);
+  assert.ok(parseMemoryLimit(result.memoryMax).ok);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('computeDefaultAbsoluteLimits: returns null when MemTotal is undeterminable', function () {
+  assert.strictEqual(computeDefaultAbsoluteLimits('/nonexistent/meminfo'), null);
+});
+
+test('renderDropIn: rendering computed absolute default values is unchanged from override rendering', function () {
+  // The drop-in renderer must not care whether the values came from an
+  // operator override or a computed default — same format, same semantics.
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-meminfo-'));
+  var meminfoPath = writeMockMeminfo(tmpDir, 12 * 1024 * 1024);
+  var computed = computeDefaultAbsoluteLimits(meminfoPath);
+
+  var content = renderDropIn({ memoryHigh: computed.memoryHigh, memoryMax: computed.memoryMax });
+  assert.ok(content.includes('[Service]'));
+  assert.ok(content.includes('MemoryHigh=\nMemoryHigh=' + computed.memoryHigh));
+  assert.ok(content.includes('MemoryMax=\nMemoryMax=' + computed.memoryMax));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('renderDropIn: operator override values still render exactly as before (regression, lr-de07)', function () {
+  var content = renderDropIn({ memoryHigh: '6G', memoryMax: '8G' });
+  assert.ok(content.includes('MemoryHigh=\nMemoryHigh=6G'));
+  assert.ok(content.includes('MemoryMax=\nMemoryMax=8G'));
+});
+
+// ---------------------------------------------------------------------------
+// checkAppliedMemoryCeiling — startup sanity check (lr-c10f6d)
+// ---------------------------------------------------------------------------
+
+test('checkAppliedMemoryCeiling: inoperative when applied memory.max is "max"', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-cgroup-'));
+  var meminfoPath = writeMockMeminfo(tmpDir, 12 * 1024 * 1024);
+  var cgroupPath = writeMockCgroupMax(tmpDir, 'max');
+
+  var result = checkAppliedMemoryCeiling({ cgroupMemoryMaxPath: cgroupPath, procMeminfoPath: meminfoPath });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.inoperative, true);
+  assert.ok(result.reason.includes("'max'"));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('checkAppliedMemoryCeiling: inoperative when applied memory.max >= MemTotal', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-cgroup-'));
+  var memTotalBytes = 12 * 1024 * 1024 * 1024; // 12G container
+  var meminfoPath = writeMockMeminfo(tmpDir, memTotalBytes / 1024);
+  // Reproduces the lr-c10f6d incident: applied ceiling (24.0G) exceeds the
+  // container's true RAM (12G) because it was resolved against host MemTotal.
+  var cgroupPath = writeMockCgroupMax(tmpDir, 24 * 1024 * 1024 * 1024);
+
+  var result = checkAppliedMemoryCeiling({ cgroupMemoryMaxPath: cgroupPath, procMeminfoPath: meminfoPath });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.inoperative, true);
+  assert.strictEqual(result.appliedMaxBytes, 24 * 1024 * 1024 * 1024);
+  assert.strictEqual(result.memTotalBytes, memTotalBytes);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('checkAppliedMemoryCeiling: inoperative when applied memory.max exactly equals MemTotal', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-cgroup-'));
+  var memTotalBytes = 4 * 1024 * 1024 * 1024;
+  var meminfoPath = writeMockMeminfo(tmpDir, memTotalBytes / 1024);
+  var cgroupPath = writeMockCgroupMax(tmpDir, memTotalBytes);
+
+  var result = checkAppliedMemoryCeiling({ cgroupMemoryMaxPath: cgroupPath, procMeminfoPath: meminfoPath });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.inoperative, true);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('checkAppliedMemoryCeiling: NOT inoperative when applied memory.max < MemTotal', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-cgroup-'));
+  var memTotalBytes = 12 * 1024 * 1024 * 1024; // 12G container
+  var meminfoPath = writeMockMeminfo(tmpDir, memTotalBytes / 1024);
+  // The correctly-computed default from this task: floor(75% of 12G) = 9G.
+  var cgroupPath = writeMockCgroupMax(tmpDir, Math.floor(memTotalBytes * 0.75));
+
+  var result = checkAppliedMemoryCeiling({ cgroupMemoryMaxPath: cgroupPath, procMeminfoPath: meminfoPath });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.inoperative, false);
+  assert.strictEqual(result.reason, null);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('checkAppliedMemoryCeiling: ok=false (not inoperative) when cgroup memory.max is unreadable', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-cgroup-'));
+  var meminfoPath = writeMockMeminfo(tmpDir, 12 * 1024 * 1024);
+
+  var result = checkAppliedMemoryCeiling({
+    cgroupMemoryMaxPath: path.join(tmpDir, 'nonexistent-memory.max'),
+    procMeminfoPath: meminfoPath,
+  });
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.inoperative, false);
+  assert.ok(result.reason.includes('unreadable'));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('checkAppliedMemoryCeiling: ok=false (not inoperative) when MemTotal is unreadable', function () {
+  var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memlimits-cgroup-'));
+  var cgroupPath = writeMockCgroupMax(tmpDir, 4 * 1024 * 1024 * 1024);
+
+  var result = checkAppliedMemoryCeiling({
+    cgroupMemoryMaxPath: cgroupPath,
+    procMeminfoPath: path.join(tmpDir, 'nonexistent-meminfo'),
+  });
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.inoperative, false);
+  assert.ok(result.reason.includes('MemTotal'));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
