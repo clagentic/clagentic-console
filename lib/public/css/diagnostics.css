@@ -350,10 +350,26 @@
     left: 16px;
   }
   .toast-diagnostic {
-    max-width: none;
+    /* lr-4ef618: the clamped container (left:16px/right:16px above) only
+       constrains itself — the child kept min-width:280px and no width
+       bound, so long unbreakable tokens (hook event names, file paths)
+       pushed the child past the container's right edge and clipped
+       off-screen. Bind the child to the container and drop the desktop
+       min-width floor so it can shrink to fit. */
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     transform: translateY(-8px);
   }
   .toast-diagnostic.visible {
     transform: translateY(0);
+  }
+  .toast-diagnostic-msg {
+    /* Long unbreakable identifiers (e.g. "PostToolUse", absolute paths)
+       must wrap instead of forcing the flex child's intrinsic width
+       past the clamped container. */
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 }
