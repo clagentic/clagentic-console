@@ -251,6 +251,22 @@ Accepted formats: `NNN%` (whole number, 1–100) or `NG` / `NM` / `NK` / bare by
 
 When neither key is set (the default), the drop-in is absent and the shipped percentage defaults win. The percentage path is preferred for most deployments — it requires no reconfiguration when RAM changes.
 
+### Bounded in-heap session history (lr-2ea2a7)
+
+On-disk JSONL is the single source of truth for full session history. The in-heap `session.history` array is always a bounded TAIL window — for every session, including one that is actively processing (a long-running Ralph/crew loop). Prior to lr-2ea2a7, a session's `isProcessing` state exempted it from LRU eviction (`lib/sessions.js`) with no other cap on its heap history, so a multi-hour loop accumulated its entire event stream in memory — the root cause of repeated daemon OOM incidents.
+
+Every append to `session.history` routes through `recordHistoryEntry()` (`lib/sessions.js`), which enforces `HISTORY_INMEM_MAX` (default 1000 entries) with hysteresis down to `HISTORY_INMEM_TRIM_TO` (default 800): once the heap array exceeds the cap, the oldest entries are trimmed and `session._historyBaseIndex` advances by the trimmed count. Absolute index (`_historyBaseIndex + heapOffset`) remains the wire/UI contract (`history_meta.total/from`, `load_more_history.before`, `messageUUIDs[].historyIndex`) — no wire-format change.
+
+Operators can override the cap via `~/.clagentic/console/daemon.json`:
+
+```json
+{
+  "historyInMemMax": 2000
+}
+```
+
+`process_stats` (admin panel) reports per-session `{heapEntries, baseIndex}` and the top 5 sessions by heap footprint for diagnosing memory pressure without a heap snapshot.
+
 **If you pinned an absolute override and added RAM:** update `memoryHigh` / `memoryMax` in `daemon.json` and re-run `npm install -g @clagentic/console` as root (or write the drop-in manually and run `systemctl daemon-reload`). Operators using the default percentage values need not do anything.
 
 ### MemoryHigh watermark log (lr-de07)
