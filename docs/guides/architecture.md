@@ -292,7 +292,23 @@ The daemon polls for MemoryHigh crossings (every 5 s) using either the cgroup v2
 [memory-limits] WARN memory_high_watermark {"event":"memory_high_watermark","source":"cgroup.memory.events","timestamp":"...","highCounter":1}
 ```
 
-This signal is what lr-6b30 (graceful drain) will consume. The watcher de-duplicates: it does not spam if the counter stays elevated; it re-alerts only when the counter advances again (strategy A) or when RSS drops back below the threshold by 5% and rises again (strategy B).
+This signal feeds two independent consumers of `onCrossing` (`lib/daemon.js`), both wired to the same watermark crossing:
+
+- **Graceful drain (lr-6b30, `lib/drain.js`)** — refuses new connections and exits once in-flight sessions complete (or a timeout forces exit). The "make the daemon go away" response.
+- **In-process shedding (lr-5e70, `lib/memory-shed.js`)** — an immediate attempt to reduce RSS *before* drain's slower shutdown path completes. Runs first, synchronously, inside the same `onCrossing` callback.
+
+### In-process memory shedding (lr-5e70)
+
+`shedMemory()` (`lib/memory-shed.js`) runs a shedding pass across every open project (`relay.forEachProject`, `lib/server.js`):
+
+1. **Retrim every loaded session's history** to `HISTORY_INMEM_TRIM_TO` via `sm.retrimHistory()` — including the actively-viewed and `isProcessing` sessions, which the lr-2ea2a7 bounded-tail cap makes safe to trim unconditionally (disk remains the full source of truth; a later `load_more_history` scroll-up still serves older content from disk).
+2. **Force-evict loaded sessions beyond the normal LRU limit** down to a pressure limit (`LRU_HISTORY_LIMIT / 2`) via `sm.forceEvictToLimit()` (`lib/sessions.js`) — more aggressive than the routine one-at-a-time post-load eviction (`_lruEvictIfNeeded`), since a shedding pass may need to unload many sessions at once. Still never evicts the actively-viewed session or an `isProcessing` session — same invariant as the routine LRU path.
+3. **Drop rebuildable caches.** Currently: `lib/server-skills.js`'s `skillsCache` (TTL-cached skills.sh proxy responses — any dropped entry just re-fetches on next request). Other module-level caches surveyed during this task (`lib/pages.js` template cache, `lib/daemon-projects.js` worktree registries, `lib/smtp.js` OTP store, `lib/store.js` queues, `lib/user-presence.js` presence store) were left alone: each holds state that is either short-lived by design or not safely re-derivable without a live client round-trip, unlike the skills proxy cache.
+4. **Emit a UI diagnostic** (`type: "diagnostic", source: "memory"`) to every project's connected clients — the same session-independent `ctx.send()` delivery path settings-preflight diagnostics already use — with before/after RSS and counts of what was shed, so operators see pressure in the Diagnostics panel, not just journald.
+5. **Emit a structured `memory_shed` log event** to stderr (`beforeBytes`, `afterBytes`, `sessionsTrimmed`, `sessionsEvicted`, `cachesDropped`).
+6. **Rate-limited to at most one pass per 60 s** — the watermark watcher's RSS-based strategy B can re-fire on hysteresis, and a shedding pass should not run back-to-back.
+
+Shedding and drain are independent: a shedding pass that fails, throws, or is rate-limited never blocks drain from entering, and drain entering never skips a shedding attempt.
 
 ## Custom emoji icons (lr-a68f)
 
