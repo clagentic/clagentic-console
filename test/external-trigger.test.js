@@ -40,6 +40,12 @@ function makeFakeProject(spawnLog) {
     saveSessionFile: function () {},
     broadcastSessionList: function () {},
     appendToSessionFile: function (sess, msg) { files.push(msg); },
+    // lr-2ea2a7: spawnSession() routes its history.push through
+    // sm.recordHistoryEntry() (single choke point for the bounded in-heap
+    // history cap) instead of calling sess.history.push() directly -- mirror
+    // just enough of the real behavior (push onto the session's history
+    // array) for this fake session manager to stay a drop-in stand-in.
+    recordHistoryEntry: function (sess, obj) { sess.history.push(obj); },
   };
   var sdk = {
     startQuery: function (sess, text, images, linuxUser) {
