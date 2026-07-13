@@ -148,16 +148,23 @@ if (selfUpdate) {
   log(`skipping start (daemon was not running or is already running — operator controls restarts)`);
 }
 
-// Step 6: Apply memory-limit drop-in if operator set overrides in daemon.json.
-// When neither memoryHigh nor memoryMax is set (the default), any previously
-// written drop-in is removed and the shipped percentage defaults take effect.
+// Step 6: Apply the memory-limit drop-in (lr-c10f6d).
+// When the operator has NOT set memoryHigh/memoryMax in daemon.json, the
+// drop-in is still written — with ABSOLUTE byte values computed from
+// /proc/meminfo MemTotal (floor(60%) / floor(75%)) — because a `%` directive
+// in the shipped unit file is resolved by systemd against the wrong MemTotal
+// inside an LXC container; only userspace sees the lxcfs-corrected value.
+// Recomputed on every postinstall so it tracks RAM changes. Operator
+// overrides in daemon.json always keep precedence (unchanged from lr-de07).
 (function applyMemoryDropIn() {
   const { loadConfig } = require('../lib/config');
   const cfg = loadConfig();
   const memoryHigh = cfg && cfg.memoryHigh ? String(cfg.memoryHigh) : null;
   const memoryMax  = cfg && cfg.memoryMax  ? String(cfg.memoryMax)  : null;
 
-  // Validate before writing — reject garbage values early.
+  // Validate operator-supplied values before writing — reject garbage early.
+  // (Computed defaults are always well-formed bare-byte strings, so no
+  // validation is needed for that path.)
   if (memoryHigh) {
     const vr = parseMemoryLimit(memoryHigh);
     if (!vr.ok) {
@@ -175,13 +182,11 @@ if (selfUpdate) {
 
   try {
     applyDropIn({ memoryHigh, memoryMax }, (msg) => log(msg.replace(/^\[memory-limits\] /, '')));
-    if (memoryHigh || memoryMax) {
-      log('running systemctl daemon-reload (memory drop-in updated)');
-      try {
-        runCmd('systemctl', ['daemon-reload']);
-      } catch (err) {
-        log(`WARNING: daemon-reload (memory drop-in) failed: ${errMsg(err)}`);
-      }
+    log('running systemctl daemon-reload (memory drop-in updated)');
+    try {
+      runCmd('systemctl', ['daemon-reload']);
+    } catch (err) {
+      log(`WARNING: daemon-reload (memory drop-in) failed: ${errMsg(err)}`);
     }
   } catch (err) {
     log(`WARNING: memory drop-in apply failed: ${err.message}`);
