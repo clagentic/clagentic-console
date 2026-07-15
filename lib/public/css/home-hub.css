@@ -497,6 +497,16 @@
   text-align: center;
   flex-shrink: 0;
 }
+/* Per-project alert indicator — same red used by .icon-strip-project-badge
+   (unread badge). A count wouldn't fit this row, so a plain dot is enough
+   to show WHERE the alert is coming from. */
+.hub-recent-alert-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #e74c3c;
+}
 .hub-recent-project-icon--blank {
   width: 20px;
   height: 20px;
