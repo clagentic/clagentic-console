@@ -28,20 +28,15 @@ avoid:
   - "Do not merge PRs that touch bin/cli.js or lib/ without green CI"
   - "Do not merge if PEACHES review is absent or blocking"
 
-# post_merge_steps — ordered list of steps NAOMI runs after a successful merge.
-#
-# install:local-test was added in PR #289 (main). It packs the repo into a
-# tarball, installs it globally with `npm install -g`, and removes the tarball.
-# This is a developer/test-tier operation, not a production deploy. It is
-# intentionally on_failure: warn — a failed local test-install must not roll
-# back or block a merge that already cleared all CI and review gates. The
-# install touches the operator's global npm environment, which may vary; a
-# failure here is surfaced for awareness but is not a correctness signal about
-# the merged code itself.
-post_merge_steps:
-  - cmd: "npm run install:local-test"
-    description: "Install latest build globally for developer test (npm pack + npm install -g). Test-tier only — not production."
-    # on_failure: warn — local test-install failure must not block or roll back
-    # a merge that already passed tests, CI, and PEACHES. Environment variance
-    # (global npm state, disk space, platform) should not gate code quality.
-    on_failure: warn
+# post_merge_steps — REMOVED here (lr-0d45). This key was DEAD CONFIG: NAOMI's
+# live merge path for this repo is loadout-merge (crew_merge.py's GitHub path
+# is hard-refused, EXIT_GITHUB_PATH_DEPRECATED, operator ruling lr-d9729d,
+# 2026-07-13), and loadout-merge reads post_merge_steps EXCLUSIVELY from
+# `<repo_root>/.clagentic/loadout/config.yaml`'s `merge:` section
+# (post_merge_config.load_post_merge_steps in clagentic-loadout) — it never
+# reads this file. Leaving a post_merge_steps key here risked being read as a
+# second, stale source of truth for a step nothing actually executes from this
+# location. The equivalent (and now hardened — on_failure: fail, plus a new
+# build-SHA verification step) post_merge_steps now lives at
+# .clagentic/loadout/config.yaml's merge.post_merge_steps. See that file's own
+# header comment for the full migration rationale.
