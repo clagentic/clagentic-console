@@ -251,11 +251,19 @@
   border-radius: 10px;
   box-shadow: 0 4px 20px rgba(var(--shadow-rgb), 0.3);
   min-width: 280px;
-  max-width: 400px;
+  /* lr-fab390: the container is right:8px from the viewport edge, so the
+     box's available width is capped at (100vw - 16px) — clamp max-width to
+     whichever is smaller than the 400px intent so the box can never be
+     pushed past the right edge on a narrow/zoomed desktop viewport. The
+     min-width:280px floor is unchanged; it still fits down to ~296px
+     viewports, matching the mobile breakpoint below which the container
+     itself switches to a full-width layout. */
+  max-width: min(400px, calc(100vw - 16px));
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-sizing: border-box;
 }
 .toast-diagnostic.visible {
   opacity: 1;
@@ -324,6 +332,11 @@
   font-size: 12.5px;
   color: var(--text-secondary);
   line-height: 1.5;
+  /* lr-fab390: mirrors the mobile overflow-wrap:anywhere fix (lr-4ef618,
+     below) — word-break:break-word alone does not break long unbreakable
+     tokens (hook event names, absolute paths), letting them force the
+     flex child's intrinsic width past the container's right edge. */
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
