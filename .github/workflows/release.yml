@@ -56,16 +56,31 @@ jobs:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Sync release tags into main
+        # Tag-reachability only: a beta cut must see any tags/history that landed on
+        # release (e.g. a stable cut) so semantic-release's tag-range logic behaves,
+        # but it must NEVER adopt release's version bookkeeping files. Those files
+        # (package.json version + CHANGELOG boundary) carry the STABLE version,
+        # which sits above main's own -beta prerelease line. Force-copying them onto
+        # main resets the version basis semantic-release computes from, burying the
+        # feature commits that are supposed to drive the next beta below a tag
+        # boundary that looks newer — silent no-op (lr-d4413a). The merge below
+        # intentionally leaves package.json/CHANGELOG.md/package-lock.json untouched:
+        # if the merge itself conflicts on those files, -X theirs already resolves
+        # them in release's favor at the git level, which is the wrong direction for
+        # a beta — so explicitly keep main's copy of just those three afterward.
         run: |
           git config user.name "clagentic-release-bot[bot]"
           git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
           if git rev-parse --verify origin/release >/dev/null 2>&1; then
             RELEASE_AHEAD=$(git rev-list --count HEAD..origin/release)
             if [ "$RELEASE_AHEAD" -gt 0 ]; then
-              echo "Release branch is $RELEASE_AHEAD commits ahead of main, merging..."
+              echo "Release branch is $RELEASE_AHEAD commits ahead of main, merging (tag-reachability only, version files stay on main's basis)..."
+              PRE_MERGE_HEAD=$(git rev-parse HEAD)
               git merge origin/release --no-edit -X theirs || true
-              git checkout origin/release -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
-              git diff --quiet || git commit -am "chore: resolve merge conflicts from release"
+              # Restore main's own version files regardless of how the merge landed —
+              # main's -beta version basis must never be replaced by release's stable one.
+              git checkout "${PRE_MERGE_HEAD}" -- CHANGELOG.md package.json package-lock.json 2>/dev/null || true
+              git diff --quiet || git commit -am "chore: resolve merge conflicts from release (keep main's version basis)"
               git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
             fi
           fi
@@ -81,10 +96,32 @@ jobs:
         run: npm ci
 
       - name: Run semantic-release (beta)
-        run: npx semantic-release
+        id: semantic-release-beta
+        run: |
+          PRE_RELEASE_HEAD=$(git rev-parse HEAD)
+          npx semantic-release
+          POST_RELEASE_HEAD=$(git rev-parse HEAD)
+          if [ "${PRE_RELEASE_HEAD}" = "${POST_RELEASE_HEAD}" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: true
+
+      - name: Fail loud if the dispatched beta published nothing
+        # An operator explicitly dispatched type=beta expecting a new prerelease. A
+        # green no-op here previously masked the version-basis-clobber bug
+        # (lr-d4413a) and left the operator believing the beta had shipped. A
+        # dispatched beta with no publishable commits is an error the operator must
+        # see, not a silent success — this is a workflow_dispatch-only invariant, not
+        # a scheduled/passive run, so failing loud here does not affect any
+        # unattended trigger.
+        if: steps.semantic-release-beta.outputs.published == 'false'
+        run: |
+          echo "::error::type=beta was dispatched but semantic-release published nothing — no beta-eligible commits were found above the current version basis. This usually means the sync step above reset main's version basis, or there truly are no releasable commits since the last beta/stable. See lr-d4413a."
+          exit 1
 
       - name: Generate .betas.json (promotable beta list)
         # Non-fatal by design: if generation/commit fails for any reason, the beta
