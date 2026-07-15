@@ -20,6 +20,7 @@ scope:
     - "bin/**"
     - "lib/**"
     - ".crew/**"
+    - ".clagentic/**"
     - "test/**"
     - "deploy/**"
     - "scripts/**"
