@@ -1,0 +1,87 @@
+# .clagentic/loadout/config.yaml — clagentic-console repo-local loadout config
+# (lr-0d45: migration off the dead .crew/naomi.yaml merge path onto the LIVE
+# loadout-merge path; see merge/verb.py's post_merge_config.load_post_merge_steps,
+# which reads ONLY this file's merge: section — .crew/naomi.yaml is never read by
+# loadout-merge).
+#
+# Authored directly from clagentic_loadout's starter template
+# (src/clagentic_loadout/loadout_init/starter_config.yaml) rather than through the
+# interactive /loadout-init elicitation flow -- that skill is a live back-and-forth
+# with an operator and this session has no such channel; the dispatching lead
+# (holden, lr-0d45) already supplied this repo's real merge-gate values in the
+# task brief, which is what step 2's elicitation would otherwise collect. No
+# deployment-specific HOME or forge-URL value is present here (post_merge_steps
+# below runs a repo-local npm script and a repo-local node script only -- no
+# machine value needed).
+#
+# Mirrors clagentic-console's actual live merge policy as of this migration:
+# CI (pr-checks.yml) must pass, tests must pass, PEACHES (reviewer) and BOBBIE
+# (security) must both post a clean verdict, NAOMI (merger) holds merge authority.
+
+roles:
+  builder:
+    - push
+  reviewer:
+    - git-host-api
+    - review-post
+    - stage-body
+  security:
+    - git-host-api
+    - review-post
+  merger:
+    - merge
+    - push
+    - release-dispatch
+    - release-detect
+  lead:
+    - git-host-api
+
+merge:
+  merge_requirements:
+    # ci_pass: true -- pr-checks.yml (GitHub Actions) runs syntax + import-
+    # resolution checks on every PR and gates merges today (mirrors
+    # .crew/naomi.yaml's own ci_pass: true).
+    ci_pass: true
+    tests_pass: true
+
+  # required_reviewer_roles: BOTH a clean PEACHES (reviewer) verdict and a
+  # clean BOBBIE (security) verdict are required before a merge is
+  # authorized -- clagentic-console's live gate today per this task's
+  # dispatch brief.
+  required_reviewer_roles:
+    - reviewer
+    - security
+
+  authorized_roles:
+    - merger
+
+  # post_merge_steps: runs in THIS repo's own working tree after loadout-merge
+  # merges a PR here. Two ordered steps (never one shell-operator string --
+  # loadout-merge's cmd parser rejects &&/||/|/;/>/< tokens in a plain cmd
+  # string at parse time; the `sh -c '...'` wrapper below is one invocation, no
+  # top-level shell operator, so it is fine as-is).
+  #
+  # Step 1 replaces npm run install:local-test's old .crew/naomi.yaml
+  # on_failure: warn with on_failure: fail -- a failed post-merge global
+  # install must now fail the merge loudly (EXIT_POST_MERGE_FAILED=28,
+  # PostMergeStepFailedError), not pass silently.
+  #
+  # Step 2 is new: asserts the just-installed @clagentic/console build
+  # actually reflects the merged commit, rather than trusting npm install -g's
+  # zero exit code alone. package.json's version field is npm-semver
+  # (1.7.0-beta.1), not a git SHA, so it cannot answer "did this install land
+  # the commit that was just merged" -- there was no build-identity signal in
+  # the package before this migration. scripts/write-build-sha.js (wired as
+  # npm's prepack lifecycle hook) now embeds the current git HEAD SHA into
+  # lib/build-sha.json at pack time, so it travels inside the tarball
+  # install:local-test builds and installs. scripts/verify-installed-build.js
+  # reads that installed build-sha.json and compares it against this tree's
+  # own HEAD SHA (the merged commit, since post_merge_steps runs after the
+  # merge), exiting non-zero on any mismatch.
+  post_merge_steps:
+    - cmd: "npm run install:local-test"
+      description: "Install latest build globally for developer test (npm pack + npm install -g). Test-tier only -- not production."
+      on_failure: fail
+    - cmd: "npm run verify:installed-build"
+      description: "Assert the globally-installed build's embedded SHA (lib/build-sha.json, written at npm prepack time) matches this repo's merged HEAD."
+      on_failure: fail

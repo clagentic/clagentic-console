@@ -1,5 +1,10 @@
 node_modules/
 lib/certs/*.pem
+# lib/build-sha.json is a generated pack-time artifact (scripts/write-build-sha.js,
+# npm's prepack lifecycle hook) — never hand-authored, never committed. It ships in
+# published tarballs because it's written before `npm pack` runs, not because it's
+# tracked in git (lr-0d45).
+lib/build-sha.json
 .claude/
 .claude-local/
 .claude-relay/

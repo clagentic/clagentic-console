@@ -11,8 +11,10 @@
   "scripts": {
     "dev": "node bin/cli.js --dev",
     "postinstall": "node scripts/postinstall.js",
+    "prepack": "node scripts/write-build-sha.js",
     "test": "node --test --test-force-exit test/*.test.js",
     "install:local-test": "sh -c 'f=$(npm pack) && npm install -g \"$f\" && rm -f \"$f\"'",
+    "verify:installed-build": "node scripts/verify-installed-build.js",
     "semantic-release": "semantic-release"
   },
   "files": [
