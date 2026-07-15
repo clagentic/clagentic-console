@@ -1,3 +1,51 @@
+# [1.7.0](https://github.com/clagentic/clagentic-console/compare/v1.6.0...v1.7.0) (2026-07-14)
+
+
+### Bug Fixes
+
+* **cli:** remove undefined enableMultiUser/disableMultiUser/isMultiUser destructure from lib/users (lr-e41f) ([2dcb260](https://github.com/clagentic/clagentic-console/commit/2dcb26041585049cabbd7365c950bcb7867c846f))
+* **cli:** source PIN hashing from lib/users, not deleted lib/server export (lr-56df) ([4126747](https://github.com/clagentic/clagentic-console/commit/41267471622d87fb458cba127be30f342a17b52f))
+* **codex:** make model/effort picker take live effect on active threads (lr-79ee) ([1649d3e](https://github.com/clagentic/clagentic-console/commit/1649d3e29d056b730d01b447c246adda5f7bbbcf))
+* **codex:** stop silently dropping image attachments (lr-de04) ([27782c6](https://github.com/clagentic/clagentic-console/commit/27782c62c1a7f7b946090854a1cb5613654a04ea))
+* **daemon:** wire memory-pressure shedding to MemoryHigh crossings (lr-5e70) ([f6e6fb4](https://github.com/clagentic/clagentic-console/commit/f6e6fb4e57ba261d88c7d0ef2131745245d13bab))
+* **diagnostics:** constrain toast-diagnostic to clamped container on mobile (lr-4ef618) ([6676c22](https://github.com/clagentic/clagentic-console/commit/6676c22e8830fcc232c379276b5132e380609218)), closes [#diagnostic-toast-container](https://github.com/clagentic/clagentic-console/issues/diagnostic-toast-container)
+* **emoji-picker:** stop custom-icon upload from silently failing (lr-6c9930) ([2e4e968](https://github.com/clagentic/clagentic-console/commit/2e4e968c14a9d73d9ce728bc0892fe6ce6b57aec))
+* **filebrowser:** correlate fs_read/history/file-at replies to their request (lr-fb49-B) ([fc75377](https://github.com/clagentic/clagentic-console/commit/fc75377942e450bbc7e2e3b03de24458d66cdb2b))
+* **ipc:** refuse daemon startup when a live daemon already owns the socket (lr-1bdb A) ([a5ce73b](https://github.com/clagentic/clagentic-console/commit/a5ce73b04e211591c6857ce84b5c592c2761c80e))
+* **loop:** anchor pending-message popover to the sticky header, not the container (lr-4a9c) ([21a219f](https://github.com/clagentic/clagentic-console/commit/21a219faf24364bdaef7da5a02ded328f81b9f0e)), closes [#ralph-sticky](https://github.com/clagentic/clagentic-console/issues/ralph-sticky)
+* **loop:** cap pending message queue length and per-message size (lr-7025) ([67a673e](https://github.com/clagentic/clagentic-console/commit/67a673e0ee3d744fd2517a47f306719bab0a821f))
+* **project-sessions:** include dirName in create_worktree_result for client correlation (lr-fb49-G) ([5817305](https://github.com/clagentic/clagentic-console/commit/5817305e7ae09962bf2436592e15814653164ca8))
+* **project:** unwatchTab returns a deterministic value instead of a loop-scoped var (lr-1bdb E) ([fcf144d](https://github.com/clagentic/clagentic-console/commit/fcf144d8ba57331fa867c1ecbb56981a86a37233))
+* **scheduler:** Escape during loop rename must not commit via blur-on-detach (lr-fb49-F) ([13fb204](https://github.com/clagentic/clagentic-console/commit/13fb204a51aa754cbad9d47d3e9d91275efffb2d))
+* **scheduler:** escape server-controlled time/cron/color at innerHTML sinks (lr-cc85) ([87f89c5](https://github.com/clagentic/clagentic-console/commit/87f89c57f4b69125b414947f4c8c202778ce4d08))
+* **security:** close BOBBIE follow-up gaps in Bash whitelist (lr-74c8) ([1984536](https://github.com/clagentic/clagentic-console/commit/1984536283e7d8f49e0d0e4a76a424ccfb0a2ec5))
+* **security:** honor Codex approval policy, tighten default sandbox (lr-f7a4) ([44d1d20](https://github.com/clagentic/clagentic-console/commit/44d1d20d30c73df7c345c5b4b9c63208987fa9aa))
+* **security:** restrict Bash whitelist to genuinely read-only commands (lr-74c8) ([334dfde](https://github.com/clagentic/clagentic-console/commit/334dfdef3dda247a793f32df2d1b1b1ac35b4da9))
+* **sessions:** bound in-heap session.history to a tail window (lr-2ea2a7) ([d0b2072](https://github.com/clagentic/clagentic-console/commit/d0b2072d05eb32f8cf04bca2d5c80032ffd77c6d)), closes [#1](https://github.com/clagentic/clagentic-console/issues/1)
+* **sessions:** eliminate async/sync flush race in session file writes (lr-1bdb D) ([27bccf4](https://github.com/clagentic/clagentic-console/commit/27bccf4ec23ddf1b9c2822286a8ecf166302512a))
+* **sessions:** load history before ownership-claim save on unowned session connect (lr-768c9e) ([23a53cd](https://github.com/clagentic/clagentic-console/commit/23a53cd1d10a2d6c29d0807a95620b3a4cedad3a))
+* **sessions:** persist a changed cliSessionId, not only the first assignment (lr-1bdb B) ([2aade49](https://github.com/clagentic/clagentic-console/commit/2aade494c93f67cb54eaadac2d2b7abf551a3ca5))
+* **sessions:** preserve on-disk history when saving unloaded session metadata (lr-79c6) ([4887497](https://github.com/clagentic/clagentic-console/commit/488749770b8c69b87f958e00faf7995ef5c96d36))
+* **sessions:** route all history.push sites through recordHistoryEntry (lr-2ea2a7) ([65a2da4](https://github.com/clagentic/clagentic-console/commit/65a2da44025d13d6bcd1ad5dd008535e4695ff1c))
+* **sidebar-projects:** unshadow draggedFolderName, rollback access PUTs, guard worktree modal handler leak (lr-fb49-C/D/G) ([d27b31e](https://github.com/clagentic/clagentic-console/commit/d27b31e76764af5ed3d1631c1fdeca5eb87e172b))
+* **sidebar-sessions:** fingerprint favoriteOrder/unread/loop fields, settle rename+armed-delete before list rebuild (lr-fb49-E/F) ([487f547](https://github.com/clagentic/clagentic-console/commit/487f547701f5dc8169467124dc5a59a2f267c89a))
+* **ui:** anchor new-msg-btn above expanded composer (lr-4a3d) ([f3f4978](https://github.com/clagentic/clagentic-console/commit/f3f497881d351e925c46815c9295bce4bf49b120)), closes [#app](https://github.com/clagentic/clagentic-console/issues/app) [#input-area](https://github.com/clagentic/clagentic-console/issues/input-area)
+* **ws-reconnect:** null onmessage/onerror on old socket during reconnect (lr-fb49-A) ([8a584d3](https://github.com/clagentic/clagentic-console/commit/8a584d3e4c8c2444e515103ae247e2ffba3b6f41))
+* **ws:** register per-client error handler to prevent daemon-wide crash (lr-fbb7) ([1f00477](https://github.com/clagentic/clagentic-console/commit/1f004775b327f12534904f4c7277b0a1caa1cce6))
+
+
+### Features
+
+* **codex:** add localImage temp-file helper (lr-de04) ([67d62a2](https://github.com/clagentic/clagentic-console/commit/67d62a2edffbb634c308edba59db7a9462e2389e))
+* **config:** wire daemon.json historyInMemMax to session manager (lr-2ea2a7) ([e2f700f](https://github.com/clagentic/clagentic-console/commit/e2f700f4c06983541780c42bea4fff370f31aead))
+* **loop-ui:** keep composer visible during an active loop iteration and route sends to loop_message (lr-e31b) ([22a95d2](https://github.com/clagentic/clagentic-console/commit/22a95d25c8ff564cef43a3c7389166d03e5b5550))
+* **loop:** queue human messages for delivery at the next loop iteration boundary (lr-e31b) ([dbd0ff6](https://github.com/clagentic/clagentic-console/commit/dbd0ff6014bacaa046d9a5686056eb3dbb6c5225))
+* **loop:** remove a single queued message before the next iteration boundary (lr-4a9c) ([30f5217](https://github.com/clagentic/clagentic-console/commit/30f5217abd8e513f614c2691bc117a49a8e49e81))
+* **memory-limits:** computed absolute-byte postinstall defaults (lr-c10f6d) ([877f118](https://github.com/clagentic/clagentic-console/commit/877f1187648b0a80f407e7e92c37c16066774f9c))
+* **memory-shed:** implement shedMemory pass (lr-5e70) ([ca307e4](https://github.com/clagentic/clagentic-console/commit/ca307e436dfb236f3bee6759bab073aa0500ece3))
+* **server-skills:** expose skillsCache drop hook (lr-5e70) ([7362bcd](https://github.com/clagentic/clagentic-console/commit/7362bcde950026755abca1281a8527e131cf23d4))
+* **sessions:** add pressure-driven bulk eviction (lr-5e70) ([66ed42d](https://github.com/clagentic/clagentic-console/commit/66ed42d173edf55cd65c8d44f4315fb572fe86f0))
+
 # [1.7.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.6.0...v1.7.0-beta.1) (2026-07-14)
 
 
