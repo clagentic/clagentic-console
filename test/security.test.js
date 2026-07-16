@@ -928,6 +928,77 @@ test("skills proxy: rejects unauthenticated request with 401 in multi-user mode"
     "authenticated user with skills permission is not rejected (no 401 or 403)");
 });
 
+// lr-30a5: sibling pre-auth 401 gates (lr-d857 B1 follow-up). Each test drives
+// the real attachSettings handler — it fails if the getMultiUserFromReq/401
+// gate is ever reverted from the corresponding route in server-settings.js.
+
+test("PUT /api/user/chat-layout: rejects unauthenticated request with 401", function () {
+  var { attachSettings } = require("../lib/server-settings");
+  var ctx = makeSettingsCtx(false, false);
+  var handler = attachSettings(ctx).handleRequest;
+
+  var req = makeReq("PUT", "/api/user/chat-layout");
+  var res = makeRes();
+  handler(req, res, "/api/user/chat-layout");
+
+  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/chat-layout gets 401");
+  assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
+});
+
+test("PUT /api/user/theme-mode: rejects unauthenticated request with 401", function () {
+  var { attachSettings } = require("../lib/server-settings");
+  var ctx = makeSettingsCtx(false, false);
+  var handler = attachSettings(ctx).handleRequest;
+
+  var req = makeReq("PUT", "/api/user/theme-mode");
+  var res = makeRes();
+  handler(req, res, "/api/user/theme-mode");
+
+  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/theme-mode gets 401");
+  assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
+});
+
+test("PUT /api/user/theme-brand: rejects unauthenticated request with 401", function () {
+  var { attachSettings } = require("../lib/server-settings");
+  var ctx = makeSettingsCtx(false, false);
+  var handler = attachSettings(ctx).handleRequest;
+
+  var req = makeReq("PUT", "/api/user/theme-brand");
+  var res = makeRes();
+  handler(req, res, "/api/user/theme-brand");
+
+  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/theme-brand gets 401");
+  assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
+});
+
+test("PUT /api/user/tool-palettes: rejects unauthenticated request with 401", function () {
+  var { attachSettings } = require("../lib/server-settings");
+  var ctx = makeSettingsCtx(false, false);
+  var handler = attachSettings(ctx).handleRequest;
+
+  var req = makeReq("PUT", "/api/user/tool-palettes");
+  var res = makeRes();
+  handler(req, res, "/api/user/tool-palettes");
+
+  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/tool-palettes gets 401");
+  assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
+});
+
+// Note: /api/user/auto-continue is a GET route in server-settings.js (not PUT,
+// despite the originating task description) — tested against the real route.
+test("GET /api/user/auto-continue: rejects unauthenticated request with 401", function () {
+  var { attachSettings } = require("../lib/server-settings");
+  var ctx = makeSettingsCtx(false, false);
+  var handler = attachSettings(ctx).handleRequest;
+
+  var req = makeReq("GET", "/api/user/auto-continue");
+  var res = makeRes();
+  handler(req, res, "/api/user/auto-continue");
+
+  assert.strictEqual(res.status, 401, "unauthenticated GET /api/user/auto-continue gets 401");
+  assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
+});
+
 // ============================================================
 // 16. git clone URL validation (lr-28b5)
 //     Calls the real exported functions from lib/clone-validate.js, which are
