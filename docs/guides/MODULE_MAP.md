@@ -118,7 +118,8 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 | Module | Concern |
 |--------|---------|
 | `app-connection.js` | WebSocket creation, reconnect with exponential backoff, connection status UI, disconnect/restore notifications |
-| `app-messages.js` | WebSocket message router (`processMessage`). Dispatches all incoming message types to appropriate handlers |
+| `app-messages.js` | WebSocket message router: a handler registry (`registerHandlers({ type: fn })` populated by this file's own core registration plus domain modules that self-register — e.g. filebrowser.js, server-settings.js). `processMessage(type)` dispatches to every registered handler for that type, in registration order |
+| `app-history-replay.js` | `history_meta` / `history_done` handlers: sticky-bottom scroll arming across a full history replay batch, batched syntax highlight/mermaid pass, context/usage panel restore from the last result in history |
 | `app-dm.js` | DM mode (open/enter/exit), DM message rendering, typing indicators |
 | `app-home-hub.js` | Home hub rendering, weather, tip rotation, upcoming schedules, project summary |
 | `app-rate-limit.js` | Rate limit UI, countdown timers, scheduled message bubbles, fast mode indicator |

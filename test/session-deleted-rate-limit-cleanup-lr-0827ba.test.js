@@ -117,6 +117,12 @@ test("lib/sessions.js: deleteSessionsBulk does not broadcast session_deleted whe
 // handler also broadcasts session_deleted (source-text checks — these
 // modules are DOM/live-WS coupled and not importable under plain Node,
 // matching the frontend-state-correlation-lr-fb49.test.js convention).
+//
+// lr-4e49 Part 2 converted app-messages.js's switch(msg.type) to a handler
+// registry (registerHandlers({ type: fn })) — same dispatch behavior, no
+// case "..." labels left to match against. Updated to match the registry
+// object-literal shape; the assertion (forgetSessionRateLimitState called
+// for every deleted id) is unchanged.
 // ---------------------------------------------------------------------------
 
 function readMod(rel) {
@@ -125,9 +131,9 @@ function readMod(rel) {
 
 test("app-messages.js: session_deleted dispatch calls forgetSessionRateLimitState for each deleted id", function () {
   var src = readMod("lib/public/modules/app-messages.js");
-  var idx = src.indexOf('case "session_deleted":');
-  assert.ok(idx !== -1, "expected a session_deleted case in the WS message switch");
-  var endIdx = src.indexOf("case \"session_list\":", idx);
+  var idx = src.indexOf("session_deleted: function (msg) {");
+  assert.ok(idx !== -1, "expected a session_deleted handler in the registry");
+  var endIdx = src.indexOf("session_list: function (msg) {", idx);
   assert.ok(endIdx !== -1 && endIdx > idx);
   var block = src.slice(idx, endIdx);
   assert.match(
