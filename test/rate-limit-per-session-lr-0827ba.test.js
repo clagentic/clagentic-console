@@ -19,6 +19,13 @@
 // live server dependencies), so — matching the existing convention in
 // test/frontend-state-correlation-lr-fb49.test.js — these are source-text
 // regression checks asserting the fix is present.
+//
+// lr-4e49 Part 2 converted app-messages.js's switch(msg.type) to a handler
+// registry (registerHandlers({ type: fn })) — same dispatch behavior, no
+// case "..." labels left to match against. The three app-messages.js
+// checks below were updated to match the registry object-literal shape
+// instead; the assertions themselves (which functions are called, with
+// which arguments, in which order) are unchanged.
 
 "use strict";
 
@@ -80,7 +87,7 @@ test("lib/sdk-message-processor.js: rate_limit event is stamped with localId: se
 // ---------------------------------------------------------------------------
 
 test("app-messages.js: scheduled_message_queued passes msg.localId through to addScheduledMessageBubble", function () {
-  var idx = APP_MESSAGES_JS.indexOf('case "scheduled_message_queued":');
+  var idx = APP_MESSAGES_JS.indexOf("scheduled_message_queued:");
   assert.ok(idx !== -1);
   var block = APP_MESSAGES_JS.slice(idx, idx + 300);
   assert.match(
@@ -91,18 +98,18 @@ test("app-messages.js: scheduled_message_queued passes msg.localId through to ad
 });
 
 test("app-messages.js: scheduled_message_sent/cancelled route through clearScheduledMessage(msg.localId)", function () {
-  var sentIdx = APP_MESSAGES_JS.indexOf('case "scheduled_message_sent":');
-  var cancelIdx = APP_MESSAGES_JS.indexOf('case "scheduled_message_cancelled":');
+  var sentIdx = APP_MESSAGES_JS.indexOf("scheduled_message_sent:");
+  var cancelIdx = APP_MESSAGES_JS.indexOf("scheduled_message_cancelled:");
   assert.ok(sentIdx !== -1 && cancelIdx !== -1);
   assert.match(APP_MESSAGES_JS.slice(sentIdx, sentIdx + 250), /clearScheduledMessage\(msg\.localId\)/);
   assert.match(APP_MESSAGES_JS.slice(cancelIdx, cancelIdx + 200), /clearScheduledMessage\(msg\.localId\)/);
 });
 
 test("app-messages.js: session_switched calls restoreRateLimitStateForSession after resetClientState (redraw-on-switch-in hook)", function () {
-  var idx = APP_MESSAGES_JS.indexOf('case "session_switched":');
+  var idx = APP_MESSAGES_JS.indexOf("session_switched: function (msg) {");
   assert.ok(idx !== -1);
-  var switchedInIdx = APP_MESSAGES_JS.indexOf('break;', idx);
-  var block = APP_MESSAGES_JS.slice(idx, switchedInIdx);
+  var handlerEndIdx = APP_MESSAGES_JS.indexOf("\n  },", idx);
+  var block = APP_MESSAGES_JS.slice(idx, handlerEndIdx);
   var resetIdx = block.indexOf("resetClientState();");
   var restoreIdx = block.indexOf("restoreRateLimitStateForSession(");
   assert.ok(resetIdx !== -1, "expected resetClientState() call inside session_switched");
