@@ -241,6 +241,21 @@
    -------------------------------------------------------- */
 .toast-diagnostic {
   position: relative;
+  /* lr-56fb36: the base .toast rule (base.css) sets left:50% and bottom:80px
+     for its own center-bottom, single-toast anchoring. .toast-diagnostic
+     already overrides transform (translateY only, no translateX) and
+     position (relative, not fixed), but left/bottom are separate properties
+     that were never reset here — the cascade lets them leak through
+     unchanged, offsetting this box away from the normal-flow position the
+     corner-anchored #diagnostic-toast-container (lr-e901) computes for it.
+     That leftover left:50% is what pushes the toast off past the right
+     viewport edge on both desktop and mobile despite the lr-fab390/lr-4ef618
+     width clamps, which only bound the box's own width, not its offset.
+     Reset both explicitly so this box's position comes entirely from normal
+     flow inside the container, matching the positioning-comes-from-the-
+     parent contract stated below. */
+  left: auto;
+  bottom: auto;
   opacity: 0;
   transform: translateY(-8px);
   pointer-events: auto;
