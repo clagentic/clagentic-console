@@ -1,3 +1,10 @@
+## [1.7.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.7.0...v1.7.1-beta.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **palette:** scan unloaded session history from disk for BM25 search (lr-a3e175) ([ab578b6](https://github.com/clagentic/clagentic-console/commit/ab578b64d6e3a6e63cab256ec1d740a9264c725f))
+
 # [1.7.0](https://github.com/clagentic/clagentic-console/compare/v1.6.0...v1.7.0) (2026-07-14)
 
 
