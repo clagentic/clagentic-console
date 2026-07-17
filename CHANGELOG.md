@@ -1,3 +1,28 @@
+# [1.8.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.7.1-beta.1...v1.8.0-beta.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* **app-connection:** fetch WS ticket before connect, split auth vs unreachable (lr-de5fcb) ([dd37297](https://github.com/clagentic/clagentic-console/commit/dd37297764929c39d319a3c3692090af17760084))
+* **app-connection:** reload on a sustained stale-version mismatch (lr-e0ec47) ([93653bd](https://github.com/clagentic/clagentic-console/commit/93653bdd4c07331e68ec4987290038bce70bb84e))
+* **app-messages:** break circular-import boot halt on handlers init (lr-4c58ae) ([94bb90a](https://github.com/clagentic/clagentic-console/commit/94bb90a1a5c397c6735ce20d1c23667fffd7ea1a))
+* **brand:** add space in 'Clagentic:Console' wordmark to 'Clagentic: Console' (lr-a924) ([cb7ff4b](https://github.com/clagentic/clagentic-console/commit/cb7ff4b6698cf35793dd9b8ccfd931751026f023))
+* **diagnostics:** reset left/bottom on diagnostic toast to stop right-edge clipping (lr-56fb36) ([a03f19f](https://github.com/clagentic/clagentic-console/commit/a03f19f939e22e1bc3d4b2fdddff7d7d5f034f9e)), closes [#diagnostic-toast-container](https://github.com/clagentic/clagentic-console/issues/diagnostic-toast-container)
+* **security:** consolidate escapeHtml onto canonical helper, close single-quote gap (lr-2f75) ([6afb22c](https://github.com/clagentic/clagentic-console/commit/6afb22ce71475865dd6c049ef446be2cf6008c6f)), closes [#39](https://github.com/clagentic/clagentic-console/issues/39)
+* **server:** echo offered ws subprotocol on cookie-authed upgrades (lr-4c58ae) ([0792a8c](https://github.com/clagentic/clagentic-console/commit/0792a8cabc953ce0feb949cda7f7ef1a6e4b2370)), closes [#358](https://github.com/clagentic/clagentic-console/issues/358)
+* **server:** never serve login HTML for unauthed project-asset/API paths (lr-e33776) ([8378201](https://github.com/clagentic/clagentic-console/commit/8378201c954b7d58e8e535ff3f88e993e4f9b00f))
+* **server:** serve public app-shell assets ahead of the project auth gate (lr-2895ea) ([bf0a186](https://github.com/clagentic/clagentic-console/commit/bf0a1868c7cda07564a404eaed3d22f5eeaea96f))
+* **sw:** call reg.update() on register and on foreground (lr-e0ec47) ([438e7d0](https://github.com/clagentic/clagentic-console/commit/438e7d083e370ced4e355f5b7815f7591f59e80a))
+* **sw:** pre-cache app shell on install to close the empty-cache window (lr-e0ec47) ([1a69958](https://github.com/clagentic/clagentic-console/commit/1a69958363b7e6fdf679d2d048ef6e4fb1cd1fb0))
+
+
+### Features
+
+* **auth:** add short-TTL single-use WS-upgrade ticket store (lr-de5fcb) ([f2a6242](https://github.com/clagentic/clagentic-console/commit/f2a624299e361282406be77b7ed9dede6d7dea08)), closes [#1](https://github.com/clagentic/clagentic-console/issues/1)
+* **command-palette:** expose getPaletteVersion accessor (lr-e0ec47) ([ac5c4b4](https://github.com/clagentic/clagentic-console/commit/ac5c4b4da096b3f2038e98b5dcc21f7fc925a9aa))
+* **server-settings:** audit-log custom-emoji upload/delete on success and failure (lr-fc71) ([d290cae](https://github.com/clagentic/clagentic-console/commit/d290cae233e4658a0fdf2c99059b719bb30a2fec)), closes [#303](https://github.com/clagentic/clagentic-console/issues/303)
+* **server:** accept ticket fallback on WS upgrade, add /api/ws-ticket (lr-de5fcb) ([58d21eb](https://github.com/clagentic/clagentic-console/commit/58d21ebf9601d58e86ea1944e7f51659d9c81321))
+
 ## [1.7.1-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.7.0...v1.7.1-beta.1) (2026-07-16)
 
 
