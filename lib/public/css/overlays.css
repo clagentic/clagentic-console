@@ -1325,3 +1325,22 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   margin-top: 1.2rem;
   letter-spacing: 0.03em;
 }
+
+/* lr-de5fcb Surface 1: shown only in the explicit "session expired" state,
+   never during a normal transient-disconnect reconnect. */
+#connect-overlay-signin-btn {
+  margin-top: 1rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  border: 1px solid #DA7756;
+  background: transparent;
+  color: #DA7756;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+#connect-overlay-signin-btn:hover {
+  background: #DA7756;
+  color: #000;
+}
