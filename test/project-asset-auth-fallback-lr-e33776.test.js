@@ -21,6 +21,20 @@
 // or /api/ prefix) gets a non-HTML 401 instead of the 200 login page. A
 // top-level document navigation (e.g. /p/{slug}/) still gets the login page.
 //
+// SUPERSEDED IN PART BY lr-2895ea: the classification above was necessary
+// but not sufficient — MILLER later proved (lr-2895ea, conf 0.9) that mobile
+// browsers withhold the SameSite=Lax session cookie on subresource requests
+// even on an authed session, so gating the real app.js/style.css/modules/*
+// shell assets behind auth at all (401 or otherwise) broke mobile app boot.
+// lr-2895ea moved these PUBLIC, identical-for-every-user shell files to be
+// served by serveStatic() BEFORE the auth gate, so they now return 200 with
+// the real asset even when unauthenticated. Cases 1 and 3 below (a real,
+// on-disk app.js and modules/app-connection.js) were updated to assert 200 +
+// correct MIME instead of "not 200" to reflect that. Case 2 (a path that
+// does not exist on disk) still falls through to the pre-existing 401
+// behavior asserted here, since serveStatic() has nothing to serve.
+// /api/* (case 4) was never made public and keeps the original assertion.
+//
 // This test spawns the real daemon (same harness as boot-smoke-lr-1a5f) and
 // issues real unauthenticated HTTP requests against project-scoped routes —
 // the bug is an HTTP-response-shape bug that only reproduces end-to-end.
@@ -176,10 +190,14 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
 
   }).then(function (port) {
     // ── Case 1: unauthenticated GET to a project-scoped .js asset path ──────
-    // Must NOT be 200 text/html — the proximate cause of lr-e33776.
+    // lr-2895ea: app.js is a PUBLIC shell asset (identical for every user, no
+    // per-user data) now served ahead of the auth gate — real 200 + JS MIME,
+    // not the 401 this test previously asserted, and never text/html.
     return httpGetRaw(port, "/p/asset-auth-project/app.js").then(function (res) {
-      assert.notEqual(res.status, 200,
-        "unauthenticated .js request must not succeed as if it were the real asset without auth semantics being applied; got " + res.status);
+      assert.strictEqual(res.status, 200,
+        "unauthenticated request for the public shell asset app.js must return the real 200 asset (lr-2895ea); got " + res.status);
+      assert.match(res.contentType, /application\/javascript/,
+        "unauthenticated app.js must return a JS Content-Type; got " + res.contentType);
       assert.ok(
         !/text\/html/.test(res.contentType),
         "unauthenticated .js request must never return Content-Type text/html (nosniff + module script breaks app boot); got " + res.contentType
@@ -203,9 +221,13 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
 
   }).then(function (port) {
     // ── Case 3: unauthenticated GET to a project-scoped module path ────────
+    // lr-2895ea: /modules/*.js chunks are PUBLIC shell assets, same as
+    // app.js — real 200 + JS MIME, served ahead of the auth gate.
     return httpGetRaw(port, "/p/asset-auth-project/modules/app-connection.js").then(function (res) {
-      assert.notEqual(res.status, 200,
-        "unauthenticated /modules/ path must not return 200; got " + res.status);
+      assert.strictEqual(res.status, 200,
+        "unauthenticated request for the public shell module modules/app-connection.js must return the real 200 asset (lr-2895ea); got " + res.status);
+      assert.match(res.contentType, /application\/javascript/,
+        "unauthenticated /modules/ path must return a JS Content-Type; got " + res.contentType);
       assert.ok(
         !/text\/html/.test(res.contentType),
         "unauthenticated /modules/ path must never return Content-Type text/html; got " + res.contentType
