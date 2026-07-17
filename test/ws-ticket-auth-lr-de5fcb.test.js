@@ -156,7 +156,15 @@ test("server.js: the WS upgrade handler falls back to a ticket only when the coo
   var idx = SERVER_JS.indexOf("var wsCookieUser = getMultiUserFromReq(req);");
   assert.ok(idx !== -1, "expected the upgrade handler to resolve the cookie-authed user first");
   var block = SERVER_JS.slice(idx, idx + 900);
-  assert.match(block, /if\s*\(!wsCookieUser\)\s*\{/, "the ticket path must only be attempted when the cookie path failed");
+  // lr-4c58ae: extractWsTicketFromHeader() (a pure parse, no side effect) now
+  // runs unconditionally so a cookie-authed request can still learn what
+  // subprotocol was offered for the handleProtocols echo — see
+  // ws-subprotocol-echo-cookie-auth-lr-4c58ae.test.js. The VALIDATING call,
+  // auth.consumeWsTicket(), remains gated on !wsCookieUser, which is the
+  // actual "ticket path only fires when the cookie path failed" invariant
+  // this test protects.
+  assert.match(block, /if\s*\(!wsCookieUser\s*&&\s*offeredTicket\)\s*\{/,
+    "the ticket must only be validated/consumed when the cookie path failed");
   assert.match(block, /extractWsTicketFromHeader\(req\.headers\["sec-websocket-protocol"\]\)/,
     "must read the ticket from Sec-WebSocket-Protocol, not a query string (avoids logging the credential)");
   assert.match(block, /auth\.consumeWsTicket\(offeredTicket\)/, "must validate+consume via the single-use ticket store");
@@ -171,10 +179,14 @@ test("server.js: a ticket-authed upgrade echoes the accepted subprotocol in the 
     "WebSocketServer must be configured with a handleProtocols hook that echoes the accepted ticket subprotocol " +
     "(required by the WS spec whenever the client offers a Sec-WebSocket-Protocol list)"
   );
+  // lr-4c58ae: this marker is now also set on a cookie-authed request that
+  // merely offered (but never had validated/consumed) a ticket subprotocol —
+  // see ws-subprotocol-echo-cookie-auth-lr-4c58ae.test.js case 2. The offered
+  // value must still be byte-identical to what the client sent either way.
   assert.match(
     SERVER_JS,
     /req\._clayAcceptedProtocol = "clagentic\.auth\." \+ offeredTicket;/,
-    "the accepted-protocol marker must only be set after the ticket was validated, not merely offered"
+    "the accepted-protocol marker must echo exactly the client-offered ticket value, never a fabricated one"
   );
 });
 
