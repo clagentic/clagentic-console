@@ -74,7 +74,11 @@ test("command-palette.js: exposes a read-only getPaletteVersion accessor for the
 test("app-connection.js: scheduleReconnect parses /info JSON and feeds it to the stale-version watchdog", function () {
   var idx = APP_CONNECTION_JS.indexOf("export function scheduleReconnect()");
   assert.ok(idx !== -1);
-  var block = APP_CONNECTION_JS.slice(idx, idx + 900);
+  // lr-e5c1fe widened the 401 branch of this function with a re-verify-once
+  // retry (see wake-reconnect-transient-401-lr-e5c1fe.test.js), pushing the
+  // non-401 res.json() parse further into the source — widen the slice
+  // window accordingly rather than assert on brittle byte offsets.
+  var block = APP_CONNECTION_JS.slice(idx, idx + 2000);
 
   assert.match(block, /fetch\("\/info"\)/, "must still preflight /info on reconnect");
   assert.match(

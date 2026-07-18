@@ -276,11 +276,20 @@ test("app-connection.js: handleUnauthenticated stops the reconnect loop instead 
   );
 });
 
-test("app-connection.js: /info 401 during scheduled reconnect routes through handleUnauthenticated, not a bare reload", function () {
+test("app-connection.js: /info 401 during scheduled reconnect eventually routes through handleUnauthenticated, not a bare reload", function () {
   var idx = APP_CONNECTION_JS.indexOf("export function scheduleReconnect()");
   assert.ok(idx !== -1);
-  var block = APP_CONNECTION_JS.slice(idx, idx + 700);
-  assert.match(block, /res\.status === 401\) \{ handleUnauthenticated\(\); return null; \}/,
-    "the /info reconnect preflight must route a 401 through the same explicit unauthenticated state as the WS path"
+  var block = APP_CONNECTION_JS.slice(idx, idx + 1400);
+  // lr-e5c1fe: a single /info 401 on a wake-from-background reconnect is no
+  // longer treated as terminal — see wake-reconnect-transient-401-lr-e5c1fe
+  // test.js for the full re-verify-before-terminal regression coverage.
+  // This test's job is narrower: confirm handleUnauthenticated() is still
+  // reachable from this preflight (the lr-de5fcb "no bare reload" invariant),
+  // not that it fires on the first 401.
+  assert.match(block, /handleUnauthenticated\(\);/,
+    "the /info reconnect preflight must still be able to route through the explicit unauthenticated state as the WS path"
+  );
+  assert.doesNotMatch(block, /if \(res\.status === 401\) \{ handleUnauthenticated\(\); return null; \}/,
+    "a single /info 401 must no longer call handleUnauthenticated() directly (lr-e5c1fe: re-verify first)"
   );
 });
