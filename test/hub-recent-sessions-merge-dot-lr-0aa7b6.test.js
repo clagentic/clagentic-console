@@ -12,15 +12,17 @@
 // Supersedes test/hub-recent-sessions-alert-dot-lr-2b1f03.test.js, which
 // asserted the old two-dot design this task explicitly replaces.
 //
-// KNOWN LIMITATION carried forward from lr-0aa7b6 (see projectHasAlert doc
-// comment in app-home-hub.js): the alert state is still keyed on
-// projectHasAlert(sess.projectSlug) — PER-PROJECT, not per-session. A
-// genuine per-session cross-project unread signal does not exist server-
-// or client-side today (see TODO(lr-0aa7b6) in app-home-hub.js); extending
-// it touches the same aggregate the project-badge unread count depends on.
-// This is flagged, not silently shipped as fixed — a test asserting true
-// per-session isolation is intentionally NOT included here, since that
-// isolation does not exist yet.
+// lr-0aa7b6 (follow-up, holden/andy decision): the alert state is now
+// PER-SESSION, not per-project. lib/server.js's crossProjectUnread map was
+// restructured to key by "slug::localId" (see crossUnreadKey /
+// getSessionUnread), threaded through lib/sessions.js's onSessionDone(),
+// lib/project.js, and lib/project-loop.js's hub_recent_sessions_list
+// handler, which now attaches each session's OWN unread count onto the
+// sess object sent to the client. The client keys the merged dot's alert
+// state on sess.unread, not projectHasAlert(sess.projectSlug) — see
+// test/server-cross-project-unread-per-session-lr-0aa7b6.test.js for the
+// server-side data-path coverage (composite key, no cross-project
+// misattribution, project-badge rollup non-regression).
 //
 // app-home-hub.js imports getCachedProjects from app-projects.js, and
 // pulls in a long chain of DOM-touching modules (theme, scheduler,
@@ -68,7 +70,7 @@ test("home-hub.css: the separate .hub-recent-alert-dot rule is removed", () => {
   );
 });
 
-test("app-home-hub.js: defines a projectHasAlert helper that reads getCachedProjects() unread state", () => {
+test("app-home-hub.js: projectHasAlert helper still exists (kept for the Projects-list badge) reading getCachedProjects() unread state", () => {
   var idx = HOME_HUB_JS.indexOf("function projectHasAlert");
   assert.ok(idx !== -1, "expected a projectHasAlert(projectSlug) helper to exist");
   var block = HOME_HUB_JS.slice(idx, idx + 1600);
@@ -85,22 +87,31 @@ test("app-home-hub.js: defines a projectHasAlert helper that reads getCachedProj
   );
 });
 
-test("app-home-hub.js: handleHubRecentSessions renders a single dot per row with LOCKED color precedence alert > processing > live > idle", () => {
+test("app-home-hub.js: handleHubRecentSessions renders a single dot per row with LOCKED color precedence alert > processing > live > idle, keyed PER-SESSION", () => {
   var idx = HOME_HUB_JS.indexOf("export function handleHubRecentSessions");
   assert.ok(idx !== -1, "expected handleHubRecentSessions to exist");
-  var block = HOME_HUB_JS.slice(idx, idx + 2500);
+  var block = HOME_HUB_JS.slice(idx, idx + 2600);
 
-  assert.match(
+  // lr-0aa7b6 follow-up: alert state must be keyed on the individual
+  // session's own unread count (sess.unread), not the project aggregate
+  // (projectHasAlert(sess.projectSlug)) — that was THE bug (every session
+  // row in a notifying project lit red even when only one was notifying).
+  assert.doesNotMatch(
     block,
     /projectHasAlert\s*\(\s*sess\.projectSlug\s*\)/,
-    "handleHubRecentSessions must call projectHasAlert(sess.projectSlug) to decide alert state"
+    "handleHubRecentSessions must NOT key alert state on projectHasAlert(sess.projectSlug) anymore — that over-lights every sibling session in the project"
+  );
+  assert.match(
+    block,
+    /sess\.unread/,
+    "handleHubRecentSessions must key alert state on sess.unread — the session's OWN unread count carried from the server"
   );
 
   // Precedence: alert must be checked/applied BEFORE (and win over) processing.
   var hasAlertIdx = block.indexOf("hasAlert");
   var alertClassIdx = block.indexOf('" alert"');
   var processingClassIdx = block.indexOf('" processing"');
-  assert.ok(hasAlertIdx !== -1, "expected a hasAlert local computed from projectHasAlert");
+  assert.ok(hasAlertIdx !== -1, "expected a hasAlert local computed from sess.unread");
   assert.ok(alertClassIdx !== -1, "expected the dot class to conditionally include ' alert'");
   assert.ok(processingClassIdx !== -1, "expected the dot class to conditionally include ' processing'");
   assert.ok(
@@ -146,19 +157,13 @@ test("home-hub.css: .hub-recent-dot.alert is styled with the established alert r
   );
 });
 
-test("app-home-hub.js: KNOWN LIMITATION is documented — alert is per-project, not per-session, pending a real per-session signal", () => {
-  var idx = HOME_HUB_JS.indexOf("function projectHasAlert");
-  assert.ok(idx !== -1);
-  var block = HOME_HUB_JS.slice(Math.max(0, idx - 1600), idx);
-
-  assert.match(
-    block,
-    /KNOWN LIMITATION/,
-    "expected the per-project (not per-session) limitation to be documented above projectHasAlert, since no per-session cross-project unread signal exists in the data path today"
-  );
-  assert.match(
-    block,
-    /TODO\(lr-0aa7b6\)/,
-    "expected a TODO(lr-0aa7b6) marking the follow-up to thread a genuine per-session unread signal"
+test("app-home-hub.js: the per-project KNOWN LIMITATION note is gone now that the alert path is per-session", () => {
+  // The stale KNOWN LIMITATION comment (documenting the per-project-only
+  // alert bug) must not remain now that the real per-session data path has
+  // been built — a fixed bug should not still read as an open limitation.
+  assert.doesNotMatch(
+    HOME_HUB_JS,
+    /KNOWN LIMITATION \(lr-0aa7b6\)/,
+    "the lr-0aa7b6 KNOWN LIMITATION comment must be removed now that per-session alert attribution is implemented, not just documented as a gap"
   );
 });
