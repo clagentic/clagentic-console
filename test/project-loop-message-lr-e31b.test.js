@@ -24,9 +24,25 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
+var execFileSync = require("child_process").execFileSync;
 
 function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-msg-"));
+}
+
+// lr-ae85d5: startLoop() shells `git rev-parse HEAD` in ctx.cwd (project-loop.js)
+// to record the loop's base commit. A bare mkdtempSync() dir has no .git
+// ancestor, so on a real CI runner (no ambient git repo wrapping /tmp) that
+// call fails and startLoop() bails out before ever calling runNextIteration().
+// Give the temp cwd a minimal real git repo so startLoop() behaves the same
+// here as it would against an actual project checkout.
+function gitInit(dir) {
+  var env = Object.assign({}, process.env, {
+    GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.com",
+    GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.com",
+  });
+  execFileSync("git", ["init", "-q"], { cwd: dir, env: env });
+  execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "init"], { cwd: dir, env: env });
 }
 
 /**
@@ -178,6 +194,9 @@ test("lr-e31b: runNextIteration() drains the queue into the next iteration promp
   });
   try {
     var ls = engine.loopState;
+
+    // startLoop() needs a real git HEAD in cwd (see gitInit() comment above).
+    gitInit(cwd);
 
     // Loop files on disk so startLoop() can read PROMPT.md / LOOP.json.
     var dir = path.join(cwd, ".claude", "loops", "loop_test123");
