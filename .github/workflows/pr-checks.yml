@@ -11,8 +11,24 @@ name: PR Checks
 #     script (scripts/check-client-imports.js).
 # We must still explicitly check out the PR head SHA below — otherwise we'd
 # be checking main's code instead of the PR's.
+# test-suite runs as its own job on the plain `pull_request` trigger (not
+# `_target`) — lr-ae85d5: NAOMI's merge_requirements.tests_pass/ci_pass both
+# name pr-checks.yml as the CI gate, but until this job existed, `npm test`
+# (which includes esm-import-check.test.js / lr-5e24, boot-smoke-lr-1a5f,
+# and app-boot-esm-graph-load-lr-4c58ae) was never actually run by CI — it
+# only ran locally, on the honor system, before a PR was opened. `pull_request`
+# (unlike `pull_request_target`) checks out the PR head with NO secret access
+# and default (read-only) permissions, so it is the standard safe pattern for
+# running `npm ci && npm test` against untrusted fork code: GitHub isolates
+# this trigger from the base-branch workflow file (a fork PR runs the
+# workflow version already on main, not its own edited copy) and grants it
+# nothing to exfiltrate. Do NOT merge this job's install/test step into the
+# `checks` job above — that job intentionally stays on `pull_request_target`
+# with no npm install, exactly per its own header comment.
 on:
   pull_request_target:
+    branches: [main]
+  pull_request:
     branches: [main]
   push:
     branches: [main]
@@ -84,3 +100,31 @@ jobs:
             fi
           done < <(find lib/public -name '*.js')
           exit $fail
+
+  test:
+    # lr-ae85d5: separate job, separate (safer) trigger — see the `on:` block
+    # comment above for why this must never run under pull_request_target.
+    # Skipped on pull_request_target so a fork PR does not attempt this job
+    # twice under two different trigger contexts; the plain `pull_request`
+    # event already covers it with no secret exposure.
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR head (or pushed ref)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite
+        run: npm test
