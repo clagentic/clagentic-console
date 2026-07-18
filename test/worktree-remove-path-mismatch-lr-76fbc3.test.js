@@ -83,6 +83,43 @@ test("lr-76fbc3: removeWorktree resolves and removes a worktree registered OUTSI
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test("lr-76fbc3 (PEACHES PR #365 review): removeWorktree disambiguates same-basename worktrees under different parents, never removing the wrong one", function () {
+  // Two independent parent repos, each with a worktree whose leaf dirName is
+  // identical ("feat") but that live in different locations on disk -- e.g.
+  // ./feat under parentA and ../sibling/feat under parentB. Matching on
+  // basename alone (the pre-fix behavior) would silently remove whichever
+  // entry sorted first in `git worktree list --porcelain`, regardless of
+  // which parent the caller actually meant.
+  var tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lr76fbc3-ambiguous-"));
+  var parentA = path.join(tmpRoot, "parentA");
+  var parentB = path.join(tmpRoot, "parentB");
+  initRepo(parentA);
+  initRepo(parentB);
+
+  var createA = createWorktree(parentA, "feat", "feat", "main");
+  assert.strictEqual(createA.ok, true, JSON.stringify(createA));
+  var createB = createWorktree(parentB, "feat", "feat", "main");
+  assert.strictEqual(createB.ok, true, JSON.stringify(createB));
+
+  assert.strictEqual(fs.existsSync(createA.path), true);
+  assert.strictEqual(fs.existsSync(createB.path), true);
+  assert.notStrictEqual(path.resolve(createA.path), path.resolve(createB.path));
+
+  // Remove the worktree bound to parentB. Only parentB's "feat" worktree may
+  // be affected -- parentA's same-named worktree must survive untouched.
+  var removeResult = removeWorktree(parentB, "feat");
+  assert.strictEqual(removeResult.ok, true, "expected removal to succeed: " + JSON.stringify(removeResult));
+  assert.strictEqual(fs.existsSync(createB.path), false, "parentB's worktree must actually be removed");
+  assert.strictEqual(fs.existsSync(createA.path), true, "parentA's same-basename worktree must NOT be touched");
+
+  // And the same holds in reverse for parentA's worktree.
+  var removeResultA = removeWorktree(parentA, "feat");
+  assert.strictEqual(removeResultA.ok, true, "expected removal to succeed: " + JSON.stringify(removeResultA));
+  assert.strictEqual(fs.existsSync(createA.path), false, "parentA's worktree must now be removed too");
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test("lr-76fbc3: removeWorktree still surfaces a genuine failure as {ok:false,error} rather than swallowing it", function () {
   var tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lr76fbc3-genuine-fail-"));
   var parent = path.join(tmpRoot, "parentproj");
