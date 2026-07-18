@@ -491,21 +491,23 @@
   opacity: 1;
   box-shadow: 0 0 6px rgba(80, 250, 123, 0.4);
 }
+/* Alert state — color precedence LOCKED (andy, lr-0aa7b6):
+   alert(red) > processing(green) > live(green) > idle(grey). This class is
+   applied instead of .processing when the row's session is notifying, so
+   red always wins visually even if the session is also active. Same red
+   used by .icon-strip-project-badge (unread badge). Formerly a SEPARATE
+   right-side dot (.hub-recent-alert-dot, removed) — now just another color
+   state of the single left dot. */
+.hub-recent-dot.alert {
+  background: #e74c3c;
+  opacity: 1;
+  box-shadow: 0 0 6px rgba(231, 76, 60, 0.5);
+}
 .hub-recent-project-icon {
   font-size: 14px;
   width: 20px;
   text-align: center;
   flex-shrink: 0;
-}
-/* Per-project alert indicator — same red used by .icon-strip-project-badge
-   (unread badge). A count wouldn't fit this row, so a plain dot is enough
-   to show WHERE the alert is coming from. */
-.hub-recent-alert-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: #e74c3c;
 }
 .hub-recent-project-icon--blank {
   width: 20px;
