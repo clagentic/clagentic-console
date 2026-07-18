@@ -195,6 +195,20 @@ test("lr-768c9e: admin connecting to an evicted, unowned session does not trunca
     // usersModule is required directly inside project-connection.js (not via
     // ctx), so it already resolves to the same instance returned above.
 
+    // Fail loud, not silent: findUserById() drives canAccessSession(), which
+    // gates whether allSessions includes this unowned session at all -- if it
+    // doesn't, handleConnection() takes the autoCreated branch and never
+    // reaches the ownership-claim code path this test exists to cover. If
+    // this lookup itself is failing (e.g. a transient users.json read racing
+    // under full-suite load), assert here with a clear diagnostic instead of
+    // the confusing downstream "ownerId is null" symptom.
+    var _seededAdmin = usersModule.findUserById(adminId);
+    assert.ok(
+      _seededAdmin && _seededAdmin.role === "admin",
+      "findUserById(" + adminId + ") must return the seeded admin before handleConnection runs -- got: " +
+        JSON.stringify(_seededAdmin)
+    );
+
     var attachment = connModule.attachConnection(ctx);
     var ws = {
       on: function () {},
