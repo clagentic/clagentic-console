@@ -565,11 +565,16 @@
   #home-hub {
     padding: 32px 16px calc(80px + var(--safe-bottom, 0px));
   }
-  .hub-greeting h1 {
-    font-size: 22px;
-  }
+  /* Close button (top:16px, 40px circle, right:20px) occupies the top-right
+     corner of #home-hub's padding box. Push the inner content down so the
+     search bar — full-width at this breakpoint — clears the button instead
+     of running underneath it (lr-ea6c65). */
   .home-hub-inner {
     max-width: 100%;
+    margin-top: 44px;
+  }
+  .hub-greeting h1 {
+    font-size: 22px;
   }
   .hub-columns {
     grid-template-columns: 1fr;
