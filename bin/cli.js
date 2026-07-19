@@ -283,9 +283,7 @@ var currentVersion = require("../package.json").version;
     if (headlessMode) {
       var protocol = config.tls ? "https" : "http";
       var ip = getLocalIP();
-      var url = config.builtinCert
-        ? toClayStudioUrl(ip, config.port, protocol)
-        : protocol + "://" + ip + ":" + config.port;
+      var url = protocol + "://" + ip + ":" + config.port;
       console.log("  " + sym.done + "  Daemon already running (PID " + config.pid + ")");
       console.log("  " + sym.done + "  " + url);
       process.exit(0);
