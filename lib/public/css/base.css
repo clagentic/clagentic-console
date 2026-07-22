@@ -227,10 +227,23 @@ html, body {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* lr-136f81: --warning-bg / --error-12 are translucent tokens designed for
+   inline diagnostic badges sitting inside an already-opaque panel
+   (diagnostics.css:310-312). A position:fixed overlay toast has live chat
+   content behind it, so a translucent background lets that content bleed
+   through and the toast reads as malformed. Layer the tint over the opaque
+   --bg-alt toast surface instead of using the translucent token directly —
+   --warning-bg itself stays untouched so the diagnostic-badge use case is
+   unaffected. */
 .toast.toast-warn {
-  background: var(--warning-bg);
+  background: linear-gradient(var(--warning-bg), var(--warning-bg)), var(--bg-alt);
   border-color: var(--warning);
   color: var(--warning);
+}
+.toast.toast-error {
+  background: linear-gradient(var(--error-12), var(--error-12)), var(--bg-alt);
+  border-color: var(--error);
+  color: var(--error);
 }
 
 /* SW update banner — shown when a new service worker activates while the page is visible */
