@@ -1,3 +1,23 @@
+# [1.8.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* **app-connection:** re-verify before terminal auth wall on wake reconnect (lr-e5c1fe) ([ae47f97](https://github.com/clagentic/clagentic-console/commit/ae47f972bfc42fea5f15d0ff3bef7b6fddc6f5b1))
+* **cli:** remove dangling toClayStudioUrl call sites (lr-db24ec) ([0d83486](https://github.com/clagentic/clagentic-console/commit/0d83486038ea0f40f020e10e590f71d9309823c7))
+* **css:** give warn/error toast overlays an opaque background (lr-136f81) ([78518dc](https://github.com/clagentic/clagentic-console/commit/78518dc2ea9a0f078c6aab8ed6bc5be2030d06dd))
+* **home-hub:** clear search bar from close button overlap on mobile (lr-ea6c65) ([9a5b6cc](https://github.com/clagentic/clagentic-console/commit/9a5b6ccdb3a56710e3b2c564dcff0734add2ac88))
+* **home-hub:** key recent-sessions alert dot on per-session unread (lr-0aa7b6) ([8dc0858](https://github.com/clagentic/clagentic-console/commit/8dc08580dadcd21e50ebbe70dc5c9a2894612589))
+* **home-hub:** merge alert dot into single left status dot (lr-0aa7b6) ([8c59d44](https://github.com/clagentic/clagentic-console/commit/8c59d449c205f28e135d969058f464e5c8be69ea))
+* **home-hub:** render getProjectAbbrev fallback for blank recent-session icons (lr-e5faff) ([6075a6b](https://github.com/clagentic/clagentic-console/commit/6075a6bf46e39e4c20083852280db9bf81146dfe))
+* **home-hub:** restructure cross-project unread to per-session keying (lr-0aa7b6) ([4956156](https://github.com/clagentic/clagentic-console/commit/49561567ded96c5535a7637010d520899d7ab58f))
+* **test:** bust ../lib/lite-detect require cache in lr-768c9e (lr-ae85d5) ([6d75416](https://github.com/clagentic/clagentic-console/commit/6d754164cc8347e4919ae60b3c5653e044603399))
+* **test:** git-init temp cwd so startLoop() sees a real HEAD (lr-ae85d5) ([73b0112](https://github.com/clagentic/clagentic-console/commit/73b01129124366663649585fbbf049726dc7b3b4))
+* **ui:** give error-level toasts the same readable duration as warnings (lr-76fbc3) ([747075e](https://github.com/clagentic/clagentic-console/commit/747075e337ef1f77ff7b84155d3f1d65e8a37a8f))
+* **users:** distinguish ENOENT from corrupt/unreadable users.json (lr-ae85d5) ([1bbb9a3](https://github.com/clagentic/clagentic-console/commit/1bbb9a3e1d18ac68605fa7a78e3b9eec7bb1646a))
+* **worktree:** bind path resolution to parent identity, not basename alone (lr-76fbc3) ([7e62945](https://github.com/clagentic/clagentic-console/commit/7e62945efb42d1c045f2dda0e29af4b9ad8584b5))
+* **worktree:** resolve actual registered path before removing a worktree (lr-76fbc3) ([6f272da](https://github.com/clagentic/clagentic-console/commit/6f272da78553983081039a6cb7cdbf6a7890ce5c))
+
 # [1.8.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.7.1-beta.1...v1.8.0-beta.1) (2026-07-17)
 
 
