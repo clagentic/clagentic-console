@@ -557,6 +557,39 @@
 .config-radio-item:hover { background: rgba(var(--overlay-rgb),0.05); color: var(--text); }
 .config-radio-item.active { color: var(--accent); font-weight: 600; }
 
+/* --- Older models disclosure (lr-e03635) — session-chip model picker's
+   collapsible escape hatch, mirroring the settings-panel disclosure
+   (.settings-older-models-toggle/-body in server-settings.css) for the
+   .config-radio-list surface. */
+.config-older-models-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-older-models-toggle:hover { color: var(--text-secondary); background: rgba(var(--overlay-rgb),0.05); }
+
+.config-older-models-toggle .settings-adv-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.config-older-models-body {
+  display: flex;
+  flex-direction: column;
+}
+
 /* Segmented control for effort */
 .config-segmented {
   display: flex;
