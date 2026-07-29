@@ -440,6 +440,47 @@
   color: var(--text-muted);
 }
 
+/* --- Older models disclosure (lr-e03635) ---
+   Mirrors the in-section "Advanced" collapsible pattern (see
+   #settings-advanced-memory-toggle/-body) so the model picker's escape
+   hatch to older models behaves and looks identical to the existing
+   disclosure convention rather than inventing a new one. */
+.settings-older-models-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text-dimmer);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 8px;
+}
+
+.settings-older-models-toggle:hover {
+  color: var(--text-secondary);
+  background: rgba(var(--overlay-rgb), 0.04);
+}
+
+.settings-older-models-toggle .settings-adv-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.settings-older-models-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
 /* --- Button group --- */
 .settings-btn-group {
   display: flex;
