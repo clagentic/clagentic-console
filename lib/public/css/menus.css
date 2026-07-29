@@ -519,6 +519,19 @@
   padding: 4px 14px 4px;
 }
 
+/* lr-db0437: states which scope a model/mode picker applies to — "This
+   session only" / "Default for new sessions in this project" / "Server
+   default" / loop-scoped. Shared across the config-chip popover, project
+   settings, server settings, Ralph-loop preview, and scheduler task tabs
+   (some of those render inside .settings-card, not .config-section, hence
+   the standalone rule rather than nesting under .config-section-label). */
+.config-scope-label {
+  font-size: 11px;
+  color: var(--text-dimmer);
+  padding: 0 14px 6px;
+  font-style: italic;
+}
+
 .config-radio-list {
   display: flex;
   flex-direction: column;
