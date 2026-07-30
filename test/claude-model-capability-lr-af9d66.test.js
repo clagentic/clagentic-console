@@ -18,6 +18,11 @@ var claudeAdapter = require("../lib/yoke/adapters/claude");
 var enrichClaudeModel = claudeAdapter._test_enrichClaudeModel;
 var enrichClaudeModels = claudeAdapter._test_enrichClaudeModels;
 
+// Mirrors CLAUDE_EFFORT_LEVELS in lib/yoke/adapters/claude.js (not exported;
+// this is the documented fallback-only static table, pinned here so a
+// malformed-vendor-value test can assert enrichment fell back to it).
+var CLAUDE_EFFORT_LEVELS_FALLBACK = ["low", "medium", "high", "xhigh", "max"];
+
 // Real shape captured from `stream.supportedModels()` against a live CLI
 // session (claude-agent-sdk 0.3.173 / claudeCodeVersion 2.1.173). fable is
 // the concrete "family the code has never seen" case (lr-af9d66) — it does
@@ -119,4 +124,57 @@ test("lr-af9d66: full live-probe list enriches without throwing and preserves pe
   assert.equal(byValue["claude-fable-5[1m]"].supportsThinking, true);
   assert.deepEqual(byValue["sonnet"].supportedEffortLevels, ["low", "medium", "high", "max"]);
   assert.deepEqual(byValue["claude-fable-5[1m]"].supportedEffortLevels, ["low", "medium", "high", "xhigh", "max"]);
+});
+
+// ---------------------------------------------------------------------------
+// Strict-boolean / malformed-vendor-value regression (BOBBIE finding on
+// PR #375, folded into lr-af9d66 before NAOMI): a present-but-non-boolean
+// capability field, or a supportedEffortLevels array with a non-string
+// entry, must be treated as vendor silence (falls through to the documented
+// fallback) rather than coerced via loose truthiness into an affirmative
+// "supported" reading. A truthy garbage value is not the same claim as a
+// real `true`, and this suite pins that distinction directly.
+// ---------------------------------------------------------------------------
+
+test("lr-af9d66: a present-but-non-boolean supportsThinking value (string) falls through to the heuristic, not loose-truthy true", function () {
+  // "false" (a non-empty string) is truthy under `!!` but is not the boolean
+  // false the vendor would send for a real negative determination.
+  var enriched = enrichClaudeModel({ value: "claude-haiku-9-9", supportsThinking: "false" });
+  // haiku heuristic says false — proves the heuristic ran (not `!!"false"` == true).
+  assert.equal(enriched.supportsThinking, false);
+});
+
+test("lr-af9d66: a present-but-non-boolean supportsAdaptiveThinking value (number) falls through to the heuristic", function () {
+  // A haiku ID is used (not opus) so a wrong (loose-truthy) implementation
+  // and a correct (strict) implementation actually disagree: opus's
+  // heuristic fail-opens to true regardless, which would mask the bug.
+  var enriched = enrichClaudeModel({ value: "claude-haiku-9-9", supportsAdaptiveThinking: 1 });
+  assert.equal(enriched.supportsThinking, false, "malformed value must not read as an affirmative true");
+});
+
+test("lr-af9d66: a present-but-non-boolean supportsEffort value (object) falls through to the heuristic", function () {
+  var enriched = enrichClaudeModel({ value: "claude-haiku-9-9", supportsEffort: { yes: true } });
+  assert.equal(enriched.supportsEffort, false, "malformed object value must not read as an affirmative true");
+});
+
+test("lr-af9d66: a real boolean false is still honored as a genuine vendor determination (not confused with malformed)", function () {
+  var enriched = enrichClaudeModel({ value: "claude-opus-9-9", supportsEffort: false });
+  // opus heuristic would fail-open to true -- only a strictly-honored false
+  // can produce this result, proving real booleans still pass through untouched.
+  assert.equal(enriched.supportsEffort, false);
+});
+
+test("lr-af9d66: supportedEffortLevels with a non-string entry is rejected wholesale, falls back to the static list", function () {
+  var enriched = enrichClaudeModel({ value: "sonnet", supportedEffortLevels: ["low", 42, "high"] });
+  assert.deepEqual(enriched.supportedEffortLevels, CLAUDE_EFFORT_LEVELS_FALLBACK);
+});
+
+test("lr-af9d66: supportedEffortLevels that is a non-array (e.g. a string) is rejected, falls back to the static list", function () {
+  var enriched = enrichClaudeModel({ value: "sonnet", supportedEffortLevels: "low,medium,high" });
+  assert.deepEqual(enriched.supportedEffortLevels, CLAUDE_EFFORT_LEVELS_FALLBACK);
+});
+
+test("lr-af9d66: supportedEffortLevels that is an empty array is rejected, falls back to the static list", function () {
+  var enriched = enrichClaudeModel({ value: "sonnet", supportedEffortLevels: [] });
+  assert.deepEqual(enriched.supportedEffortLevels, CLAUDE_EFFORT_LEVELS_FALLBACK);
 });
