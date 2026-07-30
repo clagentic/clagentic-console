@@ -481,6 +481,24 @@
   margin-top: 4px;
 }
 
+/* --- Custom model ID row (lr-f22787) — free-text escape hatch inside the
+   "Use a specific version" disclosure. Reuses .settings-budget-input for the
+   text field and .settings-btn-sm for the submit button so it matches the
+   existing thinking-budget row styling rather than inventing new input
+   chrome. */
+.settings-custom-model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 8px;
+}
+
+.settings-custom-model-input {
+  flex: 1;
+  width: auto;
+  font-family: "Roboto Mono", monospace;
+}
+
 /* --- Button group --- */
 .settings-btn-group {
   display: flex;
