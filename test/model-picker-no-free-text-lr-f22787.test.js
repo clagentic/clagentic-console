@@ -14,17 +14,26 @@
 // removed entirely; these tests pin its absence so it cannot silently
 // return in a future edit.
 //
-// See docs/roadmaps and the PR body for lr-f22787 for the accompanying
-// needs-decision on model enumeration (Finding 1): after an exhaustive
-// investigation (SDK type surface + compiled CLI binary string/control-flow
-// analysis), no reachable enumeration source in this codebase's dependency
-// surface returns prior-version Claude models — the CLI's own /model list
-// is backed by the same @anthropic-ai/claude-agent-sdk Query.supportedModels()
-// / initializationResult().models this codebase already calls, optionally
-// augmented by an account-bootstrap `additional_model_options` field that is
-// typically empty for prior/deprecated versions and is not something this
-// codebase can populate without adding a new dependency or bypassing the
-// required claude-CLI-subprocess invocation path.
+// See the PR body for lr-f22787 for the accompanying needs-decision on
+// model enumeration (Finding 1). A prior pass here concluded no version
+// table existed at all in the installed CLI; that was wrong and was
+// retracted. A second, deeper investigation (control-flow tracing of the
+// compiled claude-agent-sdk-linux-x64 binary's own /model option-builder,
+// not just the SDK's public type surface) found a real, complete,
+// hardcoded version table (`vz` — every Claude family/version with its
+// per-provider model ID) baked into the CLI. The reason it never reaches
+// this codebase is narrower than "no data exists": the option-builder only
+// reads that table's legacy-version rows on the bedrock/foundry/mantle/
+// vertex enterprise-gateway auth branches — never on the firstParty
+// (plain ANTHROPIC_API_KEY) or OAuth (Claude.ai subscription) branches this
+// codebase's Claude subprocess sessions actually use. Query.supportedModels()
+// / initializationResult().models (the SDK's only exposed enumeration
+// surface) reflect exactly that same gated output, so they inherit the same
+// gap. No sourcemap or readable manifest ships alongside the compiled CLI to
+// read the table from at runtime, and no control-protocol request or CLI
+// flag exposes it either — the only way to reach it is scraping compiled
+// binary offsets, which is neither a stable API nor something this repo
+// can rely on build-to-build.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
