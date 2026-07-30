@@ -40,6 +40,7 @@ const FAMILY_CASES = [
   'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-3-5',
   'gpt-5.5', 'default', '', null, undefined,
   { value: 'claude-sonnet-4' }, { value: 'claude-opus-4' },
+  'claude-fable-5[1m]', 'fable', // lr-5c07ce
 ];
 
 for (const model of FAMILY_CASES) {
@@ -57,11 +58,31 @@ for (const model of FAMILY_CASES) {
 const PARSE_CASES = [
   'claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-3',
   'claude-opus-4-6[1m]', 'default', '', null,
+  'claude-fable-5[1m]', 'fable', // lr-5c07ce
 ];
 
 for (const model of PARSE_CASES) {
   test('lr-d91ecf: parseClaudeModelVersion parity — ' + JSON.stringify(model), () => {
     assert.deepStrictEqual(cjs.parseClaudeModelVersion(model), esm.parseClaudeModelVersion(model));
+  });
+}
+
+// lr-5c07ce: parity for the optional description argument (alias-only lists).
+const PARSE_WITH_DESCRIPTION_CASES = [
+  ['sonnet', 'Sonnet 4.6'],
+  ['opus', 'Opus 4.8 with 1M context'],
+  ['haiku', 'Haiku 4.5'],
+  ['fable', 'Fable 5'],
+  ['claude-opus-4-5', 'Opus 4.8 with 1M context'], // own version must win
+  ['sonnet', 'Opus 4.8 with 1M context'], // mismatched family must not leak
+];
+
+for (const [modelId, description] of PARSE_WITH_DESCRIPTION_CASES) {
+  test('lr-5c07ce: parseClaudeModelVersion(modelId, description) parity — ' + JSON.stringify([modelId, description]), () => {
+    assert.deepStrictEqual(
+      cjs.parseClaudeModelVersion(modelId, description),
+      esm.parseClaudeModelVersion(modelId, description)
+    );
   });
 }
 
@@ -74,6 +95,16 @@ test('lr-d91ecf: deriveClaudeLatestTiers parity', () => {
   assert.deepStrictEqual(cjs.deriveClaudeLatestTiers(models), esm.deriveClaudeLatestTiers(models));
 });
 
+test('lr-5c07ce: deriveClaudeLatestTiers parity on an alias-only list with description fields', () => {
+  const models = [
+    { value: 'default', description: 'Opus 4.8 with 1M context' },
+    { value: 'claude-fable-5[1m]', description: 'Fable 5' },
+    { value: 'sonnet', description: 'Sonnet 4.6' },
+    { value: 'haiku', description: 'Haiku 4.5' },
+  ];
+  assert.deepStrictEqual(cjs.deriveClaudeLatestTiers(models), esm.deriveClaudeLatestTiers(models));
+});
+
 // ---------------------------------------------------------------------------
 // claudeDisplayName parity
 // ---------------------------------------------------------------------------
@@ -82,11 +113,25 @@ const DISPLAY_NAME_CASES = [
   'claude-opus-4-6', 'claude-sonnet-4-5', 'claude-haiku-3-5',
   'claude-opus-9-9', // unseen future version
   'default', 'claude-future-family-1-0',
+  'fable', 'claude-fable-5[1m]', // lr-5c07ce
 ];
 
 for (const model of DISPLAY_NAME_CASES) {
   test('lr-d91ecf: claudeDisplayName parity — ' + model, () => {
     assert.strictEqual(cjs.claudeDisplayName(model), esm.claudeDisplayName(model));
+  });
+}
+
+// lr-5c07ce: parity for claudeDisplayName's optional description argument.
+const DISPLAY_NAME_WITH_DESCRIPTION_CASES = [
+  ['sonnet', 'Sonnet 4.6'],
+  ['opus', 'Opus 4.8 with 1M context'],
+  ['fable', 'Fable 5'],
+];
+
+for (const [modelId, description] of DISPLAY_NAME_WITH_DESCRIPTION_CASES) {
+  test('lr-5c07ce: claudeDisplayName(modelId, description) parity — ' + JSON.stringify([modelId, description]), () => {
+    assert.strictEqual(cjs.claudeDisplayName(modelId, description), esm.claudeDisplayName(modelId, description));
   });
 }
 
