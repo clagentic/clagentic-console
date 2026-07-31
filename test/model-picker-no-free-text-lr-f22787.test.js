@@ -15,25 +15,47 @@
 // return in a future edit.
 //
 // See the PR body for lr-f22787 for the accompanying needs-decision on
-// model enumeration (Finding 1). A prior pass here concluded no version
-// table existed at all in the installed CLI; that was wrong and was
-// retracted. A second, deeper investigation (control-flow tracing of the
-// compiled claude-agent-sdk-linux-x64 binary's own /model option-builder,
-// not just the SDK's public type surface) found a real, complete,
-// hardcoded version table (`vz` — every Claude family/version with its
-// per-provider model ID) baked into the CLI. The reason it never reaches
-// this codebase is narrower than "no data exists": the option-builder only
-// reads that table's legacy-version rows on the bedrock/foundry/mantle/
-// vertex enterprise-gateway auth branches — never on the firstParty
-// (plain ANTHROPIC_API_KEY) or OAuth (Claude.ai subscription) branches this
-// codebase's Claude subprocess sessions actually use. Query.supportedModels()
-// / initializationResult().models (the SDK's only exposed enumeration
-// surface) reflect exactly that same gated output, so they inherit the same
-// gap. No sourcemap or readable manifest ships alongside the compiled CLI to
-// read the table from at runtime, and no control-protocol request or CLI
-// flag exposes it either — the only way to reach it is scraping compiled
-// binary offsets, which is neither a stable API nor something this repo
-// can rely on build-to-build.
+// model enumeration (Finding 1). Two prior passes here reached conflicting,
+// unverified conclusions about *why* older versions weren't enumerated
+// (first: no table exists; second: a gated `opus4X`-style enterprise-auth
+// branch). Both were retracted after independent re-verification found
+// their cited internals (e.g. an `opus4X` flag) simply do not exist in
+// either installed binary.
+//
+// A third pass ran a live, verbatim-logged empirical probe instead of
+// static/binary analysis, spawning the CLI through the exact resolution
+// path claude-worker.js uses (pathToClaudeCodeExecutable = the globally
+// resolved `claude` binary):
+//   1. A versioned model ID (claude-opus-4-6) DOES run under plain
+//      firstParty/OAuth auth, both at spawn time (options.model) and via
+//      queryInstance.setModel() mid-session — modelUsage.provider was
+//      "firstParty" in both cases, confirming no enterprise-gateway
+//      involvement. Older-version execution is not blocked.
+//   2. Query.supportedModels() / initializationResult().models — the only
+//      typed, documented SDK enumeration surface — returns ONLY the current
+//      alias set (default/opus/sonnet/haiku/fable[+[1m] variants]) on a
+//      live query. No `additional_model_options` field exists anywhere in
+//      the SDK's .d.ts surface (confirmed by direct file read, not string
+//      search of a compiled binary).
+//   3. Sending the literal "/model" command through the same control
+//      protocol this codebase drives returns: "Available: sonnet, opus,
+//      haiku, fable, best, sonnet[1m], opus[1m], fable[1m], opusplan,
+//      default, or a full model ID." — i.e. /model's own enumerated output
+//      is identical to supportedModels(); the only path to an older version
+//      is the user already knowing and typing its exact ID, which the CLI
+//      accepts without listing it anywhere.
+//
+// Net: there is no vendor-exposed enumeration of legacy Claude versions
+// reachable from this codebase, by any path (typed SDK method, live
+// control-protocol query, or the CLI's own /model text). The task's
+// "no hardcoded model ID list — enumerate from the vendor" requirement and
+// its acceptance criterion ("older versions are selectable") are therefore
+// in direct tension: satisfying discoverability requires a list this repo
+// maintains itself (the same posture as the existing, narrower
+// lib/model-context-windows.js KNOWN_CONTEXT_WINDOWS fallback table,
+// lr-336f), not a runtime source that does not exist. Escalated as
+// needs-decision rather than choosing unilaterally, since maintaining an
+// evergreen version list is a real, ongoing maintenance-cost trade-off.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
