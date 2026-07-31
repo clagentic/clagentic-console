@@ -113,7 +113,7 @@ test("lr-f22787: fetchAllModels throws on a non-2xx response (401/403/429/5xx) s
   await assert.rejects(function () { return gen.fetchAllModels("bad-key"); }, /GET \/v1\/models failed: 401/);
 });
 
-test("lr-f22787: fetchAllModels normalizes each entry to {id, displayName, createdAt}, falling back to id when display_name is absent", async function () {
+test("lr-f22787: fetchAllModels normalizes each entry to {id, displayName, createdAt, status}, falling back to id when display_name is absent", async function () {
   global.fetch = async function () {
     return fakeResponse(200, "OK", {
       data: [{ id: "claude-haiku-4-5" }], // no display_name, no created_at
@@ -121,7 +121,10 @@ test("lr-f22787: fetchAllModels normalizes each entry to {id, displayName, creat
     });
   };
   var models = await gen.fetchAllModels("fake-key");
-  assert.deepEqual(models, [{ id: "claude-haiku-4-5", displayName: "claude-haiku-4-5", createdAt: null }]);
+  // status: "active" — GET /v1/models omits retired IDs outright, so every
+  // entry it returns is active by construction (see fetchAllModels's own
+  // comment on this in scripts/generate-model-catalog.js).
+  assert.deepEqual(models, [{ id: "claude-haiku-4-5", displayName: "claude-haiku-4-5", createdAt: null, status: "active" }]);
 });
 
 // ---------------------------------------------------------------------------
@@ -233,7 +236,7 @@ test("lr-f22787: extractModelIdsFromHtml returns an empty array for HTML with no
   assert.deepEqual(gen.extractModelIdsFromHtml('<p>claude-opus-5 mentioned in plain prose, not in a matching tag</p>'), []);
 });
 
-test("lr-f22787: fetchDeprecationsPageModels normalizes extracted ids to {id, displayName, createdAt:null}", async function () {
+test("lr-f22787: fetchDeprecationsPageModels normalizes extracted ids to {id, displayName, createdAt:null, status}", async function () {
   global.fetch = async function () {
     return {
       ok: true,
@@ -245,7 +248,8 @@ test("lr-f22787: fetchDeprecationsPageModels normalizes extracted ids to {id, di
   var models = await gen.fetchDeprecationsPageModels();
   var opus5 = models.filter(function (m) { return m.id === "claude-opus-5"; })[0];
   assert.ok(opus5);
-  assert.deepEqual(opus5, { id: "claude-opus-5", displayName: "claude-opus-5", createdAt: null });
+  // claude-opus-5 in FIXTURE_HTML's main status table is "Active".
+  assert.deepEqual(opus5, { id: "claude-opus-5", displayName: "claude-opus-5", createdAt: null, status: "active" });
 });
 
 test("lr-f22787: fetchDeprecationsPageModels throws on a non-2xx response", async function () {

@@ -133,3 +133,85 @@ test('lr-f22787: renderModelList marks a fromCatalog:true entry with the Catalog
   assert.equal(olderBadges.length, 1, 'a catalog-sourced entry must carry exactly one Catalog marker');
   assert.equal(olderBadges[0].textContent, 'Catalog');
 });
+
+// ---------------------------------------------------------------------------
+// Retired-model marking (coordinator follow-up) — a known-retired ID (e.g.
+// claude-1.0) must NOT render as a plain selectable row indistinguishable
+// from a currently-runnable one like claude-opus-5.
+// ---------------------------------------------------------------------------
+
+test('lr-f22787: renderModelList disables a retired row (does not dispatch on click) and marks it "Retired", while an active row remains an ordinary clickable row', async function () {
+  var mod = await import('../lib/public/modules/settings-defaults.js');
+  var byId = installFakeDom();
+
+  var clicked = [];
+  mod.renderModelList('ps', {
+    models: [
+      { value: 'claude-opus-5', displayName: 'Opus 5', isLatest: true },
+      { value: 'claude-1.0', displayName: 'claude-1.0', isLatest: false, fromCatalog: true, isRetired: true, status: 'retired' },
+    ],
+    currentModel: 'claude-opus-5',
+    sendMsg: function (type, payload) { clicked.push(payload.model); },
+    modelMsgType: 'set_project_default_model',
+  });
+
+  var listEl = byId['ps-model-list'];
+  var activeRow = listEl.children.filter(function (c) { return c.dataset && c.dataset.model === 'claude-opus-5'; })[0];
+  assert.ok(activeRow, 'the active row must exist');
+  assert.equal(activeRow.className.indexOf('settings-model-item-disabled'), -1, 'an active row must never carry the disabled class');
+
+  var toggle = listEl.children.filter(function (c) {
+    return c.className && c.className.indexOf('settings-older-models-toggle') !== -1;
+  })[0];
+  var body = listEl.children[listEl.children.indexOf(toggle) + 1];
+  var retiredRow = body.children[0];
+
+  assert.notEqual(retiredRow, undefined, 'the retired row must still be PRESENT — visible, never filtered out');
+  assert.ok(retiredRow.className.indexOf('settings-model-item-disabled') !== -1, 'the retired row must carry the disabled class');
+  assert.equal(retiredRow.attrs['aria-disabled'], 'true');
+
+  var retiredBadges = retiredRow.children.filter(function (c) { return c.className === 'settings-model-retired-badge'; });
+  assert.equal(retiredBadges.length, 1, 'the retired row must carry exactly one Retired marker');
+  assert.equal(retiredBadges[0].textContent, 'Retired');
+
+  // The core assertion the coordinator required: clicking the retired row
+  // must NOT dispatch a model selection — it is not an ordinary selectable
+  // row indistinguishable from claude-opus-5.
+  retiredRow.dispatch('click');
+  assert.equal(clicked.length, 0, 'clicking a retired row must never send a set-model message');
+
+  // Sanity: the active row's click path is unaffected.
+  activeRow.dispatch('click');
+  assert.deepEqual(clicked, ['claude-opus-5']);
+});
+
+test('lr-f22787: renderModelList marks a deprecated (not yet retired) row with a Deprecated badge but leaves it clickable', async function () {
+  var mod = await import('../lib/public/modules/settings-defaults.js');
+  var byId = installFakeDom();
+
+  var clicked = [];
+  mod.renderModelList('ps', {
+    models: [
+      { value: 'claude-opus-4-8', displayName: 'Opus 4.8', isLatest: true },
+      { value: 'claude-opus-4-1-20250805', displayName: 'claude-opus-4-1-20250805', isLatest: false, fromCatalog: true, isDeprecated: true, status: 'deprecated' },
+    ],
+    currentModel: 'claude-opus-4-8',
+    sendMsg: function (type, payload) { clicked.push(payload.model); },
+    modelMsgType: 'set_project_default_model',
+  });
+
+  var listEl = byId['ps-model-list'];
+  var toggle = listEl.children.filter(function (c) {
+    return c.className && c.className.indexOf('settings-older-models-toggle') !== -1;
+  })[0];
+  var body = listEl.children[listEl.children.indexOf(toggle) + 1];
+  var deprecatedRow = body.children[0];
+
+  assert.equal(deprecatedRow.className.indexOf('settings-model-item-disabled'), -1, 'a deprecated (not retired) row must NOT be disabled — it still runs');
+  var deprecatedBadges = deprecatedRow.children.filter(function (c) { return c.className === 'settings-model-deprecated-badge'; });
+  assert.equal(deprecatedBadges.length, 1);
+  assert.equal(deprecatedBadges[0].textContent, 'Deprecated');
+
+  deprecatedRow.dispatch('click');
+  assert.deepEqual(clicked, ['claude-opus-4-1-20250805'], 'a deprecated row must still dispatch a normal selection click');
+});
