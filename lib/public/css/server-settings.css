@@ -424,6 +424,22 @@
   transform: translateY(-50%);
 }
 
+/* lr-f22787: marks a model entry sourced from the release-time-generated
+   catalog (lib/generated/claude-model-catalog.json) rather than the
+   vendor's live enumeration — shown, never hidden, just visually
+   distinguished (PR body point (c)). */
+.settings-model-catalog-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dimmer);
+  background: rgba(var(--overlay-rgb), 0.08);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 6px;
+}
+
 .settings-model-name {
   font-size: 13px;
   font-weight: 500;

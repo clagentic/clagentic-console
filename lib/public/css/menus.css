@@ -557,6 +557,16 @@
 .config-radio-item:hover { background: rgba(var(--overlay-rgb),0.05); color: var(--text); }
 .config-radio-item.active { color: var(--accent); font-weight: 600; }
 
+/* lr-f22787: same catalog-sourced marker as .settings-model-catalog-badge
+   (server-settings.css), for the session-chip model picker surface. */
+.config-model-catalog-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dimmer);
+}
+
 /* --- Older models disclosure (lr-e03635) — session-chip model picker's
    collapsible escape hatch, mirroring the settings-panel disclosure
    (.settings-older-models-toggle/-body in server-settings.css) for the
