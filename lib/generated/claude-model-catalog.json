@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-07-31T00:00:00Z",
+  "source": "seed",
+  "models": [
+    { "id": "claude-opus-4-6", "displayName": "Claude Opus 4.6", "createdAt": "2026-06-01T00:00:00Z" },
+    { "id": "claude-opus-4-5", "displayName": "Claude Opus 4.5", "createdAt": "2025-11-24T00:00:00Z" },
+    { "id": "claude-sonnet-4-6", "displayName": "Claude Sonnet 4.6", "createdAt": "2026-06-01T00:00:00Z" },
+    { "id": "claude-sonnet-4-5", "displayName": "Claude Sonnet 4.5", "createdAt": "2025-09-29T00:00:00Z" },
+    { "id": "claude-haiku-4-5", "displayName": "Claude Haiku 4.5", "createdAt": "2025-10-15T00:00:00Z" }
+  ]
+}
