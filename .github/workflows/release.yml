@@ -391,6 +391,33 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Claude model catalog (lr-f22787)
+        # Release-time only, never at install/runtime. ANTHROPIC_API_KEY is
+        # a repo secret scoped to this workflow step alone — it is never
+        # written to a file, never exported beyond this step's env, and is
+        # not used for any LLM call (workspace CLAUDE.md rule 17 governs the
+        # `claude` CLI invocation path for inference; GET /v1/models is a
+        # metadata lookup, not an LLM call). If the secret is absent or the
+        # call fails, generate-model-catalog.js exits 0 and leaves the
+        # previously committed lib/generated/claude-model-catalog.json
+        # untouched — this step is intentionally never allowed to fail the
+        # release (see the script's own header comment for the full
+        # missing-secret / fetch-failure design).
+        run: node scripts/generate-model-catalog.js
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Commit regenerated model catalog
+        run: |
+          git config user.name "clagentic-release-bot[bot]"
+          git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
+          git add lib/generated/claude-model-catalog.json
+          if git diff --cached --quiet; then
+            echo "Model catalog unchanged — nothing to commit."
+          else
+            git commit -m "chore: regenerate Claude model catalog (lr-f22787) [skip ci]"
+          fi
+
       - name: Run semantic-release (stable)
         run: npx semantic-release
         env:
@@ -403,12 +430,15 @@ jobs:
           git config user.email "clagentic-release-bot[bot]@users.noreply.github.com"
           git fetch origin main release
           git checkout -B main origin/main
-          # Only the version bookkeeping files need to advance on main — take release's copy
-          # outright (semantic-release just wrote the authoritative clean X.Y.Z into them on
-          # the release branch). This is a deliberate ours-side file copy, not a branch merge,
-          # so it cannot produce a merge conflict regardless of what has landed on main since
-          # the promoted beta commit.
-          git checkout origin/release -- CHANGELOG.md package.json package-lock.json
+          # Only the version bookkeeping files (plus the regenerated model
+          # catalog, lr-f22787) need to advance on main — take release's
+          # copy outright (semantic-release just wrote the authoritative
+          # clean X.Y.Z into them on the release branch, and the catalog
+          # step above already regenerated the model list on release). This
+          # is a deliberate ours-side file copy, not a branch merge, so it
+          # cannot produce a merge conflict regardless of what has landed on
+          # main since the promoted beta commit.
+          git checkout origin/release -- CHANGELOG.md package.json package-lock.json lib/generated/claude-model-catalog.json
           git diff --quiet || git commit -am "chore: sync version files from release [skip ci]"
           git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
         env:
