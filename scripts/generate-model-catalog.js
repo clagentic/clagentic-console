@@ -25,10 +25,15 @@
 // (b) MISSING SECRET / FETCH FAILURE — never fail the build, never emit an
 //     empty catalog. If ANTHROPIC_API_KEY is absent, or the API call
 //     returns any non-2xx status (401/402/403/429/5xx) or a network error,
-//     this script logs a warning and exits 0 WITHOUT touching the existing
-//     committed catalog file. The release proceeds shipping the previously
-//     generated catalog — stale is an acceptable, visible-in-git-history
-//     degradation; empty is not.
+//     this script now falls through to the credential-free deprecations-
+//     page source (see "FALLBACK SOURCE" below) instead of giving up
+//     immediately — this is what lets the very first release (before the
+//     operator has wired the secret) still produce a real, non-degenerate
+//     catalog rather than shipping only the empty/minimal state. Only if
+//     BOTH sources fail does this script log a warning and exit 0 WITHOUT
+//     touching the existing committed catalog file — the release proceeds
+//     shipping the previously generated catalog. Stale is an acceptable,
+//     visible-in-git-history degradation; empty is not.
 //
 // (c) The catalog itself carries no "deprecated" flag from the vendor
 //     response (GET /v1/models simply omits retired IDs — see task
@@ -40,13 +45,42 @@
 //     enumeration at runtime, which is the marker that actually matters to
 //     an operator deciding whether to trust a row).
 //
-// DOCUMENTED FALLBACK (not built — see PR body point under "documented
-// fallback"): if /v1/models ever starts rejecting the CI key outright
-// (402/403/429 sustained), https://platform.claude.com/docs/en/about-claude/
-// model-deprecations is a credential-free, server-rendered HTML page
-// listing active + deprecated + retired IDs that could be scraped as a
-// last-resort source. Not implemented here — recorded for a future task if
-// the API path ever stops working.
+// FALLBACK SOURCE — the public deprecations page (lr-f22787 follow-up,
+// route (a)): if /v1/models is unreachable (missing key, or a non-2xx —
+// 402/403/429/5xx), this script falls back to
+// https://platform.claude.com/docs/en/about-claude/model-deprecations, a
+// credential-free, server-rendered docs page. CONFIRMED against the live
+// raw HTML (not the markdown-converted view a browsing tool would show) —
+// the page has 11 real <table><tr><td> tables. Model IDs are NOT scattered
+// as plain text: they appear ONLY as the text content of two specific
+// widget shapes, both distinguishable from doc-site navigation noise
+// (href="...claude-on-vertex-ai..." style path segments, changelog anchor
+// slugs like "#2026-04-14-claude-sonnet-4-and-claude-opus-4-models", and
+// prose link text like "whats-new-opus-5") by their exact tag/class
+// signature:
+//   1. The main status table's "API model name" column: a click-to-copy
+//      <span ... data-state="closed" ...>MODEL_ID</span> widget.
+//   2. Every per-release deprecation-history table's "Deprecated model" /
+//      "Recommended replacement" columns: a
+//      <code class="relative inline bg-neutral-30 ...">MODEL_ID</code> tag.
+// A naive claude-[\w.-]+ scan over the raw page text (an earlier version of
+// this script) also matched inside href attributes and link prose, pulling
+// in dozens of doc-site slugs that are not model IDs at all (e.g.
+// "claude-api-skill", "claude-on-vertex-ai", "claude-prompting-best-
+// practices"). SPAN_MODEL_ID_RE / CODE_MODEL_ID_RE below scope the match to
+// ONLY those two tag/class shapes, and MODEL_ID_VALUE_RE additionally
+// requires the captured text itself to start with "claude-" (the last
+// table on the page reuses the identical <code class="relative inline
+// bg-neutral-30..."> class for non-model parameter names like
+// "temperature"/"top_p"/"top_k", so tag-shape alone is not sufficient).
+// This holds no hardcoded model ID list — it is a structural extraction
+// rule against the page's real, confirmed markup, not a table of IDs, so a
+// future model release requires zero changes here (same discipline as
+// model-families.js's family/version derivation).
+const DEPRECATIONS_PAGE_URL = 'https://platform.claude.com/docs/en/about-claude/model-deprecations';
+const SPAN_MODEL_ID_RE = /<span[^>]*\bdata-state="closed"[^>]*>([^<]+)<\/span>/g;
+const CODE_MODEL_ID_RE = /<code\b[^>]*\bclass="[^"]*\bbg-neutral-30\b[^"]*"[^>]*>([^<]+)<\/code>/g;
+const MODEL_ID_VALUE_RE = /^claude-[a-z0-9][a-z0-9.-]*$/;
 
 const fs = require('fs');
 const path = require('path');
@@ -116,37 +150,90 @@ function unionModels(existing, fresh) {
   return Object.keys(byId).sort().map(function (id) { return byId[id]; });
 }
 
-async function main() {
+// Extract every model ID from raw deprecations-page HTML. Scoped to the two
+// tag/class shapes confirmed against the live page (see the header comment
+// above) — never a bare text scan, which would also match navigation hrefs
+// and changelog anchor slugs. Exported separately from the fetch so the
+// extraction logic itself is unit-testable against a fixed HTML fixture
+// without a network call.
+function extractModelIdsFromHtml(html) {
+  const ids = new Set();
+  let m;
+  SPAN_MODEL_ID_RE.lastIndex = 0;
+  while ((m = SPAN_MODEL_ID_RE.exec(html)) !== null) {
+    const value = m[1].trim();
+    if (MODEL_ID_VALUE_RE.test(value)) ids.add(value);
+  }
+  CODE_MODEL_ID_RE.lastIndex = 0;
+  while ((m = CODE_MODEL_ID_RE.exec(html)) !== null) {
+    const value = m[1].trim();
+    if (MODEL_ID_VALUE_RE.test(value)) ids.add(value);
+  }
+  return Array.from(ids).sort();
+}
+
+// Fetch the credential-free deprecations page and extract every model ID it
+// lists via extractModelIdsFromHtml.
+async function fetchDeprecationsPageModels() {
+  const res = await fetch(DEPRECATIONS_PAGE_URL);
+  if (!res.ok) {
+    throw new Error(`GET ${DEPRECATIONS_PAGE_URL} failed: ${res.status} ${res.statusText}`);
+  }
+  const html = await res.text();
+  const ids = extractModelIdsFromHtml(html);
+  return ids.map(function (id) {
+    return { id: id, displayName: id, createdAt: null };
+  });
+}
+
+// Resolves the freshest model list this run, trying the authoritative API
+// first and falling back to the credential-free deprecations page. Returns
+// { fresh, source } or null when NEITHER source produced anything usable —
+// the caller treats null as "leave the committed catalog untouched."
+async function resolveFreshModels() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.warn('[generate-model-catalog] ANTHROPIC_API_KEY not set — leaving the committed catalog untouched.');
-    process.exit(0);
+  if (apiKey) {
+    try {
+      const fresh = await fetchAllModels(apiKey);
+      if (fresh.length) return { fresh: fresh, source: 'anthropic-api' };
+      console.warn('[generate-model-catalog] GET /v1/models returned zero entries — falling back to the deprecations page.');
+    } catch (err) {
+      console.warn('[generate-model-catalog] GET /v1/models failed — falling back to the deprecations page: ' + (err.message || err));
+    }
+  } else {
+    console.warn('[generate-model-catalog] ANTHROPIC_API_KEY not set — falling back to the deprecations page.');
   }
 
-  const existing = readExistingCatalog();
-  let fresh;
   try {
-    fresh = await fetchAllModels(apiKey);
+    const fresh = await fetchDeprecationsPageModels();
+    if (fresh.length) return { fresh: fresh, source: 'deprecations-page' };
+    console.warn('[generate-model-catalog] deprecations-page fallback returned zero entries.');
   } catch (err) {
-    console.warn('[generate-model-catalog] fetch failed — leaving the committed catalog untouched: ' + (err.message || err));
+    console.warn('[generate-model-catalog] deprecations-page fallback failed: ' + (err.message || err));
+  }
+
+  return null;
+}
+
+async function main() {
+  const existing = readExistingCatalog();
+  const resolved = await resolveFreshModels();
+
+  if (!resolved) {
+    console.warn('[generate-model-catalog] no source produced a model list this run — leaving the committed catalog untouched (never ship an empty catalog).');
     process.exit(0);
   }
 
-  if (!fresh.length) {
-    console.warn('[generate-model-catalog] /v1/models returned zero entries — leaving the committed catalog untouched (never ship an empty catalog).');
-    process.exit(0);
-  }
-
-  const merged = unionModels(existing, fresh);
+  const merged = unionModels(existing, resolved.fresh);
   const payload = {
     generatedAt: new Date().toISOString(),
-    source: 'generated',
+    source: resolved.source,
     models: merged,
   };
 
   fs.mkdirSync(path.dirname(CATALOG_PATH), { recursive: true });
   fs.writeFileSync(CATALOG_PATH, JSON.stringify(payload, null, 2) + '\n');
-  console.log(`[generate-model-catalog] wrote ${CATALOG_PATH} (${merged.length} models, ${fresh.length} from this fetch, ${existing.length} previously committed)`);
+  console.log(`[generate-model-catalog] wrote ${CATALOG_PATH} (${merged.length} models, ${resolved.fresh.length} from this run via ${resolved.source}, ${existing.length} previously committed)`);
 }
 
 // Only run as a CLI entry point when invoked directly (CI / `node
@@ -166,9 +253,13 @@ if (require.main === module) {
 
 module.exports = {
   fetchAllModels: fetchAllModels,
+  fetchDeprecationsPageModels: fetchDeprecationsPageModels,
+  extractModelIdsFromHtml: extractModelIdsFromHtml,
   unionModels: unionModels,
   readExistingCatalog: readExistingCatalog,
+  resolveFreshModels: resolveFreshModels,
   CATALOG_PATH: CATALOG_PATH,
   API_BASE: API_BASE,
+  DEPRECATIONS_PAGE_URL: DEPRECATIONS_PAGE_URL,
   PAGE_LIMIT: PAGE_LIMIT,
 };

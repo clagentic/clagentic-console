@@ -13,6 +13,19 @@
  *     from fetchAllModels — main()'s catch is what turns that into a
  *     graceful no-op exit; this test pins the error-surfacing half of that
  *     contract without invoking main() (which calls process.exit).
+ *   - extractModelIdsFromHtml: the credential-free deprecations-page
+ *     fallback parser (route (a) of the coordinator's required-fix follow-
+ *     up). Verified against the LIVE page's real raw HTML during this task
+ *     (not a browsing tool's markdown-converted view): model IDs appear only
+ *     inside two specific tag/class shapes — a click-to-copy
+ *     `<span ... data-state="closed" ...>` in the main status table, and a
+ *     `<code class="relative inline bg-neutral-30 ...">` tag in every
+ *     per-release deprecation-history table. A naive `claude-[\w.-]+` text
+ *     scan (an earlier version of this parser) also matched inside
+ *     `href="..."` navigation attributes and changelog anchor slugs,
+ *     producing dozens of false positives (e.g. "claude-api-skill",
+ *     "claude-on-vertex-ai") — these fixture tests pin that those false
+ *     positives are excluded and only genuine tag-wrapped IDs are extracted.
  *
  * main() itself (the missing-ANTHROPIC_API_KEY / fetch-failure / empty-
  * response --> "leave the committed catalog untouched, exit 0" paths) calls
@@ -144,4 +157,167 @@ test("lr-f22787: unionModels handles empty existing/fresh arrays", function () {
   assert.deepEqual(gen.unionModels([], []), []);
   assert.deepEqual(gen.unionModels([], [{ id: "a" }]).map(function (m) { return m.id; }), ["a"]);
   assert.deepEqual(gen.unionModels([{ id: "a" }], []).map(function (m) { return m.id; }), ["a"]);
+});
+
+// ---------------------------------------------------------------------------
+// extractModelIdsFromHtml — deprecations-page fallback parser
+// ---------------------------------------------------------------------------
+
+// A minimal fixture mirroring the REAL page's confirmed shapes: the main
+// status table's click-to-copy <span data-state="closed"> widget, a
+// per-release history table's <code class="...bg-neutral-30..."> tag, and —
+// critically — navigation noise (an href with a claude-* path segment, and
+// a changelog anchor slug) that a naive text scan would incorrectly match
+// but this tag-scoped parser must not.
+var FIXTURE_HTML = [
+  '<div class="overflow-x-auto my-6 text-body"><table class="w-full border-collapse"><thead><tr>',
+  '<th>API model name</th><th>Current state</th><th>Deprecated</th><th>Tentative retirement date</th>',
+  '</tr></thead><tbody>',
+  '<tr><td><span class="inline-block cursor-pointer select-none px-1 py-0.5 font-mono" data-state="closed">claude-opus-5</span></td>',
+  '<td>Active</td><td>N/A</td><td>Not sooner than July 24, 2027</td></tr>',
+  '<tr><td><span class="inline-block cursor-pointer select-none px-1 py-0.5 font-mono" data-state="closed">claude-sonnet-4-6</span></td>',
+  '<td>Active</td><td>N/A</td><td>Not sooner than February 17, 2027</td></tr>',
+  '</tbody></table></div>',
+  '<table><thead><tr><th>Retirement date</th><th>Deprecated model</th><th>Recommended replacement</th></tr></thead><tbody>',
+  '<tr><td>June 15, 2026</td>',
+  '<td><code class="relative inline bg-neutral-30 px-2 py-0.5 rounded text-body font-mono break-words box-decoration-clone">claude-sonnet-4-20250514</code></td>',
+  '<td><code class="relative inline bg-neutral-30 px-2 py-0.5 rounded text-body font-mono break-words box-decoration-clone">claude-sonnet-4-6</code></td></tr>',
+  '</tbody></table>',
+  // Non-model parameter names reusing the identical <code> class, from the
+  // page's final "Parameter / Status / Behavior" table — must be excluded
+  // by the leading "claude-" value check, not by tag shape alone.
+  '<table><tbody><tr><td><code class="relative inline bg-neutral-30 px-2 py-0.5 rounded text-body font-mono break-words box-decoration-clone">temperature</code></td></tr></tbody></table>',
+  // Navigation noise that a naive text scan (an earlier version of this
+  // parser) incorrectly matched — must be excluded entirely.
+  '<a href="/docs/en/build-with-claude/claude-on-vertex-ai#api-model-ids">Claude on Vertex AI</a>',
+  '<a href="/docs/en/agents-and-tools/agent-skills/claude-api-skill">claude-api-skill docs</a>',
+  '<a href="#2026-04-14-claude-sonnet-4-and-claude-opus-4-models">changelog anchor</a>',
+].join('\n');
+
+test("lr-f22787: extractModelIdsFromHtml pulls model IDs from the main status table's data-state=\"closed\" span widget", function () {
+  var ids = gen.extractModelIdsFromHtml(FIXTURE_HTML);
+  assert.ok(ids.indexOf("claude-opus-5") !== -1);
+  assert.ok(ids.indexOf("claude-sonnet-4-6") !== -1);
+});
+
+test("lr-f22787: extractModelIdsFromHtml pulls model IDs from a per-release history table's bg-neutral-30 code tag", function () {
+  var ids = gen.extractModelIdsFromHtml(FIXTURE_HTML);
+  assert.ok(ids.indexOf("claude-sonnet-4-20250514") !== -1);
+});
+
+test("lr-f22787: extractModelIdsFromHtml excludes non-model parameter names that reuse the identical bg-neutral-30 code class", function () {
+  var ids = gen.extractModelIdsFromHtml(FIXTURE_HTML);
+  assert.equal(ids.indexOf("temperature"), -1, "tag shape alone is not sufficient — the value must also start with claude-");
+});
+
+test("lr-f22787: extractModelIdsFromHtml never matches inside href navigation attributes or changelog anchor slugs", function () {
+  var ids = gen.extractModelIdsFromHtml(FIXTURE_HTML);
+  assert.equal(ids.indexOf("claude-on-vertex-ai"), -1);
+  assert.equal(ids.indexOf("claude-api-skill"), -1);
+  assert.equal(ids.indexOf("claude-sonnet-4-and-claude-opus-4-models"), -1);
+});
+
+test("lr-f22787: extractModelIdsFromHtml deduplicates an ID that appears in both a span and a code tag", function () {
+  var ids = gen.extractModelIdsFromHtml(FIXTURE_HTML);
+  var count = ids.filter(function (id) { return id === "claude-sonnet-4-6"; }).length;
+  assert.equal(count, 1, "claude-sonnet-4-6 appears in both the main table (span) and the history table (code) in the fixture — must be deduplicated");
+});
+
+test("lr-f22787: extractModelIdsFromHtml returns a sorted array", function () {
+  var ids = gen.extractModelIdsFromHtml(FIXTURE_HTML);
+  var sorted = ids.slice().sort();
+  assert.deepEqual(ids, sorted);
+});
+
+test("lr-f22787: extractModelIdsFromHtml returns an empty array for HTML with no matching tag shapes", function () {
+  assert.deepEqual(gen.extractModelIdsFromHtml('<p>claude-opus-5 mentioned in plain prose, not in a matching tag</p>'), []);
+});
+
+test("lr-f22787: fetchDeprecationsPageModels normalizes extracted ids to {id, displayName, createdAt:null}", async function () {
+  global.fetch = async function () {
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async function () { return FIXTURE_HTML; },
+    };
+  };
+  var models = await gen.fetchDeprecationsPageModels();
+  var opus5 = models.filter(function (m) { return m.id === "claude-opus-5"; })[0];
+  assert.ok(opus5);
+  assert.deepEqual(opus5, { id: "claude-opus-5", displayName: "claude-opus-5", createdAt: null });
+});
+
+test("lr-f22787: fetchDeprecationsPageModels throws on a non-2xx response", async function () {
+  global.fetch = async function () {
+    return { ok: false, status: 503, statusText: "Service Unavailable", text: async function () { return ""; } };
+  };
+  await assert.rejects(function () { return gen.fetchDeprecationsPageModels(); }, /GET .* failed: 503/);
+});
+
+// ---------------------------------------------------------------------------
+// resolveFreshModels — API-first, deprecations-page fallback
+// ---------------------------------------------------------------------------
+
+test("lr-f22787: resolveFreshModels falls back to the deprecations page when ANTHROPIC_API_KEY is unset", async function () {
+  var originalKey = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  global.fetch = async function () {
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async function () { return FIXTURE_HTML; },
+    };
+  };
+  try {
+    var resolved = await gen.resolveFreshModels();
+    assert.ok(resolved);
+    assert.equal(resolved.source, "deprecations-page");
+    assert.ok(resolved.fresh.length > 0);
+  } finally {
+    if (originalKey !== undefined) process.env.ANTHROPIC_API_KEY = originalKey;
+  }
+});
+
+test("lr-f22787: resolveFreshModels falls back to the deprecations page when the API call fails", async function () {
+  var originalKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "fake-key-for-test";
+  var callCount = 0;
+  global.fetch = async function (url) {
+    callCount++;
+    var isApiCall = String(url).indexOf("api.anthropic.com") !== -1;
+    if (isApiCall) {
+      return { ok: false, status: 401, statusText: "Unauthorized", text: async function () { return ""; } };
+    }
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async function () { return FIXTURE_HTML; },
+    };
+  };
+  try {
+    var resolved = await gen.resolveFreshModels();
+    assert.ok(resolved);
+    assert.equal(resolved.source, "deprecations-page");
+    assert.ok(callCount >= 2, "must attempt the API first, then fall back");
+  } finally {
+    if (originalKey !== undefined) process.env.ANTHROPIC_API_KEY = originalKey;
+    else delete process.env.ANTHROPIC_API_KEY;
+  }
+});
+
+test("lr-f22787: resolveFreshModels returns null when both sources fail — caller must leave the committed catalog untouched", async function () {
+  var originalKey = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  global.fetch = async function () {
+    return { ok: false, status: 500, statusText: "Internal Server Error", text: async function () { return ""; } };
+  };
+  try {
+    var resolved = await gen.resolveFreshModels();
+    assert.equal(resolved, null);
+  } finally {
+    if (originalKey !== undefined) process.env.ANTHROPIC_API_KEY = originalKey;
+  }
 });

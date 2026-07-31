@@ -50,6 +50,41 @@ test("lr-f22787: CATALOG_PATH points at lib/generated/claude-model-catalog.json 
   assert.equal(modelCatalog.CATALOG_PATH, path.join(__dirname, "..", "lib", "generated", "claude-model-catalog.json"));
 });
 
+test("lr-f22787: the committed catalog is GENERATOR-produced, never a hand-typed list — its source field names a real generation origin, not \"seed\"", function () {
+  // A hand-authored list masquerading as a seed is exactly the violation
+  // this task corrected: the committed file's own "source" field must name
+  // where the generator actually pulled it from (e.g. "deprecations-page",
+  // "anthropic-api"), so a reviewer can tell at a glance the file was
+  // produced by scripts/generate-model-catalog.js, not typed by hand.
+  var raw = require("fs").readFileSync(modelCatalog.CATALOG_PATH, "utf8");
+  var parsed = JSON.parse(raw);
+  assert.notEqual(parsed.source, "seed", "\"seed\" as a synonym for hand-typed is exactly the violation this task fixed");
+  assert.ok(parsed.source, "the committed catalog must declare its real generation origin");
+});
+
+test("lr-f22787: the committed catalog contains multiple distinct versions within at least one family — a degenerate/truncated catalog must fail this test, not ship silently", function () {
+  // Regression guard requested explicitly: if a future regeneration ever
+  // produces a degenerate catalog (e.g. the deprecations-page parser breaks
+  // and returns 1-2 stray matches, or /v1/models returns a near-empty page),
+  // this must fail CI rather than silently shipping a picker with nothing
+  // useful in its "Older models" disclosure.
+  var raw = require("fs").readFileSync(modelCatalog.CATALOG_PATH, "utf8");
+  var parsed = JSON.parse(raw);
+  var modelFamilies = require("../lib/model-families");
+  var countByFamily = {};
+  for (var i = 0; i < parsed.models.length; i++) {
+    var p = modelFamilies.parseClaudeModelVersion(parsed.models[i].id);
+    if (!p) continue;
+    countByFamily[p.family] = (countByFamily[p.family] || 0) + 1;
+  }
+  var families = Object.keys(countByFamily);
+  var hasMultiVersionFamily = families.some(function (f) { return countByFamily[f] > 1; });
+  assert.ok(
+    hasMultiVersionFamily,
+    "expected at least one family with 2+ versions in the committed catalog; got: " + JSON.stringify(countByFamily)
+  );
+});
+
 test("lr-f22787: mergeModelCatalog appends catalog entries not already present in the live list", function () {
   var live = [{ value: "opus", displayName: "Opus" }];
   var catalog = [
