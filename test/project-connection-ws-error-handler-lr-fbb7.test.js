@@ -74,6 +74,12 @@ function makeCtx(overrides) {
       loadSessionHistory: function () {},
       replayHistory: function () {},
       mapSessionForClient: function (s) { return s; },
+      // lr-041af8: connect-path hydration now calls sm.effectiveSessionModel()
+      // instead of reading sm.currentModel directly — mirror the real
+      // session-model-first-else-default fallback (see sessions.js).
+      effectiveSessionModel: function (session) {
+        return (session && session.model) || this.currentModel || "";
+      },
     },
     tm: { list: function () { return []; } },
     nm: { list: function () { return []; } },

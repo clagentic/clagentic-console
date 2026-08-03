@@ -50,6 +50,13 @@ function makeSessionManager(overrides) {
       return session;
     },
     saveSessionFile: function () {},
+    // lr-041af8: the set_model targeted config_state reply now routes the
+    // session-model-first-else-default fallback through this shared helper
+    // (see sessions.js's effectiveSessionModel) instead of re-deriving it
+    // inline — mirror its semantics here.
+    effectiveSessionModel: function (session) {
+      return (session && session.model) || this.currentModel || "";
+    },
   }, overrides);
 }
 

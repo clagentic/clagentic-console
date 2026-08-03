@@ -20,9 +20,16 @@ var { createSDKBridge } = require("../lib/sdk-bridge");
 
 function makeBridge(smOverrides) {
   var sent = [];
+  var sentToSession = [];
   var sm = Object.assign({
     currentModel: null,
     modelsByVendor: {},
+    // lr-041af8: setModel's model_info reply is now targeted per-session
+    // (sendToSession) instead of a broadcast, so a session's model choice
+    // can no longer overwrite every other open session's chip. Mirrors
+    // sm.sendToSession's real per-session-targeting shape closely enough for
+    // this unit test: records what was sent, keyed by the acting session.
+    sendToSession: function (session, obj) { sentToSession.push([session, obj]); },
   }, smOverrides);
   var bridge = createSDKBridge({
     cwd: "/tmp/test-db0437",
@@ -32,7 +39,7 @@ function makeBridge(smOverrides) {
     adapter: { vendor: "claude" },
     adapters: {},
   });
-  return { bridge: bridge, sm: sm, sent: sent };
+  return { bridge: bridge, sm: sm, sent: sent, sentToSession: sentToSession };
 }
 
 test("lr-db0437: setModel on a session with no active query writes session.model only, never sm.currentModel", async function () {
