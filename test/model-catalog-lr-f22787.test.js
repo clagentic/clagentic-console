@@ -2,22 +2,29 @@
 /**
  * Regression tests for lr-f22787 — release-time-generated Claude model
  * catalog: loading/parsing, missing-secret/missing-file degradation, and the
- * merge + alias-reconciliation logic that lets the picker surface older,
- * still-runnable versioned IDs that the SDK's live enumeration never lists
- * (see lib/model-catalog.js and lib/yoke/adapters/claude.js's
- * enrichClaudeModelsWithCatalog for the full design rationale).
+ * merge logic that lets the picker surface older, still-runnable versioned
+ * IDs that the SDK's live enumeration never lists (see lib/model-catalog.js
+ * and lib/yoke/adapters/claude.js's enrichClaudeModelsWithCatalog for the
+ * full design rationale).
+ *
+ * lr-d3817f CORRECTED BEHAVIOR (supersedes the original lr-f22787 assertions
+ * in this file — sanctioned exception to the never-modify-existing-tests
+ * rule, per lr-d3817f's operator-stated spec): a retired catalog entry must
+ * be FILTERED OUT of the picker entirely, on every surface, in every state —
+ * never rendered shown-and-disabled. The original lr-f22787 "shown but
+ * click-gated" policy was never something the operator asked for. Likewise,
+ * the collapsed/default view must show the vendor's own alias list
+ * unmodified (no reconcileAliasesWithCatalogIds substitution — that function
+ * was removed).
  *
  * Split into three areas:
  *   1. lib/model-catalog.js — loadClaudeModelCatalog (real file + injected
- *      bad paths) and mergeModelCatalog (pure).
- *   2. lib/yoke/adapters/claude.js's mergeStaticCatalog +
- *      reconcileAliasesWithCatalogIds (test seams _test_mergeStaticCatalog /
- *      _test_reconcileAliasesWithCatalogIds) — these read the REAL committed
- *      catalog file (lib/generated/claude-model-catalog.json), so assertions
- *      here only pin structural properties (catalog entries get merged in,
- *      an alias resolves to a concrete ID when one matches), never specific
- *      version numbers from the seed file — a future regeneration must not
- *      break this test.
+ *      bad paths), mergeModelCatalog (pure), and filterSelectableCatalogModels.
+ *   2. lib/yoke/adapters/claude.js's mergeStaticCatalog (test seam
+ *      _test_mergeStaticCatalog) — reads the REAL committed catalog file
+ *      (lib/generated/claude-model-catalog.json), so assertions here only pin
+ *      structural properties, never specific version numbers from the seed
+ *      file — a future regeneration must not break this test.
  *   3. enrichClaudeModelsWithCatalog end-to-end (the real adapter-facing
  *      entry point) vs. the pure enrichClaudeModels (must NOT merge catalog
  *      data) — pins the split that fixed the lr-e03635/lr-af9d66/lr-5c07ce
@@ -140,40 +147,38 @@ test("lr-f22787: mergeModelCatalog defaults a catalog entry's status to \"unknow
 });
 
 // ---------------------------------------------------------------------------
-// 1b. applyRetiredMarking — the coordinator-required marking mechanism
-// (previously referenced in this module's doc comment as "markRetired"
-// but never implemented; this is the real implementation + regression
-// coverage pinning it exists and behaves as documented).
+// 1b. applyRetiredMarking (deprecated-only now) + filterSelectableCatalogModels
+// (lr-d3817f REVERSED the original "retired shown-and-disabled" policy:
+// retired entries are filtered out before merge, never marked/rendered).
 // ---------------------------------------------------------------------------
 
-test("lr-f22787: applyRetiredMarking marks a status:\"retired\" entry with isRetired:true AND disabled:true", function () {
+test("lr-d3817f: applyRetiredMarking no longer marks a status:\"retired\" entry at all — retired entries are filtered out upstream, not marked", function () {
   var marked = modelCatalog.applyRetiredMarking([{ value: "claude-1.0", status: "retired" }]);
-  assert.equal(marked[0].isRetired, true);
-  assert.equal(marked[0].disabled, true);
+  assert.equal(marked[0].isRetired, undefined);
+  assert.equal(marked[0].disabled, undefined);
 });
 
-test("lr-f22787: applyRetiredMarking marks a status:\"deprecated\" entry with isDeprecated:true but does NOT disable it — it still runs", function () {
+test("lr-f22787: applyRetiredMarking marks a status:\"deprecated\" entry with isDeprecated:true — it still runs, so it stays selectable", function () {
   var marked = modelCatalog.applyRetiredMarking([{ value: "claude-opus-4-1-20250805", status: "deprecated" }]);
   assert.equal(marked[0].isDeprecated, true);
-  assert.equal(marked[0].disabled, undefined, "a deprecated (not yet retired) model is still selectable");
+  assert.equal(marked[0].disabled, undefined, "a deprecated model is still selectable");
 });
 
-test("lr-f22787: applyRetiredMarking leaves an active entry completely untouched — no isRetired, isDeprecated, or disabled fields added", function () {
+test("lr-f22787: applyRetiredMarking leaves an active entry completely untouched — no isDeprecated or disabled fields added", function () {
   var marked = modelCatalog.applyRetiredMarking([{ value: "claude-opus-5", status: "active" }]);
-  assert.equal(marked[0].isRetired, undefined);
   assert.equal(marked[0].isDeprecated, undefined);
   assert.equal(marked[0].disabled, undefined);
 });
 
 test("lr-f22787: applyRetiredMarking fails open on status:\"unknown\" — never disables a model on the strength of a parser hiccup this codebase cannot verify", function () {
   var marked = modelCatalog.applyRetiredMarking([{ value: "claude-mystery", status: "unknown" }]);
-  assert.equal(marked[0].isRetired, undefined);
+  assert.equal(marked[0].isDeprecated, undefined);
   assert.equal(marked[0].disabled, undefined);
 });
 
 test("lr-f22787: applyRetiredMarking leaves an entry with no status field at all untouched (e.g. a live vendor entry that never went through mergeModelCatalog)", function () {
   var marked = modelCatalog.applyRetiredMarking([{ value: "opus" }]);
-  assert.equal(marked[0].isRetired, undefined);
+  assert.equal(marked[0].isDeprecated, undefined);
   assert.equal(marked[0].disabled, undefined);
 });
 
@@ -183,44 +188,58 @@ test("lr-f22787: applyRetiredMarking handles null/undefined/empty input without 
   assert.deepEqual(modelCatalog.applyRetiredMarking([]), []);
 });
 
-test("lr-f22787: end-to-end — mergeModelCatalog + applyRetiredMarking together disable a known-retired catalog ID and leave an active one an ordinary selectable row", function () {
-  // This is the exact scenario the coordinator flagged: claude-1.0 (a
-  // fully-retired model, present in the real committed catalog) must not
-  // render as a plain selectable row indistinguishable from claude-opus-5.
-  var merged = modelCatalog.mergeModelCatalog([], [
+test("lr-d3817f: filterSelectableCatalogModels removes status:\"retired\" entries and keeps everything else", function () {
+  var filtered = modelCatalog.filterSelectableCatalogModels([
+    { id: "claude-1.0", status: "retired" },
+    { id: "claude-opus-5", status: "active" },
+    { id: "claude-opus-4-1-20250805", status: "deprecated" },
+    { id: "claude-mystery", status: "unknown" },
+  ]);
+  var ids = filtered.map(function (m) { return m.id; });
+  assert.deepEqual(ids.sort(), ["claude-mystery", "claude-opus-4-1-20250805", "claude-opus-5"]);
+});
+
+test("lr-d3817f: filterSelectableCatalogModels handles null/undefined/empty input without throwing", function () {
+  assert.deepEqual(modelCatalog.filterSelectableCatalogModels(null), []);
+  assert.deepEqual(modelCatalog.filterSelectableCatalogModels(undefined), []);
+  assert.deepEqual(modelCatalog.filterSelectableCatalogModels([]), []);
+});
+
+test("lr-d3817f: end-to-end — filterSelectableCatalogModels + mergeModelCatalog together mean a known-retired catalog ID never appears in the merged list at all, while an active one is an ordinary selectable row", function () {
+  // This reverses the lr-f22787 policy: claude-1.0 (a fully-retired model,
+  // present in the real committed catalog) must be ABSENT from the merged
+  // list entirely, not present-and-disabled.
+  var selectable = modelCatalog.filterSelectableCatalogModels([
     { id: "claude-1.0", displayName: "claude-1.0", status: "retired" },
     { id: "claude-opus-5", displayName: "claude-opus-5", status: "active" },
   ]);
-  var marked = modelCatalog.applyRetiredMarking(merged);
+  var merged = modelCatalog.mergeModelCatalog([], selectable);
   var byId = {};
-  marked.forEach(function (m) { byId[m.value] = m; });
+  merged.forEach(function (m) { byId[m.value] = m; });
 
-  assert.equal(byId["claude-1.0"].isRetired, true, "claude-1.0 must be marked retired");
-  assert.equal(byId["claude-1.0"].disabled, true, "claude-1.0 must be disabled from selection");
-  assert.notEqual(byId["claude-opus-5"].isRetired, true, "claude-opus-5 must NOT be marked retired");
-  assert.notEqual(byId["claude-opus-5"].disabled, true, "claude-opus-5 must remain an ordinary selectable row");
+  assert.equal(byId["claude-1.0"], undefined, "claude-1.0 must not appear in the merged list at all");
+  assert.ok(byId["claude-opus-5"], "claude-opus-5 must remain an ordinary selectable row");
+  assert.notEqual(byId["claude-opus-5"].disabled, true);
 });
 
-test("lr-f22787: the REAL committed catalog's known-retired entries (claude-1.0, claude-2.0) end up disabled after the full merge+marking pipeline, while claude-opus-5 does not", function () {
+test("lr-d3817f: the REAL committed catalog's known-retired entries (claude-1.0, claude-2.0) are absent after filterSelectableCatalogModels + merge, while claude-opus-5 remains", function () {
   // Exercises the real committed lib/generated/claude-model-catalog.json —
-  // not a synthetic fixture — through the exact pipeline
-  // mergeStaticCatalog uses (mergeModelCatalog then applyRetiredMarking).
-  // If a future regeneration ever ships without carrying status through
-  // correctly, this is the test that catches it.
+  // not a synthetic fixture — through the exact pipeline mergeStaticCatalog
+  // uses (filterSelectableCatalogModels then mergeModelCatalog). If a future
+  // regeneration ever ships without carrying status through correctly, this
+  // is the test that catches it.
   var catalog = modelCatalog.loadClaudeModelCatalog();
   assert.ok(catalog.ok);
   var hasRetiredEntry = catalog.models.some(function (m) { return m.id === "claude-1.0" || m.id === "claude-2.0"; });
   assert.ok(hasRetiredEntry, "expected the committed catalog to contain at least one known-retired legacy ID (claude-1.0 or claude-2.0) for this test to be meaningful");
 
-  var merged = modelCatalog.mergeModelCatalog([], catalog.models);
-  var marked = modelCatalog.applyRetiredMarking(merged);
+  var selectable = modelCatalog.filterSelectableCatalogModels(catalog.models);
+  var merged = modelCatalog.mergeModelCatalog([], selectable);
   var byId = {};
-  marked.forEach(function (m) { byId[m.value] = m; });
+  merged.forEach(function (m) { byId[m.value] = m; });
 
   ["claude-1.0", "claude-2.0"].forEach(function (id) {
-    if (!byId[id]) return; // not every regeneration is guaranteed to carry every legacy ID forward
-    assert.equal(byId[id].isRetired, true, id + " must be marked retired in the real committed catalog");
-    assert.equal(byId[id].disabled, true, id + " must be disabled from selection");
+    assert.equal(byId[id], undefined, id + " must be absent from the merged list — filtered out, not disabled");
   });
 
   if (byId["claude-opus-5"]) {
@@ -240,42 +259,16 @@ test("lr-f22787: mergeStaticCatalog (adapter-level) merges the real committed ca
   assert.equal(merged[0].value, "opus");
 });
 
-test("lr-f22787: mergeStaticCatalog (adapter-level) ALSO applies retired marking — a claude-1.0 entry pulled from the real catalog comes out disabled, not an ordinary row", function () {
+test("lr-d3817f: mergeStaticCatalog (adapter-level) never includes a retired entry — a claude-1.0 entry pulled from the real catalog is ABSENT, not disabled", function () {
   var merged = claudeAdapter._test_mergeStaticCatalog([]);
   var claude1 = merged.filter(function (m) { return m.value === "claude-1.0"; })[0];
-  if (!claude1) return; // committed catalog contents can change; only assert when present
-  assert.equal(claude1.isRetired, true);
-  assert.equal(claude1.disabled, true);
+  assert.equal(claude1, undefined, "claude-1.0 (a known-retired ID in the real committed catalog) must not appear at all");
 });
 
-test("lr-f22787: reconcileAliasesWithCatalogIds substitutes a bare alias's value with a concrete catalog ID when family+version (from description) match exactly", function () {
-  var models = [
-    { value: "opus", description: "Opus 4.6" },
-    { value: "claude-opus-4-6", displayName: "Claude Opus 4.6" },
-  ];
-  var reconciled = claudeAdapter._test_reconcileAliasesWithCatalogIds(models);
-  var aliasEntry = reconciled.filter(function (m) { return m.description === "Opus 4.6"; })[0];
-  assert.ok(aliasEntry, "the original alias entry must still be present (substituted in place, not dropped)");
-  assert.equal(aliasEntry.value, "claude-opus-4-6", "clicking this row must now send the pinned concrete ID, not the bare alias");
-});
-
-test("lr-f22787: reconcileAliasesWithCatalogIds leaves a bare alias untouched when no concrete ID matches its description's family+version", function () {
-  var models = [{ value: "opus", description: "Opus 99.9" }];
-  var reconciled = claudeAdapter._test_reconcileAliasesWithCatalogIds(models);
-  assert.equal(reconciled[0].value, "opus", "no matching concrete ID exists — the alias must be left selectable as-is, never dropped");
-});
-
-test("lr-f22787: reconcileAliasesWithCatalogIds never touches an entry that is already a concrete versioned ID", function () {
-  var models = [{ value: "claude-opus-4-6", description: "Opus 4.6" }];
-  var reconciled = claudeAdapter._test_reconcileAliasesWithCatalogIds(models);
-  assert.equal(reconciled[0].value, "claude-opus-4-6");
-});
-
-test("lr-f22787: reconcileAliasesWithCatalogIds handles plain string entries (no description) without throwing", function () {
-  var models = ["opus", "sonnet", "claude-opus-4-6"];
-  var reconciled = claudeAdapter._test_reconcileAliasesWithCatalogIds(models);
-  assert.equal(reconciled.length, 3);
-});
+// reconcileAliasesWithCatalogIds was removed by lr-d3817f: the collapsed
+// picker view must show the vendor's own alias, unmodified — substituting a
+// concrete catalog ID onto an alias row broke that. See
+// enrichClaudeModelsWithCatalog's doc comment in lib/yoke/adapters/claude.js.
 
 // ---------------------------------------------------------------------------
 // 3. enrichClaudeModelsWithCatalog (real path) vs enrichClaudeModels (pure)
@@ -312,6 +305,91 @@ test("lr-f22787: enrichClaudeModelsWithCatalog output includes a fromCatalog:tru
   }
 });
 
+test("lr-d3817f: enrichClaudeModelsWithCatalog never substitutes a live alias's value with a concrete catalog ID — the collapsed view must show the vendor's own alias, unmodified", function () {
+  var models = [{ value: "opus", displayName: "Opus", description: "Opus 4.6" }];
+  var withCatalog = claudeAdapter._test_enrichClaudeModelsWithCatalog(models);
+  // enrichClaudeModel does not carry `description` through onto the
+  // enriched object (only value/displayName/capability fields) — identify
+  // the live-sourced row by the absence of fromCatalog instead.
+  var aliasRow = withCatalog.filter(function (m) { return !m.fromCatalog; })[0];
+  assert.ok(aliasRow, "the original live alias entry must still be present");
+  assert.equal(aliasRow.value, "opus", "the live alias's value must be untouched — no substitution");
+  assert.equal(aliasRow.isLatest, true, "a live-sourced entry is always forced into the collapsed/latest tier");
+});
+
+test("lr-d3817f: enrichClaudeModelsWithCatalog forces isLatest:true on every live-sourced entry even when the catalog contains a higher version in the same family", function () {
+  // Regression for the exact bug this task fixed: before the fix, a live
+  // alias's tier was computed together with catalog versions, so a catalog
+  // entry with a numerically higher parsed version could knock the alias out
+  // of the collapsed/latest tier. The corrected behavior is that the live
+  // list's tier placement is independent of catalog contents.
+  var models = [{ value: "opus", displayName: "Opus", description: "Opus 1.0" }];
+  var withCatalog = claudeAdapter._test_enrichClaudeModelsWithCatalog(models);
+  var aliasRow = withCatalog.filter(function (m) { return m.value === "opus"; })[0];
+  assert.ok(aliasRow);
+  assert.equal(aliasRow.isLatest, true, "the live alias must always render in the collapsed tier regardless of catalog version numbers");
+});
+
+test("lr-d3817f: enrichClaudeModelsWithCatalog never includes a retired catalog entry in its output at all", function () {
+  var models = [{ value: "opus", displayName: "Opus", description: "Opus 4.6" }];
+  var withCatalog = claudeAdapter._test_enrichClaudeModelsWithCatalog(models);
+  var retiredRows = withCatalog.filter(function (m) { return m.status === "retired"; });
+  assert.equal(retiredRows.length, 0, "no status:retired entry may appear anywhere in the enriched output");
+});
+
 test("lr-f22787: enrichClaudeModelsWithCatalog never throws on an empty input", function () {
   assert.deepEqual(claudeAdapter._test_enrichClaudeModelsWithCatalog([]), []);
+});
+
+// ---------------------------------------------------------------------------
+// lr-d3817f acceptance: the exact operator-stated spec, exercised against
+// the REAL committed catalog with the REAL live-alias-list shape
+// (Default/Opus/Fable/Sonnet/Haiku — what stream.supportedModels() actually
+// returns per model-catalog.js's header comment).
+// ---------------------------------------------------------------------------
+
+test("lr-d3817f ACCEPTANCE: the collapsed/default tier is exactly the vendor's live alias list — no raw versioned catalog ID appears in it, and every alias value is untouched", function () {
+  var liveAliases = [
+    { value: "default", displayName: "Default" },
+    { value: "opus", description: "Opus 4.8 with 1M context" },
+    { value: "sonnet", description: "Sonnet 4.6" },
+    { value: "haiku", description: "Haiku 4.5" },
+    { value: "fable", description: "Fable 5" },
+  ];
+  var enriched = claudeAdapter._test_enrichClaudeModelsWithCatalog(liveAliases);
+  var latestTier = enriched.filter(function (m) { return m.isLatest; });
+  var latestValues = latestTier.map(function (m) { return m.value; }).sort();
+
+  assert.deepEqual(latestValues, ["default", "fable", "haiku", "opus", "sonnet"], "the collapsed tier must be exactly the five live alias values, nothing substituted, nothing dropped, nothing added");
+});
+
+test("lr-d3817f ACCEPTANCE: no status:retired ID from the real committed catalog appears anywhere in the enriched output, in either tier", function () {
+  var liveAliases = [{ value: "opus", description: "Opus 4.8" }, { value: "sonnet", description: "Sonnet 4.6" }];
+  var catalog = modelCatalog.loadClaudeModelCatalog();
+  assert.ok(catalog.ok);
+  var retiredIds = catalog.models.filter(function (m) { return m.status === "retired"; }).map(function (m) { return m.id; });
+  assert.ok(retiredIds.length > 0, "expected the real committed catalog to contain at least one retired entry for this test to be meaningful");
+
+  var enriched = claudeAdapter._test_enrichClaudeModelsWithCatalog(liveAliases);
+  var enrichedValues = enriched.map(function (m) { return m.value; });
+  retiredIds.forEach(function (id) {
+    assert.equal(enrichedValues.indexOf(id), -1, id + " (status:retired in the real catalog) must not appear anywhere in the enriched output");
+  });
+});
+
+test("lr-d3817f ACCEPTANCE: a deprecated-but-running catalog entry from the real catalog, if present, still appears and is not in the collapsed/latest tier unless it is genuinely the max version", function () {
+  var liveAliases = [{ value: "opus", description: "Opus 4.8" }];
+  var catalog = modelCatalog.loadClaudeModelCatalog();
+  assert.ok(catalog.ok);
+  var deprecatedIds = catalog.models.filter(function (m) { return m.status === "deprecated"; }).map(function (m) { return m.id; });
+  if (deprecatedIds.length === 0) return; // not every catalog snapshot is guaranteed to carry a deprecated entry
+
+  var enriched = claudeAdapter._test_enrichClaudeModelsWithCatalog(liveAliases);
+  var byValue = {};
+  enriched.forEach(function (m) { byValue[m.value] = m; });
+  var presentDeprecated = deprecatedIds.filter(function (id) { return byValue[id]; });
+  assert.ok(presentDeprecated.length > 0, "at least one deprecated entry from the real catalog should merge in and remain present (not filtered — only retired is filtered)");
+  presentDeprecated.forEach(function (id) {
+    assert.equal(byValue[id].isDeprecated, true, id + " must carry the Deprecated marker");
+  });
 });
