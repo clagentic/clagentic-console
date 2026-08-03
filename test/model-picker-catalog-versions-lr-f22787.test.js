@@ -2,8 +2,17 @@
 // versions per family as clickable rows once the release-time-generated
 // catalog (lib/generated/claude-model-catalog.json) supplies older,
 // still-runnable versioned IDs alongside the vendor's live alias list. Also
-// pins the "Catalog" marker (PR body point (c): shown, never hidden) on any
-// row sourced from the catalog rather than the live vendor enumeration.
+// pins the "Catalog" marker on any row sourced from the catalog rather than
+// the live vendor enumeration.
+//
+// lr-d3817f CORRECTED BEHAVIOR (sanctioned exception to the
+// never-modify-existing-tests rule, per lr-d3817f's operator-stated spec):
+// the original lr-f22787 policy rendered a retired entry SHOWN and
+// click-disabled with a "Retired" badge. That was never something the
+// operator asked for — retired entries are now filtered out upstream
+// (model-catalog.js's filterSelectableCatalogModels) and never reach this
+// render function at all, so there is no more Retired-badge/disabled-row
+// path to test here. Deprecated (still-runnable) entries are unaffected.
 //
 // Both picker surfaces are covered:
 //   - renderModelList (lib/public/modules/settings-defaults.js) — project/
@@ -135,12 +144,17 @@ test('lr-f22787: renderModelList marks a fromCatalog:true entry with the Catalog
 });
 
 // ---------------------------------------------------------------------------
-// Retired-model marking (coordinator follow-up) — a known-retired ID (e.g.
-// claude-1.0) must NOT render as a plain selectable row indistinguishable
-// from a currently-runnable one like claude-opus-5.
+// lr-d3817f: retired-model filtering is now an upstream responsibility
+// (model-catalog.js's filterSelectableCatalogModels, applied before the
+// picker's live list is ever built) — renderModelList/buildModelItem no
+// longer know about "retired" at all. This is a deliberate architectural
+// split: rendering never re-derives selectability, it just draws what it is
+// given. These tests pin that split, replacing the old
+// shown-and-disabled-with-a-Retired-badge behavior (removed per operator
+// spec — see lr-d3817f).
 // ---------------------------------------------------------------------------
 
-test('lr-f22787: renderModelList disables a retired row (does not dispatch on click) and marks it "Retired", while an active row remains an ordinary clickable row', async function () {
+test('lr-d3817f: renderModelList no longer recognizes isRetired at all — a model object carrying it (a caller bug, since retired entries should never reach this function) renders as an ordinary clickable row, not a disabled one', async function () {
   var mod = await import('../lib/public/modules/settings-defaults.js');
   var byId = installFakeDom();
 
@@ -148,6 +162,8 @@ test('lr-f22787: renderModelList disables a retired row (does not dispatch on cl
   mod.renderModelList('ps', {
     models: [
       { value: 'claude-opus-5', displayName: 'Opus 5', isLatest: true },
+      // Simulates a caller that failed to filter upstream — renderModelList
+      // has no retired-awareness left, so this renders as an ordinary row.
       { value: 'claude-1.0', displayName: 'claude-1.0', isLatest: false, fromCatalog: true, isRetired: true, status: 'retired' },
     ],
     currentModel: 'claude-opus-5',
@@ -156,36 +172,25 @@ test('lr-f22787: renderModelList disables a retired row (does not dispatch on cl
   });
 
   var listEl = byId['ps-model-list'];
-  var activeRow = listEl.children.filter(function (c) { return c.dataset && c.dataset.model === 'claude-opus-5'; })[0];
-  assert.ok(activeRow, 'the active row must exist');
-  assert.equal(activeRow.className.indexOf('settings-model-item-disabled'), -1, 'an active row must never carry the disabled class');
-
   var toggle = listEl.children.filter(function (c) {
     return c.className && c.className.indexOf('settings-older-models-toggle') !== -1;
   })[0];
   var body = listEl.children[listEl.children.indexOf(toggle) + 1];
-  var retiredRow = body.children[0];
+  var row = body.children[0];
 
-  assert.notEqual(retiredRow, undefined, 'the retired row must still be PRESENT — visible, never filtered out');
-  assert.ok(retiredRow.className.indexOf('settings-model-item-disabled') !== -1, 'the retired row must carry the disabled class');
-  assert.equal(retiredRow.attrs['aria-disabled'], 'true');
+  assert.equal(row.className.indexOf('settings-model-item-disabled'), -1, 'no settings-model-item-disabled class exists anymore — the class and the styling behind it were removed');
+  assert.equal(row.attrs['aria-disabled'], undefined, 'no aria-disabled attribute is ever set anymore');
+  var retiredBadges = row.children.filter(function (c) { return c.className === 'settings-model-retired-badge'; });
+  assert.equal(retiredBadges.length, 0, 'no Retired badge is ever rendered anymore — the badge and its CSS class were removed');
 
-  var retiredBadges = retiredRow.children.filter(function (c) { return c.className === 'settings-model-retired-badge'; });
-  assert.equal(retiredBadges.length, 1, 'the retired row must carry exactly one Retired marker');
-  assert.equal(retiredBadges[0].textContent, 'Retired');
-
-  // The core assertion the coordinator required: clicking the retired row
-  // must NOT dispatch a model selection — it is not an ordinary selectable
-  // row indistinguishable from claude-opus-5.
-  retiredRow.dispatch('click');
-  assert.equal(clicked.length, 0, 'clicking a retired row must never send a set-model message');
-
-  // Sanity: the active row's click path is unaffected.
-  activeRow.dispatch('click');
-  assert.deepEqual(clicked, ['claude-opus-5']);
+  // Clicking it now dispatches like any other row — renderModelList has no
+  // retired-awareness left; keeping retired models off the DOM entirely is
+  // exclusively the upstream filter's job (model-catalog.js).
+  row.dispatch('click');
+  assert.deepEqual(clicked, ['claude-1.0']);
 });
 
-test('lr-f22787: renderModelList marks a deprecated (not yet retired) row with a Deprecated badge but leaves it clickable', async function () {
+test('lr-f22787: renderModelList marks a deprecated (still-runnable) row with a Deprecated badge and leaves it clickable', async function () {
   var mod = await import('../lib/public/modules/settings-defaults.js');
   var byId = installFakeDom();
 
@@ -207,7 +212,7 @@ test('lr-f22787: renderModelList marks a deprecated (not yet retired) row with a
   var body = listEl.children[listEl.children.indexOf(toggle) + 1];
   var deprecatedRow = body.children[0];
 
-  assert.equal(deprecatedRow.className.indexOf('settings-model-item-disabled'), -1, 'a deprecated (not retired) row must NOT be disabled — it still runs');
+  assert.equal(deprecatedRow.className.indexOf('settings-model-item-disabled'), -1, 'a deprecated row must NOT be disabled — it still runs');
   var deprecatedBadges = deprecatedRow.children.filter(function (c) { return c.className === 'settings-model-deprecated-badge'; });
   assert.equal(deprecatedBadges.length, 1);
   assert.equal(deprecatedBadges[0].textContent, 'Deprecated');
