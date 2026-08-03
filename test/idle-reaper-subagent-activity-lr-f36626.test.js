@@ -198,9 +198,16 @@ test("lr-f36626: task_updated bumps session.lastActivityAt when a matching taskI
   var session = makeSession({ lastActivityAt: 1000, taskIdMap: { "task-1": "abc" } });
   var before = Date.now();
 
+  // lr-1317b8: the flattened yoke envelope uses camelCase taskId everywhere
+  // (see task_started/task_progress above in this same file) — task_id here
+  // was a fixture bug that happened to "pass" only because
+  // sdk-message-processor.js:702 itself read parsed.task_id (also wrong).
+  // Both are fixed together; this fixture now matches the real envelope
+  // shape flattenEvent() produces (see
+  // test/claude-adapter-sdk-lifecycle-lr-1317b8.test.js Defect 4).
   proc.processSDKMessage(session, {
     yokeType: "task_updated",
-    task_id: "abc",
+    taskId: "abc",
     patch: { status: "running" },
   });
 
