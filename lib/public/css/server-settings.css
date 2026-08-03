@@ -440,21 +440,9 @@
   margin-left: 6px;
 }
 
-/* lr-f22787 (coordinator follow-up): retired/deprecated markers — see
-   model-catalog.js's header comment for the decided behavior (retired:
-   disabled + marker; deprecated: still selectable, marker only). */
-.settings-model-retired-badge {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--danger, #e5484d);
-  background: rgba(var(--danger-rgb, 229, 72, 77), 0.1);
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 6px;
-}
-
+/* lr-f22787 (retired-disabled variant removed by lr-d3817f — retired
+   entries are filtered out of the picker entirely, never rendered): a
+   deprecated (still-runnable) entry keeps a marker only. */
 .settings-model-deprecated-badge {
   font-size: 10px;
   font-weight: 600;
@@ -465,16 +453,6 @@
   border-radius: 4px;
   padding: 1px 5px;
   margin-left: 6px;
-}
-
-.settings-model-item-disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.settings-model-item-disabled:hover {
-  background: rgba(var(--overlay-rgb), 0.03);
-  border-color: var(--border-subtle);
 }
 
 .settings-model-name {
