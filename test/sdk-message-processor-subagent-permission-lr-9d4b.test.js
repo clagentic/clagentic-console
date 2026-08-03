@@ -373,3 +373,196 @@ test("lr-9d4b (BOBBIE): task_notification prunes ownership normally once no pend
     "ownership record must still be pruned normally once nothing pending references it (no permanent leak)"
   );
 });
+
+// lr-9bcd7b: server activity registry -- extends this file's existing fake
+// session/processor harness to drive a full Task lifecycle and assert on the
+// derived isProcessing/session_list-broadcast behavior, not just the
+// pendingPermissions ownership this file originally covered. Per the task
+// spec, this is deliberately NOT the static source-text regex style of
+// test/processing-indicator-subagent-lr-255e.test.js -- it drives the real
+// message processor end to end.
+var sessionActivity = require("../lib/session-activity");
+
+function makeCountingSm() {
+  var sm = makeSm();
+  sm._broadcastCount = 0;
+  var realBroadcast = sm.broadcastSessionList;
+  sm.broadcastSessionList = function () {
+    sm._broadcastCount++;
+    return realBroadcast.apply(this, arguments);
+  };
+  return sm;
+}
+
+test("lr-9bcd7b: a full Task lifecycle acquires an activity token on block_stop and releases it on tool_result, keeping isProcessing true across the parent's result while the Task is live", function () {
+  var sm = makeCountingSm();
+  var processor = makeProcessor(sm);
+  var session = makeSession();
+
+  var taskToolId = "toolu_task_lifecycle";
+
+  // Parent turn dispatches a backgrounded Task.
+  processor.processSDKMessage(session, {
+    yokeType: "tool_start",
+    blockId: 0,
+    toolId: taskToolId,
+    toolName: "Task",
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "block_stop",
+    blockId: 0,
+  });
+
+  assert.equal(sessionActivity.isSessionActive(session), true, "acquiring the Task token must make the session activity-registry active");
+  assert.equal(sm._broadcastCount, 1, "the 0->1 transition must broadcast exactly once");
+
+  // The PARENT turn's SDK 'result' arrives while the Task is still running.
+  // lr-255e residual #2 / lr-9bcd7b: this must NOT clear isProcessing, because
+  // the activity registry still reports live work for this session.
+  // Note: the 'result' handler unconditionally calls sm.broadcastSessionList()
+  // once per turn for unrelated reasons (cost/title/etc) regardless of the
+  // activity registry -- that pre-existing per-turn broadcast is not what the
+  // chattiness invariant governs, so capture the count before/after this call
+  // and assert only on the activity-driven delta below, not a fixed total.
+  processor.processSDKMessage(session, {
+    yokeType: "result",
+    cost: 0.5,
+    duration: 1000,
+    sessionId: "cli-session-lifecycle",
+  });
+
+  assert.equal(
+    session.isProcessing,
+    true,
+    "isProcessing must stay true across the parent result while a backgrounded Task subagent is still active -- this is the exact picker-dot bug this task fixes"
+  );
+
+  var countAfterResult = sm._broadcastCount;
+
+  // The Task subagent's tool_result now arrives -- the terminal drain path.
+  processor.processSDKMessage(session, {
+    yokeType: "message",
+    messageRole: "user",
+    content: [
+      { type: "tool_result", tool_use_id: taskToolId, content: "subagent finished", is_error: false },
+    ],
+  });
+
+  assert.equal(sessionActivity.isSessionActive(session), false, "releasing the Task token on tool_result must clear the derived active state");
+  assert.equal(
+    sm._broadcastCount,
+    countAfterResult + 1,
+    "exactly one MORE broadcast for the 1->0 transition on tool_result -- not on every intermediate step"
+  );
+});
+
+test("lr-9bcd7b: task_notification releases the activity token when it is the first terminal path to fire (tool_result never arrives)", function () {
+  var sm = makeCountingSm();
+  var processor = makeProcessor(sm);
+  var session = makeSession();
+
+  var taskToolId = "toolu_task_notify_only";
+
+  processor.processSDKMessage(session, {
+    yokeType: "tool_start",
+    blockId: 0,
+    toolId: taskToolId,
+    toolName: "Task",
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "block_stop",
+    blockId: 0,
+  });
+  assert.equal(sessionActivity.isSessionActive(session), true);
+
+  // task_notification (subagent completion) arrives with no separate
+  // tool_result for the Task id -- must still release the token.
+  processor.processSDKMessage(session, {
+    yokeType: "task_notification",
+    parentToolId: taskToolId,
+    taskId: "task-id-notify-only",
+    status: "completed",
+  });
+
+  assert.equal(sessionActivity.isSessionActive(session), false, "task_notification alone must be sufficient to release the activity token");
+});
+
+test("lr-9bcd7b: tool_result releasing first, then a later task_notification for the same Task id, is idempotent and does not re-broadcast", function () {
+  var sm = makeCountingSm();
+  var processor = makeProcessor(sm);
+  var session = makeSession();
+
+  var taskToolId = "toolu_task_double_release";
+
+  processor.processSDKMessage(session, {
+    yokeType: "tool_start",
+    blockId: 0,
+    toolId: taskToolId,
+    toolName: "Task",
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "block_stop",
+    blockId: 0,
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "message",
+    messageRole: "user",
+    content: [
+      { type: "tool_result", tool_use_id: taskToolId, content: "done", is_error: false },
+    ],
+  });
+
+  assert.equal(sessionActivity.isSessionActive(session), false);
+  var countAfterFirstRelease = sm._broadcastCount;
+
+  // A later task_notification for the same (already-released) Task id must
+  // not report a second 1->0 transition or broadcast again.
+  processor.processSDKMessage(session, {
+    yokeType: "task_notification",
+    parentToolId: taskToolId,
+    taskId: "task-id-double-release",
+    status: "completed",
+  });
+
+  assert.equal(sm._broadcastCount, countAfterFirstRelease, "a redundant release via task_notification after tool_result already released must not broadcast again");
+});
+
+test("lr-9bcd7b CHATTINESS INVARIANT: acquiring a second concurrent Task token while one is already active must NOT broadcast again", function () {
+  var sm = makeCountingSm();
+  var processor = makeProcessor(sm);
+  var session = makeSession();
+
+  // First Task starts -- this is the only broadcast-worthy transition.
+  processor.processSDKMessage(session, {
+    yokeType: "tool_start",
+    blockId: 0,
+    toolId: "toolu_task_a",
+    toolName: "Task",
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "block_stop",
+    blockId: 0,
+  });
+  assert.equal(sm._broadcastCount, 1);
+
+  // Second concurrent Task starts while the first is still active. The
+  // session was already active (count >= 1), so this acquire must NOT
+  // trigger a second broadcast -- the mandatory chattiness mitigation.
+  processor.processSDKMessage(session, {
+    yokeType: "tool_start",
+    blockId: 1,
+    toolId: "toolu_task_b",
+    toolName: "Task",
+  });
+  processor.processSDKMessage(session, {
+    yokeType: "block_stop",
+    blockId: 1,
+  });
+
+  assert.equal(
+    sm._broadcastCount,
+    1,
+    "acquiring a second token while the session is already active must not trigger a second broadcast (mandatory chattiness mitigation)"
+  );
+  assert.equal(sessionActivity.getActiveCount(session), 2, "both tokens must still be tracked even though only the first triggered a broadcast");
+});
