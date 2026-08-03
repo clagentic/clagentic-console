@@ -1,3 +1,43 @@
+# [1.8.0](https://github.com/clagentic/clagentic-console/compare/v1.7.0...v1.8.0) (2026-07-25)
+
+
+### Bug Fixes
+
+* **app-connection:** fetch WS ticket before connect, split auth vs unreachable (lr-de5fcb) ([dd37297](https://github.com/clagentic/clagentic-console/commit/dd37297764929c39d319a3c3692090af17760084))
+* **app-connection:** re-verify before terminal auth wall on wake reconnect (lr-e5c1fe) ([ae47f97](https://github.com/clagentic/clagentic-console/commit/ae47f972bfc42fea5f15d0ff3bef7b6fddc6f5b1))
+* **app-connection:** reload on a sustained stale-version mismatch (lr-e0ec47) ([93653bd](https://github.com/clagentic/clagentic-console/commit/93653bdd4c07331e68ec4987290038bce70bb84e))
+* **app-messages:** break circular-import boot halt on handlers init (lr-4c58ae) ([94bb90a](https://github.com/clagentic/clagentic-console/commit/94bb90a1a5c397c6735ce20d1c23667fffd7ea1a))
+* **brand:** add space in 'Clagentic:Console' wordmark to 'Clagentic: Console' (lr-a924) ([cb7ff4b](https://github.com/clagentic/clagentic-console/commit/cb7ff4b6698cf35793dd9b8ccfd931751026f023))
+* **cli:** remove dangling toClayStudioUrl call sites (lr-db24ec) ([0d83486](https://github.com/clagentic/clagentic-console/commit/0d83486038ea0f40f020e10e590f71d9309823c7))
+* **css:** give warn/error toast overlays an opaque background (lr-136f81) ([78518dc](https://github.com/clagentic/clagentic-console/commit/78518dc2ea9a0f078c6aab8ed6bc5be2030d06dd))
+* **diagnostics:** reset left/bottom on diagnostic toast to stop right-edge clipping (lr-56fb36) ([a03f19f](https://github.com/clagentic/clagentic-console/commit/a03f19f939e22e1bc3d4b2fdddff7d7d5f034f9e)), closes [#diagnostic-toast-container](https://github.com/clagentic/clagentic-console/issues/diagnostic-toast-container)
+* **home-hub:** clear search bar from close button overlap on mobile (lr-ea6c65) ([9a5b6cc](https://github.com/clagentic/clagentic-console/commit/9a5b6ccdb3a56710e3b2c564dcff0734add2ac88))
+* **home-hub:** key recent-sessions alert dot on per-session unread (lr-0aa7b6) ([8dc0858](https://github.com/clagentic/clagentic-console/commit/8dc08580dadcd21e50ebbe70dc5c9a2894612589))
+* **home-hub:** merge alert dot into single left status dot (lr-0aa7b6) ([8c59d44](https://github.com/clagentic/clagentic-console/commit/8c59d449c205f28e135d969058f464e5c8be69ea))
+* **home-hub:** render getProjectAbbrev fallback for blank recent-session icons (lr-e5faff) ([6075a6b](https://github.com/clagentic/clagentic-console/commit/6075a6bf46e39e4c20083852280db9bf81146dfe))
+* **home-hub:** restructure cross-project unread to per-session keying (lr-0aa7b6) ([4956156](https://github.com/clagentic/clagentic-console/commit/49561567ded96c5535a7637010d520899d7ab58f))
+* **palette:** scan unloaded session history from disk for BM25 search (lr-a3e175) ([ab578b6](https://github.com/clagentic/clagentic-console/commit/ab578b64d6e3a6e63cab256ec1d740a9264c725f))
+* **security:** consolidate escapeHtml onto canonical helper, close single-quote gap (lr-2f75) ([6afb22c](https://github.com/clagentic/clagentic-console/commit/6afb22ce71475865dd6c049ef446be2cf6008c6f)), closes [#39](https://github.com/clagentic/clagentic-console/issues/39)
+* **server:** echo offered ws subprotocol on cookie-authed upgrades (lr-4c58ae) ([0792a8c](https://github.com/clagentic/clagentic-console/commit/0792a8cabc953ce0feb949cda7f7ef1a6e4b2370)), closes [#358](https://github.com/clagentic/clagentic-console/issues/358)
+* **server:** never serve login HTML for unauthed project-asset/API paths (lr-e33776) ([8378201](https://github.com/clagentic/clagentic-console/commit/8378201c954b7d58e8e535ff3f88e993e4f9b00f))
+* **server:** serve public app-shell assets ahead of the project auth gate (lr-2895ea) ([bf0a186](https://github.com/clagentic/clagentic-console/commit/bf0a1868c7cda07564a404eaed3d22f5eeaea96f))
+* **sw:** call reg.update() on register and on foreground (lr-e0ec47) ([438e7d0](https://github.com/clagentic/clagentic-console/commit/438e7d083e370ced4e355f5b7815f7591f59e80a))
+* **sw:** pre-cache app shell on install to close the empty-cache window (lr-e0ec47) ([1a69958](https://github.com/clagentic/clagentic-console/commit/1a69958363b7e6fdf679d2d048ef6e4fb1cd1fb0))
+* **test:** bust ../lib/lite-detect require cache in lr-768c9e (lr-ae85d5) ([6d75416](https://github.com/clagentic/clagentic-console/commit/6d754164cc8347e4919ae60b3c5653e044603399))
+* **test:** git-init temp cwd so startLoop() sees a real HEAD (lr-ae85d5) ([73b0112](https://github.com/clagentic/clagentic-console/commit/73b01129124366663649585fbbf049726dc7b3b4))
+* **ui:** give error-level toasts the same readable duration as warnings (lr-76fbc3) ([747075e](https://github.com/clagentic/clagentic-console/commit/747075e337ef1f77ff7b84155d3f1d65e8a37a8f))
+* **users:** distinguish ENOENT from corrupt/unreadable users.json (lr-ae85d5) ([1bbb9a3](https://github.com/clagentic/clagentic-console/commit/1bbb9a3e1d18ac68605fa7a78e3b9eec7bb1646a))
+* **worktree:** bind path resolution to parent identity, not basename alone (lr-76fbc3) ([7e62945](https://github.com/clagentic/clagentic-console/commit/7e62945efb42d1c045f2dda0e29af4b9ad8584b5))
+* **worktree:** resolve actual registered path before removing a worktree (lr-76fbc3) ([6f272da](https://github.com/clagentic/clagentic-console/commit/6f272da78553983081039a6cb7cdbf6a7890ce5c))
+
+
+### Features
+
+* **auth:** add short-TTL single-use WS-upgrade ticket store (lr-de5fcb) ([f2a6242](https://github.com/clagentic/clagentic-console/commit/f2a624299e361282406be77b7ed9dede6d7dea08)), closes [#1](https://github.com/clagentic/clagentic-console/issues/1)
+* **command-palette:** expose getPaletteVersion accessor (lr-e0ec47) ([ac5c4b4](https://github.com/clagentic/clagentic-console/commit/ac5c4b4da096b3f2038e98b5dcc21f7fc925a9aa))
+* **server-settings:** audit-log custom-emoji upload/delete on success and failure (lr-fc71) ([d290cae](https://github.com/clagentic/clagentic-console/commit/d290cae233e4658a0fdf2c99059b719bb30a2fec)), closes [#303](https://github.com/clagentic/clagentic-console/issues/303)
+* **server:** accept ticket fallback on WS upgrade, add /api/ws-ticket (lr-de5fcb) ([58d21eb](https://github.com/clagentic/clagentic-console/commit/58d21ebf9601d58e86ea1944e7f51659d9c81321))
+
 # [1.8.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.8.0-beta.1...v1.8.0-beta.2) (2026-07-23)
 
 
