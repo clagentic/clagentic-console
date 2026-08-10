@@ -27,21 +27,22 @@
 // and this suite's fixtures intentionally include sessions with empty
 // history arrays to prove this fix does not resurrect that bug.
 //
-// lib/server.js's getAllProjectSessions is defined inline inside
-// createServer()'s addProject() closure. createServer() stands up a real
-// HTTP+WS server with dozens of required callback opts and is not a
-// practical direct-require unit-test target (see the identical rationale in
-// test/server-cross-project-unread-per-session-lr-0aa7b6.test.js, which this
-// suite matches). Following that established convention: this suite drives
-// REAL production code for (a) users.js's canAccessProject/canAccessSession
-// (the actual predicate, required verbatim, never reimplemented, backed by
-// real on-disk user records created via users.createUser in a temp
-// CLAGENTIC_HOME) and (b) lib/project-loop.js's hub_recent_sessions_list
-// handler via attachLoop with a mocked ctx — while pairing a harness
-// reimplementation of getAllProjectSessions's own orchestration loop (the
-// project-iteration shape only, not the predicate) with source-text
-// assertions that prove the harness matches lib/server.js's real
-// implementation shape.
+// TEST-STRATEGY REWORK (holden bounce on PR #388 comment #2, 2026-08-10):
+// the original version of this suite paired a harness reimplementation of
+// getAllProjectSessions's project-iteration loop with fixed-width source-
+// text-window assertions meant to prove the harness matched lib/server.js's
+// real shape. That inverted the dependency: the seven behavioral tests
+// exercised only the harness copy, and the brittle byte-offset windows were
+// the ONLY thing tying it to shipped behavior — a mechanism that stops
+// covering anything, silently, the moment source above it drifts past the
+// window (recorded precedent: lr-255e, lr-9bcd7b).
+//
+// Fix: lib/server.js's getAllProjectSessions project-iteration + access-
+// filter logic was extracted into lib/server-hub-sessions.js's
+// computeAllProjectSessions(deps) — a small, exported, injectable pure
+// function. lib/server.js's getAllProjectSessions is now a thin call into
+// it. Every behavioral test below calls that REAL function directly. No
+// harness, no source-text window standing in for real coverage.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -49,101 +50,40 @@ var fs = require("fs");
 var path = require("path");
 var os = require("os");
 
+var { computeAllProjectSessions } = require("../lib/server-hub-sessions");
+
 function readMod(rel) {
   return fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
 }
 
-var SERVER_JS = readMod("lib/server.js");
 var PROJECT_LOOP_JS = readMod("lib/project-loop.js");
 
 // ---------------------------------------------------------------------------
-// Source-text presence checks: prove the real implementation has the shape
-// this suite's harness/functional tests assume.
+// Structural invariant: lib/project-loop.js threads the connecting client's
+// userId into getAllProjectSessions. This is a wiring fact at the caller
+// (lib/server.js's addProject ctx -> lib/project-loop.js), not a claim about
+// the filter's own behavior (that's covered end-to-end by the attachLoop
+// functional tests below, and directly by the computeAllProjectSessions
+// tests). Matched against the whole file, no fixed-width slice.
 // ---------------------------------------------------------------------------
 
-test("lib/server.js: getAllProjectSessions accepts userId and fails closed with no userId or no onGetProjectAccess", function () {
-  var idx = SERVER_JS.indexOf("getAllProjectSessions: function (includeSelf, userId)");
-  assert.ok(idx !== -1, "expected getAllProjectSessions(includeSelf, userId) signature");
-  var block = SERVER_JS.slice(idx, idx + 1600);
-  assert.match(
-    block,
-    /if\s*\(\s*!userId\s*\|\|\s*!onGetProjectAccess\s*\)\s*return\s+allSessions;/,
-    "expected an early fail-closed return when userId or onGetProjectAccess is absent"
-  );
-});
-
-test("lib/server.js: getAllProjectSessions reuses users.canAccessSession, not a new predicate", function () {
-  var idx = SERVER_JS.indexOf("getAllProjectSessions: function (includeSelf, userId)");
-  var block = SERVER_JS.slice(idx, idx + 1600);
-  assert.match(
-    block,
-    /users\.canAccessSession\s*\(\s*userId\s*,\s*s\s*,\s*access\s*\)/,
-    "expected the session-level filter to call users.canAccessSession(userId, s, access) — the existing predicate, reused"
-  );
-  assert.match(
-    block,
-    /users\.canAccessProject\s*\(\s*userId\s*,\s*access\s*\)/,
-    "expected a per-project users.canAccessProject(userId, access) gate before iterating that project's sessions"
-  );
-});
-
-test("lib/server.js: getAllProjectSessions resolves per-project access ONCE per project, not once per session (no repeated-resolution in the inner loop)", function () {
-  var idx = SERVER_JS.indexOf("getAllProjectSessions: function (includeSelf, userId)");
-  var end = SERVER_JS.indexOf("getHubSchedules: function ()", idx);
-  var block = SERVER_JS.slice(idx, end);
-
-  var innerLoopIdx = block.indexOf("pSm.sessions.forEach");
-  assert.ok(innerLoopIdx !== -1, "expected a pSm.sessions.forEach inner loop");
-  var outerBlock = block.slice(0, innerLoopIdx);
-  var innerBlock = block.slice(innerLoopIdx);
-
-  assert.match(
-    outerBlock,
-    /var access\s*=\s*onGetProjectAccess\s*\(\s*pSlug\s*\)/,
-    "onGetProjectAccess(pSlug) must be called in the OUTER per-project scope, not inside the per-session inner loop"
-  );
-  assert.doesNotMatch(
-    innerBlock,
-    /onGetProjectAccess\s*\(/,
-    "onGetProjectAccess must not be re-resolved inside the per-session inner loop — that would be an N-query/repeated-resolution pattern"
-  );
-});
-
-test("lib/server.js: the session-level filter is still `!s.hidden` (does not resurrect the lazy-history-length over-filtering bug)", function () {
-  var idx = SERVER_JS.indexOf("getAllProjectSessions: function (includeSelf, userId)");
-  var block = SERVER_JS.slice(idx, idx + 1600);
-  assert.match(
-    block,
-    /if\s*\(\s*!s\.hidden\s*&&\s*users\.canAccessSession/,
-    "expected the session-level filter to combine !s.hidden with canAccessSession, not a history-length check"
-  );
-  assert.doesNotMatch(
-    block,
-    /history\.length/,
-    "must not reintroduce a history.length-based filter — that was the prior, opposite-direction (over-filtering) bug"
-  );
-});
-
 test("lib/project-loop.js: hub_recent_sessions_list threads the connecting client's userId into getAllProjectSessions", function () {
-  var idx = PROJECT_LOOP_JS.indexOf('msg.type === "hub_recent_sessions_list"');
-  assert.ok(idx !== -1, "expected the hub_recent_sessions_list handler to exist");
-  var block = PROJECT_LOOP_JS.slice(idx, idx + 1200);
   assert.match(
-    block,
+    PROJECT_LOOP_JS,
     /getAllProjectSessions\s*\(\s*true\s*,\s*hubUserId\s*\)/,
     "expected getAllProjectSessions(true, hubUserId) — userId threaded from the connecting ws"
   );
   assert.match(
-    block,
-    /ws\._clayUser\s*\?\s*ws\._clayUser\.id\s*:\s*null/,
+    PROJECT_LOOP_JS,
+    /var hubUserId\s*=\s*ws\._clayUser\s*\?\s*ws\._clayUser\.id\s*:\s*null;/,
     "expected hubUserId to be derived from ws._clayUser.id, null when absent (fail-closed input)"
   );
 });
 
 // ---------------------------------------------------------------------------
-// Functional harness: real users.js predicate (canAccessProject /
-// canAccessSession), real on-disk user records, reimplemented ONLY the
-// project-iteration shape (verified above to match lib/server.js).
+// computeAllProjectSessions (lib/server-hub-sessions.js): real production
+// code, called directly. Real users.js predicate (canAccessProject /
+// canAccessSession), real on-disk user records.
 // ---------------------------------------------------------------------------
 
 function makeTempHome() {
@@ -166,24 +106,20 @@ function loadRealUsers(tmpHome) {
   return users;
 }
 
-// Reimplements ONLY getAllProjectSessions's project-iteration shape (matches
-// the source-text-verified real implementation above); the actual access
-// decision is made by the REAL users.canAccessProject/canAccessSession.
-function getAllProjectSessionsHarness(users, projectsBySlug, sessionsBySlug, onGetProjectAccess, includeSelf, callerSlug, userId) {
-  var allSessions = [];
-  if (!userId || !onGetProjectAccess) return allSessions;
+// Minimal projects-map stand-in: computeAllProjectSessions only calls
+// .forEach(fn(ctx, slug)) on it, matching the real `projects` Map's
+// interface in lib/server.js -- not a reimplementation of the filter itself.
+function makeProjectsMap(projectsBySlug, sessionsBySlug) {
+  var map = new Map();
   Object.keys(projectsBySlug).forEach(function (pSlug) {
-    if (!includeSelf && pSlug === callerSlug) return;
-    var access = onGetProjectAccess(pSlug);
-    if (!access || access.error) return;
-    if (!users.canAccessProject(userId, access)) return;
-    (sessionsBySlug[pSlug] || []).forEach(function (s) {
-      if (!s.hidden && users.canAccessSession(userId, s, access)) {
-        allSessions.push(Object.assign({}, s, { _projectSlug: pSlug }));
-      }
+    var status = { isWorktree: false, title: null, project: pSlug, icon: null };
+    var sm = { sessions: sessionsBySlug[pSlug] || [] };
+    map.set(pSlug, {
+      getStatus: function () { return status; },
+      getSessionManager: function () { return sm; },
     });
   });
-  return allSessions;
+  return map;
 }
 
 function makeFixture() {
@@ -212,10 +148,11 @@ function makeFixture() {
     ],
   };
 
+  var projects = makeProjectsMap(projectsBySlug, sessionsBySlug);
+
   return {
     users: users, owner: owner, outsider: outsider, admin: admin,
-    projectsBySlug: projectsBySlug, sessionsBySlug: sessionsBySlug,
-    onGetProjectAccess: onGetProjectAccess,
+    projects: projects, onGetProjectAccess: onGetProjectAccess,
     cleanup: function () { try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (_) {} },
   };
 }
@@ -223,10 +160,10 @@ function makeFixture() {
 test("a user with no access to a private project does not see that project's sessions in their payload", function () {
   var f = makeFixture();
   try {
-    var result = getAllProjectSessionsHarness(
-      f.users, f.projectsBySlug, f.sessionsBySlug, f.onGetProjectAccess,
-      true, "current-project", f.outsider.id
-    );
+    var result = computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: f.onGetProjectAccess,
+      callerSlug: "current-project", includeSelf: true, userId: f.outsider.id,
+    });
     var fromPrivateProject = result.filter(function (s) { return s._projectSlug === "project-private-x"; });
     assert.strictEqual(fromPrivateProject.length, 0, "outsider must not see any session from a private project they have no access to");
   } finally {
@@ -237,10 +174,10 @@ test("a user with no access to a private project does not see that project's ses
 test("a private session owned by user A is absent from user B's payload", function () {
   var f = makeFixture();
   try {
-    var result = getAllProjectSessionsHarness(
-      f.users, f.projectsBySlug, f.sessionsBySlug, f.onGetProjectAccess,
-      true, "current-project", f.outsider.id
-    );
+    var result = computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: f.onGetProjectAccess,
+      callerSlug: "current-project", includeSelf: true, userId: f.outsider.id,
+    });
     // project-shared is public, so outsider sees it, but session 2 is private to owner.
     var sharedSessions = result.filter(function (s) { return s._projectSlug === "project-shared"; });
     var privateSessIds = sharedSessions.map(function (s) { return s.localId; });
@@ -254,10 +191,10 @@ test("a private session owned by user A is absent from user B's payload", functi
 test("that same private session IS present in the owning user's own payload", function () {
   var f = makeFixture();
   try {
-    var result = getAllProjectSessionsHarness(
-      f.users, f.projectsBySlug, f.sessionsBySlug, f.onGetProjectAccess,
-      true, "current-project", f.owner.id
-    );
+    var result = computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: f.onGetProjectAccess,
+      callerSlug: "current-project", includeSelf: true, userId: f.owner.id,
+    });
     var sharedSessions = result.filter(function (s) { return s._projectSlug === "project-shared"; });
     var ids = sharedSessions.map(function (s) { return s.localId; });
     assert.ok(ids.indexOf(2) !== -1, "the owner must see their own private session (localId 2) in their own Home Hub payload");
@@ -269,10 +206,10 @@ test("that same private session IS present in the owning user's own payload", fu
 test("no userId (unauthenticated) returns no sessions at all -- fail closed", function () {
   var f = makeFixture();
   try {
-    var result = getAllProjectSessionsHarness(
-      f.users, f.projectsBySlug, f.sessionsBySlug, f.onGetProjectAccess,
-      true, "current-project", null
-    );
+    var result = computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: f.onGetProjectAccess,
+      callerSlug: "current-project", includeSelf: true, userId: null,
+    });
     assert.deepStrictEqual(result, [], "an absent/unauthenticated userId must yield zero sessions, not an unfiltered list");
   } finally {
     f.cleanup();
@@ -282,12 +219,57 @@ test("no userId (unauthenticated) returns no sessions at all -- fail closed", fu
 test("admin can see a private project's sessions via canAccessProject's admin bypass (real predicate, not reimplemented)", function () {
   var f = makeFixture();
   try {
-    var result = getAllProjectSessionsHarness(
-      f.users, f.projectsBySlug, f.sessionsBySlug, f.onGetProjectAccess,
-      true, "current-project", f.admin.id
-    );
+    var result = computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: f.onGetProjectAccess,
+      callerSlug: "current-project", includeSelf: true, userId: f.admin.id,
+    });
     var fromPrivateProject = result.filter(function (s) { return s._projectSlug === "project-private-x"; });
     assert.strictEqual(fromPrivateProject.length, 1, "admin must see the private project's session via users.canAccessProject's real admin bypass");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("does not resurrect the lazy-history-length over-filtering bug: sessions with empty history arrays are still returned", function () {
+  var f = makeFixture();
+  try {
+    // Every fixture session already has history: [] -- if a history.length
+    // gate were reintroduced, all of them would vanish from an accessible
+    // user's own payload. Assert the opposite: they're present.
+    var result = computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: f.onGetProjectAccess,
+      callerSlug: "current-project", includeSelf: true, userId: f.owner.id,
+    });
+    assert.ok(result.length > 0, "sessions with empty history must still be returned to a user who has access to them");
+    result.forEach(function (s) {
+      assert.deepStrictEqual(s.history, [], "fixture sessions carry empty history -- confirms no history.length filter is gating the result");
+    });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("per-project access is resolved once per project: onGetProjectAccess is called exactly once per project, not once per session", function () {
+  var f = makeFixture();
+  try {
+    var calls = [];
+    var spyOnGetProjectAccess = function (slug) {
+      calls.push(slug);
+      return f.onGetProjectAccess(slug);
+    };
+    computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: spyOnGetProjectAccess,
+      callerSlug: "current-project", includeSelf: true, userId: f.owner.id,
+    });
+    // project-shared has 2 sessions, project-private-x has 1 -- if access
+    // were re-resolved per session this would be 3 calls, not 2 (one per
+    // project). A call-counting spy on the injected accessor, exercising
+    // the real function -- strictly better than the old fixed-width
+    // source-text window this replaces.
+    var perProjectCounts = {};
+    calls.forEach(function (s) { perProjectCounts[s] = (perProjectCounts[s] || 0) + 1; });
+    assert.strictEqual(perProjectCounts["project-shared"], 1, "onGetProjectAccess must be called exactly once for project-shared, not once per session");
+    assert.strictEqual(perProjectCounts["project-private-x"], 1, "onGetProjectAccess must be called exactly once for project-private-x");
   } finally {
     f.cleanup();
   }
