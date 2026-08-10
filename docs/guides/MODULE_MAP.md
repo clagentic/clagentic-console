@@ -57,7 +57,6 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `daemon-projects.js` | Worktree tracking (scan, rescan, cleanup), removed project filtering |
 | `ws-schema.js` | WebSocket message type registry (328 message types, informational) |
 | `server-hub-sessions.js` | `computeAllProjectSessions` — pure cross-project session gather + per-user access filter for the Home Hub recent-sessions list, extracted from `lib/server.js`'s `getAllProjectSessions` for direct unit testability |
-| `server-hub-sessions.js` | `computeAllProjectSessions` — pure cross-project session gather + per-user access filter for the Home Hub recent-sessions list, extracted from `lib/server.js`'s `getAllProjectSessions` for direct unit testability |
 
 
 
