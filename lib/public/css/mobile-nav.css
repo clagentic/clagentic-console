@@ -217,6 +217,17 @@
     flex-shrink: 0;
   }
 
+  /* Multi-user tone (lr-66c118): ring shape, distinct violet hue. */
+  .mobile-project-processing.other {
+    background: transparent;
+    border: 1.5px solid var(--activity-other, #B77BF3);
+    box-sizing: border-box;
+  }
+  /* Alert tone (lr-66c118): unread wins over processing green. */
+  .mobile-project-processing.alert {
+    background: var(--danger, #e74c3c);
+  }
+
   .mobile-project-unread {
     min-width: 18px;
     height: 18px;
@@ -863,6 +874,17 @@
   .mobile-session-processing.io {
     background: #fff !important;
     box-shadow: 0 0 4px var(--success);
+  }
+
+  /* Multi-user tone (lr-66c118): ring shape, distinct violet hue. */
+  .mobile-session-processing.other {
+    background: transparent;
+    border: 1.5px solid var(--activity-other, #B77BF3);
+    box-sizing: border-box;
+  }
+  /* Alert tone (lr-66c118): unread wins over processing green. */
+  .mobile-session-processing.alert {
+    background: var(--danger, #e74c3c);
   }
 
   /* Date group header inside sheet */

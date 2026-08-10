@@ -892,6 +892,21 @@
   box-shadow: 0 0 4px var(--success);
 }
 
+/* Multi-user tone (lr-66c118): another user's activity — ring shape (not a
+   filled disc) plus a distinct violet hue, so hue alone never carries the
+   distinction at 6px. */
+.session-item .session-processing.other,
+.mate-session-item .session-processing.other {
+  background: transparent;
+  border: 1.5px solid var(--activity-other, #B77BF3);
+  box-sizing: border-box;
+}
+/* Alert tone (lr-66c118): unread activity wins over processing green. */
+.session-item .session-processing.alert,
+.mate-session-item .session-processing.alert {
+  background: var(--danger, #e74c3c);
+}
+
 /* Session unread badge */
 .session-unread-badge {
   position: absolute;

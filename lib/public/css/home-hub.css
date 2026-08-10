@@ -297,6 +297,12 @@
   background: var(--success);
   box-shadow: 0 0 6px rgba(80, 250, 123, 0.4);
 }
+/* Multi-user tone (lr-66c118): ring shape, see .hub-recent-dot.other */
+.hub-project-dot.other {
+  background: transparent;
+  border: 1.5px solid var(--activity-other, #B77BF3);
+  box-shadow: 0 0 4px rgba(183, 123, 243, 0.4);
+}
 .hub-project-icon {
   font-size: 14px;
   width: 20px;
@@ -491,17 +497,31 @@
   opacity: 1;
   box-shadow: 0 0 6px rgba(80, 250, 123, 0.4);
 }
-/* Alert state — color precedence LOCKED (andy, lr-0aa7b6):
-   alert(red) > processing(green) > live(green) > idle(grey). This class is
-   applied instead of .processing when the row's session is notifying, so
-   red always wins visually even if the session is also active. Same red
-   used by .icon-strip-project-badge (unread badge). Formerly a SEPARATE
-   right-side dot (.hub-recent-alert-dot, removed) — now just another color
-   state of the single left dot. */
+/* Alert state — color precedence LOCKED (andy, lr-0aa7b6), promoted into
+   activity-state.js's indicatorClass() as the canonical derivation for
+   every surface (lr-66c118): alert(red) > processing(green) > idle(grey).
+   ("live" never existed as a separate CSS class from "processing" anywhere
+   in the codebase — the old 4-state comment here was aspirational, not
+   real; reconciled to the 3 states actually shipped.) This class is applied
+   instead of .processing when the row's session is notifying, so red always
+   wins visually even if the session is also active. Same red used by
+   .icon-strip-project-badge (unread badge), now tokenized as --danger.
+   Formerly a SEPARATE right-side dot (.hub-recent-alert-dot, removed) — now
+   just another color state of the single left dot. */
 .hub-recent-dot.alert {
-  background: #e74c3c;
+  background: var(--danger, #e74c3c);
   opacity: 1;
   box-shadow: 0 0 6px rgba(231, 76, 60, 0.5);
+}
+/* Multi-user tone (lr-66c118): another user's activity — distinct violet
+   hue AND a ring shape (transparent center, colored border) instead of a
+   filled disc, so the state is distinguishable at 7px even under a
+   red/green color-vision deficiency (hue alone must not ship alone). */
+.hub-recent-dot.other {
+  background: transparent;
+  opacity: 1;
+  border: 1.5px solid var(--activity-other, #B77BF3);
+  box-shadow: 0 0 4px rgba(183, 123, 243, 0.4);
 }
 .hub-recent-project-icon {
   font-size: 14px;

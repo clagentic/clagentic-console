@@ -237,6 +237,23 @@
   background: var(--success);
 }
 
+/* Multi-user tone (lr-66c118): ring shape (transparent center, colored
+   border) instead of a filled disc, plus a distinct violet hue — hue alone
+   is not sufficient to distinguish "another user active" from "I'm active"
+   at 10px under a red/green color-vision deficiency. */
+.icon-strip-status.other {
+  opacity: 1;
+  background: transparent;
+  border-width: 2px;
+  border-color: var(--activity-other, #B77BF3);
+}
+
+/* Alert tone (lr-66c118): unread activity wins over processing green. */
+.icon-strip-status.alert {
+  opacity: 1;
+  background: var(--danger, #e74c3c);
+}
+
 /* IO blink = HDD LED flash */
 .icon-strip-status.io {
   opacity: 1;

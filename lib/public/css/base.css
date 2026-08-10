@@ -57,6 +57,20 @@ img.emoji {
   --error: #FF4D6A;
   --success: #29D9A8;
   --warning: #4A7FE8;
+  /* lr-66c118: --danger was referenced with two DISAGREEING fallbacks
+     (#F24822 at sidebar.css:1713, #e74c3c at icon-strip.css/mention.css)
+     but never defined here. Defining it settles both call sites on one
+     color; #e74c3c matches the existing unread/alert red already used
+     throughout (session-unread-badge, hub-recent-dot.alert, etc). */
+  --danger: #e74c3c;
+  /* lr-66c118: multi-user activity tone — a THIRD color, distinct from
+     --success (own activity, green) and --danger (alert, red). Violet is
+     maximally hue-separated from both and from --accent (cyan) /
+     --accent2/--warning (blue), which already carry meaning. Hue alone is
+     not sufficient at 6-8px (deuteranopia/protanopia; violet/blue
+     confusion) — render sites must pair this with a shape difference
+     (ring vs filled disc), never ship on hue alone. */
+  --activity-other: #B77BF3;
   --accent-8: rgba(0, 207, 255, 0.08);
   --accent-12: rgba(0, 207, 255, 0.12);
   --accent-15: rgba(0, 207, 255, 0.15);

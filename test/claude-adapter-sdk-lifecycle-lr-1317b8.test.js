@@ -358,11 +358,15 @@ test("Parity: task_progress carries subagentType", function() {
 // Defect 2 — ungated delta clear-site in app-messages.js
 // ---------------------------------------------------------------------------
 //
-// app-messages.js is a DOM-heavy ESM frontend module with no jsdom harness in
-// this project (same constraint documented in
-// test/processing-indicator-subagent-lr-255e.test.js). Scoped tightly to the
-// exact guard rather than a broad regex: assert the delta handler's body
-// contains the hasActiveSubagents() guard around its setActivity(null) call.
+// SUPERSEDED by lr-66c118 (epic lr-a6a449 child 4/4): setActivity collapsed
+// to exactly ONE optimistic raise site (input.js) with no manual clear
+// sites anywhere, including this one — so the hasActiveSubagents()-gated
+// clear this test originally proved is no longer a call that exists to gate.
+// See test/activity-state-lr-66c118.test.js's "setActivity(...) has exactly
+// one real call site" invariant for the test that now owns this contract.
+// Same supersession pattern already established in this repo: see
+// test/hub-recent-sessions-merge-dot-lr-0aa7b6.test.js superseding
+// test/hub-recent-sessions-alert-dot-lr-2b1f03.test.js.
 
 function readMod(rel) {
   return fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
@@ -370,8 +374,7 @@ function readMod(rel) {
 
 // Extracts the body of a `<name>: function (msg) { ... }` handler by brace
 // counting from the opening brace, rather than a regex that has to guess
-// where the handler ends — robust to nested if-blocks inside the handler
-// (like the guard this test is checking for).
+// where the handler ends.
 function extractHandlerBody(src, handlerName) {
   // Anchor on a preceding boundary so "delta:" doesn't match inside
   // "thinking_delta:" (a real handler name in this file) as a substring.
@@ -391,16 +394,10 @@ function extractHandlerBody(src, handlerName) {
   return null;
 }
 
-test("Defect 2: app-messages.js delta handler guards setActivity(null) with hasActiveSubagents()", function() {
+test("Defect 2 (superseded, lr-66c118): app-messages.js delta handler no longer calls setActivity at all", function() {
   var src = readMod("lib/public/modules/app-messages.js");
   var deltaBody = extractHandlerBody(src, "delta");
   assert.ok(deltaBody, "delta handler must be present in app-messages.js");
-  assert.ok(deltaBody.indexOf("hasActiveSubagents()") !== -1,
-    "delta handler must consult hasActiveSubagents() before clearing the indicator");
-  // The setActivity(null) call itself must appear inside the guarded branch,
-  // not unconditionally before/after it.
-  var guardIdx = deltaBody.indexOf("if (!hasActiveSubagents())");
-  var clearIdx = deltaBody.indexOf("setActivity(null)");
-  assert.ok(guardIdx !== -1 && clearIdx !== -1 && clearIdx > guardIdx,
-    "setActivity(null) must be gated behind the hasActiveSubagents() check, not called unconditionally");
+  assert.ok(deltaBody.indexOf("setActivity(") === -1,
+    "the delta handler must not call setActivity at all — it collapsed to a single optimistic raise in input.js (lr-66c118)");
 });
