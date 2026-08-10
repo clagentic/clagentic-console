@@ -14,26 +14,27 @@
 //       Task call is queued -- the Task itself keeps running as a background
 //       child. app-messages.js's 'result' AND 'done' handlers unconditionally
 //       called setActivity(null), which killed the .thinking-dots indicator
-//       even though the dispatched subagent was still genuinely working
-//       (confirmed server-side: session.isProcessing is set false in the
-//       'result' handler, lib/sdk-message-processor.js, with no check for
-//       session.activeTaskToolIds -- see the lr-f36626 comment in
-//       lib/sdk-bridge.js's startIdleReaper documenting this exact gap for a
-//       different symptom, the idle reaper).
+//       even though the dispatched subagent was still genuinely working.
 //
-// So this was case (b): foreground-turn behavior was already correct;
-// subagent-in-flight activity was invisible to the indicator. The acceptance
-// criterion ("visible whenever a query is actively streaming for the viewing
-// user") is widened by this fix to also cover a dispatched-but-backgrounded
-// Agent-tool subagent, since that is genuine in-progress work from the
-// operator's point of view.
+// SUPERSEDED IN PART by lr-66c118 (epic lr-a6a449 child 4/4): setActivity
+// collapsed to exactly ONE optimistic raise site (input.js) with no manual
+// clear sites anywhere — so the hasActiveSubagents()-gated
+// setActivity(null) clear this file originally proved (in app-messages.js's
+// 'result'/'done' handlers and in tools.js's markSubagentDone) no longer
+// exists to gate, and hasActiveSubagents() itself was removed as dead code
+// (zero remaining callers). Those specific tests are removed below; see
+// test/activity-state-lr-66c118.test.js for the test that now owns the
+// setActivity single-call-site contract.
 //
-// Fix: lib/public/modules/tools.js tracks live subagents (keyed by
-// parentToolId, the same id used for the existing stop-button dedup guard)
-// via hasActiveSubagents(); app-messages.js's 'result' and 'done' handlers
-// consult it before calling setActivity(null), and markSubagentDone() clears
-// the indicator once the LAST live subagent actually finishes (so it doesn't
-// linger stuck once nothing is left running).
+// What is UNCHANGED and still tested here: the underlying
+// activeSubagentToolIds liveness tracking itself is still load-bearing for
+// the per-tool "Stop" button UI (initSubagentStop / updateSubagentTaskStatus
+// / resetToolState) — lr-66c118 did not touch that machinery, only its
+// former setActivity consumer.
+//
+// Same supersession pattern already established in this repo: see
+// test/hub-recent-sessions-merge-dot-lr-0aa7b6.test.js superseding
+// test/hub-recent-sessions-alert-dot-lr-2b1f03.test.js.
 //
 // These are static source-text regression checks matching the existing
 // project convention for ESM DOM-heavy frontend modules with no jsdom
@@ -55,17 +56,9 @@ var TOOLS_JS = readMod("lib/public/modules/tools.js");
 var APP_MESSAGES_JS = readMod("lib/public/modules/app-messages.js");
 
 // ---------------------------------------------------------------------------
-// tools.js: subagent liveness tracking
+// tools.js: subagent liveness tracking (still load-bearing for the Stop
+// button UI, independent of the removed setActivity consumer)
 // ---------------------------------------------------------------------------
-
-test("tools.js: hasActiveSubagents() is exported", function () {
-  assert.match(
-    TOOLS_JS,
-    /export function hasActiveSubagents\(\)/,
-    "tools.js must export a hasActiveSubagents() predicate so callers can " +
-    "avoid clearing the activity indicator while a subagent is still live"
-  );
-});
 
 test("tools.js: initSubagentStop registers the parentToolId as an active subagent", function () {
   var idx = TOOLS_JS.indexOf("export function initSubagentStop");
@@ -91,16 +84,13 @@ test("tools.js: markSubagentDone clears the parentToolId's liveness", function (
   );
 });
 
-test("tools.js: markSubagentDone clears the indicator once the last subagent finishes", function () {
+test("tools.js (superseded, lr-66c118): markSubagentDone no longer calls setActivity", function () {
   var idx = TOOLS_JS.indexOf("export function markSubagentDone");
   assert.ok(idx !== -1);
   var block = TOOLS_JS.slice(idx, idx + 700);
-  assert.match(
-    block,
-    /if\s*\(!hasActiveSubagents\(\)\)\s*\{[\s\S]*?ctx\.setActivity\(null\);[\s\S]*?\}/,
-    "markSubagentDone must clear the activity indicator when no subagent " +
-    "remains live, so the indicator does not get stuck on after the parent " +
-    "turn's own 'result'/'done' skipped clearing it for a live subagent"
+  assert.ok(
+    block.indexOf("setActivity(") === -1,
+    "markSubagentDone must not call setActivity — the indicator collapsed to a single optimistic raise in input.js (lr-66c118)"
   );
 });
 
@@ -111,9 +101,8 @@ test("tools.js: updateSubagentTaskStatus clears liveness on a terminal failed/ki
   assert.match(
     block,
     /if\s*\(patch\.status === "failed" \|\| patch\.status === "killed"\)\s*\{\s*delete activeSubagentToolIds\[parentToolId\];/,
-    "a failed/killed subagent must stop counting as live, or the indicator " +
-    "could stay stuck on forever for a subagent that will never send " +
-    "subagent_done"
+    "a failed/killed subagent must stop counting as live, or the Stop button " +
+    "state could stay stuck for a subagent that will never send subagent_done"
   );
 });
 
@@ -130,56 +119,31 @@ test("tools.js: resetToolState() clears activeSubagentToolIds", function () {
 });
 
 // ---------------------------------------------------------------------------
-// app-messages.js: 'result' and 'done' handlers must not blindly clear the
-// indicator out from under a live subagent
+// app-messages.js: 'result' and 'done' handlers (superseded, lr-66c118) —
+// no longer gate anything on subagent liveness, because they no longer call
+// setActivity at all.
 // ---------------------------------------------------------------------------
 
-test("app-messages.js: hasActiveSubagents is imported from tools.js", function () {
-  assert.match(
-    APP_MESSAGES_JS,
-    /import\s*\{[^}]*\bhasActiveSubagents\b[^}]*\}\s*from\s*['"]\.\/tools\.js['"]/,
-    "app-messages.js must import hasActiveSubagents from tools.js"
-  );
+test("app-messages.js (superseded, lr-66c118): 'result' and 'done' handlers no longer call setActivity", function () {
+  var resultIdx = APP_MESSAGES_JS.indexOf("result: function (msg) {");
+  var doneIdx = APP_MESSAGES_JS.indexOf("done: function (msg) {\n    removePreThinking();");
+  assert.ok(resultIdx !== -1, "expected to find the 'result' handler");
+  assert.ok(doneIdx !== -1, "expected to find the top-level 'done' handler (removePreThinking is unique to it)");
+
+  var resultBlock = APP_MESSAGES_JS.slice(resultIdx, resultIdx + 900);
+  var doneBlock = APP_MESSAGES_JS.slice(doneIdx, doneIdx + 900);
+
+  assert.ok(resultBlock.indexOf("setActivity(") === -1, "the 'result' handler must not call setActivity (lr-66c118)");
+  assert.ok(doneBlock.indexOf("setActivity(") === -1, "the 'done' handler must not call setActivity (lr-66c118)");
 });
 
-test("app-messages.js: the 'result' handler only clears the indicator when no subagent is live", function () {
-  var idx = APP_MESSAGES_JS.indexOf("result: function (msg) {\n    // lr-255e:");
-  assert.ok(idx !== -1, "expected to find the 'result' handler's lr-255e comment");
-  var block = APP_MESSAGES_JS.slice(idx, idx + 900);
-  assert.match(
-    block,
-    /if\s*\(!hasActiveSubagents\(\)\)\s*\{[\s\S]*?setActivity\(null\);[\s\S]*?\}/,
-    "the 'result' handler must gate setActivity(null) on hasActiveSubagents() " +
-    "-- the parent turn's stream can end via a normal 'result' message while a " +
-    "dispatched Agent-tool subagent is still genuinely running in the background"
-  );
-});
-
-test("app-messages.js: the 'done' handler only clears the indicator when no subagent is live", function () {
-  var idx = APP_MESSAGES_JS.indexOf("done: function (msg) {\n    removePreThinking();");
-  assert.ok(idx !== -1, "expected to find the top-level 'done' handler (removePreThinking is unique to it)");
-  var block = APP_MESSAGES_JS.slice(idx, idx + 900);
-  assert.match(
-    block,
-    /if\s*\(!hasActiveSubagents\(\)\)\s*\{[\s\S]*?setActivity\(null\);[\s\S]*?\}/,
-    "the 'done' handler must also gate setActivity(null) on hasActiveSubagents() " +
-    "-- task-stop/error/abort paths in sdk-bridge.js can send 'done' without ever " +
-    "going through the 'result' handler, and without clearing " +
-    "session.activeTaskToolIds, while a subagent is still live"
-  );
-});
-
-test("app-messages.js: the 'done' handler still resets tool state after deciding whether to clear the indicator", function () {
+test("app-messages.js: the 'done' handler still calls resetToolState() unconditionally", function () {
   var idx = APP_MESSAGES_JS.indexOf("done: function (msg) {\n    removePreThinking();");
   assert.ok(idx !== -1);
   var block = APP_MESSAGES_JS.slice(idx, idx + 1200);
-  var hasActiveIdx = block.indexOf("hasActiveSubagents()");
-  var resetIdx = block.indexOf("resetToolState();");
-  assert.ok(hasActiveIdx !== -1 && resetIdx !== -1, "expected both the gate and resetToolState() in the done handler");
-  assert.ok(
-    hasActiveIdx < resetIdx,
-    "resetToolState() (which wipes activeSubagentToolIds) must run AFTER the " +
-    "indicator-clearing decision, not before -- otherwise hasActiveSubagents() " +
-    "would always see an empty set and the gate would be a no-op"
+  assert.match(
+    block,
+    /resetToolState\(\);/,
+    "resetToolState (which wipes activeSubagentToolIds) must still run in the done handler, unconditionally now that no gate depends on it running after a decision"
   );
 });

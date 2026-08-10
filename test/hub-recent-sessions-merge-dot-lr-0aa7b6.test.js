@@ -87,36 +87,38 @@ test("app-home-hub.js: projectHasAlert helper still exists (kept for the Project
   );
 });
 
-test("app-home-hub.js: handleHubRecentSessions renders a single dot per row with LOCKED color precedence alert > processing > live > idle, keyed PER-SESSION", () => {
+// lr-66c118 (epic lr-a6a449 child 4/4): the LOCKED precedence chain these
+// two tests originally proved as a local special case in this function is
+// now the CANONICAL derivation, promoted into
+// lib/public/modules/activity-state.js's sessionActivity/indicatorClass and
+// exercised behaviorally in test/activity-state-lr-66c118.test.js. These
+// tests are updated (not weakened) to assert the new call-site shape, same
+// pattern as the source-shape checks elsewhere in this file.
+
+test("app-home-hub.js: handleHubRecentSessions derives the dot via sessionActivity/indicatorClass, keyed PER-SESSION", () => {
   var idx = HOME_HUB_JS.indexOf("export function handleHubRecentSessions");
   assert.ok(idx !== -1, "expected handleHubRecentSessions to exist");
   var block = HOME_HUB_JS.slice(idx, idx + 2600);
 
-  // lr-0aa7b6 follow-up: alert state must be keyed on the individual
-  // session's own unread count (sess.unread), not the project aggregate
-  // (projectHasAlert(sess.projectSlug)) — that was THE bug (every session
-  // row in a notifying project lit red even when only one was notifying).
+  // lr-0aa7b6 follow-up (still true): alert state must never be keyed on
+  // the project aggregate helper — that was THE bug (every session row in
+  // a notifying project lit red even when only one was notifying).
   assert.doesNotMatch(
     block,
     /projectHasAlert\s*\(\s*sess\.projectSlug\s*\)/,
-    "handleHubRecentSessions must NOT key alert state on projectHasAlert(sess.projectSlug) anymore — that over-lights every sibling session in the project"
+    "handleHubRecentSessions must NOT key alert state on projectHasAlert(sess.projectSlug) — that over-lights every sibling session in the project"
+  );
+
+  // lr-66c118: alert/processing/idle is now derived, not open-coded here.
+  assert.match(
+    block,
+    /sessionActivity\s*\(\s*sess\s*,/,
+    "handleHubRecentSessions must derive the row's state via sessionActivity(sess, ...) — the canonical derivation, not a local ternary"
   );
   assert.match(
     block,
-    /sess\.unread/,
-    "handleHubRecentSessions must key alert state on sess.unread — the session's OWN unread count carried from the server"
-  );
-
-  // Precedence: alert must be checked/applied BEFORE (and win over) processing.
-  var hasAlertIdx = block.indexOf("hasAlert");
-  var alertClassIdx = block.indexOf('" alert"');
-  var processingClassIdx = block.indexOf('" processing"');
-  assert.ok(hasAlertIdx !== -1, "expected a hasAlert local computed from sess.unread");
-  assert.ok(alertClassIdx !== -1, "expected the dot class to conditionally include ' alert'");
-  assert.ok(processingClassIdx !== -1, "expected the dot class to conditionally include ' processing'");
-  assert.ok(
-    alertClassIdx < processingClassIdx,
-    "the alert branch must be evaluated/placed ahead of the processing branch in the ternary, encoding alert(red) > processing(green) precedence"
+    /indicatorClass\s*\(\s*recentActivityState\s*\)/,
+    "handleHubRecentSessions must pick the CSS class via indicatorClass(), the one place a class name is chosen"
   );
 
   // Exactly one dot span per row — no second/separate alert span.
@@ -135,13 +137,24 @@ test("app-home-hub.js: the merged dot preserves a title/tooltip explaining the s
   );
   assert.match(
     block,
-    /Unread activity/,
-    "the alert state's tooltip text must explain the red dot (e.g. 'Unread activity'), matching the removed .hub-recent-alert-dot's tooltip"
-  );
-  assert.match(
-    block,
     /title="'\s*\+\s*dotTitle\s*\+\s*'"/,
     "dotTitle must be rendered as the dot span's title attribute so hover still explains the state"
+  );
+});
+
+test("activity-state.js: sessionActivity's alert label matches the removed .hub-recent-alert-dot's 'Unread activity' tooltip text", () => {
+  // The literal 'Unread activity' string now lives in the shared derivation
+  // module (one copy, not duplicated per render site) rather than inline in
+  // app-home-hub.js — asserted here rather than via source-text grep on
+  // app-home-hub.js since it no longer contains the string directly.
+  var ACTIVITY_STATE_JS = fs.readFileSync(
+    path.join(__dirname, "../lib/public/modules/activity-state.js"),
+    "utf8"
+  );
+  assert.match(
+    ACTIVITY_STATE_JS,
+    /Unread activity/,
+    "sessionActivity's alert-tone label must still read 'Unread activity', matching the removed .hub-recent-alert-dot's tooltip"
   );
 });
 
