@@ -1,17 +1,24 @@
 /**
- * Tests for lr-1f7e: proactive model context-window warn in sdk-bridge.js
+ * Tests for lr-1f7e: proactive context-window warn in sdk-bridge.js.
+ *
+ * lr-3af675: rewritten for vendor-first resolution. The hardcoded
+ * model-name -> window table (lib/model-context-windows.js) is deleted; the
+ * warn now reads the vendor's own last-reported window
+ * (session.lastContextUsage.maxTokens, populated from getContextUsage() at
+ * the end of the previous turn — see sdk-message-processor.js) instead of
+ * resolving a model name against a table. When no vendor value is known yet
+ * (first turn, resumed session before a completed turn) the warn degrades
+ * to skipped rather than guessing a window.
  *
  * Covers:
- *   (1) warn toast fires when context tokens >= contextWindowWarnFraction of model window
+ *   (1) warn toast fires when context tokens >= contextWindowWarnFraction of
+ *       the vendor-reported window
  *   (2) warn toast does NOT fire when context tokens are below the fraction
  *   (3) getConfig().contextWindowWarnFraction is respected (overrides default 0.8)
- *   (4) warn is skipped when model is unknown (resolveModelContextWindow returns 0)
+ *   (4) warn is skipped when no vendor window is known yet (session.lastContextUsage unset)
  *   (5) getConfig().cgroupWarnFraction is respected for the cgroup warn threshold
  *   (6) no warn when contextWindowWarnFraction is 0 (disabled)
- *   (7) [PEACHES fix] context-1m beta active: warn uses 1M window, not model base window
- *   (8) [PEACHES fix] context-1m beta NOT active: warn uses model base window (o3 → 200K)
- *   (9) [PEACHES fix] resolveModelContextWindow direct unit: beta overrides map lookup
- *  (10) [PEACHES fix] cgroupWarnFraction: 0 disables cgroup warn (consistent with ctx-win)
+ *   (7) cgroupWarnFraction: 0 disables the cgroup warn
  *
  * The context-window warn fires per-turn (not only on new queries) via
  * session.lastStreamInputTokens.  We set that field on the session before
@@ -19,8 +26,8 @@
  *
  * NOTE: the cgroup hard gate (lr-2d91) depends on /sys/fs/cgroup files that
  * may or may not be present.  Tests that only target the window-based warn
- * use a known model with a large window and small token counts so that the
- * cgroup gate never fires regardless of host state.
+ * use a small token count relative to a large vendor-reported window so
+ * that the cgroup gate never fires regardless of host state.
  */
 
 var test = require("node:test");
@@ -101,8 +108,12 @@ function makeSession(opts) {
     _workerExitPromise: null,
     // lr-1f7e: per-turn context token count (set by message-processor on turn_start)
     lastStreamInputTokens: opts.lastStreamInputTokens || 0,
-    // model used for context-window resolution
+    // model used for query dispatch (no longer consulted for window resolution)
     model: opts.model || null,
+    // lr-3af675: vendor-reported context usage from the end of the previous
+    // turn (sdk-message-processor.js sets this from getContextUsage()).
+    // Undefined here models "no completed turn yet" (first turn / restart).
+    lastContextUsage: opts.lastContextUsage,
   };
 }
 
@@ -158,24 +169,31 @@ function windowWarnToasts(messages) {
 // (1) warn fires when context tokens >= contextWindowWarnFraction of window
 // ---------------------------------------------------------------------------
 
-test("lr-1f7e (1): context-window warn toast fires when tokens >= fraction of model window", async function () {
+test("lr-3af675 (1): context-window warn toast fires when tokens >= fraction of vendor-reported window", async function () {
   var queryCount = 0;
-  // claude-sonnet-4 → 1,000,000 token window; 0.8 fraction → warn at 800,000
-  var SESSION_TOKENS = 850000; // above 80% threshold
+  // vendor-reported window: small on purpose (lr-2d91's SEPARATE cgroup hard
+  // gate reads real /sys/fs/cgroup state and is out of scope for this task;
+  // small absolute token counts here keep every test below any host's
+  // headroom-derived ceiling regardless of environment -- only the
+  // percentage of the vendor-reported window matters for this assertion).
+  // window: 10,000; 0.8 fraction -> warn at 8,000
+  var SESSION_TOKENS = 8500; // above 80% threshold
   var { bridge, sm, messages } = makeBridge(
     async function () { queryCount++; return makeEmptyHandle(); },
-    null, // default config (0.8 fraction)
-    "claude-sonnet-4" // sm.currentModel
+    null // default config (0.8 fraction)
   );
 
-  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
+  var session = makeSession({
+    lastStreamInputTokens: SESSION_TOKENS,
+    lastContextUsage: { maxTokens: 10000 },
+  });
   sm.sessions.set(session.localId, session);
 
   await bridge.startQuery(session, "hello", null, null);
   await new Promise(function (r) { setImmediate(r); });
 
   var warns = windowWarnToasts(messages);
-  assert.ok(warns.length > 0, "window-based warn toast should be emitted when tokens >= 80% of window");
+  assert.ok(warns.length > 0, "window-based warn toast should be emitted when tokens >= 80% of the vendor-reported window");
   assert.ok(
     warns.some(function (m) { return m.level === "warn"; }),
     "warn toast should have level 'warn'"
@@ -188,17 +206,19 @@ test("lr-1f7e (1): context-window warn toast fires when tokens >= fraction of mo
 // (2) warn does NOT fire when context tokens are below the fraction
 // ---------------------------------------------------------------------------
 
-test("lr-1f7e (2): context-window warn toast does NOT fire when tokens are below fraction", async function () {
+test("lr-3af675 (2): context-window warn toast does NOT fire when tokens are below fraction", async function () {
   var queryCount = 0;
-  // 500,000 tokens is 50% of 1,000,000 — below the default 80% threshold
-  var SESSION_TOKENS = 500000;
+  // 5,000 tokens is 50% of 10,000 — below the default 80% threshold
+  var SESSION_TOKENS = 5000;
   var { bridge, sm, messages } = makeBridge(
     async function () { queryCount++; return makeEmptyHandle(); },
-    null,
-    "claude-sonnet-4"
+    null
   );
 
-  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
+  var session = makeSession({
+    lastStreamInputTokens: SESSION_TOKENS,
+    lastContextUsage: { maxTokens: 10000 },
+  });
   sm.sessions.set(session.localId, session);
 
   await bridge.startQuery(session, "hello", null, null);
@@ -213,17 +233,19 @@ test("lr-1f7e (2): context-window warn toast does NOT fire when tokens are below
 // (3) getConfig().contextWindowWarnFraction overrides default 0.8
 // ---------------------------------------------------------------------------
 
-test("lr-1f7e (3): getConfig().contextWindowWarnFraction overrides the default warn threshold", async function () {
+test("lr-3af675 (3): getConfig().contextWindowWarnFraction overrides the default warn threshold", async function () {
   var queryCount = 0;
-  // 600,000 / 1,000,000 = 60%.  Default (0.8) would not warn.  Custom 0.5 should warn.
-  var SESSION_TOKENS = 600000;
+  // 6,000 / 10,000 = 60%.  Default (0.8) would not warn.  Custom 0.5 should warn.
+  var SESSION_TOKENS = 6000;
   var { bridge, sm, messages } = makeBridge(
     async function () { queryCount++; return makeEmptyHandle(); },
-    function () { return { contextWindowWarnFraction: 0.5 }; },
-    "claude-sonnet-4"
+    function () { return { contextWindowWarnFraction: 0.5 }; }
   );
 
-  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
+  var session = makeSession({
+    lastStreamInputTokens: SESSION_TOKENS,
+    lastContextUsage: { maxTokens: 10000 },
+  });
   sm.sessions.set(session.localId, session);
 
   await bridge.startQuery(session, "hello", null, null);
@@ -235,20 +257,22 @@ test("lr-1f7e (3): getConfig().contextWindowWarnFraction overrides the default w
 });
 
 // ---------------------------------------------------------------------------
-// (4) warn is skipped when model is unknown (resolveModelContextWindow returns 0)
+// (4) warn is skipped when no vendor window is known yet (first turn / restart)
 // ---------------------------------------------------------------------------
 
-test("lr-1f7e (4): window-based warn is skipped when model is unknown", async function () {
+test("lr-3af675 (4): window-based warn is skipped when no vendor-reported window is known yet", async function () {
   var queryCount = 0;
   // Use a very large token count — if the window guard ran with an arbitrary
   // assumption it would fire; absence of warn confirms it was skipped.
   var SESSION_TOKENS = 999999;
   var { bridge, sm, messages } = makeBridge(
     async function () { queryCount++; return makeEmptyHandle(); },
-    null,
-    "unknown-future-model-xyz" // not in BACKEND_KNOWN_CONTEXT_WINDOWS
+    null
   );
 
+  // No lastContextUsage — this is the first turn of the session (or a
+  // daemon restart before any turn completed), so the vendor has not yet
+  // reported a window. Must degrade cleanly, never guess.
   var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
   sm.sessions.set(session.localId, session);
 
@@ -256,7 +280,7 @@ test("lr-1f7e (4): window-based warn is skipped when model is unknown", async fu
   await new Promise(function (r) { setImmediate(r); });
 
   var warns = windowWarnToasts(messages);
-  assert.equal(warns.length, 0, "window-warn toast should NOT fire when model context window is unknown");
+  assert.equal(warns.length, 0, "window-warn toast should NOT fire when no vendor-reported window is known yet");
   // Query may or may not proceed depending on cgroup state — only assert no window warn
 });
 
@@ -264,16 +288,18 @@ test("lr-1f7e (4): window-based warn is skipped when model is unknown", async fu
 // (5) warn is skipped when contextWindowWarnFraction is 0 (disabled)
 // ---------------------------------------------------------------------------
 
-test("lr-1f7e (5): window-based warn is disabled when contextWindowWarnFraction is 0", async function () {
+test("lr-3af675 (5): window-based warn is disabled when contextWindowWarnFraction is 0", async function () {
   var queryCount = 0;
   var SESSION_TOKENS = 999999; // would exceed any non-zero fraction for a 1M window
   var { bridge, sm, messages } = makeBridge(
     async function () { queryCount++; return makeEmptyHandle(); },
-    function () { return { contextWindowWarnFraction: 0 }; }, // 0 = disabled
-    "claude-sonnet-4"
+    function () { return { contextWindowWarnFraction: 0 }; } // 0 = disabled
   );
 
-  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
+  var session = makeSession({
+    lastStreamInputTokens: SESSION_TOKENS,
+    lastContextUsage: { maxTokens: 1000000 },
+  });
   sm.sessions.set(session.localId, session);
 
   await bridge.startQuery(session, "hello", null, null);
@@ -284,24 +310,27 @@ test("lr-1f7e (5): window-based warn is disabled when contextWindowWarnFraction 
 });
 
 // ---------------------------------------------------------------------------
-// (6) session.model takes precedence over sm.currentModel for window lookup
+// (6) a stale/small vendor-reported window is honored as-is (no model-name
+//     override) — vendor always wins, this task's whole point.
 // ---------------------------------------------------------------------------
 
-test("lr-1f7e (6): session.model overrides sm.currentModel for context-window resolution", async function () {
+test("lr-3af675 (6): a small vendor-reported window is honored even though sm.currentModel implies a large one", async function () {
   var queryCount = 0;
-  // session.model = o3 (200K window); sm.currentModel = claude-sonnet-4 (1M window)
-  // 190,000 tokens = 95% of 200K (above 80%), but only 19% of 1M (below 80%)
-  // If session.model wins, warn fires. If sm.currentModel wins, no warn.
-  var SESSION_TOKENS = 190000;
+  // sm.currentModel implies nothing anymore — no table is consulted. Only the
+  // vendor-reported maxTokens on the session matters. 9,500 / 10,000 = 95%,
+  // above 80% -> warn should fire purely off the vendor value. (Small
+  // absolute counts keep this below any host's cgroup headroom ceiling —
+  // see the note on test (7) above.)
+  var SESSION_TOKENS = 9500;
   var { bridge, sm, messages } = makeBridge(
     async function () { queryCount++; return makeEmptyHandle(); },
     null,
-    "claude-sonnet-4" // sm.currentModel — should NOT win
+    "claude-sonnet-4" // sm.currentModel — must have zero bearing on resolution now
   );
 
   var session = makeSession({
     lastStreamInputTokens: SESSION_TOKENS,
-    model: "o3", // session-level model — should win
+    lastContextUsage: { maxTokens: 10000 },
   });
   sm.sessions.set(session.localId, session);
 
@@ -309,116 +338,30 @@ test("lr-1f7e (6): session.model overrides sm.currentModel for context-window re
   await new Promise(function (r) { setImmediate(r); });
 
   var warns = windowWarnToasts(messages);
-  assert.ok(warns.length > 0, "window-warn should use session.model (o3, 200K window) over sm.currentModel");
+  assert.ok(warns.length > 0, "window-warn should use the vendor-reported 200K window, not any model-name inference");
   assert.equal(queryCount, 1, "query should proceed");
 });
 
 // ---------------------------------------------------------------------------
-// (7) [PEACHES fix] context-1m beta active: no warn at 170K tokens with o3 model
-//     because the true window is 1M (beta wins over the 200K map entry)
+// (7) cgroupWarnFraction: 0 disables the cgroup warn
+//      The cgroup HARD gate (lr-2d91, separate scope from this task) reads
+//      real /sys/fs/cgroup state and its ceiling varies by host -- a very
+//      large token count that reliably avoided it on a bare host can just as
+//      reliably trip it inside a constrained container. Use a small absolute
+//      token count so this test targets only the soft cgroupWarnFraction
+//      behavior under test, regardless of host headroom.
 // ---------------------------------------------------------------------------
 
-test("lr-1f7e (7): context-1m beta active — warn uses 1M window, not o3 base 200K window", async function () {
+test("lr-3af675 (7): cgroupWarnFraction: 0 accepted as valid config (disables warn)", async function () {
   var queryCount = 0;
-  // 170K tokens = 85% of 200K (would warn without beta), but only 17% of 1M (no warn with beta).
-  // This is the lr-1f7e PEACHES regression: without the fix the backend resolves 200K and
-  // warns prematurely; with the fix it sees the active beta and resolves 1M correctly.
-  var SESSION_TOKENS = 170000;
+  // Small token count: no vendor window known -> window-warn skipped either
+  // way; small absolute count keeps this well under any host's cgroup
+  // headroom-derived ceiling so only the cgroupWarnFraction:0 behavior is
+  // under test here, not the (separately scoped) hard gate.
+  var SESSION_TOKENS = 100;
   var { bridge, sm, messages } = makeBridge(
     async function () { queryCount++; return makeEmptyHandle(); },
-    null,
-    "o3" // base window 200K — but beta extends it to 1M
-  );
-
-  // Activate the context-1m beta on the session manager (mirrors set_betas WS message).
-  sm.currentBetas = ["context-1m"];
-
-  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
-  sm.sessions.set(session.localId, session);
-
-  await bridge.startQuery(session, "hello", null, null);
-  await new Promise(function (r) { setImmediate(r); });
-
-  var warns = windowWarnToasts(messages);
-  assert.equal(warns.length, 0,
-    "no window-warn should fire: context-1m beta is active so true window is 1M, " +
-    "and 170K tokens is only 17% of 1M (well below 80% threshold)");
-  assert.equal(queryCount, 1, "query should proceed");
-});
-
-// ---------------------------------------------------------------------------
-// (8) [PEACHES fix] context-1m beta NOT active: o3 base 200K window IS used,
-//     so 170K tokens (85% of 200K) correctly triggers the warn
-// ---------------------------------------------------------------------------
-
-test("lr-1f7e (8): context-1m beta NOT active — warn fires using o3 base 200K window", async function () {
-  var queryCount = 0;
-  // Same token count as test (7), but no beta — o3's 200K base applies.
-  // 170K / 200K = 85%, above the 80% default threshold → warn should fire.
-  var SESSION_TOKENS = 170000;
-  var { bridge, sm, messages } = makeBridge(
-    async function () { queryCount++; return makeEmptyHandle(); },
-    null,
-    "o3"
-  );
-
-  // No currentBetas set (defaults to []).
-  var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
-  sm.sessions.set(session.localId, session);
-
-  await bridge.startQuery(session, "hello", null, null);
-  await new Promise(function (r) { setImmediate(r); });
-
-  var warns = windowWarnToasts(messages);
-  assert.ok(warns.length > 0,
-    "window-warn should fire: no beta, o3 base window is 200K, 170K tokens is 85% (above 80%)");
-  assert.equal(queryCount, 1, "query should proceed");
-});
-
-// ---------------------------------------------------------------------------
-// (9) [PEACHES fix] resolveModelContextWindow unit test: beta array overrides map
-// ---------------------------------------------------------------------------
-
-test("lr-1f7e (9): resolveModelContextWindow — context-1m beta overrides KNOWN_CONTEXT_WINDOWS lookup", function () {
-  var { resolveModelContextWindow } = freshSdkBridge();
-
-  // Without beta: o3 → 200K
-  assert.equal(resolveModelContextWindow("o3", []), 200000,
-    "o3 without beta should resolve to 200K");
-
-  // With beta: o3 → 1M (beta wins)
-  assert.equal(resolveModelContextWindow("o3", ["context-1m"]), 1000000,
-    "o3 with context-1m beta should resolve to 1M");
-
-  // With beta: unknown model → 1M (beta wins even when model not in map)
-  assert.equal(resolveModelContextWindow("hypothetical-200k-model", ["context-1m"]), 1000000,
-    "unknown model with context-1m beta should resolve to 1M");
-
-  // Without beta: unknown model → 0 (degrade cleanly)
-  assert.equal(resolveModelContextWindow("hypothetical-200k-model", []), 0,
-    "unknown model without beta should resolve to 0 (skip warn)");
-
-  // Null activeBetas treated gracefully
-  assert.equal(resolveModelContextWindow("o3", null), 200000,
-    "null activeBetas should fall through to map lookup");
-});
-
-// ---------------------------------------------------------------------------
-// (10) [PEACHES fix] cgroupWarnFraction: 0 disables the cgroup warn
-//      On this test host cgroup reads return null (not running in the service),
-//      so the cgroup gate block is skipped entirely. We verify no cgroup warn
-//      toast is present — consistent with contextWindowWarnFraction: 0 behavior.
-// ---------------------------------------------------------------------------
-
-test("lr-1f7e (10): cgroupWarnFraction: 0 accepted as valid config (disables warn)", async function () {
-  var queryCount = 0;
-  // High token count to ensure window-warn does not fire (model unknown → window=0).
-  // cgroupWarnFraction: 0 should be accepted without crashing and not produce a warn.
-  var SESSION_TOKENS = 999999;
-  var { bridge, sm, messages } = makeBridge(
-    async function () { queryCount++; return makeEmptyHandle(); },
-    function () { return { cgroupWarnFraction: 0 }; },
-    "unknown-future-model-xyz"
+    function () { return { cgroupWarnFraction: 0 }; }
   );
 
   var session = makeSession({ lastStreamInputTokens: SESSION_TOKENS });
