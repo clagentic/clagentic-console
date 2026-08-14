@@ -335,10 +335,16 @@ and that report is the only source ever trusted.
   fire-and-forget at the end of a turn — see `lib/sdk-message-processor.js`)
   are both vendor-reported and already reflect any active beta (e.g.
   `context-1m`).
-- **Codex.** The app-server does not currently expose a per-turn context
-  window on this path, so the meter renders the indeterminate state for
-  Codex sessions. Consuming Codex's `turn/started` `model_context_window` is
-  tracked separately (lr-872f94), not solved here.
+- **Codex.** `modelUsage[model].contextWindow` is sourced from
+  `ThreadTokenUsage.modelContextWindow`, delivered on the
+  `thread/tokenUsage/updated` notification (`lib/yoke/adapters/codex.js`) —
+  schema-verified via `codex app-server generate-json-schema` (codex-cli
+  0.124.0). There is no `model_context_window` field on `turn/started` or
+  `turn/completed`; that was a research hypothesis from a degraded tier,
+  not a real field (lr-872f94). Until the app-server reports a window for
+  the session (e.g. before the first `thread/tokenUsage/updated`), the
+  meter renders the indeterminate state, same as any other vendor that
+  hasn't reported yet.
 
 `lib/public/modules/app-panels.js`'s `resolveContextWindow(vendorWindow)` is
 a pure validator — it returns the vendor value unchanged when it is a
