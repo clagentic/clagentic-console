@@ -179,3 +179,55 @@ test("lr-9bcd7b: listActiveSources reports only current-generation live tokens w
   assert.equal(bySource.task.label, "Researching X");
   assert.equal(bySource.tool.label, "Bash");
 });
+
+// ---------------------------------------------------------------------------
+// lr-6e20f7: widened token scope. sdk-message-processor.js now acquires an
+// activity token for EVERY Claude tool_use block at block_stop (source:
+// "tool"), not only block.name === "Task" (source: "task"). This is exactly
+// the scenario the mandatory chattiness invariant above (source: "task" +
+// source: "tool" concurrent) was written to prove in general — these two
+// tests pin the SPECIFIC real-world shape: a Task token already held while
+// an ordinary tool (e.g. a top-level Bash the user is watching directly)
+// also acquires one, and the reverse order, proving neither the widened
+// acquisition nor its ordering relative to a pre-existing Task token
+// produces a second broadcast-worthy transition. Without this, widening
+// acquisition to every tool call would be an O(sessions x clients) JSON
+// serialization regression wearing a UI fix's clothing (task spec, HARD
+// REQUIREMENT) — this is the proof, not an assertion that it holds.
+// ---------------------------------------------------------------------------
+
+test("lr-6e20f7 CHATTINESS INVARIANT: an ordinary tool token acquired while a Task token is already live must NOT report a second transition", function () {
+  var session = makeSession();
+  var taskAcquire = sessionActivity.acquireToken(session, "task-tool-id", { source: "task", label: "Researching X" });
+  assert.equal(taskAcquire.changed, true, "the Task token is the FIRST acquire (0->1) — only this one may report changed:true");
+
+  // Simulate the widened block_stop behavior: an ordinary top-level Bash
+  // tool_use block also acquires a token while the Task's is still live.
+  var toolAcquire = sessionActivity.acquireToken(session, "ordinary-bash-id", { source: "tool", label: "Bash" });
+  assert.equal(toolAcquire.changed, false, "acquiring the widened ordinary-tool token while a Task token is already live must not move the derived boolean");
+  assert.equal(toolAcquire.activeCount, 2);
+});
+
+test("lr-6e20f7 CHATTINESS INVARIANT: reverse order — a Task token acquired while an ordinary tool token is already live must NOT report a second transition", function () {
+  var session = makeSession();
+  var toolAcquire = sessionActivity.acquireToken(session, "ordinary-bash-id", { source: "tool", label: "Bash" });
+  assert.equal(toolAcquire.changed, true, "the ordinary tool token is the FIRST acquire (0->1) here — only this one may report changed:true");
+
+  var taskAcquire = sessionActivity.acquireToken(session, "task-tool-id", { source: "task", label: "Researching X" });
+  assert.equal(taskAcquire.changed, false, "a Task token acquired while an ordinary-tool token is already live must not move the derived boolean");
+  assert.equal(taskAcquire.activeCount, 2);
+});
+
+test("lr-6e20f7 CHATTINESS INVARIANT: releasing the widened ordinary-tool token before the Task token releases must NOT report a transition", function () {
+  var session = makeSession();
+  sessionActivity.acquireToken(session, "task-tool-id", { source: "task" });
+  sessionActivity.acquireToken(session, "ordinary-bash-id", { source: "tool" });
+
+  var releaseTool = sessionActivity.releaseToken(session, "ordinary-bash-id");
+  assert.equal(releaseTool.changed, false, "releasing the ordinary-tool token while the Task token is still live must not flip the derived boolean");
+  assert.equal(sessionActivity.isSessionActive(session), true);
+
+  var releaseTask = sessionActivity.releaseToken(session, "task-tool-id");
+  assert.equal(releaseTask.changed, true, "the LAST live token (Task, in this ordering) releasing must be the only reported transition");
+  assert.equal(sessionActivity.isSessionActive(session), false);
+});

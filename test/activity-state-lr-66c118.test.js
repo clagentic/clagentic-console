@@ -278,20 +278,47 @@ test("precedence table: alert > other > self > idle is total and consistent unde
 });
 
 // ---------------------------------------------------------------------------
-// 5. CI ABSENCE INVARIANT #1: setActivity collapses to exactly ONE real call
-//    site (the optimistic raise at input.js). Comment-only mentions of the
-//    pattern (explaining what was removed) are excluded via
-//    stripLineComments — this is proving absence of a CALL, not absence of
-//    the string in prose (see this file's header + the established
+// 5. CI ABSENCE INVARIANT #1 (REVISED, lr-6e20f7): setActivity collapses to a
+//    SMALL, FULLY ENUMERATED set of real call sites — no longer "exactly
+//    one". This invariant is the one MILLER's lr-6e20f7 diagnosis names
+//    explicitly as having caused the bug it was meant to prevent: "exactly
+//    one setActivity call site" actively enforced the ABSENCE of a reactive
+//    clear, since lr-66c118 deleted all 15 manual clear sites on the
+//    assumption a reactive clear would replace them, but none was ever
+//    wired up (setActivity(null) had zero callers, and the widget stranded
+//    on-screen indistinguishable from a second live indicator).
+//
+//    lr-6e20f7 adds exactly that reactive clear: app-favicon.js's
+//    initActivityFooter() subscribes to store.processing and both raises
+//    AND clears the widget, so it now has two real call sites of its own
+//    (raise + clear) in addition to input.js's pre-existing optimistic
+//    raise. The enumeration below is the exhaustive list this invariant now
+//    checks — an extra, unenumerated call site anywhere else is still
+//    rejected, which is what actually matters (a stray manual raise/clear
+//    creeping back in elsewhere). What changed is WHICH SPECIFIC file:line
+//    entries are allowed, not whether unbounded growth is caught.
+//
+//    Comment-only mentions of the pattern (explaining what was removed) are
+//    excluded via stripLineComments — this is proving absence of a
+//    call outside the enumerated set, not absence of the string in prose
+//    (see this file's header + the established
 //    hub-recent-sessions-merge-dot-lr-0aa7b6.test.js precedent for that
 //    exclusion).
 // ---------------------------------------------------------------------------
 
-test("CI invariant: setActivity(...) has exactly one real call site across lib/public/", function () {
+test("CI invariant: setActivity(...) call sites are confined to the enumerated reactive raise/clear pair plus input.js's optimistic raise", function () {
   var MODULES_DIR = path.join(__dirname, "..", "lib", "public", "modules");
   var files = fs.readdirSync(MODULES_DIR).filter(function (f) { return f.endsWith(".js"); });
 
-  var callSites = [];
+  // lr-6e20f7: the exhaustive set of files allowed to contain a real
+  // setActivity(...) call, and how many each is allowed. A file NOT in this
+  // list, or a count exceeding what's listed, fails the invariant.
+  var ALLOWED_CALL_SITES = {
+    "input.js": 1,          // pre-existing optimistic raise on user submit
+    "app-favicon.js": 2,    // lr-6e20f7: initActivityFooter's reactive raise + clear
+  };
+
+  var callSitesByFile = {};
   files.forEach(function (f) {
     var rel = "lib/public/modules/" + f;
     var src = stripLineComments(readMod(rel));
@@ -299,24 +326,39 @@ test("CI invariant: setActivity(...) has exactly one real call site across lib/p
     // the export function setActivity(text) { definition itself.
     var re = /\bctx\.setActivity\(|(?<!export function )\bsetActivity\(/g;
     var m;
+    var sites = [];
     while ((m = re.exec(src)) !== null) {
       // Exclude the definition line itself (export function setActivity).
       var lineStart = src.lastIndexOf("\n", m.index) + 1;
       var line = src.slice(lineStart, src.indexOf("\n", m.index));
       if (/^\s*export function setActivity\(/.test(line)) continue;
-      callSites.push(rel + ":" + line.trim());
+      sites.push(line.trim());
+    }
+    if (sites.length > 0) callSitesByFile[f] = sites;
+  });
+
+  var offenders = [];
+  Object.keys(callSitesByFile).forEach(function (f) {
+    var allowed = ALLOWED_CALL_SITES[f] || 0;
+    var found = callSitesByFile[f].length;
+    if (found !== allowed) {
+      offenders.push(f + ": found " + found + " call site(s), allowed " + allowed + " — " + JSON.stringify(callSitesByFile[f]));
+    }
+  });
+  Object.keys(ALLOWED_CALL_SITES).forEach(function (f) {
+    if (!callSitesByFile[f]) {
+      offenders.push(f + ": expected " + ALLOWED_CALL_SITES[f] + " call site(s), found 0 — the enumerated reactive raise/clear pair (or the optimistic raise) is missing");
     }
   });
 
-  assert.strictEqual(
-    callSites.length,
-    1,
-    "expected exactly ONE real setActivity(...) call site (the optimistic raise in input.js), found: " +
-    JSON.stringify(callSites)
+  assert.deepStrictEqual(
+    offenders,
+    [],
+    "setActivity(...) call sites drifted from the enumerated set (input.js:1, app-favicon.js:2 — lr-6e20f7): " + JSON.stringify(offenders)
   );
   assert.ok(
-    callSites[0].indexOf("input.js") !== -1,
-    "the sole remaining call site must be input.js's optimistic raise, found: " + callSites[0]
+    callSitesByFile["input.js"] && callSitesByFile["input.js"][0].indexOf("setActivity") !== -1,
+    "input.js's optimistic raise must remain present"
   );
 });
 
