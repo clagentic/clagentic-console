@@ -580,6 +580,14 @@
   line-height: 1;
 }
 
+/* lr-872f94: vendor-reported rate-limit usedPercent, shown in the pill
+   itself alongside the label (previously only in the transient popover). */
+.header-pill-pct {
+  line-height: 1;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
 /* Rate limit wrapper for popover positioning */
 .header-rate-limit-wrap {
   position: relative;
@@ -666,7 +674,8 @@
 
 /* Hide pills on very narrow screens */
 @media (max-width: 400px) {
-  .header-pill-text { display: none; }
+  .header-pill-text,
+  .header-pill-pct { display: none; }
   .header-rate-limit,
   .header-fast-mode { padding: 3px; }
   .rate-limit-popover { font-size: 11px; padding: 6px 10px; }
