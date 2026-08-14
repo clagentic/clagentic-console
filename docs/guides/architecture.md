@@ -323,6 +323,44 @@ Fourth and final leg of the OOM-hardening chain (lr-2ea2a7 -> lr-c10f6d -> lr-5e
 
 No code deletions resulted from this pass — every candidate is either already-consolidated (search paths, eviction helper de-duplication) or independently justified as still load-bearing. Two gaps outside this audit's no-behavior-change scope were surfaced and left for lr-efd60f: `/api/palette/search` (`lib/server-palette.js` -> `lib/session-search.js`) reads `session.history` without a `loadSessionHistory()` call, so palette search is silently incomplete for lazy/unloaded sessions; and `session.messageUUIDs` is never trimmed or cleared on LRU eviction (unlike `session.history`), so it can hold a full-conversation array in heap indefinitely for a session that gets reloaded and evicted repeatedly.
 
+## Context meter (lr-3af675)
+
+The context-window meter (header bar, context panel, popover, and the
+Plan-approval "Clear context" label) is **vendor-first**: it never derives a
+context-window size from a model name. Each provider reports its own window,
+and that report is the only source ever trusted.
+
+- **Claude.** `modelUsage.contextWindow` (sent on every `result` message) and
+  `getContextUsage()`'s `maxTokens` (the SDK's own rich breakdown, fetched
+  fire-and-forget at the end of a turn — see `lib/sdk-message-processor.js`)
+  are both vendor-reported and already reflect any active beta (e.g.
+  `context-1m`).
+- **Codex.** The app-server does not currently expose a per-turn context
+  window on this path, so the meter renders the indeterminate state for
+  Codex sessions. Consuming Codex's `turn/started` `model_context_window` is
+  tracked separately (lr-872f94), not solved here.
+
+`lib/public/modules/app-panels.js`'s `resolveContextWindow(vendorWindow)` is
+a pure validator — it returns the vendor value unchanged when it is a
+positive number, and `0` ("unknown") otherwise. There is no fallback table
+and no guessed default: **a resumed session before its first completed turn,
+or a daemon restart, is expected to show a blank/indeterminate meter, not a
+fabricated `0 / 200K · 0%`.** `getEffectiveContextFill()` is the single
+`{used, win}` pair every meter surface reads from, so the header bar,
+context panel, popover, and the `tools.js` clear-context label can never
+disagree with each other.
+
+Context fill counts all three of Anthropic's (disjoint) usage fields —
+`input_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens`
+— since all three occupy the window; omitting `cache_creation_input_tokens`
+under-reports fill on cache-write-heavy turns.
+
+On compaction, the daemon re-reads vendor usage and pushes a fresh
+`context_usage` message the moment the provider reports the turn as no
+longer compacting (see the `status` handler in
+`lib/sdk-message-processor.js`) — the meter does not wait for the next
+turn's `result` event to reflect the provider's post-compaction accounting.
+
 ## Custom emoji icons (lr-a68f)
 
 Projects can use uploaded images as icons instead of Unicode emoji. The icon value stored in `config.projects[].icon` is a `:slug:` sentinel string (pattern `^:[a-z0-9_-]{1,64}:$`) when a custom image is selected.

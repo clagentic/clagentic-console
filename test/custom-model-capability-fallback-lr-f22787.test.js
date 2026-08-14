@@ -18,10 +18,14 @@
 // enumeration snapshot doesn't contain — confirmed by reading the source,
 // not assumed.
 //
-// resolveContextWindow (also app-panels.js, delegating to the shared core in
-// lib/public/modules/model-context-windows.js) is covered too: an unmatched
-// model ID must fall back to the live SDK-reported window, then to the
-// documented 200000 last resort — never a wrong/tiny hardcoded number.
+// resolveContextWindow (also app-panels.js) used to delegate to a shared
+// hardcoded model-name -> window table with a 200000 last-resort default;
+// lr-3af675 deleted that table entirely (operator direction: vendor-first,
+// no guessed fallback). Its coverage below now pins the current one-arg,
+// vendor-only contract: resolveContextWindow(vendorWindow) returns the
+// vendor value unchanged when it's a positive number, else 0 ("unknown") —
+// see the dedicated resolveContextWindow/getEffectiveContextFill coverage
+// in test/context-meter-vendor-first-lr-3af675.test.js for the full picture.
 //
 // app-panels.js itself has no top-level `document.`/DOM access outside
 // function bodies (only `var x = null` module state) — but its import graph
@@ -86,7 +90,6 @@ var storeMod = await import('../lib/public/modules/store.js');
 var getModelSupportsEffort = appPanels.getModelSupportsEffort;
 var getModelSupportsThinking = appPanels.getModelSupportsThinking;
 var getModelEffortLevels = appPanels.getModelEffortLevels;
-var resolveContextWindow = appPanels.resolveContextWindow;
 var createStore = storeMod.createStore;
 
 var UNMATCHED_MODEL = 'claude-opus-4-99-totally-unenumerated';
@@ -152,20 +155,10 @@ test('lr-f22787: getModelEffortLevels falls back to the vendor-generic level set
   assert.deepEqual(levels, ['low', 'medium', 'high', 'xhigh', 'max']);
 });
 
-test('lr-f22787: resolveContextWindow falls back to the live SDK-reported window for an unrecognized custom model ID', function () {
-  createStore({ currentBetas: [] });
-
-  // "unrecognized" here means it doesn't even substring-match any
-  // KNOWN_CONTEXT_WINDOWS key (unlike e.g. "claude-opus-4-6", which matches
-  // the "opus-4-6" key by substring and is intentionally NOT a case this
-  // test covers — that path already works via the shared map).
-  var result = resolveContextWindow('totally-unknown-custom-id', 512000);
-  assert.equal(result, 512000, 'a live SDK-reported context window must win over the last-resort default');
-});
-
-test('lr-f22787: resolveContextWindow falls back to 200000 when a custom model ID matches nothing and the SDK reported no window', function () {
-  createStore({ currentBetas: [] });
-
-  var result = resolveContextWindow('totally-unknown-custom-id', 0);
-  assert.equal(result, 200000, 'last-resort default must never be silently 0 or undefined for an unrecognized model');
-});
+// lr-3af675: the two resolveContextWindow tests formerly here (fallback to
+// a live SDK-reported window / fallback to a 200000 last resort for an
+// unrecognized model NAME) asserted a two-arg, model-name-driven resolution
+// contract that this task removed by direct operator mandate — there is no
+// longer a model-name lookup of any kind on this path. Superseded by the
+// one-arg vendor-first contract covered in
+// test/context-meter-vendor-first-lr-3af675.test.js.
