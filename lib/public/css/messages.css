@@ -632,6 +632,17 @@ pre.mermaid-error {
 
 .thinking-item.done .thinking-spinner { display: none; }
 
+/* lr-6e20f7: bubble layout (body:not(.wide-view)) has its own
+   bottom-of-transcript presence indicator (.activity-inline, driven by
+   activity-state.js via app-favicon.js's initActivityFooter). The thinking
+   block owns DETAIL (the expandable content), not presence — showing this
+   spinner too duplicated the footer dots (this task's SYMPTOM B: one
+   indicator here, one at the bottom, simultaneously). Channel layout has no
+   such duplicate (its footer, .channel-pre-thinking, is always removed by
+   removePreThinking() before a real thinking block ever renders), so this
+   is scoped to bubble layout only. */
+body:not(.wide-view) .thinking-spinner { display: none; }
+
 .thinking-content {
   display: none;
   padding: 8px 14px;
