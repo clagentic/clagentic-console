@@ -167,31 +167,79 @@ test("lr-3ccc78 (twin): readAgentToolsFromFile without override still works (bac
 });
 
 // ---------------------------------------------------------------------------
-// Path-traversal containment (semgrep-flagged lines in discoverClaudeSkills)
+// Path-traversal / symlink-escape containment
+//
+// BOBBIE (PR #394 review) found the original version of this section built
+// an "outside" directory that was never linked INTO the skills dir a
+// readdirSync call would ever traverse — so it passed identically whether or
+// not containment logic worked at all. A real regression case here MUST put
+// a symlinked directory ENTRY inside the skills dir pointing OUTSIDE it,
+// because that is exactly the escape vector: fs.readdirSync's withFileTypes
+// entries include symlinks (entry.isSymbolicLink()), and a lexical
+// path.resolve/startsWith check on the entry name does not stop a later
+// fs.accessSync/readFileSync from following that symlink to its real target.
+// Only fs.realpathSync-based containment (the second stage safePath in
+// project.js applies) actually closes this.
 // ---------------------------------------------------------------------------
 
-test("lr-3ccc78: discoverClaudeSkills does not follow a directory entry that escapes the skills base dir", function () {
-  // Simulate a crafted/symlinked entry name escaping the base dir. We can't
-  // easily fabricate a readdirSync Dirent with a traversal name on a real
-  // filesystem, so this test instead verifies containment holds for a real
-  // symlink pointing outside the skills dir — accessSync would otherwise
-  // happily follow it and leak an unrelated SKILL.md into discovery.
+// Builds: <home>/.claude/skills/escape-link -> <outside>/secret-skill
+// (a real directory with its own SKILL.md, entirely outside the skills dir).
+// Returns { home, outside } for the caller to pass into whichever
+// discovery function is under test.
+function makeSymlinkEscapeFixture() {
   var home = fs.mkdtempSync(path.join(os.tmpdir(), "lr-3ccc78-contain-home-"));
   var outside = fs.mkdtempSync(path.join(os.tmpdir(), "lr-3ccc78-contain-outside-"));
+  var skillsDir = path.join(home, ".claude", "skills");
+  fs.mkdirSync(skillsDir, { recursive: true });
+
+  var secretDir = path.join(outside, "secret-skill");
+  fs.mkdirSync(secretDir, { recursive: true });
+  fs.writeFileSync(path.join(secretDir, "SKILL.md"), "description: secret\n# secret\n");
+
+  // The escape vector: a symlink NAMED as a skill directory entry, living
+  // INSIDE skillsDir, whose target resolves OUTSIDE skillsDir.
+  fs.symlinkSync(secretDir, path.join(skillsDir, "escape-link"), "dir");
+
+  return { home: home, outside: outside };
+}
+
+test("lr-3ccc78: discoverClaudeSkills refuses a symlinked skill entry that escapes the skills base dir", function () {
+  var fixture = makeSymlinkEscapeFixture();
   var cwd = fs.mkdtempSync(path.join(os.tmpdir(), "lr-3ccc78-contain-cwd-"));
   try {
-    var skillsDir = path.join(home, ".claude", "skills");
-    fs.mkdirSync(skillsDir, { recursive: true });
-    // A legitimate skill outside the skills dir entirely (not linked in) —
-    // discovery must never see it regardless of containment.
-    fs.mkdirSync(path.join(outside, "secret-skill"), { recursive: true });
-    fs.writeFileSync(path.join(outside, "secret-skill", "SKILL.md"), "# secret\n");
-
-    var result = discoverClaudeSkills(cwd, home);
-    assert.equal(result["secret-skill"], undefined, "skill outside the base dir must never be discovered");
+    var result = discoverClaudeSkills(cwd, fixture.home);
+    assert.equal(result["escape-link"], undefined, "a symlinked entry escaping the skills dir must be refused, not followed");
   } finally {
-    rmrf(home);
-    rmrf(outside);
+    rmrf(fixture.home);
+    rmrf(fixture.outside);
+    rmrf(cwd);
+  }
+});
+
+test("lr-3ccc78: discoverSkillsWithMeta refuses a symlinked skill entry that escapes the skills base dir", function () {
+  var fixture = makeSymlinkEscapeFixture();
+  var cwd = fs.mkdtempSync(path.join(os.tmpdir(), "lr-3ccc78-contain-cwd2-"));
+  try {
+    var result = discoverSkillsWithMeta(cwd, fixture.home);
+    var names = result.map(function (s) { return s.name; });
+    assert.equal(names.indexOf("escape-link"), -1, "a symlinked entry escaping the skills dir must be refused, not followed");
+  } finally {
+    rmrf(fixture.home);
+    rmrf(fixture.outside);
+    rmrf(cwd);
+  }
+});
+
+test("lr-3ccc78: attachSkillDiscovery's discoverSkillDirs refuses a symlinked skill entry that escapes the skills base dir", function () {
+  var fixture = makeSymlinkEscapeFixture();
+  var cwd = fs.mkdtempSync(path.join(os.tmpdir(), "lr-3ccc78-contain-cwd3-"));
+  try {
+    var skills = attachSkillDiscovery({ cwd: cwd });
+    var result = skills.discoverSkillDirs(fixture.home);
+    assert.equal(result["escape-link"], undefined, "a symlinked entry escaping the skills dir must be refused, not followed");
+  } finally {
+    rmrf(fixture.home);
+    rmrf(fixture.outside);
     rmrf(cwd);
   }
 });
