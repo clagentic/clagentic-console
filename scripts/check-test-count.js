@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 "use strict";
 //
-// check-test-count.js — run-invariant floor for `npm test` (lr-795882).
+// check-test-count.js — per-file completion + count floor for `npm test`
+// (lr-795882, hardened after PEACHES/BOBBIE PR #395 review).
 //
 // PROBLEM: `node --test` can exit 0 with a self-consistent-looking summary
 // even when a truncated run silently dropped an entire test file's worth of
@@ -9,91 +10,132 @@
 // runs on unmodified main, all exit 0, 1385 missing 21 real security tests
 // from test/xss-escape.test.js). A green `npm test` did not prove the full
 // suite ran. Fixing the underlying leaked handles (lr-795882) closed the
-// mechanism that caused truncation, but nothing short of counting executed
-// tests can catch the NEXT regression of this class — a future leaked
-// handle in a NEW test file would reproduce the exact same silent-drop
-// failure mode this script exists to catch.
+// mechanism that caused THAT truncation, but nothing short of verifying
+// every file actually ran can catch the NEXT regression of this class — a
+// future leaked handle in a NEW test file would reproduce the exact same
+// silent-drop failure mode this script exists to catch.
 //
-// MECHANISM: run the real test command as a child process, stream its
-// stdout/stderr through unchanged (so `npm test` output is unaffected for a
-// normal developer run), and parse Node's own TAP "# tests N" summary line
-// from the captured output. Fail (non-zero exit) if:
-//   - the process exits before ever printing a "# tests N" line (the
-//     truncation-without-a-summary case), or
-//   - N is below TEST_COUNT_FLOOR.
+// WHAT THIS DOES AND DOES NOT CATCH — state this plainly, not left for a
+// reader to work out (PR #395 review, andy):
+//   - CATCHES: any single test FILE that reports zero test:pass/test:fail
+//     events at all — the literal MILLER failure mode (one file's tests
+//     silently vanish while `node --test` still exits 0). This is a hard
+//     per-file boundary, not a probabilistic total: every file named on
+//     the command line is checked individually against the reporter's own
+//     event stream; there is no "close enough" combined count to hide
+//     behind, and — unlike an earlier version of this script — this
+//     mechanism does NOT need to isolate each file into its own process
+//     to get that per-file signal (see MECHANISM below), so it carries no
+//     risk of changing test timing/ordering behavior.
+//   - DOES NOT CATCH: a handful of tests silently dropped from WITHIN an
+//     otherwise-reporting file (e.g. 3 of a file's 40 tests vanish but the
+//     file still reports other passes and exits 0). Catching that would
+//     require a checked-in expected test-name list per file, which is far
+//     more maintenance than this bug class justifies. TEST_COUNT_FLOOR
+//     below is a coarser secondary net for a LARGE in-file drop, not a
+//     precise one.
 //
-// FLOOR CHOICE: TEST_COUNT_FLOOR is set well below the current true count
-// (see current-count comment below) rather than pinned to it exactly. A
-// floor equal to the exact live count would false-fail on every single
-// legitimate test addition/removal — the two things this project does
-// constantly. A floor with meaningful headroom below the current count
-// still catches the actual failure class (an entire test FILE silently
-// vanishing, which drops tens of tests at once) without demanding this
-// script be bumped on every ordinary PR. Bump TEST_COUNT_FLOOR (with a
-// comment noting the new baseline) if the suite is deliberately and
-// substantially trimmed — that's an explicit, reviewable diff, unlike a
-// truncation, which is exactly the point.
+// MECHANISM (v2 — replaces the v1 "single combined run + parse the shared
+// TAP summary's total" design, which BOBBIE/PEACHES correctly flagged as
+// too loose: a floor of 1300 against a live count of ~1407 has 107 tests
+// of slack, comfortably hiding MILLER's own 21-test drop; and a v1.5
+// per-file-isolated-process design, which was correct in principle but
+// exposed an unrelated pre-existing test-order flake
+// (project-connection-hydrate-session-model-lr-041af8.test.js's
+// millisecond tie-break) purely as a side effect of changing how files are
+// scheduled — rejected because the count-verification mechanism itself
+// should never be the thing introducing new failure risk):
 //
-// Current true count as of lr-795882 (5 consecutive full runs, all
-// --test-force-exit-free, all stable): 1407 registered / 1406 pass / 1
-// skipped (test/project-connection-ownership-claim-lr-768c9e.test.js:153,
-// intentionally skipped pending lr-a7b03e). Floor is set well under that so
-// normal test churn never trips it, while a whole missing file (dozens of
-// tests) always will.
+//   Run ALL files in ONE node --test invocation, exactly as `npm test`
+//   always has (no per-file process isolation, no timing/ordering change),
+//   but attach a CUSTOM REPORTER (test-file-completion-reporter.js)
+//   alongside the normal `tap` reporter. Node's reporter API delivers a
+//   `file` field on every test:pass/test:fail event REGARDLESS of what
+//   TAP's own text output shows (TAP text has no per-file marker when
+//   multiple files share one process — that's what made v1 unable to do
+//   this without isolating files). The custom reporter emits one
+//   machine-readable "RESULT <pass|fail> <file>" line per test result to a
+//   separate destination stream; this script reads that stream, buckets
+//   results by file, and requires every file passed on argv to have at
+//   least one RESULT line.
+//
 var TEST_COUNT_FLOOR = 1300;
 
-var { spawn } = require("child_process");
+var path = require("path");
+var { spawnSync } = require("child_process");
 
-var child = spawn(process.execPath, ["--test"].concat(process.argv.slice(2)), {
-  stdio: ["inherit", "pipe", "pipe"],
-});
-
-var stdoutBuf = "";
-
-child.stdout.on("data", function (chunk) {
-  process.stdout.write(chunk);
-  stdoutBuf += chunk.toString("utf8");
-});
-child.stderr.on("data", function (chunk) {
-  process.stderr.write(chunk);
-});
-
-child.on("error", function (err) {
-  process.stderr.write("[check-test-count] failed to spawn node --test: " + err.message + "\n");
+var files = process.argv.slice(2);
+if (files.length === 0) {
+  process.stderr.write("[check-test-count] no test files given (expected: node scripts/check-test-count.js <file...>)\n");
   process.exit(1);
+}
+
+var REPORTER_PATH = path.join(__dirname, "test-file-completion-reporter.js");
+
+var result = spawnSync(process.execPath, [
+  "--test",
+  "--test-reporter=tap", "--test-reporter-destination=stdout",
+  "--test-reporter=" + REPORTER_PATH, "--test-reporter-destination=stderr",
+].concat(files), {
+  stdio: ["inherit", "pipe", "pipe"],
+  encoding: "utf8",
+  maxBuffer: 64 * 1024 * 1024,
 });
 
-child.on("exit", function (code) {
-  var match = stdoutBuf.match(/^# tests (\d+)\s*$/m);
+if (result.stdout) process.stdout.write(result.stdout);
+
+if (result.error) {
+  process.stderr.write("[check-test-count] failed to spawn node --test: " + result.error.message + "\n");
+  process.exit(1);
+}
+
+// The custom reporter's RESULT lines are the only thing routed to stderr —
+// forward everything else Node itself wrote to stderr (real errors,
+// warnings) so a normal `npm test` run still surfaces them, then parse the
+// RESULT lines separately below.
+var stderrLines = (result.stderr || "").split("\n");
+var resultsByFile = Object.create(null);
+var passCount = 0;
+var failCount = 0;
+
+stderrLines.forEach(function (line) {
+  var match = /^RESULT (pass|fail) (.+)$/.exec(line);
   if (!match) {
-    process.stderr.write(
-      "[check-test-count] FAIL: no '# tests N' summary line found in output — " +
-      "the run likely terminated (or was force-exited) before completing. " +
-      "A missing summary is treated as a truncated run, not a pass, " +
-      "regardless of the child process's own exit code (" + code + ").\n"
-    );
-    process.exit(1);
+    if (line) process.stderr.write(line + "\n");
     return;
   }
-
-  var actualCount = parseInt(match[1], 10);
-  if (actualCount < TEST_COUNT_FLOOR) {
-    process.stderr.write(
-      "[check-test-count] FAIL: executed test count " + actualCount +
-      " is below the floor of " + TEST_COUNT_FLOOR + ". " +
-      "This is exactly the failure class lr-795882 fixed: a truncated " +
-      "`node --test` run can otherwise report exit 0 with a " +
-      "self-consistent-looking summary while silently dropping an entire " +
-      "test file. See scripts/check-test-count.js for the floor-choice " +
-      "rationale and how to update it if this is a deliberate suite " +
-      "reduction.\n"
-    );
-    process.exit(1);
-    return;
-  }
-
-  // Preserve the real child exit code for actual test failures/passes —
-  // this script only adds an additional failure mode (truncation), it
-  // never turns a real failure into a pass.
-  process.exit(code === null ? 1 : code);
+  var kind = match[1];
+  var file = match[2];
+  if (!resultsByFile[file]) resultsByFile[file] = 0;
+  resultsByFile[file] += 1;
+  if (kind === "pass") passCount += 1;
+  else failCount += 1;
 });
+
+var missingFiles = files.filter(function (f) {
+  var abs = path.resolve(f);
+  return !resultsByFile[abs];
+});
+
+if (missingFiles.length > 0) {
+  process.stderr.write(
+    "[check-test-count] FAIL: " + missingFiles.length + " test file(s) reported ZERO test results — " +
+    "treated as a truncated/incomplete run, not a pass, regardless of the overall exit code. This is " +
+    "exactly the failure class lr-795882 fixed (MILLER, lr-a7b03e): a file whose tests silently vanish " +
+    "while the overall run still exits 0.\n  " + missingFiles.join("\n  ") + "\n"
+  );
+  process.exit(1);
+}
+
+var totalTests = passCount + failCount;
+if (totalTests < TEST_COUNT_FLOOR) {
+  process.stderr.write(
+    "[check-test-count] FAIL: total executed test count " + totalTests +
+    " is below the floor of " + TEST_COUNT_FLOOR + " even though every file reported at least one result — " +
+    "likely a large in-file test drop. See this script's header for what the floor does and does not " +
+    "catch, and how to update it for a deliberate suite reduction.\n"
+  );
+  process.exit(1);
+}
+
+process.exit(result.status === null ? 1 : result.status);
