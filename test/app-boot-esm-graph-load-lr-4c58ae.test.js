@@ -175,18 +175,6 @@ function installBrowserGlobals() {
   // Firing onopen asynchronously mirrors a real successful handshake, which
   // reaches connect()'s real terminal state and clears its own timer via the
   // production onopen handler — no test-side timer bookkeeping needed.
-  // lr-795882: a real browser WebSocket always eventually calls onopen,
-  // onclose, or onerror. This stub previously never called any of them, so
-  // app-connection.js's connect()->openSocket() 3s "not connected yet" watchdog
-  // (connectTimeoutId, app-connection.js:297) never got cleared by a real
-  // onopen — it fired, tore the socket down, and called connect() again,
-  // which built a NEW real 3s Node timer, forever. Under `node --test`
-  // (no --test-force-exit) that unbounded setTimeout chain kept the process
-  // event loop alive indefinitely, and under --test-force-exit it silently
-  // truncated later test files in the same run instead of ever completing.
-  // Firing onopen asynchronously mirrors a real successful handshake, which
-  // reaches connect()'s real terminal state and clears its own timer via the
-  // production onopen handler — no test-side timer bookkeeping needed.
   global.WebSocket = function (url, protocols) {
     var sock = {
       send: function () {},
