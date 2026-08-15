@@ -218,6 +218,16 @@ test("lr-e31b: runNextIteration() drains the queue into the next iteration promp
       return origSetTimeout(fn, delay);
     };
 
+    // lr-795882: runNextIteration() also arms a real, un-mocked 10-minute
+    // coderWatchdog setTimeout per iteration (project-loop.js's "Watchdog:
+    // if onQueryComplete hasn't fired after 10 minutes"). The global.setTimeout
+    // intercept above only special-cases delay === 1000 (the advance timer),
+    // so every coderWatchdog call passed straight through to the real timer
+    // — left armed for any iteration that isn't itself completed via
+    // onQueryComplete before the test ends. Keep the intercept installed
+    // (restored in the outer finally below) across BOTH iterations' full
+    // completion so neither iteration's coderWatchdog reaches the real event
+    // loop as a leaked handle.
     try {
       engine.startLoop({ maxIterations: 5 });
 
@@ -236,12 +246,25 @@ test("lr-e31b: runNextIteration() drains the queue into the next iteration promp
       ];
 
       // Complete iteration 1 with clean history (no error markers) so the
-      // simple-mode onQueryComplete path schedules iteration 2.
+      // simple-mode onQueryComplete path schedules iteration 2. This also
+      // clears iteration 1's coderWatchdog via the real production code path
+      // (project-loop.js:491).
       iter1Session.history.push({ type: "done", code: 0 });
       iter1Session.onQueryComplete(iter1Session);
 
       assert.ok(capturedAdvance, "iteration 1 completion should schedule the next iteration");
       capturedAdvance();
+
+      var iter2SessionForCleanup = ctx.sm.sessions.get(ls.currentSessionId);
+      assert.ok(iter2SessionForCleanup, "iteration 2 session should exist before assertions");
+
+      // Complete iteration 2 the same way — clears iteration 2's coderWatchdog
+      // via the same real onQueryComplete path. maxIterations is 5, so this
+      // itself schedules a THIRD 1000ms advance timer; the intercept above
+      // captures (rather than arms) it, and we simply never invoke it, so no
+      // iteration 3 ever starts and no further coderWatchdog is armed.
+      iter2SessionForCleanup.history.push({ type: "done", code: 0 });
+      iter2SessionForCleanup.onQueryComplete(iter2SessionForCleanup);
     } finally {
       global.setTimeout = origSetTimeout;
     }
