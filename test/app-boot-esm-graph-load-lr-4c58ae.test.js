@@ -163,9 +163,32 @@ function installBrowserGlobals() {
   });
   global.localStorage = { getItem: function () { return null; }, setItem: function () {}, removeItem: function () {} };
   global.sessionStorage = { getItem: function () { return null; }, setItem: function () {}, removeItem: function () {} };
+  // lr-795882: a real browser WebSocket always eventually calls onopen,
+  // onclose, or onerror. This stub previously never called any of them, so
+  // app-connection.js's connect()->openSocket() 3s "not connected yet" watchdog
+  // (connectTimeoutId, app-connection.js:297) never got cleared by a real
+  // onopen — it fired, tore the socket down, and called connect() again,
+  // which built a NEW real 3s Node timer, forever. Under `node --test`
+  // (no --test-force-exit) that unbounded setTimeout chain kept the process
+  // event loop alive indefinitely, and under --test-force-exit it silently
+  // truncated later test files in the same run instead of ever completing.
+  // Firing onopen asynchronously mirrors a real successful handshake, which
+  // reaches connect()'s real terminal state and clears its own timer via the
+  // production onopen handler — no test-side timer bookkeeping needed.
   global.WebSocket = function (url, protocols) {
+    var sock = {
+      send: function () {},
+      close: function () {},
+      onopen: null,
+      onclose: null,
+      onerror: null,
+      onmessage: null,
+    };
     wsConstructions.push({ url: url, protocols: protocols });
-    return { send: function () {}, close: function () {} };
+    setTimeout(function () {
+      if (typeof sock.onopen === "function") sock.onopen();
+    }, 0);
+    return sock;
   };
   global.lucide = { createIcons: function () {} };
   global.marked = { parse: function (s) { return s; }, setOptions: function () {}, use: function () {} };
@@ -214,5 +237,36 @@ test("connect() runs as part of app.js's top-level init sequence (WebSocket is c
     wsConstructions.length > 0,
     "connect() (app.js:1041) never constructed a WebSocket — module graph " +
     "loaded but boot did not reach the connection step"
+  );
+});
+
+// Regression test for lr-795882: the fake WebSocket used to load app.js's
+// module graph above must resolve to a real terminal FSM state (connected),
+// not leave a live reconnect watchdog running. Before the fix, this file
+// left an unbounded self-rescheduling setTimeout chain
+// (app-connection.js:297's connectTimeoutId) running forever because the
+// fake WebSocket never called onopen/onclose/onerror — silently truncating
+// whatever test file happened to run after this one under
+// --test-force-exit, and hanging `node --test` outright without it.
+//
+// `store` is the same singleton app.js's own connect() call reads/writes —
+// asserting through it (rather than reaching into app-connection.js's
+// private connectTimeoutId closure variable) verifies the *effect* that
+// actually matters: the connection FSM reached a settled state and stopped
+// scheduling new watchdog timers, using only the module's public surface.
+test("connect()'s FSM reaches a settled connected state (no leaked reconnect watchdog, lr-795882)", async function () {
+  var storeModule = await import(pathToFileURL(
+    path.join(__dirname, "..", "lib", "public", "modules", "store.js")
+  ).href);
+  // The fake WebSocket's onopen fires via a real setTimeout(fn, 0) queued
+  // during app.js's module-load (see installBrowserGlobals above); yield to
+  // the event loop so that macrotask has a chance to run before asserting.
+  await new Promise(function (resolve) { setTimeout(resolve, 50); });
+  assert.equal(
+    storeModule.store.get("connected"), true,
+    "app.js's connect() FSM must reach 'connected' once the stubbed WebSocket " +
+    "opens — if this is false, the 3s connectTimeoutId watchdog in " +
+    "app-connection.js is still armed and will keep rescheduling itself " +
+    "(the exact leak lr-795882 fixed)"
   );
 });
