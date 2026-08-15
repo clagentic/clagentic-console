@@ -30,3 +30,11 @@ scripts/pr-body-*.txt
 scripts/smoke.sh
 test-results/
 
+# Same pattern as scripts/_* above, for the test/ tree — ad-hoc verification
+# logs, probe test files, and repro fixtures left behind by AMoS build
+# sessions while diagnosing/verifying a fix (lr-795882). Never part of the
+# shipped test suite; `test/*.test.js` (the npm test glob) already only
+# picks up real *.test.js files, so these are inert either way, but leaving
+# them untracked-and-unignored just accumulates as `git status` noise.
+test/.scratch-*
+
