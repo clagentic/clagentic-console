@@ -910,22 +910,55 @@ test("skills proxy: rejects unauthenticated request with 401 in multi-user mode"
   assert.strictEqual(res403.status, 403, "authenticated user without skills permission gets 403");
 
   // lr-ec2d: single-user mode removed; authenticated user with skills permission proceeds
-  var ctxOk = {
-    users: {
-      isMultiUser: function () { return true; },
-      getEffectivePermissions: function () { return { skills: true }; },
-    },
-    osUsers: [],
-    getMultiUserFromReq: function () { return { id: "u2" }; },
+  //
+  // lr-795882: the pass-through branch calls the REAL lib/server-skills.js
+  // handler, which (once past the permission gate this test exists to check)
+  // synchronously kicks off a real outbound https.get("https://skills.sh/...")
+  // — a genuine network dependency in a unit test, and the connection was
+  // never awaited, timed out, or closed, leaking a live TCP+TLS socket that
+  // kept `node --test` (run without --test-force-exit) from ever reaching
+  // idle for the rest of this suite. This test only asserts the auth gate
+  // was passed (see the pre-existing comment below), so stub https.get for
+  // the duration of this one call — scoped to this test, restored
+  // immediately after — instead of letting a real network call fire for an
+  // assertion that never reads its result.
+  var https = require("https");
+  var origHttpsGet = https.get;
+  https.get = function (url, opts, cb) {
+    // Match Node's http.get behavior when only a callback is passed.
+    if (typeof opts === "function") { cb = opts; }
+    var fakeResp = {
+      statusCode: 200,
+      headers: {},
+      on: function (event, handler) {
+        if (event === "end") setImmediate(handler);
+        return fakeResp;
+      },
+    };
+    if (typeof cb === "function") setImmediate(function () { cb(fakeResp); });
+    var fakeReq = { on: function () { return fakeReq; } };
+    return fakeReq;
   };
-  var handlerOk = attachSkills(ctxOk).handleRequest;
-  var reqOk = makeReq("GET", "/api/skills?tab=all");
-  reqOk.url = "/api/skills?tab=all";
-  var resOk = makeRes();
-  handlerOk(reqOk, resOk, "/api/skills");
-  // Response is async (fetch); status is null now — just verify it's not 401/403
-  assert.ok(resOk.status !== 401 && resOk.status !== 403,
-    "authenticated user with skills permission is not rejected (no 401 or 403)");
+  try {
+    var ctxOk = {
+      users: {
+        isMultiUser: function () { return true; },
+        getEffectivePermissions: function () { return { skills: true }; },
+      },
+      osUsers: [],
+      getMultiUserFromReq: function () { return { id: "u2" }; },
+    };
+    var handlerOk = attachSkills(ctxOk).handleRequest;
+    var reqOk = makeReq("GET", "/api/skills?tab=all");
+    reqOk.url = "/api/skills?tab=all";
+    var resOk = makeRes();
+    handlerOk(reqOk, resOk, "/api/skills");
+    // Response is async (fetch); status is null now — just verify it's not 401/403
+    assert.ok(resOk.status !== 401 && resOk.status !== 403,
+      "authenticated user with skills permission is not rejected (no 401 or 403)");
+  } finally {
+    https.get = origHttpsGet;
+  }
 });
 
 // lr-30a5: sibling pre-auth 401 gates (lr-d857 B1 follow-up). Each test drives
@@ -1455,10 +1488,11 @@ test("validateLoopId: accepts well-formed loop IDs", function () {
 
 test("loop_registry_files handler: sends loop_registry_error for invalid id via real handleLoopMessage", function () {
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-h-test-"));
+  var loop = null;
   try {
     var sent = [];
     var ctx = makeLoopCtx(tmpDir, function (msg) { sent.push(msg); });
-    var loop = attachLoop(ctx);
+    loop = attachLoop(ctx);
 
     var attackIds = [
       "../../../etc/passwd",
@@ -1478,16 +1512,25 @@ test("loop_registry_files handler: sends loop_registry_error for invalid id via 
         "error text must be invalid_loop_id for id=" + attackIds[i]);
     }
   } finally {
+    // lr-795882: attachLoop() unconditionally starts a real 30s
+    // setInterval (loopRegistry.startTimer(), project-loop.js -> scheduler.js)
+    // as part of attaching, independent of whether a loop is ever started.
+    // Left uncleared, that interval is a genuine leaked handle that keeps
+    // `node --test` (run without --test-force-exit) from ever reaching
+    // beforeExit/idle for the rest of this file's tests and every test file
+    // that runs after it in the same process.
+    if (loop) loop.stopTimer();
     fs.rmSync(tmpDir, { recursive: true });
   }
 });
 
 test("loop_registry_save_files handler: sends loop_registry_error for invalid id via real handleLoopMessage", function () {
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-h-test-"));
+  var loop = null;
   try {
     var sent = [];
     var ctx = makeLoopCtx(tmpDir, function (msg) { sent.push(msg); });
-    var loop = attachLoop(ctx);
+    loop = attachLoop(ctx);
 
     var attackIds = [
       "../../../etc/passwd",
@@ -1505,6 +1548,9 @@ test("loop_registry_save_files handler: sends loop_registry_error for invalid id
         "error text must be invalid_loop_id for id=" + attackIds[i]);
     }
   } finally {
+    // lr-795882: same leaked-timer class as the test above — see that
+    // comment for the full explanation.
+    if (loop) loop.stopTimer();
     fs.rmSync(tmpDir, { recursive: true });
   }
 });
