@@ -302,6 +302,109 @@ test("lr-fd38ac (client gate): switching into a finished loop session after a da
     "a session that is not the loop's current session must not arm queue mode even while a loop is running elsewhere");
 });
 
+// ---------------------------------------------------------------------------
+// Part 2 follow-up (PEACHES-blocking on the initial Part 2 fix): a
+// re-evaluation bug in the new global-state dependency. loop_started and
+// loop_iteration (app-messages.js) write loopActive/loopCurrentSessionId
+// directly via store.set() — they do not call updateLoopInputVisibility()
+// themselves. Before this follow-up, nothing re-ran the gate when those
+// fields changed, so a client already viewing the session that becomes the
+// loop's own current session (e.g. it started the loop from that session)
+// was stuck with a stale loopQueueMode: false even once every gate
+// condition became true — silently dropping a message instead of queuing
+// it, the inverse of the original lr-fd38ac bug.
+//
+// This test drives the exact state transition loop_iteration performs
+// (plain store.set() calls on loopIteration/loopMaxIterations/
+// loopCurrentSessionId, and loopActive from loop_started) — never calling
+// updateLoopInputVisibility() directly — and asserts loopQueueMode follows
+// automatically via app-loop-ui.js's reactive store.subscribe().
+test("lr-fd38ac follow-up: loopQueueMode re-arms via reactive subscription when loop_started/loop_iteration set loopActive/loopCurrentSessionId, without a direct updateLoopInputVisibility() call", async function () {
+  var inputAreaEl = makeFakeElement();
+  var inputEl = makeFakeElement();
+  inputEl.placeholder = "Message Claude Code...";
+  var elementsById = { "input-area": inputAreaEl, "input": inputEl };
+
+  global.document = {
+    addEventListener: function () {},
+    removeEventListener: function () {},
+    createElement: function () { return makeFakeElement(); },
+    getElementById: function (id) { return elementsById[id] || makeFakeElement(); },
+    querySelector: function () { return null; },
+    querySelectorAll: function () { return []; },
+    body: makeFakeElement(),
+  };
+  global.window = { innerWidth: 1024, innerHeight: 768, addEventListener: function () {}, removeEventListener: function () {} };
+  global.lucide = { createIcons: function () {} };
+  global.requestAnimationFrame = function () { return 0; };
+  global.cancelAnimationFrame = function () {};
+  global.localStorage = {
+    _data: {},
+    getItem: function (k) { return Object.prototype.hasOwnProperty.call(this._data, k) ? this._data[k] : null; },
+    setItem: function (k, v) { this._data[k] = String(v); },
+    removeItem: function (k) { delete this._data[k]; },
+  };
+  global.marked = { use: function () {}, parse: function (s) { return s; }, setOptions: function () {} };
+  global.mermaid = { initialize: function () {}, render: function () { return Promise.resolve({ svg: "" }); } };
+  global.DOMPurify = { sanitize: function (s) { return s; } };
+  global.fetch = function () { return Promise.resolve({ json: function () { return Promise.resolve({}); } }); };
+
+  var storeMod = await import("../lib/public/modules/store.js");
+  var loopUiMod = await import("../lib/public/modules/app-loop-ui.js");
+  var createStore = storeMod.createStore;
+  var store = storeMod.store;
+
+  // Install the reactive subscription under test — initLoopUi() calls this
+  // as part of real app boot; installing it directly here avoids pulling
+  // in initLoopUi()'s unrelated DOM-rendering subscriber (loop banner/
+  // button), which this test has no reason to exercise. Must run before
+  // any store.set() calls below for the subscription to see them.
+  loopUiMod.initLoopQueueModeSync();
+
+  // Scenario: the human is already viewing session 7 (e.g. they started
+  // the loop from this exact session — session_switched already ran for
+  // it earlier with loopActive still false, so the gate evaluated false
+  // and armed nothing) when the loop actually starts and its first
+  // iteration lands on this same session id.
+  createStore({ activeSessionId: 7, loopActive: false, loopCurrentSessionId: null, loopQueueMode: false });
+
+  // loop_started: sets loopActive true. Does not touch loopCurrentSessionId
+  // or activeSessionId, so the gate must NOT arm yet (no loop session is
+  // confirmed as "this one" until loop_iteration below).
+  store.set({ loopActive: true, ralphPhase: "executing", loopIteration: 0, loopMaxIterations: 20, loopBannerName: "Test Loop" });
+  assert.strictEqual(store.get("loopQueueMode"), false,
+    "loop_started alone (loopCurrentSessionId still null) must not arm queue mode");
+
+  // loop_iteration: sets loopCurrentSessionId to the loop's new session —
+  // here, the same session (7) already being viewed. This is a plain
+  // store.set(), exactly mirroring app-messages.js's loop_iteration
+  // handler; updateLoopInputVisibility() is never called directly by this
+  // test. All four gate conditions are now true.
+  store.set({ loopIteration: 1, loopMaxIterations: 20, loopCurrentSessionId: 7 });
+
+  assert.strictEqual(store.get("loopQueueMode"), true,
+    "loopQueueMode must re-arm reactively once loopActive/loopCurrentSessionId/activeSessionId all line up, " +
+    "even though nothing called updateLoopInputVisibility() directly for this transition");
+
+  // Inverse: an ENDED loop session must still not re-arm queue mode
+  // through this same reactive path. loop_finished sets loopActive:false
+  // and loopCurrentSessionId:null in the same store.set() (see
+  // app-messages.js) — assert the reactive subscriber tracks that too.
+  store.set({ loopActive: false, ralphPhase: "done", loopBannerName: null, loopCurrentSessionId: null });
+  assert.strictEqual(store.get("loopQueueMode"), false,
+    "an ended loop must not leave queue mode re-armed via the reactive path");
+
+  // Further inverse: loopCurrentSessionId pointing at a DIFFERENT loop
+  // session than the one being viewed must not arm queue mode, even while
+  // a loop is genuinely running (mirrors the direct-call contrast case
+  // above, exercised here through the reactive path instead).
+  createStore({ activeSessionId: 3, loopActive: false, loopCurrentSessionId: null, loopQueueMode: false });
+  store.set({ loopActive: true });
+  store.set({ loopCurrentSessionId: 7 });
+  assert.strictEqual(store.get("loopQueueMode"), false,
+    "a running loop whose current session is not the one being viewed must not arm queue mode reactively");
+});
+
 test("lr-fd38ac (client gate): judge session with a stale active marker after daemon restart is also resumable", async function () {
   var inputAreaEl = makeFakeElement();
   var inputEl = makeFakeElement();
