@@ -128,11 +128,49 @@ var { spawnSync } = require("child_process");
 // process.exitCode below), so an uncaught throw here can only ever turn an
 // already-nonzero process into a hard crash (still non-zero), never a FAIL
 // verdict into exit 0. Swallowing the error here would risk exactly that.
+//
+// NON-ADVANCING WRITE GUARD (lr-e551b9 fold-in, PEACHES PR #402 BLOCKING).
+// fs.writeSync's return value is the ONLY thing that advances `offset`; the
+// Node docs do not rule out a 0-byte return (distinct from throwing EAGAIN),
+// and this loop's sole invariant is that it always terminates. An unguarded
+// `while (offset < buffer.length)` against a 0-byte return spins forever —
+// on this specific script, the merge-gate wrapper whose entire purpose is
+// turning a FAIL into a legible signal, an infinite loop here is strictly
+// worse than the truncation bug it replaced: truncation still failed fast
+// with a usable exit code, while a hang burns the runner until the workflow
+// timeout kills it and produces NO verdict and NO annotation at all.
+//
+// A single 0-byte return is not necessarily fatal — a transient EAGAIN-like
+// stall on a pipe under backpressure could plausibly resolve on the very
+// next attempt without ever surfacing as a thrown error. But an unbounded
+// RUN of 0-byte returns with no forward progress is exactly the spin this
+// guard exists to rule out. MAX_CONSECUTIVE_ZERO_WRITES bounds that run:
+// each 0-byte return increments a counter; any return >0 resets it; hitting
+// the bound throws. Throwing (not returning/silently giving up) matches the
+// existing EPIPE/EAGAIN posture directly above — an uncaught throw always
+// exits non-zero, so it can never produce a false green, and it surfaces
+// immediately in CI as a hard crash rather than a silent short-delivery.
+var MAX_CONSECUTIVE_ZERO_WRITES = 100;
+
 function writeFullySync(fd, data) {
   var buffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data), "utf8");
   var offset = 0;
+  var consecutiveZeroWrites = 0;
   while (offset < buffer.length) {
-    offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    var written = fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    if (written === 0) {
+      consecutiveZeroWrites += 1;
+      if (consecutiveZeroWrites >= MAX_CONSECUTIVE_ZERO_WRITES) {
+        throw new Error(
+          "writeFullySync: fs.writeSync returned 0 " + consecutiveZeroWrites +
+          " times in a row with no forward progress (delivered " + offset + " of " +
+          buffer.length + " bytes) — aborting instead of spinning forever."
+        );
+      }
+      continue;
+    }
+    consecutiveZeroWrites = 0;
+    offset += written;
   }
 }
 
