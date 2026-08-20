@@ -102,6 +102,40 @@ var { spawnSync } = require("child_process");
 // terminates. See below for suspenders (annotation ordered before the large
 // stdout dump; process.exitCode instead of process.exit()).
 // ---------------------------------------------------------------------------
+// writeFullySync(fd, data) — fs.writeSync performs exactly ONE write(2)
+// syscall attempt and returns the number of bytes actually written; it does
+// NOT loop to guarantee the whole buffer lands, and a pipe fd can legitimately
+// short-write under backpressure once the payload is large (BOBBIE, PR #402
+// comment 5360992190). The single unlooped call this replaced discarded that
+// return value entirely, so a short write silently truncated its output —
+// exactly the class of silent-truncation defect this whole task (lr-e551b9)
+// exists to eliminate, now against the raw TAP evidence trail instead of the
+// verdict. This loops until every byte is confirmed written.
+//
+// `data` may be a Buffer or a string; if it is a string it is converted to a
+// Buffer ONCE up front, and the loop advances over that Buffer by byte
+// offset. This matters because fs.writeSync's offset/length/return-value
+// semantics are BYTE-indexed always, but a JS string is indexed by UTF-16
+// code unit — slicing a string by a byte count returned from a short write
+// would misalign mid multi-byte UTF-8 sequence. Converting once avoids that
+// mismatch entirely rather than trying to reconcile the two index spaces on
+// every partial-write iteration.
+//
+// Any thrown error (e.g. EPIPE/EAGAIN) propagates uncaught — deliberately not
+// swallowed here. This function is called from FAIL-path code whose only job
+// is to make a non-zero exit legible; the exit code itself is already
+// determined by classifyRun() before either write site runs (see
+// process.exitCode below), so an uncaught throw here can only ever turn an
+// already-nonzero process into a hard crash (still non-zero), never a FAIL
+// verdict into exit 0. Swallowing the error here would risk exactly that.
+function writeFullySync(fd, data) {
+  var buffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data), "utf8");
+  var offset = 0;
+  while (offset < buffer.length) {
+    offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
+  }
+}
+
 function emitAnnotation(message) {
   // GitHub Actions workflow-command syntax. `%`, CR and LF must be escaped
   // in the message text per GitHub's documented encoding for `::error::` —
@@ -110,7 +144,7 @@ function emitAnnotation(message) {
     .replace(/%/g, "%25")
     .replace(/\r/g, "%0D")
     .replace(/\n/g, "%0A");
-  fs.writeSync(1, "::error::" + escaped + "\n");
+  writeFullySync(1, "::error::" + escaped + "\n");
 }
 
 // classifyRun() is the pure decision core of this script: given the raw
@@ -227,7 +261,11 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
   return { ok: true, exitCode: 0, kind: "ok", reason: null };
 }
 
-module.exports = { classifyRun: classifyRun, emitAnnotation: emitAnnotation };
+module.exports = {
+  classifyRun: classifyRun,
+  emitAnnotation: emitAnnotation,
+  writeFullySync: writeFullySync,
+};
 
 // Everything below only runs when this file is executed directly (`node
 // scripts/check-test-count.js <file...>`), not when required as a module by
@@ -295,14 +333,17 @@ if (require.main === module) {
     emitAnnotation(line);
   }
 
-  // The raw TAP dump is written with fs.writeSync too, for the same reason
+  // The raw TAP dump is written with writeFullySync too, for the same reason
   // as the annotation above: process.stdout.write() queues asynchronously
   // once a pipe's 64KB kernel buffer fills, and a ~1400-test TAP blob is
   // multi-MB — far larger than that buffer. Losing the raw output is a
   // real, independent problem even though the annotation above no longer
   // depends on it: a developer reading a captured `npm test` run should
-  // still see the actual TAP text, not a truncation artifact.
-  if (result.stdout) fs.writeSync(1, result.stdout);
+  // still see the actual TAP text, not a truncation artifact. A single
+  // unlooped fs.writeSync call here would carry the same short-write risk
+  // as the annotation write did (BOBBIE, PR #402) — writeFullySync loops
+  // until the whole multi-MB buffer is confirmed delivered.
+  if (result.stdout) writeFullySync(1, result.stdout);
 
   // process.exitCode (not process.exit()) lets the event loop drain
   // naturally instead of tearing the process down immediately — the second
