@@ -62,3 +62,42 @@ reviewer:
         intent before CI runs.
       applies_to:
         - "lib/public/**/*.js"
+
+    # Full decision record (why this option over a CLAUDE.md reminder, a
+    # lint-checked annotation, or mutation testing; how the nondeterministic
+    # case is handled): docs/guides/TESTING_CONVENTIONS.md.
+    #
+    # This is a review-judgment rule, not a regex — no `pattern` field.
+    # PEACHES's per-chunk model reasoning applies it directly against the
+    # diff text, same as any other rulebook item without a mechanical
+    # pattern (see AGENT.md's Rulebook section: project overrides are cited
+    # by id, not required to be regex-detectable).
+    - id: clagentic-console.demonstrated-test-failure
+      severity: blocking
+      description: >-
+        Any new or modified test asserting a bug fix (a "regression test")
+        must be traceable to a genuine failure against the pre-fix code, not
+        merely accepted on the author's say-so. Do not pass a regression
+        test on the strength of a PR/commit claim alone ("verified via git
+        stash", "confirmed failing before the fix") — independently trace
+        it: identify the parent/pre-fix commit for the changed test and
+        confirm, from the diff and commit history available in this review,
+        that the assertion the test makes is actually exercised by the code
+        path the fix touches (the PR #394 failure mode was a test that
+        touched an unrelated directory a readdirSync listing never surfaced
+        — plausible-looking, but not connected to the bug at all). You do
+        not need to re-run the suite to do this; read the pre-fix version of
+        the test/source pair in the diff and confirm the assertion would
+        have failed against it.
+        Exception — nondeterministic/flaky failures (e.g. lr-b5d62f, a
+        load-dependent race that reproduces in only some full-suite runs):
+        a test for this class cannot be demonstrated to fail on demand by
+        construction. Do not block on demonstrated-failure for these; instead
+        require the PR to say explicitly, in the body or a commit message,
+        that the failure is load-dependent/nondeterministic and name the
+        mechanism (the race/ordering/timing condition), not just assert
+        "flaky, trust me". A claim of nondeterminism with no named mechanism
+        is itself a finding — it is exactly as unverifiable as an unproven
+        determinism claim and must not be used to route around this rule.
+      applies_to:
+        - "test/**/*.js"
