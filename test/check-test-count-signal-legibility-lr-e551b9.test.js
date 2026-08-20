@@ -32,6 +32,27 @@
 // (the logic was unreachable except by paying for a full real `node --test`
 // spawn). Per-test behavioral detail below where the mapping is not obvious
 // from the function name alone.
+//
+// STRONG-FORM DEMONSTRATED FAILURE (PEACHES PR #401 fold-in): the "missing
+// symbol" failure above proves classifyRun is new, not that its VERDICTS
+// are correct — a test that would still pass against a WRONG verdict is not
+// a behavioral guard. PEACHES found exactly that gap: the below-floor
+// branch (~line 137, pre-fold-in) was checked before signal-death, so a
+// signal-killed run with a below-floor total (the common real shape — an
+// OOM-killed run IS a truncated run) reported kind "below-floor" instead of
+// "signal-death". The "signal-death is checked before below-floor" test
+// below was verified the strong way: run via `npx node --test
+// test/check-test-count-signal-legibility-lr-e551b9.test.js` against the
+// mis-ordered implementation BEFORE the reorder landed, it failed with
+// `AssertionError [ERR_ASSERTION]: ... expected: 'signal-death', actual:
+// 'below-floor'` (test 9 of 12, `code: 'ERR_ASSERTION'`) — a genuine
+// wrong-verdict assertion failure, not a missing-symbol error. After
+// reordering signal-death ahead of below-floor in classifyRun, the same
+// isolated run passed 12/12. The "missing-files still wins ... full
+// three-way precedence" test alongside it already passed pre-fix (missing-
+// files was already checked first), which is the expected shape: that test
+// pins a precedence relationship the reorder must NOT disturb, not one it
+// fixes.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -157,6 +178,47 @@ test("lr-e551b9: check ORDER — missing-files is checked before signal-death (a
   var verdict = checkTestCount.classifyRun(result, files, resultsByFile, 5, FLOOR);
 
   assert.equal(verdict.kind, "missing-files");
+  assert.ok(verdict.reason.indexOf("test/killed-mid-run.test.js") !== -1);
+});
+
+test("lr-e551b9: check ORDER — signal-death is checked before below-floor (PEACHES PR #401 finding: an OOM-killed run IS a truncated run, so these two conditions fire TOGETHER in the ordinary case this task exists to make legible, and the wrong cause must not win)", function () {
+  // All argv files reported at least one RESULT (so missing-files does NOT
+  // fire), the orchestrator was signal-killed, AND the total is below the
+  // floor — the common real shape for an OOM/CI-timeout kill mid-run: every
+  // file that got to run at least once emitted partial results before the
+  // process died, so nothing is individually "missing", but the aggregate
+  // total is far short of a real run. signal-death must win here: it is the
+  // more actionable, more specific cause (names the actual signal) and is
+  // the true cause of the truncation, not a coincidental byproduct of it.
+  var files = ["test/present.test.js"];
+  var resultsByFile = {};
+  resultsByFile[absFile("test/present.test.js")] = 2;
+  var result = { status: null, signal: "SIGKILL", error: undefined };
+
+  var verdict = checkTestCount.classifyRun(result, files, resultsByFile, 2, FLOOR);
+
+  assert.equal(verdict.kind, "signal-death",
+    "a signal-killed run with a below-floor total must report signal-death, not below-floor — " +
+    "otherwise the diagnostic reports the wrong cause precisely when the cause matters most; got: " + verdict.kind);
+  assert.ok(verdict.reason.indexOf("SIGKILL") !== -1,
+    "must name the actual signal even when below-floor also applies; got: " + verdict.reason);
+});
+
+test("lr-e551b9: check ORDER — missing-files still wins over signal-death even when below-floor would also apply (full three-way precedence)", function () {
+  // Reaffirms the existing missing-files-before-signal-death precedence
+  // (line ~147 above) but with a total that is ALSO below the floor, so
+  // all three conditions are live at once. missing-files must still win —
+  // reordering signal-death ahead of below-floor must not disturb the
+  // higher-precedence missing-files check.
+  var files = ["test/present.test.js", "test/killed-mid-run.test.js"];
+  var resultsByFile = {};
+  resultsByFile[absFile("test/present.test.js")] = 2;
+  var result = { status: null, signal: "SIGKILL", error: undefined };
+
+  var verdict = checkTestCount.classifyRun(result, files, resultsByFile, 2, FLOOR);
+
+  assert.equal(verdict.kind, "missing-files",
+    "missing-files must win over both signal-death and below-floor when all three are live; got: " + verdict.kind);
   assert.ok(verdict.reason.indexOf("test/killed-mid-run.test.js") !== -1);
 });
 

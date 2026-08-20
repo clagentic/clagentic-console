@@ -101,10 +101,16 @@ function emitAnnotation(message) {
 // Returns { ok: bool, exitCode: number, reason: string|null, kind: string }.
 // `kind` names which of this script's distinct FAIL routes produced the
 // verdict (see the module header's WHAT THIS DOES AND DOES NOT CATCH /
-// MECHANISM sections for the full list) — 'ok', 'spawn-error',
-// 'missing-files', 'below-floor', 'signal-death', or 'test-failure' (a
-// genuine node --test non-zero exit with no wrapper-level condition
-// tripped — i.e. an ordinary named test failure, not a wrapper failure).
+// MECHANISM sections for the full list). Checked in this precedence order
+// when multiple conditions are live at once (lr-e551b9 fold-in, PR #401):
+// 'spawn-error' > 'missing-files' > 'signal-death' > 'below-floor' >
+// 'test-failure' (a genuine node --test non-zero exit with no wrapper-level
+// condition tripped — i.e. an ordinary named test failure, not a wrapper
+// failure) > 'ok'. missing-files outranks signal-death because it names a
+// specific file, the most actionable cause available; signal-death outranks
+// below-floor because a signal-killed run IS the truncated run that
+// produces a below-floor count in the first place — see the check itself
+// for the full reasoning.
 function classifyRun(result, files, resultsByFile, totalTests, floor) {
   if (result.error) {
     return {
@@ -134,20 +140,6 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
     };
   }
 
-  if (totalTests < floor) {
-    return {
-      ok: false,
-      exitCode: 1,
-      kind: "below-floor",
-      reason: (
-        "total executed test count " + totalTests +
-        " is below the floor of " + floor + " even though every file reported at least one result — " +
-        "likely a large in-file test drop. See this script's header for what the floor does and does not " +
-        "catch, and how to update it for a deliberate suite reduction."
-      ),
-    };
-  }
-
   if (result.status === null) {
     // The child `node --test` ORCHESTRATOR process itself (not an
     // individual per-file worker/subprocess it manages internally — Node's
@@ -158,6 +150,17 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
     // child_process docs: exactly one of status/signal is non-null).
     // Previously this exited 1 with ZERO explanatory output — indistinguishable
     // from a genuine test failure at the exit-code level. lr-e551b9.
+    //
+    // Checked BEFORE below-floor (PEACHES PR #401 finding, lr-e551b9
+    // fold-in): an OOM-killed/externally-signaled orchestrator IS a
+    // truncated run, and a truncated run is exactly what produces a
+    // below-floor total — the two conditions fire TOGETHER in the ordinary
+    // case this whole check exists to make legible. Reporting below-floor
+    // here would name the wrong cause precisely when the cause matters
+    // most (the run still fails either way — exitCode stays 1 — but the
+    // diagnostic would mislabel it). missing-files is still checked above
+    // this because it names a more specific, actionable culprit (an actual
+    // file) when both conditions are live.
     return {
       ok: false,
       exitCode: 1,
@@ -167,6 +170,20 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
         "timeout/cancellation); no test failure was reported because the process did not exit normally. " +
         "This is NOT the same as a per-file worker crash (Node's test runner already reports those as a " +
         "named test:fail with a signal field); this is the top-level orchestrator process itself dying."
+      ),
+    };
+  }
+
+  if (totalTests < floor) {
+    return {
+      ok: false,
+      exitCode: 1,
+      kind: "below-floor",
+      reason: (
+        "total executed test count " + totalTests +
+        " is below the floor of " + floor + " even though every file reported at least one result — " +
+        "likely a large in-file test drop. See this script's header for what the floor does and does not " +
+        "catch, and how to update it for a deliberate suite reduction."
       ),
     };
   }
