@@ -222,17 +222,35 @@ test("lr-e551b9: check ORDER — missing-files still wins over signal-death even
   assert.ok(verdict.reason.indexOf("test/killed-mid-run.test.js") !== -1);
 });
 
-test("lr-e551b9: emitAnnotation writes a ::error:: prefixed workflow command to stdout", function () {
+// NOTE (lr-e551b9 reopen): emitAnnotation() is now implemented with
+// fs.writeSync(1, ...) rather than process.stdout.write(...) — see
+// check-test-count.js's DELIVERY comment above emitAnnotation for why: a
+// process.stdout.write-based stub, exactly like the two tests below used to
+// use, cannot observe the async-pipe/process.exit() race that lost the
+// annotation in production (that is precisely the gap MILLER's reopen
+// diagnosis found — see test/check-test-count-delivery-lr-e551b9.test.js for
+// the through-a-real-pipe regression test that covers actual delivery).
+// These two tests still verify message FORMAT — the ::error:: prefix and the
+// GitHub workflow-command escaping — which is a real, narrower thing worth
+// unit-testing fast and in isolation; they now spy on fs.writeSync (the
+// primitive the implementation actually calls) instead of stubbing
+// process.stdout.write (a primitive it no longer calls), so the spy remains
+// truthful about what emitAnnotation does today.
+test("lr-e551b9: emitAnnotation writes a ::error:: prefixed workflow command to fd 1", function () {
+  var fs = require("fs");
   var chunks = [];
-  var originalWrite = process.stdout.write;
-  process.stdout.write = function (chunk) {
-    chunks.push(chunk);
-    return true;
+  var originalWriteSync = fs.writeSync;
+  fs.writeSync = function (fd, chunk) {
+    if (fd === 1) {
+      chunks.push(chunk);
+      return chunk.length;
+    }
+    return originalWriteSync.apply(fs, arguments);
   };
   try {
     checkTestCount.emitAnnotation("[check-test-count] FAIL (signal-death): node --test was killed by SIGKILL");
   } finally {
-    process.stdout.write = originalWrite;
+    fs.writeSync = originalWriteSync;
   }
 
   var written = chunks.join("");
@@ -241,16 +259,20 @@ test("lr-e551b9: emitAnnotation writes a ::error:: prefixed workflow command to 
 });
 
 test("lr-e551b9: emitAnnotation escapes %, CR and LF per GitHub's documented workflow-command encoding", function () {
+  var fs = require("fs");
   var chunks = [];
-  var originalWrite = process.stdout.write;
-  process.stdout.write = function (chunk) {
-    chunks.push(chunk);
-    return true;
+  var originalWriteSync = fs.writeSync;
+  fs.writeSync = function (fd, chunk) {
+    if (fd === 1) {
+      chunks.push(chunk);
+      return chunk.length;
+    }
+    return originalWriteSync.apply(fs, arguments);
   };
   try {
     checkTestCount.emitAnnotation("100% failure\r\nline two");
   } finally {
-    process.stdout.write = originalWrite;
+    fs.writeSync = originalWriteSync;
   }
 
   var written = chunks.join("");

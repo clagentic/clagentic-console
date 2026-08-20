@@ -61,11 +61,14 @@
 //
 var TEST_COUNT_FLOOR = 1300;
 
+var fs = require("fs");
 var path = require("path");
 var { spawnSync } = require("child_process");
 
 // ---------------------------------------------------------------------------
-// CI legibility (lr-e551b9, MILLER re-diagnosis of PR #400 / lr-4e1242 seq 5).
+// CI legibility (lr-e551b9, MILLER re-diagnosis of PR #400 / lr-4e1242 seq 5;
+// re-diagnosed again post-merge, same task, when the shipped fix turned out
+// not to survive a real CI pipe — see DELIVERY below).
 //
 // GitHub Actions does not surface arbitrary stderr text anywhere a crew
 // agent can reach it: the raw job log requires following a redirect to a
@@ -77,7 +80,100 @@ var { spawnSync } = require("child_process");
 // agent can actually read it, without changing which conditions fail the
 // run (see the module header above: every condition that fails today must
 // keep failing).
+//
+// DELIVERY (lr-e551b9 reopen, MILLER third-pass diagnosis, confidence 0.93,
+// reproduced locally and in CI on PR #400's rebased head): the first version
+// of this function used `process.stdout.write`. When stdout is a PIPE
+// (always true in CI, and in any captured run), that write is ASYNCHRONOUS —
+// it queues in userspace once the 64KB kernel pipe buffer fills. The
+// multi-MB TAP dump this script also writes to stdout vastly exceeds that
+// buffer, so by the time emitAnnotation() ran, its own write was queued
+// BEHIND the still-draining TAP blob. process.exit() then tore the process
+// down without draining the queue, so the annotation reached the Writable
+// stream object and never reached the file descriptor: exit code 1 with NO
+// annotation, indistinguishable from a genuine test failure at the very
+// point this script exists to make that distinguishable.
+//
+// Fixed by writing the annotation with fs.writeSync(1, ...) instead of
+// process.stdout.write(...). writeSync is a direct, synchronous syscall to
+// the fd — it is not subject to the Writable stream's internal async queue
+// at all, so there is no buffer to race process.exit() against. This is
+// belt: it holds even if something upstream changes how/when the process
+// terminates. See below for suspenders (annotation ordered before the large
+// stdout dump; process.exitCode instead of process.exit()).
 // ---------------------------------------------------------------------------
+// writeFullySync(fd, data) — fs.writeSync performs exactly ONE write(2)
+// syscall attempt and returns the number of bytes actually written; it does
+// NOT loop to guarantee the whole buffer lands, and a pipe fd can legitimately
+// short-write under backpressure once the payload is large (BOBBIE, PR #402
+// comment 5360992190). The single unlooped call this replaced discarded that
+// return value entirely, so a short write silently truncated its output —
+// exactly the class of silent-truncation defect this whole task (lr-e551b9)
+// exists to eliminate, now against the raw TAP evidence trail instead of the
+// verdict. This loops until every byte is confirmed written.
+//
+// `data` may be a Buffer or a string; if it is a string it is converted to a
+// Buffer ONCE up front, and the loop advances over that Buffer by byte
+// offset. This matters because fs.writeSync's offset/length/return-value
+// semantics are BYTE-indexed always, but a JS string is indexed by UTF-16
+// code unit — slicing a string by a byte count returned from a short write
+// would misalign mid multi-byte UTF-8 sequence. Converting once avoids that
+// mismatch entirely rather than trying to reconcile the two index spaces on
+// every partial-write iteration.
+//
+// Any thrown error (e.g. EPIPE/EAGAIN) propagates uncaught — deliberately not
+// swallowed here. This function is called from FAIL-path code whose only job
+// is to make a non-zero exit legible; the exit code itself is already
+// determined by classifyRun() before either write site runs (see
+// process.exitCode below), so an uncaught throw here can only ever turn an
+// already-nonzero process into a hard crash (still non-zero), never a FAIL
+// verdict into exit 0. Swallowing the error here would risk exactly that.
+//
+// NON-ADVANCING WRITE GUARD (lr-e551b9 fold-in, PEACHES PR #402 BLOCKING).
+// fs.writeSync's return value is the ONLY thing that advances `offset`; the
+// Node docs do not rule out a 0-byte return (distinct from throwing EAGAIN),
+// and this loop's sole invariant is that it always terminates. An unguarded
+// `while (offset < buffer.length)` against a 0-byte return spins forever —
+// on this specific script, the merge-gate wrapper whose entire purpose is
+// turning a FAIL into a legible signal, an infinite loop here is strictly
+// worse than the truncation bug it replaced: truncation still failed fast
+// with a usable exit code, while a hang burns the runner until the workflow
+// timeout kills it and produces NO verdict and NO annotation at all.
+//
+// A single 0-byte return is not necessarily fatal — a transient EAGAIN-like
+// stall on a pipe under backpressure could plausibly resolve on the very
+// next attempt without ever surfacing as a thrown error. But an unbounded
+// RUN of 0-byte returns with no forward progress is exactly the spin this
+// guard exists to rule out. MAX_CONSECUTIVE_ZERO_WRITES bounds that run:
+// each 0-byte return increments a counter; any return >0 resets it; hitting
+// the bound throws. Throwing (not returning/silently giving up) matches the
+// existing EPIPE/EAGAIN posture directly above — an uncaught throw always
+// exits non-zero, so it can never produce a false green, and it surfaces
+// immediately in CI as a hard crash rather than a silent short-delivery.
+var MAX_CONSECUTIVE_ZERO_WRITES = 100;
+
+function writeFullySync(fd, data) {
+  var buffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data), "utf8");
+  var offset = 0;
+  var consecutiveZeroWrites = 0;
+  while (offset < buffer.length) {
+    var written = fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    if (written === 0) {
+      consecutiveZeroWrites += 1;
+      if (consecutiveZeroWrites >= MAX_CONSECUTIVE_ZERO_WRITES) {
+        throw new Error(
+          "writeFullySync: fs.writeSync returned 0 " + consecutiveZeroWrites +
+          " times in a row with no forward progress (delivered " + offset + " of " +
+          buffer.length + " bytes) — aborting instead of spinning forever."
+        );
+      }
+      continue;
+    }
+    consecutiveZeroWrites = 0;
+    offset += written;
+  }
+}
+
 function emitAnnotation(message) {
   // GitHub Actions workflow-command syntax. `%`, CR and LF must be escaped
   // in the message text per GitHub's documented encoding for `::error::` —
@@ -86,7 +182,7 @@ function emitAnnotation(message) {
     .replace(/%/g, "%25")
     .replace(/\r/g, "%0D")
     .replace(/\n/g, "%0A");
-  process.stdout.write("::error::" + escaped + "\n");
+  writeFullySync(1, "::error::" + escaped + "\n");
 }
 
 // classifyRun() is the pure decision core of this script: given the raw
@@ -203,7 +299,11 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
   return { ok: true, exitCode: 0, kind: "ok", reason: null };
 }
 
-module.exports = { classifyRun: classifyRun, emitAnnotation: emitAnnotation };
+module.exports = {
+  classifyRun: classifyRun,
+  emitAnnotation: emitAnnotation,
+  writeFullySync: writeFullySync,
+};
 
 // Everything below only runs when this file is executed directly (`node
 // scripts/check-test-count.js <file...>`), not when required as a module by
@@ -226,8 +326,6 @@ if (require.main === module) {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-
-  if (result.stdout) process.stdout.write(result.stdout);
 
   // The custom reporter's RESULT lines are the only thing routed to stderr —
   // forward everything else Node itself wrote to stderr (real errors,
@@ -255,6 +353,14 @@ if (require.main === module) {
   var totalTests = passCount + failCount;
   var verdict = classifyRun(result, files, resultsByFile, totalTests, TEST_COUNT_FLOOR);
 
+  // DELIVERY ORDER (lr-e551b9 reopen). The annotation is emitted BEFORE the
+  // large TAP dump below, not after: emitAnnotation() now uses
+  // fs.writeSync(1, ...), a direct synchronous syscall that bypasses the
+  // stdout Writable's async queue entirely, so this ordering is not load-
+  // bearing for the annotation's own delivery — but it also means the
+  // annotation is never at risk of landing "behind" a dump that is itself
+  // subject to the async-pipe race (see below), belt-and-suspenders rather
+  // than relying on ordering alone.
   if (!verdict.ok) {
     var line = "[check-test-count] FAIL (" + verdict.kind + "): " + verdict.reason;
     process.stderr.write(line + "\n");
@@ -265,5 +371,27 @@ if (require.main === module) {
     emitAnnotation(line);
   }
 
-  process.exit(verdict.exitCode);
+  // The raw TAP dump is written with writeFullySync too, for the same reason
+  // as the annotation above: process.stdout.write() queues asynchronously
+  // once a pipe's 64KB kernel buffer fills, and a ~1400-test TAP blob is
+  // multi-MB — far larger than that buffer. Losing the raw output is a
+  // real, independent problem even though the annotation above no longer
+  // depends on it: a developer reading a captured `npm test` run should
+  // still see the actual TAP text, not a truncation artifact. A single
+  // unlooped fs.writeSync call here would carry the same short-write risk
+  // as the annotation write did (BOBBIE, PR #402) — writeFullySync loops
+  // until the whole multi-MB buffer is confirmed delivered.
+  if (result.stdout) writeFullySync(1, result.stdout);
+
+  // process.exitCode (not process.exit()) lets the event loop drain
+  // naturally instead of tearing the process down immediately — the second
+  // half of MILLER's recommended (a)+(b) combination. Nothing below this
+  // line can reset process.exitCode or call process.exit(0): this is the
+  // last statement in the script, so there is no later code path that could
+  // turn a red run green. The FAIL-OPEN CONSTRAINT (lr-795882, engram
+  // 7613980) requires this be verified, not assumed — every exit-1
+  // condition above still sets verdict.exitCode to 1 or the child's own
+  // non-zero status; process.exitCode is set from that value unconditionally
+  // and nothing else touches it.
+  process.exitCode = verdict.exitCode;
 }
