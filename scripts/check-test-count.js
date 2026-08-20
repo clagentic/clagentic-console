@@ -61,11 +61,14 @@
 //
 var TEST_COUNT_FLOOR = 1300;
 
+var fs = require("fs");
 var path = require("path");
 var { spawnSync } = require("child_process");
 
 // ---------------------------------------------------------------------------
-// CI legibility (lr-e551b9, MILLER re-diagnosis of PR #400 / lr-4e1242 seq 5).
+// CI legibility (lr-e551b9, MILLER re-diagnosis of PR #400 / lr-4e1242 seq 5;
+// re-diagnosed again post-merge, same task, when the shipped fix turned out
+// not to survive a real CI pipe — see DELIVERY below).
 //
 // GitHub Actions does not surface arbitrary stderr text anywhere a crew
 // agent can reach it: the raw job log requires following a redirect to a
@@ -77,6 +80,27 @@ var { spawnSync } = require("child_process");
 // agent can actually read it, without changing which conditions fail the
 // run (see the module header above: every condition that fails today must
 // keep failing).
+//
+// DELIVERY (lr-e551b9 reopen, MILLER third-pass diagnosis, confidence 0.93,
+// reproduced locally and in CI on PR #400's rebased head): the first version
+// of this function used `process.stdout.write`. When stdout is a PIPE
+// (always true in CI, and in any captured run), that write is ASYNCHRONOUS —
+// it queues in userspace once the 64KB kernel pipe buffer fills. The
+// multi-MB TAP dump this script also writes to stdout vastly exceeds that
+// buffer, so by the time emitAnnotation() ran, its own write was queued
+// BEHIND the still-draining TAP blob. process.exit() then tore the process
+// down without draining the queue, so the annotation reached the Writable
+// stream object and never reached the file descriptor: exit code 1 with NO
+// annotation, indistinguishable from a genuine test failure at the very
+// point this script exists to make that distinguishable.
+//
+// Fixed by writing the annotation with fs.writeSync(1, ...) instead of
+// process.stdout.write(...). writeSync is a direct, synchronous syscall to
+// the fd — it is not subject to the Writable stream's internal async queue
+// at all, so there is no buffer to race process.exit() against. This is
+// belt: it holds even if something upstream changes how/when the process
+// terminates. See below for suspenders (annotation ordered before the large
+// stdout dump; process.exitCode instead of process.exit()).
 // ---------------------------------------------------------------------------
 function emitAnnotation(message) {
   // GitHub Actions workflow-command syntax. `%`, CR and LF must be escaped
@@ -86,7 +110,7 @@ function emitAnnotation(message) {
     .replace(/%/g, "%25")
     .replace(/\r/g, "%0D")
     .replace(/\n/g, "%0A");
-  process.stdout.write("::error::" + escaped + "\n");
+  fs.writeSync(1, "::error::" + escaped + "\n");
 }
 
 // classifyRun() is the pure decision core of this script: given the raw
@@ -227,8 +251,6 @@ if (require.main === module) {
     maxBuffer: 64 * 1024 * 1024,
   });
 
-  if (result.stdout) process.stdout.write(result.stdout);
-
   // The custom reporter's RESULT lines are the only thing routed to stderr —
   // forward everything else Node itself wrote to stderr (real errors,
   // warnings) so a normal `npm test` run still surfaces them, then parse the
@@ -255,6 +277,14 @@ if (require.main === module) {
   var totalTests = passCount + failCount;
   var verdict = classifyRun(result, files, resultsByFile, totalTests, TEST_COUNT_FLOOR);
 
+  // DELIVERY ORDER (lr-e551b9 reopen). The annotation is emitted BEFORE the
+  // large TAP dump below, not after: emitAnnotation() now uses
+  // fs.writeSync(1, ...), a direct synchronous syscall that bypasses the
+  // stdout Writable's async queue entirely, so this ordering is not load-
+  // bearing for the annotation's own delivery — but it also means the
+  // annotation is never at risk of landing "behind" a dump that is itself
+  // subject to the async-pipe race (see below), belt-and-suspenders rather
+  // than relying on ordering alone.
   if (!verdict.ok) {
     var line = "[check-test-count] FAIL (" + verdict.kind + "): " + verdict.reason;
     process.stderr.write(line + "\n");
@@ -265,5 +295,24 @@ if (require.main === module) {
     emitAnnotation(line);
   }
 
-  process.exit(verdict.exitCode);
+  // The raw TAP dump is written with fs.writeSync too, for the same reason
+  // as the annotation above: process.stdout.write() queues asynchronously
+  // once a pipe's 64KB kernel buffer fills, and a ~1400-test TAP blob is
+  // multi-MB — far larger than that buffer. Losing the raw output is a
+  // real, independent problem even though the annotation above no longer
+  // depends on it: a developer reading a captured `npm test` run should
+  // still see the actual TAP text, not a truncation artifact.
+  if (result.stdout) fs.writeSync(1, result.stdout);
+
+  // process.exitCode (not process.exit()) lets the event loop drain
+  // naturally instead of tearing the process down immediately — the second
+  // half of MILLER's recommended (a)+(b) combination. Nothing below this
+  // line can reset process.exitCode or call process.exit(0): this is the
+  // last statement in the script, so there is no later code path that could
+  // turn a red run green. The FAIL-OPEN CONSTRAINT (lr-795882, engram
+  // 7613980) requires this be verified, not assumed — every exit-1
+  // condition above still sets verdict.exitCode to 1 or the child's own
+  // non-zero status; process.exitCode is set from that value unconditionally
+  // and nothing else touches it.
+  process.exitCode = verdict.exitCode;
 }
