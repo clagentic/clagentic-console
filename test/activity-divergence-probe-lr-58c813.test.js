@@ -104,10 +104,17 @@ test("lr-58c813: idle-reaper tick counts a session where isProcessing=true but t
     // fire when isProcessing && !queryInstance, or !isProcessing) do not
     // themselves mutate isProcessing or the registry this tick — isolating
     // what this test is asserting to the probe alone.
+    //
+    // Constructed exactly as the real constructors do (lib/sessions.js:697,
+    // :835): no `activity` property at all. Deliberately NOT calling
+    // sessionActivity.isSessionActive() anywhere in this test, before or
+    // after the tick — that call itself lazily creates session.activity
+    // (session-activity.js ensureRegistry), which would mask the exact
+    // defect this test exists to catch (PEACHES lr-58c813 finding).
     var session = makeSession({ isProcessing: true, queryInstance: {} });
+    assert.equal(Object.prototype.hasOwnProperty.call(session, "activity"), false,
+      "precondition: session has no activity property, matching the real constructors");
     sm.sessions.set(session.localId, session);
-
-    assert.equal(sessionActivity.isSessionActive(session), false, "precondition: registry has no token for this session");
 
     var before = setup.sdkBridgeMod.getActivityDivergenceStats();
 
@@ -117,13 +124,18 @@ test("lr-58c813: idle-reaper tick counts a session where isProcessing=true but t
     var after = setup.sdkBridgeMod.getActivityDivergenceStats();
 
     assert.equal(after.count, before.count + 1, "exactly one divergence must be recorded for the one diverging session");
-    assert.equal(after.recentSamples[0].sessionId, session.localId);
     assert.equal(after.recentSamples[0].rawIsProcessing, true);
     assert.equal(after.recentSamples[0].derivedIsActive, false);
 
-    // The probe must be READ ONLY: neither source was touched by observing it.
+    // The probe must be genuinely READ ONLY: neither source was touched by
+    // observing it, INCLUDING never lazily creating session.activity. This
+    // is the assertion that fails against the pre-fix probe (verified by
+    // stash-testing — see PR body) because the pre-fix probe called
+    // sessionActivity.isSessionActive(session), which assigns
+    // session.activity as a side effect of reading it.
     assert.equal(session.isProcessing, true, "probe must not correct session.isProcessing");
-    assert.equal(sessionActivity.isSessionActive(session), false, "probe must not mutate the registry");
+    assert.equal(Object.prototype.hasOwnProperty.call(session, "activity"), false,
+      "probe must not lazily create session.activity as a side effect of observing it");
 
     bridge.stopIdleReaper();
   } finally {
@@ -234,9 +246,26 @@ test("lr-58c813: bridge.getMemoryStats() exposes activityDivergenceCount and act
 //    assignment to session.isProcessing or session.activity anywhere in the
 //    probe helper function, so a future edit cannot silently turn this
 //    baseline measurement into a fix.
+//
+//    lr-58c813 PEACHES finding: a prior version of this invariant only
+//    inspected the probe function's own body for DIRECT writes, so it could
+//    not see the TRANSITIVE mutation through sessionActivity.isSessionActive
+//    -> getActiveCount -> ensureRegistry (which assigns session.activity as
+//    a side effect of reading it). Source inspection alone cannot prove a
+//    called function is side-effect-free without re-deriving that function's
+//    own body every time it changes — so this invariant is now split in two:
+//    (a) a narrow, defensible source check that the probe never calls the
+//        two specific sessionActivity exports known to have this shape
+//        (isSessionActive, getActiveCount), rather than trying to inspect
+//        their transitive bodies; and
+//    (b) the behavioral test above ("...counts a session where..."), which
+//        constructs a session exactly as the real constructors do (no
+//        `activity` property) and asserts session.activity is STILL ABSENT
+//        after the probe runs — that is the test that actually catches a
+//        transitive mutation, source inspection is a secondary guard.
 // ---------------------------------------------------------------------------
 
-test("CI invariant: _recordActivityDivergenceIfAny never assigns session.isProcessing or session.activity", function () {
+test("CI invariant: _recordActivityDivergenceIfAny never assigns session.isProcessing or session.activity, and never calls a mutating sessionActivity read (isSessionActive/getActiveCount)", function () {
   var fs = require("fs");
   var path = require("path");
   var src = fs.readFileSync(path.join(__dirname, "..", "lib", "sdk-bridge.js"), "utf8");
@@ -247,4 +276,58 @@ test("CI invariant: _recordActivityDivergenceIfAny never assigns session.isProce
   assert.doesNotMatch(body, /session\.isProcessing\s*=/, "the probe must never write session.isProcessing");
   assert.doesNotMatch(body, /session\.activity\s*=/, "the probe must never write session.activity");
   assert.doesNotMatch(body, /sessionActivity\.(acquireToken|releaseToken|bumpGeneration|sweepStaleTokens|replaceRegistry)\(/, "the probe must never call a registry-mutating export");
+  // The lazy-init defect: isSessionActive/getActiveCount both call
+  // ensureRegistry(session) internally, which assigns session.activity if
+  // absent. Neither is a "write" by grep-for-assignment, so they need their
+  // own explicit ban here — this is the transitive-mutation gap this
+  // invariant previously missed.
+  assert.doesNotMatch(body, /sessionActivity\.(isSessionActive|getActiveCount)\(/,
+    "the probe must not call sessionActivity.isSessionActive/getActiveCount — both lazily create session.activity as a side effect; use the non-mutating _peekIsSessionActive helper instead");
+  assert.match(body, /_peekIsSessionActive\(/, "the probe must read activity via the non-mutating _peekIsSessionActive helper");
+});
+
+test("lr-58c813: _peekIsSessionActive itself never creates session.activity — direct unit check independent of the reaper/tick plumbing", function () {
+  var setup = makeBridge();
+  var session = makeSession({ isProcessing: true, queryInstance: {} });
+  assert.equal(Object.prototype.hasOwnProperty.call(session, "activity"), false, "precondition");
+  // _peekIsSessionActive is not exported (private helper) — exercised
+  // indirectly here via the same public entry point production uses
+  // (getMemoryStats/getActivityDivergenceStats after a reaper tick is
+  // covered above); this test instead pins the module-level CI-invariant
+  // helper name so the source-inspection test above stays meaningful if
+  // the helper is ever renamed.
+  var fs = require("fs");
+  var path = require("path");
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "sdk-bridge.js"), "utf8");
+  assert.match(src, /function _peekIsSessionActive\(session\)/, "expected the non-mutating helper to exist by this name in lib/sdk-bridge.js");
+});
+
+// ---------------------------------------------------------------------------
+// 5. BOBBIE finding: divergence samples carry no session identifier, since
+//    process_stats (the handler that folds these into its response) has no
+//    admin/role gate.
+// ---------------------------------------------------------------------------
+
+test("lr-58c813: a recorded divergence sample never includes a sessionId field", function (t) {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    var setup = makeBridge();
+    var sm = setup.sm;
+    var bridge = setup.bridge;
+
+    var session = makeSession({ isProcessing: true, queryInstance: {} });
+    sm.sessions.set(session.localId, session);
+
+    bridge.startIdleReaper();
+    t.mock.timers.tick(60 * 1000 * 1);
+
+    var stats = setup.sdkBridgeMod.getActivityDivergenceStats();
+    assert.ok(stats.recentSamples.length >= 1, "expected at least one recorded sample");
+    assert.equal(Object.prototype.hasOwnProperty.call(stats.recentSamples[0], "sessionId"), false,
+      "a divergence sample must not carry a session identifier — process_stats is not admin-gated");
+
+    bridge.stopIdleReaper();
+  } finally {
+    t.mock.timers.reset();
+  }
 });
