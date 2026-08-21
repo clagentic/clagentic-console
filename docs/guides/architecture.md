@@ -67,7 +67,50 @@ graph TB
     P2 --- Sessions2
 ```
 
-The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`.
+The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`, `get_activity_diagnostics`.
+
+### Agent-readable diagnostics over IPC
+
+Some server-side diagnostic probes (e.g. the activity-source divergence
+counter that sizes the `session.isProcessing` vs. registry-derived-active
+redesign) are recorded server-side but were historically only reachable
+through a live WebSocket client (`process_stats`) — unreachable by a
+read-only crew agent holding only `Bash`+`Read`, no browser, no WS client,
+no devtools.
+
+The daemon.sock IPC channel above is already reachable by such an agent (it
+is a plain Unix socket, no browser or WS client required), and is gated by
+filesystem permissions rather than any per-command auth check: `CONFIG_DIR`
+(containing `daemon.sock`) is created `chmod 0700` (`ensureConfigDir`, `lib/config.js`),
+so only the daemon's own OS user can connect at all. A read-only diagnostics
+command added to this channel inherits that gate for free — it does not
+copy the auth gap `process_stats`'s WS handler has (`lib/project-sessions.js:668-709`,
+tracked separately), since it is a different transport with its own,
+stricter gate.
+
+**The exact command a Bash-only agent runs** to read the activity-divergence
+probe from a running daemon:
+
+```
+clagentic-console --activity-diagnostics
+```
+
+This prints JSON to stdout:
+
+```json
+{
+  "activeLiveCount": 0,
+  "activityDivergenceCount": 0,
+  "activityDivergenceRecentSamples": []
+}
+```
+
+Samples carry no session-identifying field (`ts`, `rawIsProcessing`,
+`derivedIsActive`, `hasQueryInstance` only) — the same shape
+`process_stats` already carries, unchanged by adding this second retrieval
+path. See `lib/sdk-bridge.js`'s `buildActivityDiagnosticsResponse()` (the
+shared, unit-tested function both retrieval paths can call) and
+`lib/daemon.js`'s `get_activity_diagnostics` IPC case.
 
 ## YOKE Adapter Layer
 
