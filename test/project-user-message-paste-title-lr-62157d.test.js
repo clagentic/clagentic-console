@@ -91,3 +91,49 @@ test("lr-62157d / fnd-439007: a non-string pastes[0] (e.g. an image-paste-shaped
     assert.equal(title, "Image", "a non-string paste entry must fall through to the 'Image' literal, not throw");
   }, "a non-string pastes[0] must not throw a TypeError out of .replace()");
 });
+
+// BOBBIE (PR #406 review, comment 5403852401): plain substring(0, 50)
+// indexes by UTF-16 code unit, so a cut landing inside a surrogate pair
+// (most emoji, many CJK supplementary-plane characters) produces a lone
+// unpaired surrogate -- renders as a broken/replacement glyph in the
+// sidebar. Newly reachable in a way it wasn't before this task: pasted
+// content is now a title source, and pasted text is far more likely to
+// contain emoji/CJK than a typed first line. Cosmetic (not a crash/security
+// issue), but a real, newly-introduced regression path worth pinning.
+test("lr-62157d / BOBBIE: a paste whose 50th-character boundary falls inside a surrogate pair does not split it (no broken glyph)", function () {
+  // 49 plain ASCII chars, then an emoji (astral code point, 2 UTF-16 code
+  // units) starting exactly at code-unit index 49 -- substring(0, 50) would
+  // land squarely inside that surrogate pair.
+  var prefix = "a".repeat(49);
+  var emoji = "\u{1F600}"; // grinning face, U+1F600 -- surrogate pair in UTF-16
+  var pasteText = prefix + emoji + " trailing content that pushes this paste well past the 500-char client diversion threshold, repeated for length. ".repeat(4);
+  assert.ok(pasteText.length >= 500, "sanity: paste must actually be >=500 chars, matching the client's diversion threshold");
+
+  var msg = { type: "message", text: "", pastes: [pasteText] };
+  var title = deriveProvisionalTitle(msg);
+
+  // A broken surrogate pair produces the Unicode replacement/"unknown"
+  // rendering; the concrete, checkable symptom is a lone unpaired surrogate
+  // code unit somewhere in the raw UTF-16 string. Array.from() on the title
+  // splits it back into code points (a length-1 array element for a proper
+  // astral code point, since Array.from correctly reassembles a surrogate
+  // pair into one iteration step) -- but each element is still a JS string
+  // of 1 OR 2 UTF-16 code units, so codePointAt(0) (not charCodeAt(0), which
+  // always reports only the first UTF-16 code unit even for a 2-unit
+  // element) is what correctly reports "is this a single combined astral
+  // code point" vs. "is this a lone surrogate masquerading as its own
+  // element" -- the latter only happens if Array.from itself received an
+  // already-broken (lone-surrogate) string, which is exactly the bug this
+  // test exists to catch.
+  var codePoints = Array.from(title);
+  codePoints.forEach(function (cp) {
+    var code = cp.codePointAt(0);
+    var isLoneSurrogate = code >= 0xD800 && code <= 0xDFFF;
+    assert.ok(!isLoneSurrogate, "title must not contain a lone (unpaired) surrogate code unit: " + JSON.stringify(title));
+  });
+  // The emoji itself, if present in the truncated title at all, must survive
+  // intact as a single code point (not split into two lone surrogates).
+  if (title.indexOf("\uD83D") !== -1 || title.indexOf("\uDE00") !== -1) {
+    assert.ok(title.indexOf(emoji) !== -1, "if either half of the emoji surrogate pair appears, the whole emoji must be present intact: " + JSON.stringify(title));
+  }
+});
