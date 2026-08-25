@@ -229,18 +229,58 @@ test("sidebar-sessions.js: _fingerprintSessions includes favoriteOrder, unread, 
 
 // ---------------------------------------------------------------------------
 // F — sidebar-sessions + scheduler: inline rename / armed-delete vs list rebuild
+//
+// SUPERSEDED by lr-16b88d (MILLER fnd-fcdaf1): the original fix here made
+// renderSessionList() force-commit an in-progress rename on every rebuild.
+// That traded silent data loss for a worse regression — an actively
+// streaming session broadcasts session_list many times per turn, so the
+// rename committed within a keystroke or two, sending a partial title as a
+// real rename_session (durable write + permanent titleManuallySet=true).
+// The two tests below now assert the corrected contract: renderSessionList
+// SUSPENDS (captures, does not commit/cancel/send) an in-progress rename,
+// and re-opens it with the captured value + caret after a real rebuild.
+// clearArmedSessionDelete() is unaffected by lr-16b88d and still asserted.
 // ---------------------------------------------------------------------------
 
-test("sidebar-sessions.js: renderSessionList settles an active rename and clears armed-delete before rebuilding", function () {
+test("sidebar-sessions.js: renderSessionList suspends (not commits) an active rename before rebuilding, and clears armed-delete", function () {
   var idx = SIDEBAR_SESSIONS_JS.indexOf("export function renderSessionList");
   assert.ok(idx !== -1);
   var block = SIDEBAR_SESSIONS_JS.slice(idx, idx + 900);
 
-  assert.match(block, /if\s*\(activeRename\)\s*activeRename\.commit\(\);/, "renderSessionList must settle an in-progress rename before the DOM teardown");
+  assert.match(
+    block,
+    /activeRename\s*\?\s*\{[\s\S]*?snapshot:\s*activeRename\.suspend\(\),[\s\S]*?\}\s*:\s*null/,
+    "renderSessionList must SUSPEND (not commit) an in-progress rename before the DOM teardown — " +
+    "force-committing on every rebuild is the lr-16b88d regression (partial title sent as a real " +
+    "rename_session on nearly every broadcast from an actively-streaming session)"
+  );
+  assert.doesNotMatch(
+    block,
+    /if\s*\(activeRename\)\s*activeRename\.commit\(\);/,
+    "renderSessionList must not unconditionally commit activeRename — that is the lr-16b88d regression"
+  );
   assert.match(block, /clearArmedSessionDelete\(\);/, "renderSessionList must clear armed-delete state before the DOM teardown");
 });
 
-test("sidebar-sessions.js: startInlineRename / startLoopInlineRename register activeRename and guard double-settle", function () {
+test("sidebar-sessions.js: renderSessionList re-opens a suspended rename after a real rebuild, restoring value + caret", function () {
+  var idx = SIDEBAR_SESSIONS_JS.indexOf("export function renderSessionList");
+  var endIdx = SIDEBAR_SESSIONS_JS.indexOf("// --- Search results ---", idx);
+  assert.ok(idx !== -1 && endIdx !== -1 && endIdx > idx);
+  var block = SIDEBAR_SESSIONS_JS.slice(idx, endIdx);
+
+  assert.match(
+    block,
+    /if\s*\(suspendedRename\)\s*\{\s*if\s*\(suspendedRename\.type\s*===\s*"loop"\)\s*\{\s*startLoopInlineRename\(suspendedRename\.id,\s*suspendedRename\.currentTitle,\s*suspendedRename\.snapshot\);/,
+    "the end of renderSessionList must re-open a suspended loop rename via startLoopInlineRename() with the captured snapshot"
+  );
+  assert.match(
+    block,
+    /startInlineRename\(suspendedRename\.id,\s*suspendedRename\.currentTitle,\s*suspendedRename\.snapshot\);/,
+    "the end of renderSessionList must re-open a suspended session rename via startInlineRename() with the captured snapshot"
+  );
+});
+
+test("sidebar-sessions.js: startInlineRename / startLoopInlineRename register activeRename with a non-settling suspend(), and guard double-settle", function () {
   assert.match(SIDEBAR_SESSIONS_JS, /var activeRename = null;/, "expected module-level activeRename tracking");
 
   var idx1 = SIDEBAR_SESSIONS_JS.indexOf("function startInlineRename");
@@ -248,14 +288,34 @@ test("sidebar-sessions.js: startInlineRename / startLoopInlineRename register ac
   assert.ok(idx1 !== -1 && idx1End !== -1 && idx1End > idx1);
   var block1 = SIDEBAR_SESSIONS_JS.slice(idx1, idx1End);
   assert.match(block1, /var settled = false;/);
-  assert.match(block1, /activeRename\s*=\s*\{\s*commit:\s*commitRename,\s*cancel:\s*cancelRename\s*\};/);
+  assert.match(block1, /function suspendRename\(\)\s*\{\s*return\s*\{\s*value:\s*input\.value,\s*selectionStart:\s*input\.selectionStart,\s*selectionEnd:\s*input\.selectionEnd\s*\};\s*\}/,
+    "startInlineRename must expose a suspendRename() that captures value + caret without touching `settled`");
+  assert.match(block1, /type:\s*"session",/);
+  assert.match(block1, /suspend:\s*suspendRename,/);
 
   var idx2 = idx1End;
   var idx2End = SIDEBAR_SESSIONS_JS.indexOf("// --- Date grouping", idx2);
   assert.ok(idx2End !== -1 && idx2End > idx2);
   var block2 = SIDEBAR_SESSIONS_JS.slice(idx2, idx2End);
   assert.match(block2, /var settled = false;/);
-  assert.match(block2, /activeRename\s*=\s*\{\s*commit:\s*commitRename,\s*cancel:\s*cancelRename\s*\};/);
+  assert.match(block2, /function suspendRename\(\)\s*\{\s*return\s*\{\s*value:\s*input\.value,\s*selectionStart:\s*input\.selectionStart,\s*selectionEnd:\s*input\.selectionEnd\s*\};\s*\}/,
+    "startLoopInlineRename must expose a suspendRename() that captures value + caret without touching `settled`");
+  assert.match(block2, /type:\s*"loop",/);
+  assert.match(block2, /suspend:\s*suspendRename,/);
+});
+
+test("sidebar-sessions.js: startInlineRename / startLoopInlineRename restore a resumed value + caret via setSelectionRange, not select()", function () {
+  var idx1 = SIDEBAR_SESSIONS_JS.indexOf("function startInlineRename");
+  var idx1End = SIDEBAR_SESSIONS_JS.indexOf("function startLoopInlineRename");
+  var block1 = SIDEBAR_SESSIONS_JS.slice(idx1, idx1End);
+  assert.match(block1, /input\.value\s*=\s*resume\s*\?\s*resume\.value\s*:\s*\(currentTitle\s*\|\|\s*"New Session"\);/);
+  assert.match(block1, /input\.setSelectionRange\(resume\.selectionStart,\s*resume\.selectionEnd\);/);
+
+  var idx2 = idx1End;
+  var idx2End = SIDEBAR_SESSIONS_JS.indexOf("// --- Date grouping", idx2);
+  var block2 = SIDEBAR_SESSIONS_JS.slice(idx2, idx2End);
+  assert.match(block2, /input\.value\s*=\s*resume\s*\?\s*resume\.value\s*:\s*\(currentName\s*\|\|\s*"Loop"\);/);
+  assert.match(block2, /input\.setSelectionRange\(resume\.selectionStart,\s*resume\.selectionEnd\);/);
 });
 
 test("scheduler.js: Escape during loop-name edit cancels rather than committing via blur-on-detach", function () {
