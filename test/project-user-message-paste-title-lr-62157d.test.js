@@ -72,3 +72,22 @@ test("lr-62157d: an empty-string paste array entry does not crash and still fall
     assert.equal(typeof title, "string");
   });
 });
+
+// PEACHES fnd-439007 (PR #406 review, head_sha f59ef92e): msg is raw
+// client-controlled WS JSON with no server-side schema validation
+// (project-connection.js's bare JSON.parse) — the bundled browser client
+// only ever sends strings in pastes[] (input.js pushes p.text, always a
+// string), but nothing enforces that for an arbitrary WS client. pastes[0]
+// was never previously consulted for title derivation before this task, so
+// a non-string entry there is a genuinely new reachable path, not a
+// hypothetical — the irony being that the operator's ORIGINAL report was a
+// paste getting mis-titled "Image"; a naive fix must not trade that bug for
+// a crash on a malformed/adversarial payload.
+test("lr-62157d / fnd-439007: a non-string pastes[0] (e.g. an image-paste-shaped object) does not throw and falls back to 'Image'", function () {
+  var msg = { type: "message", text: "", pastes: [{ type: "image", mediaType: "image/png", data: "..." }] };
+
+  assert.doesNotThrow(function () {
+    var title = deriveProvisionalTitle(msg);
+    assert.equal(title, "Image", "a non-string paste entry must fall through to the 'Image' literal, not throw");
+  }, "a non-string pastes[0] must not throw a TypeError out of .replace()");
+});
