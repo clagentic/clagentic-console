@@ -242,17 +242,31 @@ test("sidebar-sessions.js: _fingerprintSessions includes favoriteOrder, unread, 
 // clearArmedSessionDelete() is unaffected by lr-16b88d and still asserted.
 // ---------------------------------------------------------------------------
 
-test("sidebar-sessions.js: renderSessionList suspends (not commits) an active rename before rebuilding, and clears armed-delete", function () {
+test("sidebar-sessions.js: renderSessionList suspends (not commits) an active rename before rebuilding, nulls the slot, and clears armed-delete", function () {
   var idx = SIDEBAR_SESSIONS_JS.indexOf("export function renderSessionList");
-  assert.ok(idx !== -1);
-  var block = SIDEBAR_SESSIONS_JS.slice(idx, idx + 900);
+  var endIdx = SIDEBAR_SESSIONS_JS.indexOf("clearArmedSessionDelete();", idx);
+  assert.ok(idx !== -1 && endIdx !== -1 && endIdx > idx);
+  var block = SIDEBAR_SESSIONS_JS.slice(idx, endIdx + 100);
+
+  // PEACHES follow-up (lr-16b88d PR #405 review): suspend() alone is not
+  // enough — the fingerprint must be computed BEFORE suspend() is ever
+  // called (so a no-op render never settles a rename that was never
+  // actually interrupted), and the module-level activeRename slot must be
+  // nulled immediately after suspending (so no stale closure can commit a
+  // torn-down rename, and the resume-open path's own
+  // "if (activeRename) activeRename.commit()" guard is a genuine no-op).
+  var fpIdx = block.indexOf("var fp = _fingerprintSessions");
+  var suspendIdx = block.indexOf("activeRename.suspend()");
+  assert.ok(fpIdx !== -1 && suspendIdx !== -1 && fpIdx < suspendIdx,
+    "the fingerprint must be computed before activeRename.suspend() is ever called");
 
   assert.match(
     block,
-    /activeRename\s*\?\s*\{[\s\S]*?snapshot:\s*activeRename\.suspend\(\),[\s\S]*?\}\s*:\s*null/,
-    "renderSessionList must SUSPEND (not commit) an in-progress rename before the DOM teardown — " +
-    "force-committing on every rebuild is the lr-16b88d regression (partial title sent as a real " +
-    "rename_session on nearly every broadcast from an actively-streaming session)"
+    /if\s*\(activeRename\)\s*\{\s*var snapshot\s*=\s*activeRename\.suspend\(\);[\s\S]*?activeRename\s*=\s*null;\s*\}/,
+    "renderSessionList must SUSPEND (not commit) an in-progress rename before the DOM teardown, THEN null the " +
+    "module-level activeRename slot — force-committing on every rebuild is the lr-16b88d regression (partial " +
+    "title sent as a real rename_session on nearly every broadcast from an actively-streaming session); leaving " +
+    "a stale activeRename reference after suspending is the lr-16b88d PEACHES follow-up (defects #2/#3)"
   );
   assert.doesNotMatch(
     block,
@@ -280,28 +294,45 @@ test("sidebar-sessions.js: renderSessionList re-opens a suspended rename after a
   );
 });
 
-test("sidebar-sessions.js: startInlineRename / startLoopInlineRename register activeRename with a non-settling suspend(), and guard double-settle", function () {
+test("sidebar-sessions.js: startInlineRename / startLoopInlineRename register activeRename with a SETTLING suspend(), and guard double-settle", function () {
   assert.match(SIDEBAR_SESSIONS_JS, /var activeRename = null;/, "expected module-level activeRename tracking");
 
+  // PEACHES follow-up (lr-16b88d PR #405 review, defect #1): suspend() must
+  // flip `settled` BEFORE returning, not merely capture a snapshot — a
+  // rebuild's innerHTML="" teardown synthesizes a real blur on the detached
+  // input, and that input's own blur listener (commitRename) is still
+  // attached at that instant. Without settling, that synthetic blur commits
+  // the suspended partial edit as a real rename_session — the exact defect
+  // this task exists to fix. See sidebar-sessions-rename-lifecycle-lr-16b88d.test.js
+  // for the runtime (not just source-shape) proof of this guard.
   var idx1 = SIDEBAR_SESSIONS_JS.indexOf("function startInlineRename");
   var idx1End = SIDEBAR_SESSIONS_JS.indexOf("function startLoopInlineRename");
   assert.ok(idx1 !== -1 && idx1End !== -1 && idx1End > idx1);
   var block1 = SIDEBAR_SESSIONS_JS.slice(idx1, idx1End);
   assert.match(block1, /var settled = false;/);
-  assert.match(block1, /function suspendRename\(\)\s*\{\s*return\s*\{\s*value:\s*input\.value,\s*selectionStart:\s*input\.selectionStart,\s*selectionEnd:\s*input\.selectionEnd\s*\};\s*\}/,
-    "startInlineRename must expose a suspendRename() that captures value + caret without touching `settled`");
+  assert.match(block1, /function suspendRename\(\)\s*\{\s*if\s*\(settled\)\s*return null;\s*settled\s*=\s*true;\s*return\s*\{\s*value:\s*input\.value,\s*selectionStart:\s*input\.selectionStart,\s*selectionEnd:\s*input\.selectionEnd\s*\};\s*\}/,
+    "startInlineRename's suspendRename() must check-then-set `settled` BEFORE returning the snapshot, so a " +
+    "detach-synthesized blur firing immediately after suspend() is a no-op");
   assert.match(block1, /type:\s*"session",/);
   assert.match(block1, /suspend:\s*suspendRename,/);
+  // commitRename/cancelRename must only null activeRename when they are
+  // still its current occupant (identity check) — otherwise a stale
+  // closure from an already-suspended-and-resumed rename could clobber a
+  // newer rename's activeRename slot (PEACHES defect #2/#3 follow-up).
+  var identityNullMatches1 = block1.match(/if\s*\(activeRename\s*&&\s*activeRename\.commit\s*===\s*commitRename\)\s*activeRename\s*=\s*null;/g) || [];
+  assert.ok(identityNullMatches1.length >= 2, "commitRename and cancelRename must both identity-check activeRename.commit before nulling it");
 
   var idx2 = idx1End;
   var idx2End = SIDEBAR_SESSIONS_JS.indexOf("// --- Date grouping", idx2);
   assert.ok(idx2End !== -1 && idx2End > idx2);
   var block2 = SIDEBAR_SESSIONS_JS.slice(idx2, idx2End);
   assert.match(block2, /var settled = false;/);
-  assert.match(block2, /function suspendRename\(\)\s*\{\s*return\s*\{\s*value:\s*input\.value,\s*selectionStart:\s*input\.selectionStart,\s*selectionEnd:\s*input\.selectionEnd\s*\};\s*\}/,
-    "startLoopInlineRename must expose a suspendRename() that captures value + caret without touching `settled`");
+  assert.match(block2, /function suspendRename\(\)\s*\{\s*if\s*\(settled\)\s*return null;\s*settled\s*=\s*true;\s*return\s*\{\s*value:\s*input\.value,\s*selectionStart:\s*input\.selectionStart,\s*selectionEnd:\s*input\.selectionEnd\s*\};\s*\}/,
+    "startLoopInlineRename's suspendRename() must have the identical settle-before-return guard");
   assert.match(block2, /type:\s*"loop",/);
   assert.match(block2, /suspend:\s*suspendRename,/);
+  var identityNullMatches2 = block2.match(/if\s*\(activeRename\s*&&\s*activeRename\.commit\s*===\s*commitRename\)\s*activeRename\s*=\s*null;/g) || [];
+  assert.ok(identityNullMatches2.length >= 2, "startLoopInlineRename's commitRename and cancelRename must both identity-check activeRename.commit before nulling it");
 });
 
 test("sidebar-sessions.js: startInlineRename / startLoopInlineRename restore a resumed value + caret via setSelectionRange, not select()", function () {
