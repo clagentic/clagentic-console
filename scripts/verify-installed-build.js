@@ -42,8 +42,11 @@
 //        merged HEAD AND the running daemon (if any) loaded that same SHA
 //        with no detected stale inodes.
 //      — ARTIFACT_VERIFIED_NO_PROCESS: installed build-sha.json matches
-//        merged HEAD and no daemon is currently running to check (nothing
-//        to compare — not a failure).
+//        merged HEAD and no daemon is currently running, so the PROCESS
+//        CHECK DID NOT RUN. The service's build status is UNKNOWN, not
+//        verified — nothing to compare against yet (e.g. a fresh box that
+//        has never started the service). This is not a failure, but it must
+//        never be read as "the service is fine".
 //   1  — ARTIFACT_MISMATCH: installed build-sha.json does not match merged
 //        HEAD (PART 1's original failure mode, unchanged).
 //      — PROCESS_MISMATCH: the artifact matches, but the running daemon's
@@ -186,8 +189,10 @@ function main() {
 
   if (!processStatus.running) {
     console.log(
-      '[verify-installed-build] ARTIFACT_VERIFIED_NO_PROCESS: artifact matches merged HEAD; ' +
-      'no running daemon to check against (nothing to compare — not a failure).'
+      '[verify-installed-build] ARTIFACT_VERIFIED_NO_PROCESS: artifact matches merged HEAD ' +
+      `(${headSha}); no daemon is running, so the PROCESS CHECK DID NOT RUN and the process ` +
+      'build status is UNKNOWN -- do not read this as the process/service being verified. ' +
+      'Not a failure: there is no running process to compare against yet.'
     );
     return;
   }

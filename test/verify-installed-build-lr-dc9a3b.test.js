@@ -160,6 +160,27 @@ test("scripts/verify-installed-build.js: every 'verified' output is qualified as
     assert.match(line, /ARTIFACT|artifact|PROCESS|process/i,
       "line mentioning 'verified' must be qualified as artifact and/or process: " + line.trim());
   });
+
+  // PEACHES nit (PR #411): the ARTIFACT_VERIFIED_NO_PROCESS branch is the one
+  // place in this file where "verified" appears right next to a state where
+  // the process was NOT checked at all -- being merely "qualified" per the
+  // loop above is not enough here, since a careless reader could still take
+  // "artifact matches merged HEAD" + "verified" together as covering the
+  // service. This is the exact artifact/process conflation the task exists
+  // to eliminate, so the NO_PROCESS message must say outright that the
+  // process check did not run and that the service's build status is
+  // unknown -- not merely silent about it.
+  // indexOf alone would find the header comment's mention of
+  // "ARTIFACT_VERIFIED_NO_PROCESS:" first, not the actual console.log call
+  // inside main() — same anchoring issue test 5 above solves the same way;
+  // lastIndexOf finds the code occurrence, the last of the two in the file.
+  var noProcessIdx = src.lastIndexOf("ARTIFACT_VERIFIED_NO_PROCESS:");
+  assert.ok(noProcessIdx !== -1, "expected an ARTIFACT_VERIFIED_NO_PROCESS output line");
+  var noProcessSlice = src.slice(noProcessIdx, noProcessIdx + 500);
+  assert.match(noProcessSlice, /PROCESS CHECK DID NOT RUN/i,
+    "the NO_PROCESS message must state plainly that the process check did not run");
+  assert.match(noProcessSlice, /UNKNOWN/,
+    "the NO_PROCESS message must say the service's build status is unknown, not verified");
 });
 
 // ---------------------------------------------------------------------------
