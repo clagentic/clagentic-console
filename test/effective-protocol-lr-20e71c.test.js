@@ -83,13 +83,32 @@ test("resolveEffectiveProtocol: trustedProxy true but header is http -> disabled
   assert.deepStrictEqual(result, { protocol: "http", state: "disabled" });
 });
 
-test("resolveEffectiveProtocol: multi-hop header takes the first (closest) hop's value", function () {
+test("resolveEffectiveProtocol: multi-hop header 'https, http' (append-mode spoof vector) must NOT read as https — a single trustedProxy boolean cannot express which hop is trustworthy", function () {
+  // Regression for the PEACHES finding-1 defect: the old code took
+  // split(",")[0] (the LEFTMOST value) under the mistaken belief that a
+  // proxy chain appends closest-proxy-first. In a real appending chain the
+  // leftmost value is the ORIGINAL CLIENT-SUPPLIED one — an untrusted client
+  // sending "X-Forwarded-Proto: https" to an appending proxy that itself
+  // forwards plain HTTP produces exactly "https, http" on the wire. The old
+  // code read "https" (leftmost) and reported a false "Enabled (proxy)"
+  // badge — reintroducing the spoofing surface this task exists to close.
+  // This test fails on the pre-fix code (which returned state: "proxy").
   var result = resolveEffectiveProtocol({
     tlsOptions: null,
     trustedProxy: true,
     forwardedProtoHeader: "https, http",
   });
-  assert.deepStrictEqual(result, { protocol: "https", state: "proxy" });
+  assert.deepStrictEqual(result, { protocol: "http", state: "disabled" },
+    "a multi-valued X-Forwarded-Proto must be refused outright, not partially trusted by position");
+});
+
+test("resolveEffectiveProtocol: multi-hop header 'http, https' (rightmost https) is ALSO refused — rightmost-trust is not assumed safe under a single-boolean trust model", function () {
+  var result = resolveEffectiveProtocol({
+    tlsOptions: null,
+    trustedProxy: true,
+    forwardedProtoHeader: "http, https",
+  });
+  assert.deepStrictEqual(result, { protocol: "http", state: "disabled" });
 });
 
 test("resolveEffectiveProtocol: header value is case-insensitive", function () {
@@ -146,6 +165,61 @@ test("lib/server.js: ws._clayEffectiveProtocol is assigned inside the upgrade ha
   assert.ok(upgradeIdx !== -1 && effIdx !== -1 && handleConnIdx !== -1, "expected all three anchors to exist");
   assert.ok(upgradeIdx < effIdx && effIdx < handleConnIdx,
     "ws._clayEffectiveProtocol must be resolved after the upgrade handler starts (req.headers in scope) and before the connection is handed off");
+});
+
+// ---------------------------------------------------------------------------
+// lib/server.js: /setup and /pwa GET routes, and the last-visited-project
+// cookie's Secure attribute, must derive from resolveEffectiveProtocol
+// rather than tlsOptions alone (PEACHES finding 2 on PR #409 — HOLDEN
+// independently verified by reading source). Behind a trusted TLS-
+// terminating proxy, tlsOptions is correctly null, so `tlsOptions ? "https"
+// : "http"` under-reports for any route still using that pattern.
+// ---------------------------------------------------------------------------
+
+test("lib/server.js: /setup route derives its URL protocol via resolveEffectiveProtocol, not tlsOptions alone", function () {
+  var idx = SERVER_JS.indexOf('fullUrl === "/setup" && req.method === "GET"');
+  assert.ok(idx !== -1, "expected the /setup route to exist");
+  var block = SERVER_JS.slice(idx, idx + 700);
+  assert.ok(!/var protocol = tlsOptions \? "https" : "http";/.test(block),
+    "/setup must not fall back to the bare tlsOptions-as-protocol pattern this task exists to remove");
+  assert.match(
+    block,
+    /var protocol = resolveEffectiveProtocol\(\{\s*tlsOptions:\s*tlsOptions,\s*trustedProxy:\s*trustedProxy,\s*forwardedProtoHeader:\s*req\.headers\["x-forwarded-proto"\],\s*\}\)\.protocol;/,
+    "/setup must resolve the per-request effective protocol exactly as the WS upgrade handler does"
+  );
+});
+
+test("lib/server.js: /pwa route derives its URL protocol via resolveEffectiveProtocol, not tlsOptions alone", function () {
+  var idx = SERVER_JS.indexOf('fullUrl === "/pwa" && req.method === "GET"');
+  assert.ok(idx !== -1, "expected the /pwa route to exist");
+  var block = SERVER_JS.slice(idx, idx + 700);
+  assert.ok(!/var protocol = tlsOptions \? "https" : "http";/.test(block),
+    "/pwa must not fall back to the bare tlsOptions-as-protocol pattern this task exists to remove");
+  assert.match(
+    block,
+    /var protocol = resolveEffectiveProtocol\(\{\s*tlsOptions:\s*tlsOptions,\s*trustedProxy:\s*trustedProxy,\s*forwardedProtoHeader:\s*req\.headers\["x-forwarded-proto"\],\s*\}\)\.protocol;/,
+    "/pwa must resolve the per-request effective protocol exactly as the WS upgrade handler does"
+  );
+});
+
+test("lib/server.js: no remaining `tlsOptions ? \"https\" : \"http\"` protocol-derivation sites anywhere in the file", function () {
+  assert.ok(
+    !/tlsOptions \? "https" : "http"/.test(SERVER_JS),
+    "every route that derives a display/URL protocol from tlsOptions must instead resolve it via resolveEffectiveProtocol"
+  );
+});
+
+test("lib/server.js: last-visited-project cookie's Secure attribute derives from resolveEffectiveProtocol, not tlsOptions alone", function () {
+  var idx = SERVER_JS.indexOf("Set last-visited project cookie for root redirect");
+  assert.ok(idx !== -1, "expected the last-visited-project cookie block to exist");
+  var block = SERVER_JS.slice(idx, idx + 900);
+  assert.ok(!/tlsOptions \? "; Secure" : ""/.test(block),
+    "the Secure cookie attribute must not gate on daemon-internal tlsOptions alone — that under-reports HTTPS behind a trusted proxy");
+  assert.match(
+    block,
+    /cookieEffectiveProtocol === "https" \? "; Secure" : ""/,
+    "Secure must be set whenever the resolved effective protocol is https, including the proxy-terminated case"
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -208,11 +282,21 @@ test("lib/daemon.js: get_status IPC case is untouched — still reports tls: !!t
 test("lib/daemon.js: startup listen log reflects the trustedProxy declaration rather than always printing http:// behind a proxy", function () {
   var idx = DAEMON_JS.indexOf('function startListening() {');
   assert.ok(idx !== -1, "expected startListening to exist");
-  var block = DAEMON_JS.slice(idx, idx + 600);
+  var block = DAEMON_JS.slice(idx, idx + 900);
   assert.match(
     block,
-    /var protocol = tlsOptions \? "https" : \(config\.trustedProxy \? "https \(proxy-terminated\)" : "http"\);/,
+    /var protocol = tlsOptions \? "https" : \(config\.trustedProxy \? "https" : "http"\);/,
     "startup has no live request (no X-Forwarded-Proto to read), so the log line must fall back to the operator's trustedProxy declaration instead of silently printing http://"
+  );
+  assert.match(
+    block,
+    /var protocolNote = \(!tlsOptions && config\.trustedProxy\) \? " \(proxy-terminated\)" : "";/,
+    "the proxy-terminated annotation must be kept out of the scheme itself — 'https (proxy-terminated)://...' is not a valid URI"
+  );
+  assert.match(
+    block,
+    /"\[daemon\] Listening on " \+ protocol \+ ":\/\/" \+ listenHost \+ ":" \+ config\.port \+ protocolNote/,
+    "the annotation must be appended after the URI, not inside the scheme"
   );
 });
 
