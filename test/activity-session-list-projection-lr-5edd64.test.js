@@ -23,19 +23,34 @@
 //     derive from it, reading the client-local latch instead — THAT is the
 //     defect this file's REQUIRED assertion demonstrates and closes.
 //
-// TESTING METHODOLOGY (per task spec, comment #2 Q7): this suite asserts
-// the RENDERED OUTCOME from the server-authoritative value, not against the
-// token registry (which would inherit the ledger defect and pass
-// vacuously) and not against a source-text regex proving only that a wire
-// field exists. app-messages.js itself is DOM-heavy and unimportable in a
-// plain Node test process (see activity-latch-lr-96e7da.test.js's header
-// comment for the theme.js<->markdown.js circular-import hazard this
-// mirrors) — so, following this suite's own established pattern, this file
-// drives the REAL store.js + the REAL activity-state.js together with the
-// exact derivation app-messages.js's session_list handler performs
-// (documented and pinned by the CI invariant at the bottom of this file),
-// proving the projection logic itself is correct end-to-end rather than
-// hand-waved.
+// PEACHES BLOCKING review (PR #410, finding 3): the original version of
+// this file defined its own applySessionListProjection() that
+// REIMPLEMENTED the handler inline, then asserted against that copy — a
+// behavioral assertion that would PASS on pre-fix code, since only the
+// (separate) source-text CI invariant below would catch a regression.
+// That reproduces the exact blind spot that let seven prior fixes ship:
+// the previous 16-test suite was fully behavioral and still blind because
+// it tested the wrong thing.
+//
+// FIX: app-messages.js's session_list handler no longer inlines the
+// derivation. It calls activity-state.js's deriveSessionListProcessing()
+// (a pure, DOM-free function — extracted specifically for this reason).
+// This file imports and drives THAT REAL, PRODUCTION function directly —
+// not a reimplementation of it. app-messages.js itself remains unimportable
+// in a plain Node test process (its import graph reaches app-favicon.js,
+// which reaches the theme.js<->markdown.js circular-import hazard — see
+// activity-latch-lr-96e7da.test.js's header comment for the mechanism);
+// that constraint is unchanged and out of this task's scope to repair. The
+// CI invariant below pins that app-messages.js's handler actually CALLS
+// deriveSessionListProcessing() (and applies its result to the store)
+// rather than reimplementing the derivation inline again in the future.
+//
+// VERIFIED FAILS ON PRE-FIX CODE: with the fix's { ignoreUnread: true }
+// removed from deriveSessionListProcessing's sessionActivity() call
+// (restoring the pre-fix behavior — unread flips the footer on
+// regardless of isProcessing), the new "unread alone must not pin the
+// footer active" test below fails as expected; restoring the fix passes
+// it again. See that test for the specific assertion.
 
 "use strict";
 
@@ -66,18 +81,14 @@ function stripLineComments(src) {
     .join("\n");
 }
 
-// Mirrors EXACTLY the derivation app-messages.js's session_list handler
-// performs (pinned by the CI invariant test at the bottom of this file):
-// find the entry matching activeSessionId, derive .active via
-// sessionActivity(), and push it into store.processing.
-function applySessionListProjection(store, sessionActivity, sessions) {
+// Applies the REAL production projection (activity-state.js's
+// deriveSessionListProcessing) to the REAL store, exactly as
+// app-messages.js's session_list handler does — no reimplementation.
+function applyRealSessionListProjection(store, deriveSessionListProcessing, sessions) {
   var activeId = store.get("activeSessionId");
-  if (activeId == null) return;
-  for (var i = 0; i < sessions.length; i++) {
-    if (sessions[i].id === activeId) {
-      store.set({ processing: sessionActivity(sessions[i]).active });
-      return;
-    }
+  var projection = deriveSessionListProcessing(sessions, activeId);
+  if (projection.found) {
+    store.set({ processing: projection.active });
   }
 }
 
@@ -106,7 +117,7 @@ test("REQUIRED (comment #3): a session_list entry with isProcessing=true renders
         { id: "sess-B", isProcessing: false, unread: 0 },
       ],
     };
-    applySessionListProjection(s.store, activityState.sessionActivity, sessionListMsg.sessions);
+    applyRealSessionListProjection(s.store, activityState.deriveSessionListProcessing, sessionListMsg.sessions);
 
     assert.equal(
       footerActive,
@@ -128,7 +139,7 @@ test("session_list projection: an idle entry for the focused session drives the 
       footerActive = !!state.processing;
     });
 
-    applySessionListProjection(s.store, activityState.sessionActivity, [
+    applyRealSessionListProjection(s.store, activityState.deriveSessionListProcessing, [
       { id: "sess-A", isProcessing: false, unread: 0 },
     ]);
 
@@ -148,7 +159,7 @@ test("session_list projection: entries for OTHER sessions never affect the focus
       transitions++;
     });
 
-    applySessionListProjection(s.store, activityState.sessionActivity, [
+    applyRealSessionListProjection(s.store, activityState.deriveSessionListProcessing, [
       { id: "sess-FOCUSED", isProcessing: false, unread: 0 },
       { id: "sess-BACKGROUND", isProcessing: true, unread: 0 },
     ]);
@@ -172,7 +183,7 @@ test("session_list projection: unchanged value does not fire the footer subscrib
 
     // Broadcast again with the SAME true value (e.g. a routine roster
     // refresh mid-turn) — must not re-fire the subscriber.
-    applySessionListProjection(s.store, activityState.sessionActivity, [
+    applyRealSessionListProjection(s.store, activityState.deriveSessionListProcessing, [
       { id: "sess-A", isProcessing: true, unread: 0 },
     ]);
 
@@ -180,28 +191,102 @@ test("session_list projection: unchanged value does not fire the footer subscrib
   });
 });
 
+test("PEACHES finding 2 (BLOCKING, this task's 8th recurrence): unread alone, with isProcessing=false, must NOT pin the footer active — the transcript footer is a turn-running indicator, not an unread-alert surface", { timeout: 10000 }, function () {
+  return Promise.all([import(STORE_URL), import(ACTIVITY_STATE_URL)]).then(function (mods) {
+    var s = mods[0];
+    var activityState = mods[1];
+    s.createStore({ processing: false, activeSessionId: "sess-A" });
+
+    var footerActive = false;
+    s.store.subscribe(["processing"], function (state, prev) {
+      if (state.processing === prev.processing) return;
+      footerActive = !!state.processing;
+    });
+
+    // isProcessing: false, unread: 1 — sessionActivity()'s LOCKED
+    // alert > processing precedence makes .active true here UNLESS the
+    // projection passes { ignoreUnread: true }. This is the exact
+    // operator-reported symptom: "notifications when it's idle" —
+    // a session with an unread message but no turn running lighting the
+    // processing dot. Verified: reverting deriveSessionListProcessing's
+    // { ignoreUnread: true } back out reproduces this test failing
+    // (footerActive becomes true) against otherwise-unchanged code.
+    applyRealSessionListProjection(s.store, activityState.deriveSessionListProcessing, [
+      { id: "sess-A", isProcessing: false, unread: 1 },
+    ]);
+
+    assert.equal(
+      footerActive,
+      false,
+      "unread with isProcessing=false must not activate the footer projection — got true, meaning the alert/unread rollup leaked into the turn-running indicator"
+    );
+    assert.equal(s.store.get("processing"), false);
+  });
+});
+
+test("session_list projection: isProcessing=true together with unread>0 still activates the footer (processing itself, not the alert, drives it)", { timeout: 10000 }, function () {
+  return Promise.all([import(STORE_URL), import(ACTIVITY_STATE_URL)]).then(function (mods) {
+    var s = mods[0];
+    var activityState = mods[1];
+    s.createStore({ processing: false, activeSessionId: "sess-A" });
+
+    applyRealSessionListProjection(s.store, activityState.deriveSessionListProcessing, [
+      { id: "sess-A", isProcessing: true, unread: 3 },
+    ]);
+
+    assert.equal(s.store.get("processing"), true, "isProcessing=true must still activate the footer even when unread is also nonzero — ignoreUnread suppresses the ALERT contribution, not the processing one");
+  });
+});
+
+test("deriveSessionListProcessing: activeSessionId not present in the list -> found:false, caller must not touch the store", { timeout: 10000 }, function () {
+  return import(ACTIVITY_STATE_URL).then(function (activityState) {
+    var result = activityState.deriveSessionListProcessing(
+      [{ id: "sess-OTHER", isProcessing: true, unread: 0 }],
+      "sess-MISSING"
+    );
+    assert.equal(result.found, false);
+  });
+});
+
+test("deriveSessionListProcessing: null activeSessionId -> found:false (mirrors the handler's activeId != null guard)", { timeout: 10000 }, function () {
+  return import(ACTIVITY_STATE_URL).then(function (activityState) {
+    var result = activityState.deriveSessionListProcessing(
+      [{ id: "sess-A", isProcessing: true, unread: 0 }],
+      null
+    );
+    assert.equal(result.found, false);
+  });
+});
+
 // ---------------------------------------------------------------------------
-// CI invariant: app-messages.js's session_list handler actually performs
-// this derivation via the real, pure sessionActivity() (activity-state.js),
-// not a reimplemented inline isProcessing read — which would violate
+// CI invariant: app-messages.js's session_list handler actually calls the
+// real, pure deriveSessionListProcessing() (activity-state.js), not a
+// reimplemented inline derivation — which would both violate
 // activity-state-lr-66c118.test.js's CI invariant #2 (.isProcessing reads
-// confined to activity-state.js plus one documented exception).
+// confined to activity-state.js plus one documented exception) AND put this
+// file back in the "tests a copy, not the code that ships" state PEACHES
+// flagged (finding 3).
 // ---------------------------------------------------------------------------
 
-test("CI invariant: app-messages.js's session_list handler derives the 'processing' projection via activity-state.js's sessionActivity(), scoped to the active session", function () {
+test("CI invariant: app-messages.js's session_list handler derives the 'processing' projection via activity-state.js's deriveSessionListProcessing(), scoped to the active session", function () {
   var src = stripLineComments(readMod("lib/public/modules/app-messages.js"));
   assert.match(
     src,
-    /import\s*\{[^}]*\bsessionActivity\b[^}]*\}\s*from\s*['"]\.\/activity-state\.js['"]/,
-    "app-messages.js must import sessionActivity from activity-state.js"
+    /import\s*\{[^}]*\bderiveSessionListProcessing\b[^}]*\}\s*from\s*['"]\.\/activity-state\.js['"]/,
+    "app-messages.js must import deriveSessionListProcessing from activity-state.js"
   );
   var idx = src.indexOf("session_list: function");
   assert.ok(idx !== -1, "expected a session_list handler in app-messages.js");
   var handlerBody = src.slice(idx, src.indexOf("\n  },", idx) + 5);
   assert.match(
     handlerBody,
-    /store\.set\(\{\s*processing:\s*sessionActivity\(/,
-    "session_list must set store 'processing' from sessionActivity(...) — not a raw .isProcessing read"
+    /deriveSessionListProcessing\(/,
+    "session_list must derive the projection via deriveSessionListProcessing(...) — not a raw .isProcessing read or a hand-inlined derivation"
+  );
+  assert.match(
+    handlerBody,
+    /store\.set\(\{\s*processing:/,
+    "session_list must apply the derived projection's result to store 'processing'"
   );
   assert.match(
     handlerBody,
@@ -243,7 +328,7 @@ test("CI invariant: setStatus's 'connected' branch no longer independently zeroe
   );
 });
 
-test("CI invariant: app-projects.js's resetClientState no longer force-zeroes 'processing' — it runs AFTER session_switched's reconciliation and would stomp the correct projected value on every session switch", function () {
+test("CI invariant: app-projects.js's resetClientState no longer force-zeroes 'processing' — it runs BEFORE session_switched's own projection is applied (reordered, PEACHES finding 1 fix) and must not stomp the correct projected value", function () {
   var projectsSrc = stripLineComments(readMod("lib/public/modules/app-projects.js"));
   var fnStart = projectsSrc.indexOf("export function resetClientState");
   assert.ok(fnStart !== -1, "expected resetClientState to be defined in app-projects.js");
@@ -252,5 +337,38 @@ test("CI invariant: app-projects.js's resetClientState no longer force-zeroes 'p
     fnBody,
     /store\.set\(\{\s*processing:\s*false\s*\}\)/,
     "resetClientState must not force-zero 'processing' independently of the session_list/session_switched projection"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// CI invariant (PEACHES finding 1, lr-5edd64 8th recurrence): session_switched
+// must apply its 'processing' projection AFTER calling resetClientState(),
+// not before. Ordering matters here in a way source review alone can miss:
+// resetClientState() nulls the footer widget's DOM ref (setActivityEl(null))
+// and wipes the transcript DOM. If the projection's store.set() ran first,
+// its synchronous subscriber (app-favicon.js's initActivityFooter) could
+// raise the widget against the OUTGOING session's about-to-be-wiped DOM,
+// stranding a stale ref that a later unchanged value would never repair
+// (store.set()'s changed-flag bounding, lr-9bcd7b) — stuck OFF forever, the
+// inverse of the stuck-ON failure this redesign exists to close.
+// ---------------------------------------------------------------------------
+
+test("CI invariant: session_switched applies its 'processing' projection AFTER resetClientState(), not before", function () {
+  var src = stripLineComments(readMod("lib/public/modules/app-messages.js"));
+  var idx = src.indexOf("session_switched: function");
+  assert.ok(idx !== -1, "expected a session_switched handler in app-messages.js");
+  var handlerBody = src.slice(idx, src.indexOf("\n  },", idx) + 5);
+
+  var resetIdx = handlerBody.indexOf("resetClientState()");
+  assert.ok(resetIdx !== -1, "expected session_switched to call resetClientState()");
+
+  var projectionRe = /store\.set\(\{\s*processing:\s*store\.get\(['"]sessionIsProcessing['"]\)\s*\}\)/;
+  var projectionMatch = projectionRe.exec(handlerBody);
+  assert.ok(projectionMatch, "expected session_switched to apply store.set({ processing: store.get('sessionIsProcessing') })");
+
+  assert.ok(
+    projectionMatch.index > resetIdx,
+    "the 'processing' projection must be applied AFTER resetClientState() — found it at index " +
+      projectionMatch.index + ", resetClientState() call at index " + resetIdx
   );
 });
