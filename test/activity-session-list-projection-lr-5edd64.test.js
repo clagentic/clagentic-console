@@ -372,3 +372,123 @@ test("CI invariant: session_switched applies its 'processing' projection AFTER r
       projectionMatch.index + ", resetClientState() call at index " + resetIdx
   );
 });
+
+// ---------------------------------------------------------------------------
+// PEACHES BLOCKING (PR #410, new finding from the finding-1 reorder above),
+// HOLDEN-verified in source, this task's 9th recurrence:
+//
+// resetClientState() nulls the footer widget's DOM ref (setActivityEl(null))
+// independently of any store.processing value change. The ONLY prior repair
+// path was app-favicon.js's initActivityFooter subscriber, which is gated on
+// ['processing'] actually CHANGING (store.js's changed-flag bounding). On a
+// TRUE -> TRUE session switch (outgoing session processing, incoming session
+// ALSO processing), store.set({ processing: true }) after an already-true
+// value is a no-op transition — the subscriber never fires, the ref
+// resetClientState() just nulled is never repaired, and the footer is stuck
+// OFF for that session and every later broadcast carrying the same
+// unchanged true value (identical mechanism to the finding-1 stuck-OFF this
+// task already closed once, inverse edge).
+//
+// FIX: app-favicon.js's reconcileActivityFooter() renders the footer from
+// current store.processing UNCONDITIONALLY — callers (session_list,
+// session_switched) invoke it explicitly right after applying their
+// projection's store.set(), not gated on whether that store.set() changed
+// anything. These CI invariants pin that the unconditional call is actually
+// wired at both call sites (source-inspection, per this suite's own
+// app-favicon.js-is-not-importable constraint — see header above) and a
+// behavioral test below proves the OLD subscriber-only shape truly misses
+// the true->true case using the real store.js + activity-state.js.
+// ---------------------------------------------------------------------------
+
+test("REQUIRED (9th recurrence): a value-change-only subscriber (the pre-fix shape) does NOT fire on a true->true session switch — demonstrates the defect this fix closes, using the real store.js", { timeout: 10000 }, function () {
+  return import(STORE_URL).then(function (s) {
+    // Mirrors app-favicon.js's ORIGINAL initActivityFooter body exactly:
+    // gated on state.processing !== prev.processing.
+    s.createStore({ processing: true });
+    var subscriberFired = false;
+    s.store.subscribe(["processing"], function (state, prev) {
+      if (state.processing === prev.processing) return;
+      subscriberFired = true;
+    });
+
+    // Outgoing session was processing:true; resetClientState() (not
+    // modeled here — it touches the DOM) nulls the footer ref independently
+    // of this store update. The incoming session is ALSO processing:true.
+    s.store.set({ processing: true });
+
+    assert.equal(
+      subscriberFired,
+      false,
+      "a value-change-gated subscriber must NOT fire when the projected value is unchanged (true->true) — this is exactly why a ref nulled by resetClientState() outside of any store.set() can never be repaired by that subscriber alone"
+    );
+  });
+});
+
+test("REQUIRED (9th recurrence): the false->true case (finding 1) DOES fire the value-change subscriber, so a naive read of this file could not silently reintroduce finding 1 while missing the true->true fix", { timeout: 10000 }, function () {
+  return import(STORE_URL).then(function (s) {
+    s.createStore({ processing: false });
+    var subscriberFired = false;
+    s.store.subscribe(["processing"], function (state, prev) {
+      if (state.processing === prev.processing) return;
+      subscriberFired = true;
+    });
+
+    s.store.set({ processing: true });
+
+    assert.equal(subscriberFired, true, "false->true must still fire the value-change subscriber — this case was never broken, only true->true was");
+  });
+});
+
+test("CI invariant: app-favicon.js's reconcileActivityFooter() renders from current store.processing UNCONDITIONALLY — not gated on a store.processing value transition", function () {
+  var src = stripLineComments(readMod("lib/public/modules/app-favicon.js"));
+  assert.match(
+    src,
+    /export function reconcileActivityFooter\s*\(/,
+    "app-favicon.js must export reconcileActivityFooter"
+  );
+  var fnStart = src.indexOf("export function reconcileActivityFooter");
+  var fnBody = src.slice(fnStart, src.indexOf("\n}", fnStart) + 2);
+  assert.doesNotMatch(
+    fnBody,
+    /prev\.processing/,
+    "reconcileActivityFooter must not compare against a previous value — it renders unconditionally from current state, unlike initActivityFooter's value-change-gated subscriber"
+  );
+  assert.match(
+    fnBody,
+    /store\.get\(['"]processing['"]\)/,
+    "reconcileActivityFooter must read current store.processing directly"
+  );
+});
+
+test("CI invariant: session_list's 'processing' projection calls reconcileActivityFooter() unconditionally, after applying the projection's store.set()", function () {
+  var src = stripLineComments(readMod("lib/public/modules/app-messages.js"));
+  assert.match(
+    src,
+    /import\s*\{[^}]*\breconcileActivityFooter\b[^}]*\}\s*from\s*['"]\.\/app-favicon\.js['"]/,
+    "app-messages.js must import reconcileActivityFooter from app-favicon.js"
+  );
+  var idx = src.indexOf("session_list: function");
+  assert.ok(idx !== -1, "expected a session_list handler in app-messages.js");
+  var handlerBody = src.slice(idx, src.indexOf("\n  },", idx) + 5);
+  var setIdx = handlerBody.search(/store\.set\(\{\s*processing:/);
+  assert.ok(setIdx !== -1, "expected session_list to apply the 'processing' projection via store.set()");
+  var reconcileIdx = handlerBody.indexOf("reconcileActivityFooter()", setIdx);
+  assert.ok(
+    reconcileIdx !== -1 && reconcileIdx > setIdx,
+    "session_list must call reconcileActivityFooter() after applying its 'processing' projection's store.set() — an unconditional render, not left to the value-change subscriber alone"
+  );
+});
+
+test("CI invariant: session_switched's 'processing' projection calls reconcileActivityFooter() unconditionally, after applying the projection's store.set()", function () {
+  var src = stripLineComments(readMod("lib/public/modules/app-messages.js"));
+  var idx = src.indexOf("session_switched: function");
+  assert.ok(idx !== -1, "expected a session_switched handler in app-messages.js");
+  var handlerBody = src.slice(idx, src.indexOf("\n  },", idx) + 5);
+  var setIdx = handlerBody.search(/store\.set\(\{\s*processing:\s*store\.get\(['"]sessionIsProcessing['"]\)\s*\}\)/);
+  assert.ok(setIdx !== -1, "expected session_switched to apply store.set({ processing: store.get('sessionIsProcessing') })");
+  var reconcileIdx = handlerBody.indexOf("reconcileActivityFooter()", setIdx);
+  assert.ok(
+    reconcileIdx !== -1 && reconcileIdx > setIdx,
+    "session_switched must call reconcileActivityFooter() after applying its 'processing' projection's store.set() — this is the fix for the true->true stuck-OFF case (9th recurrence), not left to the value-change subscriber alone"
+  );
+});

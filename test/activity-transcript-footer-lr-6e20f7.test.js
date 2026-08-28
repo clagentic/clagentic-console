@@ -79,27 +79,41 @@ test("enumeration: all 3 transcript indicator classes are actually defined in CS
 // ---------------------------------------------------------------------------
 
 test("CI invariant: app-favicon.js exports a reactive footer-clear path (initActivityFooter), not just the raise", function () {
-  var src = readMod("lib/public/modules/app-favicon.js");
+  var src = stripLineComments(readMod("lib/public/modules/app-favicon.js"));
   assert.match(
     src,
     /export function initActivityFooter\s*\(/,
     "app-favicon.js must export a reactive init function that can clear the .activity-inline widget without a manual setActivity(null) call site"
   );
-  // The reactive path must actually call setActivity(null) (or an
-  // equivalent clear) somewhere INSIDE that function, not just define an
-  // empty stub — pin the body, not just the export.
   var fnStart = src.indexOf("export function initActivityFooter");
   assert.ok(fnStart !== -1);
   var fnBody = src.slice(fnStart, src.indexOf("\n}", fnStart) + 2);
   assert.match(
     fnBody,
-    /setActivity\(null\)/,
-    "initActivityFooter must call setActivity(null) somewhere in its body — a reactive clear that never actually clears is the same bug restated"
-  );
-  assert.match(
-    fnBody,
     /store\.subscribe\(/,
     "the clear must be driven by a store subscription (reactive), not a one-shot call"
+  );
+  // lr-5edd64 (9th recurrence): the actual clear/raise logic was extracted
+  // out of initActivityFooter's subscriber body into reconcileActivityFooter()
+  // — an unconditional render callable from outside a value-change
+  // subscription (see that function's own doc comment for why: a value
+  // unchanged across a DOM-ref reset must still be repairable). The
+  // subscriber must delegate to it rather than reimplementing the clear
+  // inline, and reconcileActivityFooter() itself must still actually call
+  // setActivity(null) somewhere — a reactive clear that never actually
+  // clears is the same bug restated.
+  assert.match(
+    fnBody,
+    /reconcileActivityFooter\(\)/,
+    "initActivityFooter's subscriber must delegate to reconcileActivityFooter()"
+  );
+  var reconcileStart = src.indexOf("export function reconcileActivityFooter");
+  assert.ok(reconcileStart !== -1, "expected app-favicon.js to export reconcileActivityFooter");
+  var reconcileBody = src.slice(reconcileStart, src.indexOf("\n}", reconcileStart) + 2);
+  assert.match(
+    reconcileBody,
+    /setActivity\(null\)/,
+    "reconcileActivityFooter must call setActivity(null) somewhere in its body — a reactive clear that never actually clears is the same bug restated"
   );
 });
 
@@ -168,14 +182,21 @@ test("POSITIVE invariant: .channel-pre-thinking (footer) is driven by a reactive
   );
 });
 
-test("POSITIVE invariant: initActivityFooter is itself layout-gated to bubble layout only, so it cannot fight .channel-pre-thinking for the same slot", function () {
+test("POSITIVE invariant: the footer render path (reconcileActivityFooter, called by both initActivityFooter's subscriber and every projection call site) is layout-gated to bubble layout only, so it cannot fight .channel-pre-thinking for the same slot", function () {
+  // lr-5edd64 (9th recurrence): the layout gate moved with the render logic
+  // into reconcileActivityFooter() — see the header comment on the prior
+  // test in this file for why. Pinning the gate on reconcileActivityFooter()
+  // covers every caller (the subscriber AND the explicit unconditional
+  // calls from session_list/session_switched), which a gate left behind on
+  // initActivityFooter alone would not.
   var favSrc = readMod("lib/public/modules/app-favicon.js");
-  var fnStart = favSrc.indexOf("export function initActivityFooter");
+  var fnStart = favSrc.indexOf("export function reconcileActivityFooter");
+  assert.ok(fnStart !== -1, "expected app-favicon.js to export reconcileActivityFooter");
   var fnBody = favSrc.slice(fnStart, favSrc.indexOf("\n}", fnStart) + 2);
   assert.match(
     fnBody,
     /getChatLayout\(\)\s*!==\s*"channel"/,
-    "initActivityFooter must gate on getChatLayout() !== 'channel' (bubble layout only), mirroring input.js's optimistic-raise gate and showClaudePreThinking's channel-only gate"
+    "reconcileActivityFooter must gate on getChatLayout() !== 'channel' (bubble layout only), mirroring input.js's optimistic-raise gate and showClaudePreThinking's channel-only gate"
   );
 });
 
