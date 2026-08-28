@@ -33,7 +33,7 @@ var { forkDaemon, devMode, setDaemonWatcherOpts } = require("../lib/cli/daemon-l
 var { setup, promptRestoreProjects, showMainMenu } = require("../lib/cli/menus");
 var { getLocalIP } = require("../lib/cli/net-detect");
 var { log, a, sym } = require("../lib/cli/tui");
-var { handleShutdown, handleRestart, handleAdd, handleRemove, handleList, handleActivityDiagnostics } = require("../lib/cli/ipc-subcommands");
+var { handleShutdown, handleRestart, handleAdd, handleRemove, handleList, handleActivityDiagnostics, handleProcessBuildStatus } = require("../lib/cli/ipc-subcommands");
 
 var args = process.argv.slice(2);
 
@@ -70,6 +70,7 @@ var addPath = null;
 var removePath = null;
 var listMode = false;
 var activityDiagnosticsMode = false;
+var processBuildStatusMode = false;
 var dangerouslySkipPermissions = false;
 var headlessMode = false;
 var watchMode = false;
@@ -121,6 +122,8 @@ for (var i = 0; i < args.length; i++) {
     listMode = true;
   } else if (args[i] === "--activity-diagnostics") {
     activityDiagnosticsMode = true;
+  } else if (args[i] === "--process-build-status") {
+    processBuildStatusMode = true;
   } else if (args[i] === "--headless") {
     headlessMode = true;
     autoYes = true;
@@ -136,6 +139,7 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --remove <path>  Remove a project from the running daemon");
   console.log("       clagentic-console --list            List registered projects");
   console.log("       clagentic-console --activity-diagnostics  Print activity-divergence probe totals as JSON (agent-readable)");
+  console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
   console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");
     console.log("");
     console.log("Options:");
@@ -154,6 +158,7 @@ for (var i = 0; i < args.length; i++) {
     console.log("  --remove <path>    Remove a project directory");
     console.log("  --list             List all registered projects");
     console.log("  --activity-diagnostics  Print activity-divergence probe totals as JSON");
+    console.log("  --process-build-status  Print the running process's loaded build SHA as JSON");
     console.log("  --headless         Start daemon and exit immediately (implies --yes)");
     console.log("  --multi-user       Start in multi-user mode (use with --yes for headless)");
     console.log("  --os-users         Enable OS-level user isolation (Linux, requires root + --multi-user)");
@@ -202,6 +207,12 @@ if (listMode) {
 // --- Handle --activity-diagnostics before anything else ---
 if (activityDiagnosticsMode) {
   handleActivityDiagnostics();
+  return;
+}
+
+// --- Handle --process-build-status before anything else ---
+if (processBuildStatusMode) {
+  handleProcessBuildStatus();
   return;
 }
 
