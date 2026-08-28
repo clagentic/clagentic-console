@@ -443,6 +443,49 @@ The helper is wired into every icon render site: `sidebar-projects.js`, `app-hom
 
 `app-home-hub.js` previously interpolated `proj.icon` directly into `innerHTML`. That site now uses DOM API with `renderProjectIcon`, eliminating the stored-XSS vector.
 
+## Effective external protocol vs. daemon-internal TLS (lr-20e71c)
+
+`tlsOptions` (`lib/daemon.js`) means one specific thing: the daemon itself is
+terminating TLS from a cert under `CONFIG_DIR/certs`. It says nothing about
+whether the console is actually reached over HTTPS — a deployment fronted by
+a reverse proxy (e.g. Caddy) that terminates TLS and forwards plain HTTP to
+the daemon is genuinely HTTPS, but `tlsOptions` is correctly `null` there.
+
+`lib/effective-protocol.js`'s `resolveEffectiveProtocol()` is the single
+source of truth for the protocol a client actually reached the daemon over,
+kept deliberately separate from `tlsOptions`. It resolves one of three
+states:
+
+- **`direct`** — the daemon terminates TLS itself (`tlsOptions` set).
+- **`proxy`** — no local TLS, but the operator has declared this deployment
+  sits behind a trusted proxy (`config.trustedProxy: true` in `daemon.json`)
+  and the request carried `X-Forwarded-Proto: https`.
+- **`disabled`** — genuinely unencrypted. Stays visibly distinct from the
+  other two states rather than being papered over.
+
+`X-Forwarded-Proto` is never trusted unconditionally — an unauthenticated
+client could otherwise spoof an "Enabled" readout over what is really plain
+HTTP. It is only consulted when `trustedProxy` is set. `lib/server.js`
+resolves the effective protocol once per WebSocket connection, at upgrade
+time (where `req.headers` is still in scope), and attaches it to
+`ws._clayEffectiveProtocol`; `lib/project-sessions.js`'s `get_daemon_config`
+handler passes it through to `onGetDaemonConfig()`, which folds it into the
+`tlsEffective`/`tlsState` fields on top of the still-accurate `tls` field.
+
+The System Settings HTTPS badge (`lib/public/modules/server-settings.js`)
+renders `tlsState` as three visibly distinct states — Enabled / Enabled
+(proxy) / Disabled — and stays read-only; this is a readout, not a control.
+
+**Trade-off:** the trust boundary is a single operator-declared boolean
+(`trustedProxy`), not a per-proxy IP/CIDR allowlist. An operator who
+declares `trustedProxy: true` without actually sitting behind a proxy — or
+whose proxy is reachable directly, bypassing it — reopens the spoofing
+surface this fix closes. Declaring `trustedProxy: true` is only safe when
+the daemon's port is not reachable except through the trusted proxy (e.g.
+bound to localhost, or firewalled). This mirrors the trust model of
+`X-Forwarded-For`-consuming software generally (nginx `real_ip`, Express
+`trust proxy`) rather than inventing a new one.
+
 ## See Also
 
 - [MODULE_MAP.md](./MODULE_MAP.md) — where every module lives and what it owns

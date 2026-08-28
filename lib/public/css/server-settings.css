@@ -696,6 +696,15 @@
   color: #3fb950;
 }
 
+/* --- Badge variant: proxy-terminated HTTPS (lr-20e71c) ---
+   Distinct from settings-badge-green: TLS is genuinely active, but a
+   reverse proxy terminates it rather than the daemon itself. Reuses the
+   existing --warning semantic token rather than introducing a new color. */
+.settings-badge.settings-badge-proxy {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
 /* --- Nav danger item (Shutdown) --- */
 .settings-nav-item.settings-nav-danger {
   color: var(--error);
