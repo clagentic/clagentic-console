@@ -145,9 +145,9 @@ test("lib/server.js: reads opts.trustedProxy (operator-declared trust boundary)"
   );
 });
 
-test("lib/server.js: resolves and attaches ws._clayEffectiveProtocol at WS-upgrade time via resolveEffectiveProtocol", function () {
-  var idx = SERVER_JS.indexOf("ws._clayEffectiveProtocol = resolveEffectiveProtocol(");
-  assert.ok(idx !== -1, "expected ws._clayEffectiveProtocol to be assigned from resolveEffectiveProtocol(...)");
+test("lib/server.js: resolves and attaches ws._clagenticEffectiveProtocol at WS-upgrade time via resolveEffectiveProtocol", function () {
+  var idx = SERVER_JS.indexOf("ws._clagenticEffectiveProtocol = resolveEffectiveProtocol(");
+  assert.ok(idx !== -1, "expected ws._clagenticEffectiveProtocol to be assigned from resolveEffectiveProtocol(...)");
   var block = SERVER_JS.slice(idx, idx + 300);
   assert.match(block, /tlsOptions:\s*tlsOptions/, "must pass the daemon-internal tlsOptions through");
   assert.match(block, /trustedProxy:\s*trustedProxy/, "must pass the operator-declared trustedProxy flag through");
@@ -158,13 +158,13 @@ test("lib/server.js: resolves and attaches ws._clayEffectiveProtocol at WS-upgra
   );
 });
 
-test("lib/server.js: ws._clayEffectiveProtocol is assigned inside the upgrade handler, before ctx.handleConnection", function () {
+test("lib/server.js: ws._clagenticEffectiveProtocol is assigned inside the upgrade handler, before ctx.handleConnection", function () {
   var upgradeIdx = SERVER_JS.indexOf('server.on("upgrade", function (req, socket, head) {');
-  var effIdx = SERVER_JS.indexOf("ws._clayEffectiveProtocol = resolveEffectiveProtocol(");
+  var effIdx = SERVER_JS.indexOf("ws._clagenticEffectiveProtocol = resolveEffectiveProtocol(");
   var handleConnIdx = SERVER_JS.indexOf("ctx.handleConnection(ws, wsUser);");
   assert.ok(upgradeIdx !== -1 && effIdx !== -1 && handleConnIdx !== -1, "expected all three anchors to exist");
   assert.ok(upgradeIdx < effIdx && effIdx < handleConnIdx,
-    "ws._clayEffectiveProtocol must be resolved after the upgrade handler starts (req.headers in scope) and before the connection is handed off");
+    "ws._clagenticEffectiveProtocol must be resolved after the upgrade handler starts (req.headers in scope) and before the connection is handed off");
 });
 
 // ---------------------------------------------------------------------------
@@ -230,14 +230,14 @@ test("lib/server.js: last-visited-project cookie's Secure attribute derives from
 
 var PROJECT_SESSIONS_JS = readMod("lib/project-sessions.js");
 
-test('lib/project-sessions.js: get_daemon_config calls onGetDaemonConfig(ws._clayEffectiveProtocol)', function () {
+test('lib/project-sessions.js: get_daemon_config calls onGetDaemonConfig(ws._clagenticEffectiveProtocol)', function () {
   var idx = PROJECT_SESSIONS_JS.indexOf('if (msg.type === "get_daemon_config") {');
   assert.ok(idx !== -1, "expected the get_daemon_config handler to exist");
   var block = PROJECT_SESSIONS_JS.slice(idx, idx + 600);
   assert.match(
     block,
-    /opts\.onGetDaemonConfig\s*\(\s*ws\._clayEffectiveProtocol\s*\)/,
-    "get_daemon_config must forward ws._clayEffectiveProtocol (resolved at upgrade time) into onGetDaemonConfig"
+    /opts\.onGetDaemonConfig\s*\(\s*ws\._clagenticEffectiveProtocol\s*\)/,
+    "get_daemon_config must forward ws._clagenticEffectiveProtocol (resolved at upgrade time) into onGetDaemonConfig"
   );
 });
 

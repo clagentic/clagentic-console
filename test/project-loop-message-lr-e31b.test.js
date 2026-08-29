@@ -152,7 +152,7 @@ test("lr-e31b: loop_message queues text and broadcasts loop_pending_messages whi
   try {
     engine.loopState.active = true;
 
-    var ws = { _clayUser: { id: "u1", displayName: "Andy" } };
+    var ws = { _clagenticUser: { id: "u1", displayName: "Andy" } };
     var handled = engine.handleLoopMessage(ws, { type: "loop_message", text: "  check the staging logs  " });
     assert.strictEqual(handled, true);
 

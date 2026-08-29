@@ -110,7 +110,7 @@ test("process_stats: non-admin does not receive activeLiveCount/maxConcurrentSes
   stub.ctx.sendTo = function (target, msg) { responses.push(msg); };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };
   h.handleSessionsMessage(ws, { type: "process_stats" });
 
   assert.equal(responses.length, 1, "should send exactly one process_stats reply");
@@ -129,7 +129,7 @@ test("process_stats: non-admin STILL receives the base fields the /status panel 
   stub.ctx.sendTo = function (target, msg) { responses.push(msg); };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };
   h.handleSessionsMessage(ws, { type: "process_stats" });
 
   var resp = responses[0];
@@ -148,7 +148,7 @@ test("process_stats: admin DOES receive the diagnostic fields", function () {
   stub.ctx.sendTo = function (target, msg) { responses.push(msg); };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.adminUser };
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.adminUser };
   h.handleSessionsMessage(ws, { type: "process_stats" });
 
   var resp = responses[0];
@@ -158,13 +158,13 @@ test("process_stats: admin DOES receive the diagnostic fields", function () {
   assert.equal(resp.activityDivergenceRecentSamples.length, 1);
 });
 
-test("process_stats: unauthenticated caller (no _clayUser) does not receive diagnostic fields either", function () {
+test("process_stats: unauthenticated caller (no _clagenticUser) does not receive diagnostic fields either", function () {
   var stub = makeCtx();
   var responses = [];
   stub.ctx.sendTo = function (target, msg) { responses.push(msg); };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: null };
+  var ws = { _session: stub.wsSession, _clagenticUser: null };
   h.handleSessionsMessage(ws, { type: "process_stats" });
 
   var resp = responses[0];
@@ -177,7 +177,7 @@ test("process_stats: sdk.getMemoryStats() is not called at all for a non-admin c
   stub.ctx.sendTo = function () {};
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };
   h.handleSessionsMessage(ws, { type: "process_stats" });
 
   assert.equal(stub.getMemStatsCallCount(), 0);
@@ -197,7 +197,7 @@ test("process_stats: non-admin response key set is exactly PROCESS_STATS_BASE_FI
   stub.ctx.sendTo = function (target, msg) { responses.push(msg); };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };
   h.handleSessionsMessage(ws, { type: "process_stats" });
 
   var resp = responses[0];

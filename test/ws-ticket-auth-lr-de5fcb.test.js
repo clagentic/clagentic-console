@@ -175,7 +175,7 @@ test("server.js: the WS upgrade handler falls back to a ticket only when the coo
 test("server.js: a ticket-authed upgrade echoes the accepted subprotocol in the 101 handshake", function () {
   assert.match(
     SERVER_JS,
-    /handleProtocols:\s*function\s*\(protocols,\s*req\)\s*\{[\s\S]{0,200}req\._clayAcceptedProtocol/,
+    /handleProtocols:\s*function\s*\(protocols,\s*req\)\s*\{[\s\S]{0,200}req\._clagenticAcceptedProtocol/,
     "WebSocketServer must be configured with a handleProtocols hook that echoes the accepted ticket subprotocol " +
     "(required by the WS spec whenever the client offers a Sec-WebSocket-Protocol list)"
   );
@@ -185,7 +185,7 @@ test("server.js: a ticket-authed upgrade echoes the accepted subprotocol in the 
   // value must still be byte-identical to what the client sent either way.
   assert.match(
     SERVER_JS,
-    /req\._clayAcceptedProtocol = "clagentic\.auth\." \+ offeredTicket;/,
+    /req\._clagenticAcceptedProtocol = "clagentic\.auth\." \+ offeredTicket;/,
     "the accepted-protocol marker must echo exactly the client-offered ticket value, never a fabricated one"
   );
 });

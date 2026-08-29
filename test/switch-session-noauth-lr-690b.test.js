@@ -1,13 +1,13 @@
 "use strict";
 // Regression tests for lr-690b: commit dca60a7 (lr-ec2d) over-eagerly blocked
 // switchSession() for no-auth / single-user connections by treating null
-// _clayUser as "Access denied", which left ws._clayActiveSession unset and
-// broke live message broadcast (doSendAndRecord filters on _clayActiveSession).
+// _clagenticUser as "Access denied", which left ws._clagenticActiveSession unset and
+// broke live message broadcast (doSendAndRecord filters on _clagenticActiveSession).
 //
-// 1. no-auth ws (null _clayUser) — switchSession must still bind _clayActiveSession
+// 1. no-auth ws (null _clagenticUser) — switchSession must still bind _clagenticActiveSession
 //    so live deltas reach the client without requiring a manual session round-trip.
 // 2. multi-user ws whose user lacks access — must still be denied AND must NOT
-//    bind _clayActiveSession (the multi-user gate must remain intact).
+//    bind _clagenticActiveSession (the multi-user gate must remain intact).
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -48,10 +48,10 @@ function makeSessionManager(tmpHome, extraOpts) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 1 — no-auth connection (null _clayUser): _clayActiveSession must be set
+// Test 1 — no-auth connection (null _clagenticUser): _clagenticActiveSession must be set
 // ---------------------------------------------------------------------------
 
-test("lr-690b-1: switchSession binds _clayActiveSession for null _clayUser (no-auth)", function () {
+test("lr-690b-1: switchSession binds _clagenticActiveSession for null _clagenticUser (no-auth)", function () {
   var tmpHome = makeTempHome();
   var errors = [];
   var sm = makeSessionManager(tmpHome, {
@@ -65,22 +65,22 @@ test("lr-690b-1: switchSession binds _clayActiveSession for null _clayUser (no-a
   assert.ok(active, "session manager must have an initial active session");
   var localId = active.localId;
 
-  // Simulate a no-auth WebSocket connection — _clayUser is null.
-  var ws = { _clayUser: null, readyState: 1, send: function () {} };
+  // Simulate a no-auth WebSocket connection — _clagenticUser is null.
+  var ws = { _clagenticUser: null, readyState: 1, send: function () {} };
 
   sm.switchSession(localId, ws);
 
   assert.equal(errors.length, 0,
-    "null _clayUser must not produce an error in no-auth mode");
-  assert.equal(ws._clayActiveSession, localId,
-    "_clayActiveSession must be bound so live broadcast reaches this ws");
+    "null _clagenticUser must not produce an error in no-auth mode");
+  assert.equal(ws._clagenticActiveSession, localId,
+    "_clagenticActiveSession must be bound so live broadcast reaches this ws");
 });
 
 // ---------------------------------------------------------------------------
 // Test 2 — authenticated user who lacks access: still denied, no binding
 // ---------------------------------------------------------------------------
 
-test("lr-690b-2: switchSession denies authenticated user without access and does not bind _clayActiveSession", function () {
+test("lr-690b-2: switchSession denies authenticated user without access and does not bind _clagenticActiveSession", function () {
   var tmpHome = makeTempHome();
 
   // We need sendTo + sendEach to exercise the multi-user path.
@@ -103,16 +103,16 @@ test("lr-690b-2: switchSession denies authenticated user without access and does
 
   // Simulate a different authenticated user who should NOT have access.
   var ws = {
-    _clayUser: { id: "other-user-id", role: "user" },
+    _clagenticUser: { id: "other-user-id", role: "user" },
     readyState: 1,
     send: function () {},
   };
-  // _clayActiveSession is deliberately absent / undefined before the call.
+  // _clagenticActiveSession is deliberately absent / undefined before the call.
 
   sm.switchSession(localId, ws);
 
   assert.ok(errors.length > 0,
     "authenticated user lacking access must receive an error");
-  assert.notEqual(ws._clayActiveSession, localId,
-    "_clayActiveSession must NOT be bound when the user is denied");
+  assert.notEqual(ws._clagenticActiveSession, localId,
+    "_clagenticActiveSession must NOT be bound when the user is denied");
 });

@@ -269,7 +269,7 @@ var { createTerminalManager } = require("../lib/terminal-manager");
 
 function makeWs(userId, role) {
   return {
-    _clayUser: userId ? { id: userId, role: role || "user" } : null,
+    _clagenticUser: userId ? { id: userId, role: role || "user" } : null,
     readyState: 1,
     send: function () {},
   };
@@ -283,7 +283,7 @@ function makeNullPtyManager() {
 }
 
 test("terminal manager: unauthenticated caller (system context) is handled gracefully (lr-ec2d)", function () {
-  // Always multi-user now; system-context callers (null _clayUser) are still allowed to
+  // Always multi-user now; system-context callers (null _clagenticUser) are still allowed to
   // call the terminal manager without an authenticated ws — they simply get full access.
   var tm = createTerminalManager({
     cwd: "/tmp",
@@ -291,7 +291,7 @@ test("terminal manager: unauthenticated caller (system context) is handled grace
     sendTo: function () {},
     isMultiUser: true,
   });
-  var ws = makeWs(null); // no _clayUser
+  var ws = makeWs(null); // no _clagenticUser
   // attach to non-existent terminal returns false gracefully
   assert.strictEqual(tm.attach(99, ws), false, "attach to missing id returns false");
   assert.doesNotThrow(function () { tm.write(99, "data", ws); }, "write to missing id does not throw");
@@ -355,7 +355,7 @@ test("terminal manager: list() filters by caller userId in multi-user mode", fun
     if (!isMultiUser) return true;
     if (!callerWs) return true;
     if (!session.ownerUserId) return true;
-    var caller = callerWs._clayUser;
+    var caller = callerWs._clagenticUser;
     if (!caller) return true;
     if (caller.role === "admin") return true;
     return caller.id === session.ownerUserId;
@@ -370,7 +370,7 @@ test("terminal manager: list() filters by caller userId in multi-user mode", fun
   var wsA = makeWs("user-A");
   var wsB = makeWs("user-B");
   var wsAdmin = makeWs("user-admin", "admin");
-  var wsNoUser = { _clayUser: null, readyState: 1, send: function () {} };
+  var wsNoUser = { _clagenticUser: null, readyState: 1, send: function () {} };
 
   var listForA = sessions.filter(function (s) { return isAuthorized(s, wsA); });
   var listForB = sessions.filter(function (s) { return isAuthorized(s, wsB); });
@@ -507,7 +507,7 @@ test("getScrollback returns null for unauthorized caller in multi-user mode", fu
     if (!isMultiUser) return true;
     if (!callerWs) return true;
     if (!session.ownerUserId) return true;
-    var caller = callerWs._clayUser;
+    var caller = callerWs._clagenticUser;
     if (!caller) return true;
     if (caller.role === "admin") return true;
     return caller.id === session.ownerUserId;
@@ -515,9 +515,9 @@ test("getScrollback returns null for unauthorized caller in multi-user mode", fu
 
   var session = { ownerUserId: "user-A", scrollback: [], totalBytesWritten: 0 };
 
-  var wsOwner = { _clayUser: { id: "user-A", role: "user" } };
-  var wsOther = { _clayUser: { id: "user-B", role: "user" } };
-  var wsAdmin = { _clayUser: { id: "user-C", role: "admin" } };
+  var wsOwner = { _clagenticUser: { id: "user-A", role: "user" } };
+  var wsOther = { _clagenticUser: { id: "user-B", role: "user" } };
+  var wsAdmin = { _clagenticUser: { id: "user-C", role: "admin" } };
 
   assert.ok(isAuthorizedLocal(session, wsOwner, true), "owner can read their own scrollback");
   assert.ok(!isAuthorizedLocal(session, wsOther, true), "non-owner cannot read scrollback in multi-user mode");
@@ -538,8 +538,8 @@ test("context_sources_save filters out term: IDs the caller does not own", funct
   var fakeGetScrollback = function(termId, callerWs) {
     // terminal 1 is owned by user-A
     if (termId === 1) {
-      if (!callerWs || !callerWs._clayUser) return null;
-      return callerWs._clayUser.id === "user-A" ? { totalBytesWritten: 0 } : null;
+      if (!callerWs || !callerWs._clagenticUser) return null;
+      return callerWs._clagenticUser.id === "user-A" ? { totalBytesWritten: 0 } : null;
     }
     return null; // unknown terminal
   };
@@ -554,8 +554,8 @@ test("context_sources_save filters out term: IDs the caller does not own", funct
     });
   }
 
-  var wsA = { _clayUser: { id: "user-A" } };
-  var wsB = { _clayUser: { id: "user-B" } };
+  var wsA = { _clagenticUser: { id: "user-A" } };
+  var wsB = { _clagenticUser: { id: "user-B" } };
 
   var sources = ["file:readme.md", "term:1", "term:2"];
 
@@ -681,7 +681,7 @@ test("switchSession: rejects non-existent session ID with structured error", fun
     return true; // would proceed
   }
 
-  var fakeWs = { _clayUser: null, readyState: 1, send: function () {} };
+  var fakeWs = { _clagenticUser: null, readyState: 1, send: function () {} };
 
   assert.strictEqual(switchSessionGuard(99, fakeWs), false, "non-existent ID is rejected");
   assert.strictEqual(sentErrors.length, 1, "one error sent");
@@ -719,7 +719,7 @@ test("switchSession: rejects unauthorized access in multi-user mode", function (
     var session = sessions.get(localId);
     if (targetWs) {
       if (isMultiUser) {
-        var user = targetWs._clayUser;
+        var user = targetWs._clagenticUser;
         if (!user) {
           fakeSendTo(targetWs, { type: "error", error: "Access denied" });
           return false;
@@ -738,8 +738,8 @@ test("switchSession: rejects unauthorized access in multi-user mode", function (
     return true;
   }
 
-  var wsB = { _clayUser: { id: "user-B", role: "user" }, readyState: 1, send: function () {} };
-  var wsA = { _clayUser: { id: "user-A", role: "user" }, readyState: 1, send: function () {} };
+  var wsB = { _clagenticUser: { id: "user-B", role: "user" }, readyState: 1, send: function () {} };
+  var wsA = { _clagenticUser: { id: "user-A", role: "user" }, readyState: 1, send: function () {} };
 
   // user-B cannot access user-A's private session in multi-user mode
   sentErrors.length = 0;
@@ -1330,7 +1330,7 @@ test("server-dm.js dm_send handler: silently drops traversal dmKey (no write)", 
 
   var sentMessages = [];
   var fakeWs = {
-    _clayUser: { id: "alice", role: "user" },
+    _clagenticUser: { id: "alice", role: "user" },
     readyState: 1,
     send: function (msg) { sentMessages.push(msg); },
   };
@@ -1365,7 +1365,7 @@ test("server-dm.js dm_typing handler: silently drops traversal dmKey", function 
 
   var forEachClientCalled = false;
   var fakeWs = {
-    _clayUser: { id: "alice", role: "user" },
+    _clagenticUser: { id: "alice", role: "user" },
     readyState: 1,
     send: function () {},
   };
@@ -1572,7 +1572,7 @@ test("server-dm.js dm_send handler: allows valid key and calls dm.sendMessage", 
 
   var sentMessages = [];
   var fakeWs = {
-    _clayUser: { id: "alice", role: "user" },
+    _clagenticUser: { id: "alice", role: "user" },
     readyState: 1,
     send: function (msg) { sentMessages.push(msg); },
   };

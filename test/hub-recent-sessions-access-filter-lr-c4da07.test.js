@@ -16,7 +16,7 @@
 // broadcastSessionList (lib/sessions.js:794-795) already uses. Fails CLOSED
 // when userId is absent (no legitimate no-auth caller reaches this path —
 // the WS upgrade handler in lib/server.js rejects any unauthenticated
-// connection with 401 before ws._clayUser can be set, in every mode
+// connection with 401 before ws._clagenticUser can be set, in every mode
 // including single-user/PIN).
 //
 // DO NOT confuse with the prior, opposite-direction defect in this same
@@ -75,8 +75,8 @@ test("lib/project-loop.js: hub_recent_sessions_list threads the connecting clien
   );
   assert.match(
     PROJECT_LOOP_JS,
-    /var hubUserId\s*=\s*ws\._clayUser\s*\?\s*ws\._clayUser\.id\s*:\s*null;/,
-    "expected hubUserId to be derived from ws._clayUser.id, null when absent (fail-closed input)"
+    /var hubUserId\s*=\s*ws\._clagenticUser\s*\?\s*ws\._clagenticUser\.id\s*:\s*null;/,
+    "expected hubUserId to be derived from ws._clagenticUser.id, null when absent (fail-closed input)"
   );
 });
 
@@ -277,7 +277,7 @@ test("per-project access is resolved once per project: onGetProjectAccess is cal
 
 // ---------------------------------------------------------------------------
 // Functional test via attachLoop (real production project-loop.js code):
-// proves hub_recent_sessions_list actually threads ws._clayUser.id through,
+// proves hub_recent_sessions_list actually threads ws._clagenticUser.id through,
 // end to end, using a getAllProjectSessions stub that asserts on its args.
 // ---------------------------------------------------------------------------
 
@@ -342,7 +342,7 @@ test("project-loop.js hub_recent_sessions_list: getAllProjectSessions is called 
   };
   var { engine, ctx, cleanup } = makeEngine(cwd, stub);
   try {
-    var ws = { _clayUser: { id: "user-real-123" } };
+    var ws = { _clagenticUser: { id: "user-real-123" } };
     var handled = engine.handleLoopMessage(ws, { type: "hub_recent_sessions_list" });
     assert.strictEqual(handled, true);
     assert.strictEqual(calls.length, 1, "expected exactly one getAllProjectSessions call");
@@ -353,7 +353,7 @@ test("project-loop.js hub_recent_sessions_list: getAllProjectSessions is called 
   }
 });
 
-test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clayUser) still calls getAllProjectSessions but with a null userId -- server-side fails closed, does not crash", function () {
+test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clagenticUser) still calls getAllProjectSessions but with a null userId -- server-side fails closed, does not crash", function () {
   var cwd = makeTempHomeLoop();
   var calls = [];
   var stub = function (includeSelf, userId) {
@@ -362,7 +362,7 @@ test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clayU
   };
   var { engine, ctx, cleanup } = makeEngine(cwd, stub);
   try {
-    var ws = {}; // no _clayUser
+    var ws = {}; // no _clagenticUser
     var handled = engine.handleLoopMessage(ws, { type: "hub_recent_sessions_list" });
     assert.strictEqual(handled, true);
     assert.deepStrictEqual(calls[0], [true, null], "expected a null userId to be passed through explicitly, not a crash or a silently-omitted arg");

@@ -15,7 +15,7 @@
 //     per-session isProcessing to EVERY client regardless of which session
 //     that client currently has focused/bound
 //     (lib/sessions.js broadcastSessionList/mapSessionForClient is not
-//     scoped by ws._clayActiveSession the way status/done/auth_required
+//     scoped by ws._clagenticActiveSession the way status/done/auth_required
 //     sends are) — so a client whose focused session's activity edge was
 //     dropped by that server-side routing filter (comment #3's "case A")
 //     still receives the correct isProcessing value on the very next
@@ -98,7 +98,7 @@ test("REQUIRED (comment #3): a session_list entry with isProcessing=true renders
     var activityState = mods[1];
     // 'processing' starts false — no status:"processing" push edge was ever
     // applied to this client for this session (comment #3 case A: the
-    // server-side ws._clayActiveSession filter dropped it before
+    // server-side ws._clagenticActiveSession filter dropped it before
     // shouldApplyActivityEdge ever ran client-side).
     s.createStore({ processing: false, activeSessionId: "sess-A" });
 

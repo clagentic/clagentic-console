@@ -105,7 +105,7 @@ test("3a: schedule_move denied for user without scheduledTasks permission", func
   stub.ctx.sendTo = function(ws, msg) { if (msg.type === "error") errors.push(msg); };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };  // regularUser: { permissions: {} }
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };  // regularUser: { permissions: {} }
   h.handleSessionsMessage(ws, {
     type: "schedule_move",
     recordId: "sched-1",
@@ -130,7 +130,7 @@ test("3a: schedule_move allowed for user with scheduledTasks permission", functi
   stub.ctx.getHubSchedules = function() { return []; };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.adminUser };  // adminUser: { permissions: { scheduledTasks: true } }
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.adminUser };  // adminUser: { permissions: { scheduledTasks: true } }
   h.handleSessionsMessage(ws, {
     type: "schedule_move",
     recordId: "sched-1",
@@ -156,7 +156,7 @@ test("3b: set_session_visibility denied for user who cannot access target sessio
   };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };
   h.handleSessionsMessage(ws, {
     type: "set_session_visibility",
     sessionId: 99,         // otherSession.localId
@@ -174,7 +174,7 @@ test("3b: set_session_visibility allowed for user who owns the session", functio
   };
 
   var h = attachSessions(stub.ctx);
-  var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+  var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };
   h.handleSessionsMessage(ws, {
     type: "set_session_visibility",
     sessionId: 1,          // wsSession.localId — owned by regularUser
@@ -202,7 +202,7 @@ test("3c: kill_process denied for non-admin in multi-user mode", function() {
 
   try {
     var h = attachSessions(stub.ctx);
-    var ws = { _session: stub.wsSession, _clayUser: stub.regularUser };
+    var ws = { _session: stub.wsSession, _clagenticUser: stub.regularUser };
     h.handleSessionsMessage(ws, { type: "kill_process", pid: 99999 });
 
     assert.equal(killed.length, 0,
@@ -224,7 +224,7 @@ test("3c: kill_process allowed for admin in multi-user mode", function() {
 
   try {
     var h = attachSessions(stub.ctx);
-    var ws = { _session: stub.wsSession, _clayUser: stub.adminUser };
+    var ws = { _session: stub.wsSession, _clagenticUser: stub.adminUser };
     h.handleSessionsMessage(ws, { type: "kill_process", pid: 99999 });
 
     assert.equal(killed.length, 1,
@@ -249,8 +249,8 @@ test("3c: kill_process denied for unauthenticated caller (single-user mode remov
 
   try {
     var h = attachSessions(stub.ctx);
-    // No _clayUser — unauthenticated caller
-    var ws = { _session: stub.wsSession, _clayUser: null };
+    // No _clagenticUser — unauthenticated caller
+    var ws = { _session: stub.wsSession, _clagenticUser: null };
     h.handleSessionsMessage(ws, { type: "kill_process", pid: 99999 });
 
     assert.equal(killed.length, 0,
