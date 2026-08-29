@@ -192,15 +192,15 @@ Endpoints are now unconditionally active.
 - **`switchSession()`** (lines 554–580): Remove else branch (lines 573–580) blocking access to sessions with `ownerId` in single-user mode.
 - Lines 594–595, 657, 704: Delete all `singleUserUnread` tracking.
 - Line 814–817: Delete else-if branch using `singleUserUnread`.
-- Line 1104: `var unreadMap = ws && ws._clayUnread ? ws._clayUnread : singleUserUnread;` → `var unreadMap = (ws && ws._clayUnread) ? ws._clayUnread : {};`
+- Line 1104: `var unreadMap = ws && ws._clagenticUnread ? ws._clagenticUnread : singleUserUnread;` → `var unreadMap = (ws && ws._clagenticUnread) ? ws._clagenticUnread : {};`
 
 ### 2.10 `lib/project-sessions.js`
 
 All `usersModule.isMultiUser()` conditions (lines 135, 160, 267, 286, 298, 311, 328,
 483, 583, 647, 1099, 1599): collapse — remove the guard, guarded block always executes.
 
-- Line 1099: `if (!usersModule.isMultiUser() || !ws._clayUser) return true;` → `if (!ws._clayUser) return true;`
-- Line 583: `if (usersModule.isMultiUser() && (!ws._clayUser || ws._clayUser.role !== "admin")) return true;` → `if (!ws._clayUser || ws._clayUser.role !== "admin") return true;`
+- Line 1099: `if (!usersModule.isMultiUser() || !ws._clagenticUser) return true;` → `if (!ws._clagenticUser) return true;`
+- Line 583: `if (usersModule.isMultiUser() && (!ws._clagenticUser || ws._clagenticUser.role !== "admin")) return true;` → `if (!ws._clagenticUser || ws._clagenticUser.role !== "admin") return true;`
 - Line 647: Same as 583.
 
 ### 2.11 `lib/project-user-message.js`
@@ -291,7 +291,7 @@ returns `multiUser: true` from `/api/me`. Clean up as follow-on:
 
 In `test/security.test.js`:
 
-- `"terminal manager: single-user mode allows any ws to attach"` → Rewrite as `"terminal manager: unauthenticated caller is allowed (system context)"`. Pass `isMultiUser: true`, test that caller with no `_clayUser` is authorized.
+- `"terminal manager: single-user mode allows any ws to attach"` → Rewrite as `"terminal manager: unauthenticated caller is allowed (system context)"`. Pass `isMultiUser: true`, test that caller with no `_clagenticUser` is authorized.
 - Lines 402–427: `routePush` test asserting single-user uses broadcast → Rewrite to test multi-user user-targeted path only.
 - Lines 439–465: `dangerouslySkipPermissions` test asserting `!isMultiUser` enables the flag → Assert `computeFlag(true, true) === false` (always disabled). Remove single-user cases.
 - Lines 345–384: Terminal list filtering test asserting unauthenticated client sees all sessions → Rewrite to reflect unauthenticated callers get no sessions in multi-user mode.

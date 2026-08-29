@@ -7,7 +7,7 @@
 // the map was increment-only: onSessionDone() incremented a client's entry
 // for every notifying session, and the ONLY clear paths were (1) connecting
 // to the notifying project (prefix zero at connect time) or (2) same-project
-// switchSession zeroing ws._clayUnread[localId]. If the notifying session
+// switchSession zeroing ws._clagenticUnread[localId]. If the notifying session
 // was deleted before any client ever reconnected to its project, the entry
 // became permanently unreachable — a phantom that inflates the badge
 // forever. This suite covers the two additions:
@@ -95,7 +95,7 @@ function makeSessionManager(tmpHome, onSessionDeleted) {
     cwd: tmpHome,
     send: function () {},
     sendTo: function () {},
-    sendEach: function (fn) { fn({ readyState: 1, _clayActiveSession: -1, send: function () {} }); },
+    sendEach: function (fn) { fn({ readyState: 1, _clagenticActiveSession: -1, send: function () {} }); },
     onSessionDeleted: onSessionDeleted,
   });
 }

@@ -468,7 +468,7 @@ client could otherwise spoof an "Enabled" readout over what is really plain
 HTTP. It is only consulted when `trustedProxy` is set. `lib/server.js`
 resolves the effective protocol once per WebSocket connection, at upgrade
 time (where `req.headers` is still in scope), and attaches it to
-`ws._clayEffectiveProtocol`; `lib/project-sessions.js`'s `get_daemon_config`
+`ws._clagenticEffectiveProtocol`; `lib/project-sessions.js`'s `get_daemon_config`
 handler passes it through to `onGetDaemonConfig()`, which folds it into the
 `tlsEffective`/`tlsState` fields on top of the still-accurate `tls` field.
 

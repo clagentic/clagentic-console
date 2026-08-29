@@ -9,7 +9,7 @@
 // cookie-authed and does not need a ticket. On the server, the upgrade
 // handler only parsed/consumed the offered ticket inside
 // `if (!wsCookieUser)`, so a cookie-authed request never learned what
-// subprotocol was offered, and `req._clayAcceptedProtocol` was only ever set
+// subprotocol was offered, and `req._clagenticAcceptedProtocol` was only ever set
 // on the wsTicketUser branch. The WebSocketServer's handleProtocols hook
 // therefore returned `false` for a cookie-authed+ticket-offered upgrade, so
 // the 101 response omitted Sec-WebSocket-Protocol entirely.
@@ -24,7 +24,7 @@
 // FIX (server.js, fix-forward — does not revert lr-de5fcb, which fixes a
 // real mobile cookie-drop gap): the offered subprotocol is now parsed
 // unconditionally (extractWsTicketFromHeader has no side effect — pure
-// parse), and `req._clayAcceptedProtocol` is set whenever a subprotocol was
+// parse), and `req._clagenticAcceptedProtocol` is set whenever a subprotocol was
 // offered AND auth succeeded via EITHER path. On the cookie-authed path the
 // offered ticket is echoed back as-is but never passed to
 // auth.consumeWsTicket() — the cookie already authenticated the request, so
@@ -265,7 +265,7 @@ test("lr-4c58ae: a cookie-authed upgrade that also offers a ticket subprotocol e
     var cookie = SESSION_COOKIE_NAME + "=" + sessionToken;
 
     // ── Case 2: cookie-authed AND ticket subprotocol offered — THE REGRESSION
-    // Pre-fix: handleProtocols returned false (req._clayAcceptedProtocol was
+    // Pre-fix: handleProtocols returned false (req._clagenticAcceptedProtocol was
     // never set on the cookie path), so the 101 omitted
     // Sec-WebSocket-Protocol entirely — which, per RFC 6455 §4.1, makes a
     // real browser fail the connection outright even though the upgrade

@@ -15,7 +15,7 @@
 //      project siblings.
 //   3. lib/server.js: getSessionUnread(ws, ownSlug, sessSlug, localId)
 //      resolves per-session unread correctly for both "own project"
-//      (ws._clayUnread, same-project mechanism) and "other project"
+//      (ws._clagenticUnread, same-project mechanism) and "other project"
 //      (composite crossProjectUnread) sessions, and does NOT cross-
 //      attribute unread between two different projects' sessions that
 //      happen to share the same localId (localId is only unique WITHIN
@@ -90,7 +90,7 @@ function makeSessionManager(tmpHome, onSessionDone) {
     cwd: tmpHome,
     send: function () {},
     sendTo: function () {},
-    sendEach: function (fn) { fn({ readyState: 1, _clayActiveSession: -1, send: function () {} }); },
+    sendEach: function (fn) { fn({ readyState: 1, _clagenticActiveSession: -1, send: function () {} }); },
     onSessionDone: onSessionDone,
   });
 }
@@ -156,11 +156,11 @@ test("lib/server.js: onSessionDone accepts sourceLocalId and increments only tha
   );
 });
 
-test("lib/server.js: getSessionUnread resolves own-project sessions via ws._clayUnread and other-project sessions via the composite map", function () {
+test("lib/server.js: getSessionUnread resolves own-project sessions via ws._clagenticUnread and other-project sessions via the composite map", function () {
   var idx = SERVER_JS.indexOf("function getSessionUnread(ws, ownSlug, sessSlug, localId)");
   assert.ok(idx !== -1, "expected a getSessionUnread(ws, ownSlug, sessSlug, localId) helper");
   var block = SERVER_JS.slice(idx, idx + 500);
-  assert.match(block, /ws\._clayUnread/, "own-project branch must read ws._clayUnread (the existing same-project per-session mechanism)");
+  assert.match(block, /ws\._clagenticUnread/, "own-project branch must read ws._clagenticUnread (the existing same-project per-session mechanism)");
   assert.match(block, /crossUnreadKey\s*\(\s*sessSlug\s*,\s*localId\s*\)/, "other-project branch must look up the composite crossUnreadKey(sessSlug, localId)");
 });
 
@@ -211,7 +211,7 @@ function makeHarness() {
     return total;
   }
   function getSessionUnread(ws, ownSlug, sessSlug, localId) {
-    if (sessSlug === ownSlug) return (ws._clayUnread && ws._clayUnread[localId]) || 0;
+    if (sessSlug === ownSlug) return (ws._clagenticUnread && ws._clagenticUnread[localId]) || 0;
     var m = getMap(ws);
     return m[crossUnreadKey(sessSlug, localId)] || 0;
   }
@@ -254,14 +254,14 @@ test("harness: getCrossProjectUnreadForSlug (project-badge total) sums every not
   assert.strictEqual(h.getCrossProjectUnreadForSlug(ws, "project-b"), 1, "project-b total must be unaffected by project-a's entries");
 });
 
-test("harness: own-project sessions resolve via ws._clayUnread, never the cross-project map", function () {
+test("harness: own-project sessions resolve via ws._clagenticUnread, never the cross-project map", function () {
   var h = makeHarness();
-  var ws = { _clayUnread: { 7: 4 } };
+  var ws = { _clagenticUnread: { 7: 4 } };
 
   // Even if a cross-project entry happened to exist under the same composite
   // key shape, the own-project branch must take priority for sessSlug === ownSlug.
-  assert.strictEqual(h.getSessionUnread(ws, "project-a", "project-a", 7), 4, "own-project lookup must read ws._clayUnread[localId]");
-  assert.strictEqual(h.getSessionUnread(ws, "project-a", "project-a", 8), 0, "an own-project session with no ws._clayUnread entry must resolve to 0");
+  assert.strictEqual(h.getSessionUnread(ws, "project-a", "project-a", 7), 4, "own-project lookup must read ws._clagenticUnread[localId]");
+  assert.strictEqual(h.getSessionUnread(ws, "project-a", "project-a", 8), 0, "an own-project session with no ws._clagenticUnread entry must resolve to 0");
 });
 
 // ---------------------------------------------------------------------------

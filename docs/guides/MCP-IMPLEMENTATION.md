@@ -30,7 +30,7 @@ REMOTE USER (browser on different machine):
 
 ## Connection Path: Local
 
-When `ws._clayLocal` is true (client IP is 127.0.0.1 / ::1), Clagentic:Console server manages MCP processes directly via `lib/mcp-local.js`.
+When `ws._clagenticLocal` is true (client IP is 127.0.0.1 / ::1), Clagentic:Console server manages MCP processes directly via `lib/mcp-local.js`.
 
 ```
 lib/mcp-local.js    reads ~/.clagentic/mcp.json, spawns processes, relays JSON-RPC
@@ -39,7 +39,7 @@ lib/project-mcp.js  builds SDK proxy servers from local tools (createLocalToolHa
 ```
 
 **Flow:**
-1. Local client connects -> `ws._clayLocal = true` (set in server.js upgrade handler)
+1. Local client connects -> `ws._clagenticLocal = true` (set in server.js upgrade handler)
 2. `handleConnection` in project.js calls `_localMcp.initialize()`
 3. `mcp-local.js` reads `~/.clagentic/mcp.json`, spawns all configured servers
 4. Each server goes through MCP handshake (initialize -> notifications/initialized -> tools/list)
@@ -50,7 +50,7 @@ lib/project-mcp.js  builds SDK proxy servers from local tools (createLocalToolHa
 
 ## Connection Path: Remote
 
-When `ws._clayLocal` is false, MCP processes run on the user's machine via the Native Host bridge.
+When `ws._clagenticLocal` is false, MCP processes run on the user's machine via the Native Host bridge.
 
 ### Components
 
@@ -179,7 +179,7 @@ When `ws._clayLocal` is false, MCP processes run on the user's machine via the N
 | `lib/project-mcp.js` | MCP bridge module, proxy server builder, toggle handler |
 | `lib/project.js` | Creates _localMcp, wires to _mcp, detects local clients |
 | `lib/project-user-message.js` | Handles browser_tab_list (sets _extensionWs) |
-| `lib/server.js` | Sets ws._clayLocal, passes MCP callbacks to project context |
+| `lib/server.js` | Sets ws._clagenticLocal, passes MCP callbacks to project context |
 | `lib/daemon.js` | onGetProjectMcpServers / onSetProjectMcpServers (config persistence) |
 | `lib/public/modules/app-misc.js` | Webapp MCP message forwarding |
 | `lib/public/modules/mcp-ui.js` | MCP Servers modal (setup wizard + toggle list) |
