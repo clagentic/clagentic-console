@@ -31,6 +31,42 @@
 // service), which is different from a daemon that IS running but did not
 // pick up the new build.
 //
+// STALE_PROCESS (lr-71f0c3, new): a FOURTH outcome, distinct from all of the
+// above. A daemon that predates the get_build_status IPC case entirely (i.e.
+// predates lr-dc9a3b itself) cannot answer this query at all — it replies
+// {ok:false, error:"unknown command: get_build_status"} over the socket,
+// which the CLI surfaces as `Failed: unknown command: get_build_status` on
+// stderr with a non-zero exit. That raw transport string reads as a
+// MISSING-CODE defect (the subcommand "isn't wired up") when it is nothing
+// of the kind — the handler IS present (lib/daemon.js:~1640, see
+// test/verify-installed-build-lr-dc9a3b.test.js's tests 7-9), the process
+// just started before the handler existed. This condition recurred three
+// times (PR #411, #412, #414 — see lr-71f0c3): twice it misled a crew agent
+// into treating it as missing code; the third time it aborted a P1 merge's
+// post_merge_steps chain outright, since the raw error was indistinguishable
+// from a genuine tooling failure and the step was on_failure: fail.
+//
+// This is structurally unavoidable, not an edge case: a daemon predating the
+// handler cannot manifest as a SHA mismatch (PROCESS_MISMATCH above) since it
+// cannot answer the SHA question at all. "unknown command" is the ONLY shape
+// this specific staleness can take, and it recurs on every merge until an
+// operator restarts the daemon onto a build that has the handler. Detected
+// here by matching the "unknown command: get_build_status" error text the
+// daemon's default IPC case emits (see lib/daemon.js's default branch) —
+// distinguished from a generic/unexpected failure the same way "no running
+// daemon" already is, one level up in resolveProcessBuildStatus().
+//
+// Treated as NON-FATAL (exit 0), same posture as ARTIFACT_VERIFIED_NO_PROCESS
+// — the primary assertion (artifact matches merged HEAD) already passed by
+// the time this leg runs, and this condition self-resolves the moment the
+// daemon restarts (no operator action this script could gate on would change
+// the outcome faster than a restart already would). Aborting on_failure:fail
+// on it, as happened on PR #414, halts an otherwise-sound merge's post-merge
+// chain on a known, self-resolving, non-code condition. It is NOT read as
+// "verified" — the message says plainly the process build status is UNKNOWN
+// pending a restart, mirroring ARTIFACT_VERIFIED_NO_PROCESS's own "not a
+// failure, but do not read this as verified" framing exactly.
+//
 // Every reported outcome names EXACTLY ONE of "artifact" or "process" (or
 // both) so "verified" is never ambiguous about which one it means — that
 // ambiguity is what let the artifact-only PART 1 result get relayed
@@ -55,6 +91,12 @@
 //        the failure mode that would have caught 2026-08-25 at 01:48 — see
 //        test/verify-installed-build-lr-dc9a3b.test.js for the
 //        demonstrated-failure-before-fix simulation.
+//      — STALE_PROCESS (lr-71f0c3): the artifact matches, but the running
+//        daemon predates the get_build_status handler itself and cannot
+//        answer the query at all. NOT a failure (exit 0, see PART 2's
+//        header comment above for the fatal/non-fatal reasoning) — reported
+//        plainly with the remedy (restart the daemon), never as the raw
+//        'unknown command' transport string.
 //   All failures are reported on stderr with the exact SHAs/flags involved
 //   so the drift is visible in loadout-merge's captured step output.
 //
@@ -105,13 +147,17 @@ function resolveInstalledSha() {
 // `clagentic-console` on PATH instead of a real daemon socket.
 //
 // Returns:
-//   { running: false }                                  — no daemon running
-//   { running: true, loadedBuildSha, staleInodes, pid }  — daemon answered
+//   { running: false }                                        — no daemon
+//   { running: true, stale: true }                             — daemon
+//     running but predates the get_build_status handler (lr-71f0c3) — see
+//     this function's STALE_PROCESS handling below
+//   { running: true, loadedBuildSha, staleInodes, pid }         — daemon
+//     answered normally
 //
 // Throws only on a genuinely unexpected failure (the binary isn't on PATH,
 // or it returned output this parser can't make sense of at all) — a daemon
-// that is simply not running is NOT a throw, since that's an expected,
-// non-failing state (nothing to compare against yet).
+// that is simply not running, or one that is running but predates this
+// check, is NOT a throw, since both are expected, non-failing states.
 function resolveProcessBuildStatus(cliBin) {
   const bin = cliBin || 'clagentic-console';
   let raw;
@@ -132,8 +178,27 @@ function resolveProcessBuildStatus(cliBin) {
         return { running: false };
       }
     } catch (_parseErr) {
-      // fall through to the generic failure below
+      // fall through below
     }
+
+    // lr-71f0c3: a daemon that predates the get_build_status IPC case
+    // (i.e. predates lr-dc9a3b's own introduction) does not hit the
+    // {ok:false, error:"no running daemon"} shape above at all — it IS
+    // running, it just has no case for this command, so lib/daemon.js's
+    // default IPC branch replies {ok:false, error:"unknown command:
+    // get_build_status"}, and handleProcessBuildStatus (lib/cli/
+    // ipc-subcommands.js) surfaces that on stderr as
+    // "Failed: unknown command: get_build_status" with exit 1.
+    // execFileSync's err.message embeds that stderr text, so match on it
+    // directly here (stdout carries no JSON in this path, unlike the "no
+    // running daemon" shape above -- the failure is on stderr, from a
+    // console.error, not a stdout console.log).
+    const stderrText = err.stderr ? err.stderr.toString() : '';
+    if (/unknown command:\s*get_build_status/.test(stderrText) ||
+        /unknown command:\s*get_build_status/.test(err.message || '')) {
+      return { running: true, stale: true };
+    }
+
     throw new Error(`--process-build-status failed: ${err.message}`);
   }
   const parsed = JSON.parse(raw);
@@ -193,6 +258,25 @@ function main() {
       `(${headSha}); no daemon is running, so the PROCESS CHECK DID NOT RUN and the process ` +
       'build status is UNKNOWN -- do not read this as the process/service being verified. ' +
       'Not a failure: there is no running process to compare against yet.'
+    );
+    return;
+  }
+
+  if (processStatus.stale) {
+    // lr-71f0c3: the running daemon predates the get_build_status handler
+    // itself, so it cannot answer this query at all -- structurally
+    // unavoidable until it restarts (see this script's header comment for
+    // why this is non-fatal, not a code defect, and not surfaced as the raw
+    // transport error). This is NOT read as "verified": the build status of
+    // the running process is explicitly UNKNOWN pending a restart.
+    console.log(
+      '[verify-installed-build] STALE_PROCESS: artifact matches merged HEAD ' +
+      `(${headSha}); the running daemon does not recognize the get_build_status query, ` +
+      'meaning it predates that handler and has not picked up any build since. The PROCESS build ' +
+      'status is UNKNOWN, NOT VERIFIED (PROCESS check inconclusive) -- restart the daemon to ' +
+      'clear this: systemctl restart clagentic-console (NOT done automatically by this check). ' +
+      'Not a failure: this is expected on first contact with a build that adds a new ' +
+      'PROCESS-status query and self-resolves on restart.'
     );
     return;
   }
