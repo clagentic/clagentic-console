@@ -745,6 +745,12 @@
   color: var(--text-dimmer);
 }
 
+/* lr-93e3c8: visible error state for save-status spans (e.g. Advanced >
+   Memory), matching the same class other save-status spans already use. */
+.ps-save-status-error {
+  color: var(--error, #f38ba8);
+}
+
 /* Environment notice */
 .ps-env-notice {
   display: flex;

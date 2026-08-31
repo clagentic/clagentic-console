@@ -1424,8 +1424,11 @@
               </div>
               <div class="settings-field" style="margin-top: 16px;">
                 <label class="settings-label" for="settings-tokens-per-mb-headroom">Context tokens per MB headroom</label>
-                <div class="settings-hint">Controls how large a session's context can grow relative to available cgroup memory. Lower = more conservative. Default (67) is calibrated for claude-opus-4 at 1M context.</div>
-                <input type="number" id="settings-tokens-per-mb-headroom" class="settings-budget-input" min="10" max="500" step="1" value="67" style="margin-top: 8px; width: 120px;">
+                <div class="settings-hint">Controls how large a session's context can grow relative to available cgroup memory. Lower = more conservative. Default (240) is derived from this daemon's own observed cgroup memory.peak against a confirmed large-session token count (lr-93e3c8) -- not a fixed model assumption.</div>
+                <input type="number" id="settings-tokens-per-mb-headroom" class="settings-budget-input" min="10" max="500" step="1" value="240" style="margin-top: 8px; width: 120px;">
+              </div>
+              <div class="ps-textarea-actions" style="margin-top: 8px;">
+                <span class="ps-save-status" id="ss-memory-save-status"></span>
               </div>
             </div>
           </div>
