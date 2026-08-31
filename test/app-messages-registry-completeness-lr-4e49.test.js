@@ -81,6 +81,13 @@ var ORIGINAL_CASE_LABELS = [
   "loop_registry_error", "notifications_state", "notification_created",
   "notification_dismissed", "notification_dismissed_all", "daemon_config_changed",
   "lite_project_status", "lite_enroll_result", "lite_unenroll_result",
+  // lr-93e3c8: genuinely new message types (not pre-refactor labels) --
+  // these were declared in ws-schema.js with app-messages.js as handler but
+  // never implemented anywhere (fnd-66af4e). Added here the same way
+  // daemon_config_changed / lite_* above were: this list has been extended
+  // for real new types before, not just transcribed once and frozen.
+  "set_mem_available_threshold_result", "mem_available_threshold_changed",
+  "set_tokens_per_mb_headroom_result", "tokens_per_mb_headroom_changed",
 ];
 
 var REGISTRY_FILES = [
