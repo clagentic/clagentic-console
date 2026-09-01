@@ -22,21 +22,25 @@
 // the shipped HTML and is bound, in the shipped JS, to the exact save
 // functions that send set_mem_available_threshold / set_tokens_per_mb_headroom.
 //
-// WHAT THIS TEST DOES NOT PROVE (documented per this task's explicit
-// instruction rather than silently substituting something adjacent): this
-// repo has no jsdom/DOM-execution harness (confirmed against package.json
-// devDependencies and every other DOM-heavy test file's own header comment,
-// e.g. activity-latch-lr-96e7da.test.js and
-// app-boot-esm-graph-load-lr-4c58ae.test.js's rationale for NOT adding one),
-// and adding one is a new dependency this task is not authorized to add
-// (code-craft rule 9, no allow_new_deps in .crew/amos.yaml). A real
-// click-and-observe-the-WS-send browser/Playwright test would be strictly
-// stronger evidence than the static source-inspection below, which can prove
-// "a <button> with this id exists in the real HTML, inside the real
-// ps-textarea-actions container, and the real JS wires its click handler to
-// the real save function" but cannot execute a browser event loop to prove
-// the click actually fires in a live DOM. Flagged explicitly rather than
-// papered over.
+// WHAT THIS TEST DOES NOT PROVE, AND WHERE THAT GAP WAS ACTUALLY CLOSED
+// (PEACHES PR #416 finding 4, fold-in): this file is static source-inspection
+// only and cannot execute a click, so it cannot catch a double-send, a save
+// function whose ws.send was quietly removed, CSS-class-based hiding, or a
+// shared-status race between the two fields -- and indeed it did not catch
+// findings 1 and 2 in this PR's own diff (PEACHES caught them; this file did
+// not). This repo has no jsdom/happy-dom/linkedom/Playwright dependency
+// (confirmed against package.json devDependencies), but it DOES have an
+// established, dependency-free EXECUTION pattern used across the suite
+// (dynamic import() of the real ES module + a hand-built fake `document` --
+// see test/context-meter-vendor-first-lr-3af675.test.js,
+// test/rate-limit-pill-percent-lr-872f94.test.js, and five more). This
+// file's own header previously (incorrectly) treated a full DOM-execution
+// harness as unavailable here; test/server-settings-memory-save-dedup-status-lr-9e6569.test.js
+// uses that existing pattern to drive the real saveMemAvailableThreshold /
+// saveTokensPerMbHeadroom / status-rendering code paths and demonstrably
+// fails against the pre-fix code for both findings. This static file is kept
+// as a floor (it still proves the button/wiring exist at all) but is no
+// longer the whole story for this surface.
 
 "use strict";
 
