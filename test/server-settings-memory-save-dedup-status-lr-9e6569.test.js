@@ -409,3 +409,60 @@ test('lr-9e6569 (BOBBIE bobbie.uncat.1): a reconnect snapshot confirming the sen
   var sends = ctx.sent.filter(function (m) { return m.type === "set_mem_available_threshold"; });
   assert.equal(sends.length, 1, "a snapshot confirming the already-sent value was applied must not cause a spurious re-send of that same value");
 });
+
+test('lr-9e6569: clicking Save on an unchanged fallback default persists it instead of dedup-suppressing it', function () {
+  elementsById = {};
+  var memEl = fakeElementFor("settings-mem-available-min");
+  var tpmEl = fakeElementFor("settings-tokens-per-mb-headroom");
+  var saveBtn = fakeElementFor("ss-memory-save-btn");
+  fireChangeThenClickSave(memEl, "settings-mem-available-min");
+  fireChangeThenClickSave(tpmEl, "settings-tokens-per-mb-headroom");
+  var btnListeners = fireChangeThenClickSave(saveBtn, "ss-memory-save-btn");
+
+  var ctx = makeFakeCtx();
+  serverSettings.initServerSettings(ctx);
+
+  // Full daemon snapshot says these rendered numbers are fallback defaults,
+  // not persisted config keys. Saving the unchanged displayed values is a
+  // legitimate action: it should write the keys and clear the "not yet saved"
+  // notes after the daemon result, not disappear behind last-sent dedup.
+  serverSettings.updateDaemonConfig({
+    memAvailableMinMB: 1024, memAvailableMinMBIsDefault: true,
+    tokensPerMbHeadroom: 240, tokensPerMbHeadroomIsDefault: true,
+  });
+
+  btnListeners.click[0]();
+
+  var memSends = ctx.sent.filter(function (m) { return m.type === "set_mem_available_threshold"; });
+  var tpmSends = ctx.sent.filter(function (m) { return m.type === "set_tokens_per_mb_headroom"; });
+  assert.equal(memSends.length, 1, "fallback mem-available default must still be persistable by clicking Save");
+  assert.equal(memSends[0].value, 1024);
+  assert.equal(tpmSends.length, 1, "fallback tokens-per-mb default must still be persistable by clicking Save");
+  assert.equal(tpmSends[0].value, 240);
+});
+
+test('lr-9e6569 finding 1: non-error shared status renders the most recent field status, not always mem-available first', function () {
+  elementsById = {};
+  var memEl = fakeElementFor("settings-mem-available-min");
+  var tpmEl = fakeElementFor("settings-tokens-per-mb-headroom");
+  statusEl = fakeElementFor("ss-memory-save-status");
+  var tpmListeners = fireChangeThenClickSave(tpmEl, "settings-tokens-per-mb-headroom");
+
+  var ctx = makeFakeCtx();
+  serverSettings.initServerSettings(ctx);
+
+  serverSettings.updateDaemonConfig({
+    memAvailableMinMB: 6144, memAvailableMinMBIsDefault: false,
+    tokensPerMbHeadroom: 280, tokensPerMbHeadroomIsDefault: false,
+  });
+  serverSettings.handleSetMemAvailableThresholdResult({ ok: true, memAvailableMinMB: 6144 });
+  assert.equal(statusEl.textContent, "Saved");
+
+  // A later edit in the tokens field should render its live status. The old
+  // renderer kept showing mem-available's older "Saved" because it used
+  // memAvail.text || tpm.text instead of tracking recency.
+  tpmEl.value = "281";
+  tpmListeners.change[0]();
+
+  assert.equal(statusEl.textContent, "Saving...");
+});
