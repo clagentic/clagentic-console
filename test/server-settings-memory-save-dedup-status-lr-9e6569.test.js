@@ -327,3 +327,85 @@ test('lr-9e6569 finding 3 (fold-in): a partial daemon_config_changed broadcast l
   assert.match(tpmNoteEl.textContent, /Using default/,
     "an unrelated partial broadcast must not silently clear the tokens-per-mb default-note");
 });
+
+// lr-9e6569 fold-in (BOBBIE PR #416 bobbie.uncat.1): the dedup marker
+// (lastSentMemAvailableMin / lastSentTokensPerMbHeadroom) must mean "the
+// value the server is known to hold", not "the last value this tab
+// optimistically transmitted". updateDaemonConfig -- the handler for the
+// authoritative get_daemon_config snapshot fetched on panel open and on
+// reconnect -- previously repainted the input's .value from the server's
+// config but left the dedup marker untouched. Reachable failure sequence:
+// a save is sent; its WS response never arrives (disconnect between send
+// and daemon processing); the marker stays pinned to that unconfirmed
+// value; on reconnect updateDaemonConfig repaints the input but not the
+// marker; a later legitimate retry of that exact same value is then
+// silently suppressed by the val === lastSent* check -- no send, no error,
+// no feedback. This is exactly the "action appears to work while nothing
+// happens" defect class this task series exists to eliminate, reintroduced
+// inside the very dedup layer added to fix a different instance of it.
+test('lr-9e6569 (BOBBIE bobbie.uncat.1): save sent + no response + reconnect snapshot + retry of same value must still send', function () {
+  elementsById = {};
+  var memEl = fakeElementFor("settings-mem-available-min");
+  var saveBtn = fakeElementFor("ss-memory-save-btn");
+  var memListeners = fireChangeThenClickSave(memEl, "settings-mem-available-min");
+  var btnListeners = fireChangeThenClickSave(saveBtn, "ss-memory-save-btn");
+
+  var ctx = makeFakeCtx();
+  serverSettings.initServerSettings(ctx);
+
+  // User edits and saves. This send's response never arrives (simulated by
+  // simply never calling handleSetMemAvailableThresholdResult) -- the WS
+  // disconnects between send and the daemon processing it.
+  memEl.value = "4096";
+  memListeners.change[0]();
+  var firstSends = ctx.sent.filter(function (m) { return m.type === "set_mem_available_threshold"; });
+  assert.equal(firstSends.length, 1, "the initial save must send");
+  assert.equal(firstSends[0].value, 4096);
+
+  // Reconnect: the client re-fetches the authoritative daemon config. The
+  // snapshot reports the server's actual persisted value -- which, because
+  // the prior save's response never arrived, the daemon may or may not have
+  // actually applied. Model the case where the daemon never got it: the
+  // snapshot reports the OLD (pre-save) value, distinct from what this tab
+  // optimistically set the marker to.
+  serverSettings.updateDaemonConfig({ memAvailableMinMB: 2048 });
+  assert.equal(memEl.value, "2048", "the snapshot must repaint the input to the server's authoritative value");
+
+  // The user (told nothing failed, because nothing did -- it just never got
+  // an answer) simply retries the same 4096 value they already tried once.
+  // This MUST send: the server is not known to hold 4096, so this is a
+  // genuine, non-redundant save attempt, not a suppressible repeat.
+  memEl.value = "4096";
+  memListeners.change[0]();
+
+  var allSends = ctx.sent.filter(function (m) { return m.type === "set_mem_available_threshold"; });
+  assert.equal(allSends.length, 2,
+    "a retry of a value whose save response never arrived, after a reconnect snapshot reporting a different " +
+    "server-held value, must still send -- silently dropping it here is exactly bobbie.uncat.1");
+  assert.equal(allSends[1].value, 4096);
+});
+
+test('lr-9e6569 (BOBBIE bobbie.uncat.1): a reconnect snapshot confirming the sent value was actually applied correctly suppresses an immediate unedited re-save', function () {
+  elementsById = {};
+  var memEl = fakeElementFor("settings-mem-available-min");
+  var saveBtn = fakeElementFor("ss-memory-save-btn");
+  var memListeners = fireChangeThenClickSave(memEl, "settings-mem-available-min");
+  var btnListeners = fireChangeThenClickSave(saveBtn, "ss-memory-save-btn");
+
+  var ctx = makeFakeCtx();
+  serverSettings.initServerSettings(ctx);
+
+  memEl.value = "1536";
+  memListeners.change[0]();
+  assert.equal(ctx.sent.filter(function (m) { return m.type === "set_mem_available_threshold"; }).length, 1);
+
+  // Reconnect snapshot confirms the daemon DID apply 1536 before dropping
+  // the response -- the marker should reconcile to match, and clicking Save
+  // again on the same unedited value must remain a no-op (this is the
+  // existing dedup behavior this fold-in must not regress).
+  serverSettings.updateDaemonConfig({ memAvailableMinMB: 1536 });
+  btnListeners.click[0]();
+
+  var sends = ctx.sent.filter(function (m) { return m.type === "set_mem_available_threshold"; });
+  assert.equal(sends.length, 1, "a snapshot confirming the already-sent value was applied must not cause a spurious re-send of that same value");
+});
