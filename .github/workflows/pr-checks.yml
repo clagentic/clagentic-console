@@ -128,3 +128,30 @@ jobs:
 
       - name: Run test suite
         run: npm test
+
+  test-gate:
+    # Fail-closed aggregation. `test` is skipped (not failed) under
+    # pull_request_target by design (see its own `if:` comment above) — GitHub
+    # does not fail a run because a job was skipped, so a head that produces
+    # ONLY a pull_request_target run previously reported the whole workflow
+    # SUCCESS with the test suite never executed. This job closes that gap:
+    # it runs on every event this workflow listens to, including
+    # pull_request_target, and turns "test did not run" into an explicit
+    # failure instead of silence.
+    #
+    # SECURITY: this job MUST stay a pure metadata assertion. No checkout of
+    # PR code, no npm install, no execution of anything from the PR — it only
+    # reads the `test` job's reported `result`. Adding any of those under
+    # pull_request_target would reintroduce the exact secret-exposure risk
+    # the `if:` on the `test` job exists to prevent.
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require test job to have actually run and passed
+        run: |
+          echo "test job result: ${{ needs.test.result }}"
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "::error::test job did not succeed (result: ${{ needs.test.result }}). A skipped or failed test job must not yield a green PR Checks run." >&2
+            exit 1
+          fi
