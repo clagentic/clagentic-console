@@ -203,6 +203,51 @@ test("lr-553d27: raw IPC set_tokens_per_mb_headroom still accepts an in-range va
 });
 
 // ---------------------------------------------------------------------------
+// Prefix-string coercion (fold-in, BOBBIE PR #417 coercion review): a raw IPC
+// caller sending a garbage-suffixed numeric string over the real socket must
+// be rejected, not silently truncate-parsed to a DIFFERENT value than it
+// sent and reported ok:true -- the exact "reports success while nothing
+// happened" contract violation this task exists to eliminate, one level
+// below the out-of-range case BOBBIE originally flagged as an integrity
+// issue when raising this task's priority.
+// ---------------------------------------------------------------------------
+
+test("lr-553d27: raw IPC set_tokens_per_mb_headroom rejects a garbage-suffixed numeric string ('300abc') over the real socket, instead of truncate-parsing it to 300", function () {
+  var config = { tokensPerMbHeadroom: 240 };
+  return withRealIpcServer(config, function (sockPath, saveCalls) {
+    return sendIPCCommand(sockPath, { cmd: "set_tokens_per_mb_headroom", value: "300abc" }).then(function (resp) {
+      assert.equal(resp.ok, false, "\"300abc\" must be rejected, not silently truncate-parsed to 300 and reported as success");
+      assert.match(resp.error, /10-500/, "the error must name the valid band");
+      assert.equal(config.tokensPerMbHeadroom, 240, "the persisted value must be UNCHANGED -- this is the exact trap: 300 (a different value than what was sent) used to silently land here instead");
+      assert.equal(saveCalls.length, 0, "saveConfig must never be called for a rejected value");
+    });
+  });
+});
+
+test("lr-553d27: raw IPC set_mem_available_threshold rejects a garbage-suffixed numeric string ('128xyz') over the real socket, instead of truncate-parsing it to 128", function () {
+  var config = { memAvailableMinMB: 64 };
+  return withRealIpcServer(config, function (sockPath, saveCalls) {
+    return sendIPCCommand(sockPath, { cmd: "set_mem_available_threshold", value: "128xyz" }).then(function (resp) {
+      assert.equal(resp.ok, false, "\"128xyz\" must be rejected, not silently truncate-parsed to 128 and reported as success");
+      assert.equal(config.memAvailableMinMB, 64, "the persisted value must be UNCHANGED");
+      assert.equal(saveCalls.length, 0);
+    });
+  });
+});
+
+test("lr-553d27: raw IPC set_tokens_per_mb_headroom still accepts a clean in-range numeric STRING ('300') over the real socket -- a legitimate caller sending a JSON string is not the malformed-input case this fix targets", function () {
+  var config = { tokensPerMbHeadroom: 240 };
+  return withRealIpcServer(config, function (sockPath, saveCalls) {
+    return sendIPCCommand(sockPath, { cmd: "set_tokens_per_mb_headroom", value: "300" }).then(function (resp) {
+      assert.equal(resp.ok, true, "a clean numeric string must still be accepted");
+      assert.equal(resp.tokensPerMbHeadroom, 300);
+      assert.equal(config.tokensPerMbHeadroom, 300);
+      assert.equal(saveCalls.length, 1);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Source-parity check: daemon.js's actual case bodies must call the SAME
 // shared validator this test drives, not a hand-duplicated inline copy that
 // could silently drift back to the clamp-and-report-success shape. Mirrors
