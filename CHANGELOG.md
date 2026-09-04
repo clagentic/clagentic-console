@@ -1,3 +1,42 @@
+# [1.9.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.9.0-beta.2...v1.9.0-beta.3) (2026-09-04)
+
+
+### Bug Fixes
+
+* **client:** correct footer stuck-ON/stuck-OFF projection bugs (lr-5edd64) ([33d1a01](https://github.com/clagentic/clagentic-console/commit/33d1a013dd4103666c8a863e0b6150a451c8d9cb)), closes [#410](https://github.com/clagentic/clagentic-console/issues/410)
+* **client:** make store.processing a projection of server-authoritative state (lr-5edd64) ([266427d](https://github.com/clagentic/clagentic-console/commit/266427d47043cf5ed144465f3595acf30c1e9dd2))
+* **client:** make store.processing a projection of server-authoritative state (lr-5edd64) ([abd1a0d](https://github.com/clagentic/clagentic-console/commit/abd1a0da590671535d1accc35f6e1f83e21c1bf8)), closes [#2](https://github.com/clagentic/clagentic-console/issues/2) [#1](https://github.com/clagentic/clagentic-console/issues/1) [#2](https://github.com/clagentic/clagentic-console/issues/2)
+* **client:** repair footer DOM ref unconditionally, not on a value transition (lr-5edd64) ([466ff91](https://github.com/clagentic/clagentic-console/commit/466ff91800d0559bb599d00b1cfe23693b68d642)), closes [#410](https://github.com/clagentic/clagentic-console/issues/410)
+* **daemon:** make process_stats base/admin field split structural (lr-2016fe) ([d1356a9](https://github.com/clagentic/clagentic-console/commit/d1356a9aac22951c48190cb6ccdbc709a2f3dd63)), closes [#412](https://github.com/clagentic/clagentic-console/issues/412) [#403](https://github.com/clagentic/clagentic-console/issues/403)
+* **daemon:** reject out-of-range memory settings instead of silent clamp (lr-93e3c8) ([22f09d5](https://github.com/clagentic/clagentic-console/commit/22f09d5c9171441387ccccac71c39461f31453b5))
+* **daemon:** report default-vs-persisted memory settings state (lr-9e6569) ([6f3609e](https://github.com/clagentic/clagentic-console/commit/6f3609ec410157ce412dbe36992575f2423e812f))
+* **daemon:** restrict process_stats diagnostic fields to admins (lr-2016fe) ([ee6ffc8](https://github.com/clagentic/clagentic-console/commit/ee6ffc8fed2edd4cdc98e831461bad928870abdc))
+* **daemon:** restrict process_stats diagnostic fields to admins (lr-2016fe) ([0793a75](https://github.com/clagentic/clagentic-console/commit/0793a7554030857db830a3a6e7d409f2477ae379)), closes [#403](https://github.com/clagentic/clagentic-console/issues/403)
+* **daemon:** stop reporting daemon-internal TLS termination as the HTTPS badge (lr-20e71c) ([ef4c2a7](https://github.com/clagentic/clagentic-console/commit/ef4c2a7d7350fc3c78dd3d1a32c1a1a4bef6af70))
+* **daemon:** stop reporting daemon-internal TLS termination as the HTTPS badge (lr-20e71c) ([0a10406](https://github.com/clagentic/clagentic-console/commit/0a104060e74fe16403d3c522cc128273eb59f9ae))
+* **scripts:** correct process-build verification (lr-dc9a3b) ([1741d97](https://github.com/clagentic/clagentic-console/commit/1741d97813154d4eae5896f6ee5f487a45ba25b3))
+* **scripts:** correct process-build verification (lr-dc9a3b) ([cd9d21f](https://github.com/clagentic/clagentic-console/commit/cd9d21f151b0b0dcb9ce6edf252fb0a56ca6b48e))
+* **scripts:** make ARTIFACT_VERIFIED_NO_PROCESS state the process check did not run (lr-dc9a3b) ([9b1ba64](https://github.com/clagentic/clagentic-console/commit/9b1ba6494da6ae2f82013a061cc9a92ca9f22c3d))
+* **scripts:** stop leaking raw 'unknown command' on stale-daemon process check (lr-71f0c3) ([a973832](https://github.com/clagentic/clagentic-console/commit/a973832356520a256fd7baa01446b777044f8efe))
+* **scripts:** stop leaking raw 'unknown command' on stale-daemon process check (lr-71f0c3) ([245f2f0](https://github.com/clagentic/clagentic-console/commit/245f2f05789c97facb514ab0ecafd50a0a1453a8)), closes [#411](https://github.com/clagentic/clagentic-console/issues/411) [#412](https://github.com/clagentic/clagentic-console/issues/412) [#414](https://github.com/clagentic/clagentic-console/issues/414)
+* **scripts:** verify-installed-build now checks the running process, not just the artifact (lr-dc9a3b) ([9224901](https://github.com/clagentic/clagentic-console/commit/92249015ef5a08fec38e8cb964b1c2730684c3ef))
+* **sdk-bridge:** honor memAvailableMinMB=0 and fix cgroup cause-message boundary (lr-93e3c8) ([1a87ef2](https://github.com/clagentic/clagentic-console/commit/1a87ef22afd3665efb2521437bbeedaf8edee099)), closes [#414](https://github.com/clagentic/clagentic-console/issues/414)
+* **sdk-bridge:** recalibrate memory guard and fix settings panel silent drop (lr-93e3c8) ([367c7a8](https://github.com/clagentic/clagentic-console/commit/367c7a86fcbb549a29dfc52e0fe4583f65bceea6))
+* **sdk-bridge:** recalibrate memory guard and fix settings panel silent drop (lr-93e3c8) ([447276b](https://github.com/clagentic/clagentic-console/commit/447276b4dd3d05387682d022e2886bcc8e9e3906))
+* **sdk-bridge:** stop misdirecting operators on cgroup memory guard block (lr-93e3c8) ([cbb332e](https://github.com/clagentic/clagentic-console/commit/cbb332ea9eecb6254e196b79906db34979b85eaf))
+* **server-settings:** add explicit Save button to Advanced > Memory panel (lr-9e6569) ([db5280c](https://github.com/clagentic/clagentic-console/commit/db5280c9dbcc49f16cb923abfedfd3d5d42d44fd))
+* **server-settings:** add Save button to Advanced > Memory panel (lr-9e6569) ([ca2699e](https://github.com/clagentic/clagentic-console/commit/ca2699e927d2ff96ce290c8cb406ba9b5a3b792e))
+* **server-settings:** fix dedup-marker default semantics and status recency (lr-9e6569) ([6e30e31](https://github.com/clagentic/clagentic-console/commit/6e30e3153ef29c80c05b1bcfcea0acb06093d832)), closes [#416](https://github.com/clagentic/clagentic-console/issues/416)
+* **server-settings:** reconcile memory-save dedup markers on daemon snapshot (lr-9e6569) ([ecba657](https://github.com/clagentic/clagentic-console/commit/ecba65749d3728f0ba9d3343bdf1f0227978590b)), closes [#416](https://github.com/clagentic/clagentic-console/issues/416)
+* **server-settings:** stop double-send and status races on memory save (lr-9e6569) ([b83cbf0](https://github.com/clagentic/clagentic-console/commit/b83cbf073905912c96a9355a098cc1d895c94b00)), closes [#416](https://github.com/clagentic/clagentic-console/issues/416)
+* **server-settings:** surface feedback for Advanced > Memory edits (lr-93e3c8) ([61aaa5d](https://github.com/clagentic/clagentic-console/commit/61aaa5dab79781ab24ab12d7ed20e0b6f086d53a))
+* **server:** fix X-Forwarded-Proto multi-hop trust and remaining tlsOptions-as-protocol sites (lr-20e71c) ([1a44cab](https://github.com/clagentic/clagentic-console/commit/1a44cab6181eed9902fafdbbe8762ce30af5df28)), closes [#409](https://github.com/clagentic/clagentic-console/issues/409)
+
+
+### Features
+
+* **daemon:** expose the running process's loaded build SHA over IPC (lr-dc9a3b) ([e59a10a](https://github.com/clagentic/clagentic-console/commit/e59a10a66faf1b295b9b6a1290ca4fa9e744dda7))
+
 # [1.9.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.9.0-beta.1...v1.9.0-beta.2) (2026-08-27)
 
 
