@@ -169,7 +169,6 @@ test("scripts/verify-installed-build.js: STALE_PROCESS message never surfaces th
 test("scripts/verify-installed-build.js: resolveProcessBuildStatus is the single place that detects the 'unknown command: get_build_status' shape", function () {
   var src = fs.readFileSync(path.join(__dirname, "..", "scripts", "verify-installed-build.js"), "utf8");
 
-  var matches = src.match(/unknown command:\\?s\*get_build_status/g) || [];
   // resolveProcessBuildStatus contains two `.test(...)` calls against the
   // same regex literal (stderr and err.message) plus the header-comment
   // prose mentioning the literal string -- assert the regex-based detection
