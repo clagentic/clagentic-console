@@ -1,25 +1,43 @@
 // pr-checks-test-gate-fail-closed-lr-665c62.test.js
 //
-// Regression coverage for lr-665c62: PR Checks (.github/workflows/pr-checks.yml)
-// could report the whole run SUCCESS while the `test` job was SKIPPED (not
-// failed) — GitHub does not fail a run because a job was skipped, so a head
-// that produced only a pull_request_target run previously reported green
-// with `npm test` never having executed. Commit 4b150ff added a `test-gate`
-// job that asserts `needs.test.result == 'success'` and fails otherwise.
+// Coverage for the `test-gate` job's shell conditional in
+// .github/workflows/pr-checks.yml (lr-665c62). Commit 4b150ff added
+// `test-gate`, which asserts `needs.test.result == 'success'` and fails
+// otherwise, for the case where the `test` job is DISPATCHED but fails or
+// is cancelled.
 //
-// PEACHES (PR #418, comment 5546266561) held this BLOCKING: the guard's
-// correctness was reasoned from reading the YAML, never demonstrated by an
-// actual failing execution. This file closes that gap the same way lr-243b
-// closed an analogous one for release.yml (see
-// test/release-workflow-promote-version-guard-lr-243b.test.js) — no YAML
-// parser dependency (none in package.json), so it extracts the test-gate
-// step's run: block VERBATIM from the workflow text and executes it under
-// `sh -c` with `needs.test.result` substituted exactly as GitHub Actions'
-// `${{ }}` expression interpolation would substitute it: a literal string,
-// spliced into the script text before any shell ever runs it. That is the
-// real substitution mechanism (GHA expressions are evaluated by the runner,
-// not by the step's shell), so this test exercises the identical script the
+// WHAT THIS FILE PROVES, and no more: that the extracted shell conditional
+// itself is correct for every value of `needs.test.result` (success,
+// skipped, failure, cancelled, empty). No YAML parser dependency (none in
+// package.json), so it extracts the test-gate step's run: block VERBATIM
+// from the workflow text and executes it under `sh -c` with
+// `needs.test.result` substituted exactly as GitHub Actions' `${{ }}`
+// expression interpolation would substitute it: a literal string, spliced
+// into the script text before any shell ever runs it. That is the real
+// substitution mechanism (GHA expressions are evaluated by the runner, not
+// by the step's shell), so this test exercises the identical script the
 // runner would execute for each value, not an approximation of it.
+//
+// WHAT THIS FILE DOES NOT PROVE, and this is the gap that matters (MILLER
+// fnd-3973e2, lr-665c62 comment thread): it never models GitHub's job
+// SCHEDULING layer, only the shell script's behavior once invoked. In
+// production, under pull_request_target, `test` is skipped by its own
+// job-level `if:` — and that skip PROPAGATES to `test-gate` through
+// `needs: test` even though `test-gate` has `if: always()`. always() only
+// rescues a dependent whose dependency FAILED or was CANCELLED; it does not
+// resurrect a dependent whose dependency was skipped by the dependency's
+// own `if:`. So on the exact event this job exists to guard, `test-gate` is
+// never scheduled at all — it produces no check-run, not a skipped one, not
+// a failed one. The case at :~116-120 below, "fails closed when the test
+// job result is skipped", is the exact production scenario, and it passes —
+// while production never reaches the script this test is exercising. This
+// file therefore closes PEACHES's "unreached script" concern for the
+// failed/cancelled cases only; it does NOT close lr-665c62 or demonstrate
+// that the guard fires in the pull_request_target skip case, because it
+// cannot: that gap is a job-dispatch property, not a script property, and
+// is not something a shell-level test can exercise. Closing it requires
+// branch protection requiring the `test` check by name (operator action,
+// tracked on lr-665c62), not another test in this file.
 
 var test = require("node:test");
 var assert = require("node:assert");
