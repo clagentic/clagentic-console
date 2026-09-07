@@ -486,6 +486,67 @@ bound to localhost, or firewalled). This mirrors the trust model of
 `X-Forwarded-For`-consuming software generally (nginx `real_ip`, Express
 `trust proxy`) rather than inventing a new one.
 
+## Build-adoption diagnostic (lr-e85fec)
+
+Installing a new build (`npm install -g @clagentic/console`) never restarts a
+running daemon — restart timing is the operator's decision, never an
+automation's (see the Memory Limits section above and lr-d22a: killing
+sessions out from under an operator is worse than serving old code a while
+longer). Before lr-e85fec, that correct restraint had no counterpart: nothing
+in the product told the operator a newer build was sitting on disk unused.
+lr-22e8 (June 2026) added a stale-inode/journald WARN, but a detector with no
+attached actuator does not close the gap — the warning could fire for days
+before anyone thought to check `journalctl`, during which every merged fix is
+silently inert.
+
+**Why not fully automatic, session-preserving adoption (hot-reload):**
+investigated and rejected as infeasible in this codebase, not skipped. A
+session's live state — `queryInstance`/child processes (YOKE adapters),
+open WebSocket connections, terminal PTYs (`lib/terminal-manager.js`),
+in-flight tool-approval promises (`pendingPermissions`) — are live JS objects
+and OS handles inside *this* process's heap; Node's `require()` cache has no
+supported unload/reload primitive. The only re-exec path that exists today
+(`spawnAndRestart()`, used by the "Restart" admin action and update-and-
+restart) already demonstrates this: it tears down every project via
+`shutdownProjects()` before spawning the replacement process. Making a re-exec
+survive a live tool call or open terminal would need mid-turn checkpoint/
+restore — lr-0287's Tier 2, explicitly out of scope in that task's own
+description and not built.
+
+**What ships instead — detector with an attached actuator, not a bigger
+detector:**
+
+1. **Detection** (`lib/build-update-check.js`'s `checkForNewerInstalledBuild`)
+   compares `loadedBuildSha` — the SHA this process read from
+   `lib/build-sha.json` once at startup (lr-dc9a3b) — against a fresh read of
+   the same file, polled every 5 minutes from `lib/daemon.js` (plus once
+   10s after startup, so an install landing moments after boot is not missed
+   for a full interval).
+2. **Offer, not action.** On a detected mismatch, the daemon broadcasts a
+   `{type: "diagnostic", severity: "warning", source: "build-update",
+   actionable: {label: "Restart to apply update", action:
+   "restart_for_build_update"}}` message — the same diagnostic
+   channel/toast/panel `lib/memory-shed.js` already uses for the memory-
+   pressure notice, now with a real button
+   (`lib/public/modules/diagnostics.js`'s `_buildActionableEl`) instead of
+   just a hint icon. Client-side, `actionable.action` is matched against an
+   explicit allowlist (`ACTIONABLE_HANDLERS`) before anything is sent back
+   over the socket — the backend can offer an action, never dictate an
+   arbitrary WS command through the diagnostic payload.
+3. **Actuation only on that click.** The button sends `{type:
+   "restart_for_build_update"}`, gated by the same admin-only check as
+   `restart_server`/`shutdown_server` (`lib/project-sessions.js`). The
+   handler (`onRestartForBuildUpdate`, `lib/daemon.js`) waits for in-flight
+   sessions to finish — `lib/build-update-check.js`'s `waitForIdleThenAct`,
+   polling the same `getActiveLiveCount()` signal `lib/drain.js` uses for the
+   memory-pressure drain path — bounded at 60s, then calls the existing
+   `spawnAndRestart()`. No restart fires without this explicit click; nothing
+   times it, schedules it, or fires it as a side effect of install or merge.
+
+The floor (lr-22e8's journald WARN + `health.stale`) is unchanged and still
+fires independently — this adds the offered affordance on top of it, it does
+not replace it.
+
 ## See Also
 
 - [MODULE_MAP.md](./MODULE_MAP.md) — where every module lives and what it owns

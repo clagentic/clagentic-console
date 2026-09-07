@@ -202,6 +202,33 @@
   line-height: 1.4;
 }
 
+/* lr-e85fec: actionable button — rendered instead of the plain hint icon+text
+   above when the client has a real handler for actionable.action (e.g.
+   "Restart to apply update"). A detector with no attached actuator was the
+   whole gap this closes, so a known action gets a real control, not just a
+   label. */
+.diagnostics-actionable-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--accent2, #4A7FE8);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.diagnostics-actionable-btn:hover { opacity: 0.85; }
+.diagnostics-actionable-btn:disabled { opacity: 0.5; cursor: default; }
+.diagnostics-actionable-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.diagnostics-actionable-btn .lucide { width: 12px; height: 12px; }
+
 /* Empty state */
 .diagnostics-empty {
   padding: 20px 14px;
@@ -359,6 +386,29 @@
   font-size: 10.5px;
   color: var(--text-dimmer);
   margin-top: 2px;
+}
+
+/* lr-e85fec: same actuator button as .diagnostics-actionable-btn, sized for
+   the toast's tighter layout — offered at the moment the operator first
+   sees the condition, not only once they open the panel. */
+.toast-diagnostic-action-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 5px 12px;
+  background: var(--accent2, #4A7FE8);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.toast-diagnostic-action-btn:hover { opacity: 0.85; }
+.toast-diagnostic-action-btn:disabled { opacity: 0.5; cursor: default; }
+.toast-diagnostic-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* --------------------------------------------------------
