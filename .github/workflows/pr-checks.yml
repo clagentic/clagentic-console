@@ -128,3 +128,44 @@ jobs:
 
       - name: Run test suite
         run: npm test
+
+  test-gate:
+    # Fail-closed aggregation for the cases where `test` is DISPATCHED but
+    # does not succeed: `needs: test` + `if: always()` means this job still
+    # runs (and fails) when `test` fails or is cancelled, turning that
+    # failure into an explicit red check instead of a silent partial result.
+    #
+    # WHAT THIS DOES NOT COVER (lr-665c62, MILLER fnd-3973e2): under
+    # pull_request_target, `test` is skipped by its OWN `if:` above — and a
+    # dependent job's `if: always()` only overrides the default success()
+    # condition for a job GitHub actually SCHEDULES; it does not resurrect a
+    # dependent whose dependency was skipped by that dependency's own
+    # job-level `if:`. The skip PROPAGATES, so on a head that produces only a
+    # pull_request_target run, this job is never scheduled at all — it
+    # produces no check-run, not even a skipped one. That is precisely the
+    # case this job was believed to close, and it does not.
+    #
+    # A workflow-layer fix for that case is not possible: a run cannot see
+    # its sibling runs, so nothing expressible in this file can assert "this
+    # SHA was tested by some OTHER run." Closing it requires branch
+    # protection that requires the `test` check BY NAME — protection
+    # evaluates across the whole check suite for a SHA, and a required check
+    # that is absent or skipped is not satisfied. That is an operator/repo-
+    # settings action, not something any workflow edit here can express.
+    #
+    # SECURITY: this job MUST stay a pure metadata assertion. No checkout of
+    # PR code, no npm install, no execution of anything from the PR — it only
+    # reads the `test` job's reported `result`. Adding any of those under
+    # pull_request_target would reintroduce the exact secret-exposure risk
+    # the `if:` on the `test` job exists to prevent.
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require test job to have actually run and passed
+        run: |
+          echo "test job result: ${{ needs.test.result }}"
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "::error::test job did not succeed (result: ${{ needs.test.result }}). A skipped or failed test job must not yield a green PR Checks run." >&2
+            exit 1
+          fi
