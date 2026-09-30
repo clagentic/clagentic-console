@@ -631,6 +631,11 @@
 
 .permission-container.resolved-cancelled .permission-decision-label { color: var(--text-dimmer); }
 
+/* Awaiting server confirmation: not a final state, so no dimming */
+.permission-sending-note { font-size: 12px; color: var(--text-muted); padding: 4px 12px 8px; }
+.permission-sending-note.permission-note-error { color: var(--error); }
+.permission-container.sending .permission-btn { opacity: 0.5; cursor: default; }
+
 .permission-container.resolved { opacity: 0.5; }
 
 /* ==========================================================================
