@@ -3,7 +3,9 @@
 // after a long-open request, an unknown/stale response is answered explicitly,
 // and every path that ends a request dismisses its notification banner.
 
-var test = require("node:test");
+var nodeTest = require("node:test");
+var test = nodeTest.test;
+var describe = nodeTest.describe;
 var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
@@ -95,7 +97,11 @@ function cleanup(h) {
   try { fs.rmSync(h.tmpHome, { recursive: true, force: true }); } catch (_) {}
 }
 
-test("a long-open permission request survives the idle reaper and allow_always still resolves and persists the grant", async function (t) {
+// Characterization / guard, not a regression test: this passes on main before
+// the fix. The server path already held for a long-open card (MILLER lr-b75006,
+// comment seq 3); the defect was client-side. Kept to guard that path.
+describe("characterization: long-open permission request (existing behaviour)", function () {
+test("survives the idle reaper and allow_always still resolves and persists the grant", async function (t) {
   t.mock.timers.enable({ apis: ["setInterval"] });
   var h = makeHarness();
   try {
@@ -134,6 +140,7 @@ test("a long-open permission request survives the idle reaper and allow_always s
     t.mock.timers.reset();
     cleanup(h);
   }
+});
 });
 
 test("resolving a request dismisses its notification", function () {
