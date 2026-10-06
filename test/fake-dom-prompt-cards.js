@@ -40,6 +40,20 @@ FakeElement.prototype.click = function () {
   (this._listeners.click || []).slice().forEach(function (fn) { fn({}); });
 };
 FakeElement.prototype.focus = function () {};
+function dataKey(name) {
+  return name.slice(5).replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+}
+FakeElement.prototype.setAttribute = function (name, value) {
+  if (name.indexOf("data-") === 0) this.dataset[dataKey(name)] = String(value);
+  else (this._attrs = this._attrs || {})[name] = String(value);
+};
+FakeElement.prototype.getAttribute = function (name) {
+  if (name.indexOf("data-") === 0) {
+    var v = this.dataset[dataKey(name)];
+    return v === undefined ? null : v;
+  }
+  return this._attrs && Object.prototype.hasOwnProperty.call(this._attrs, name) ? this._attrs[name] : null;
+};
 FakeElement.prototype.appendChild = function (c) { c._parent = this; this._children.push(c); return c; };
 FakeElement.prototype.remove = function () {
   if (!this._parent) return;
