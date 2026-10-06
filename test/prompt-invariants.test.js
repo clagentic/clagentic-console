@@ -21,8 +21,9 @@
 //   I5  Deny (or skip, or reject), and every ending that is not an answer,
 //       stops the call
 //   I6  only the prompt's own scope ends it: a top-level prompt may end with
-//       its turn or query, a tracked sub-agent's prompt with neither, and
-//       every prompt with the daemon
+//       its turn, a tracked sub-agent's prompt not with its parent's turn,
+//       every prompt with its query (the vendor cancels the callbacks of a
+//       closed query), and every prompt with the daemon
 //   I7  Allow for Session auto-approves the same grant key afterwards, across
 //       turns and restart, and nothing else
 //   I8  every prompt that ends records exactly one terminal event
@@ -304,7 +305,8 @@ Harness.prototype.request = async function (prompt, ownerTask) {
     });
   }
   var before = this.server.heldPromptIds();
-  var abort = new AbortController();
+  // The live query issues the signal and cancels it when it closes.
+  var abort = this.server.issueSignal();
   var promise = prompt.kind === "elicitation"
     ? this.server.bridge.handleElicitation(session, prompt.request, { signal: abort.signal })
     : this.server.bridge.handleCanUseTool(session, prompt.toolName, prompt.input, { toolUseID: toolUseId, signal: abort.signal });
@@ -371,25 +373,21 @@ Harness.prototype.turnResult = async function () {
   await this.settle();
 };
 
-// The query ends. vendorCancels models a vendor that, closing the query,
-// cancels every callback it still had waiting (the Claude SDK aborts each
-// in-flight canUseTool; the worker relay and the Codex adapter do the same on
-// their query's end); without it, a backgrounded sub-agent's callback is left
-// waiting and its prompt must stay answerable.
-Harness.prototype.queryEnd = async function (vendorCancels) {
-  this.op = vendorCancels ? VENDOR_QUERY_END : "query end";
+// The query ends. Closing it makes the vendor cancel every callback it still
+// had waiting, a backgrounded sub-agent's included (the fake query handle
+// aborts the signals it issued, as the Claude SDK does; the worker relay and
+// the Codex adapter report the same on their query's end), so every prompt of
+// this query must end, denied and recorded.
+Harness.prototype.queryEnd = async function () {
+  this.op = QUERY_END;
   var gen = this.queryGen;
   var self = this;
-  if (vendorCancels) {
-    this.pending().forEach(function (r) { if (r.query === gen) r.abort.abort(); });
-  }
   await this.server.endQuery();
   await this.settle();
   this.order.forEach(function (id) {
     var r = self.requests[id];
     if (r.query !== gen || r.settled || r.dead) return;
-    if (vendorCancels) self.fail(id + " outlived the vendor cancelling it (I5)");
-    else if (!r.scopedBefore) self.fail(id + " (top-level) outlived its closed query (I6: nothing else can end it)");
+    self.fail(id + " outlived the vendor cancelling it (I5)");
   });
   this.forgetIdleTasks();
   this.queryGen++;
@@ -534,7 +532,7 @@ Harness.prototype.restart = async function () {
 // --- invariants ----------------------------------------------------------
 
 var OPERATOR_CAUSE = /^(client-\d+|HTTP) /;
-var VENDOR_QUERY_END = "query end, vendor cancels its callbacks";
+var QUERY_END = "query end";
 
 Harness.prototype.check = function () {
   var self = this;
@@ -557,8 +555,8 @@ Harness.prototype.check = function () {
       var byOperator = aimedHere && (OPERATOR_CAUSE.test(cause) || cause.indexOf("abort ") === 0);
       if (!byOperator) {
         if (allows(r.outcome)) self.fail(id + " ended by '" + cause + "' without stopping the call (I5)");
-        var scopeEnd = cause === "daemon restart" || cause === VENDOR_QUERY_END ||
-          ((cause === "query end" || cause === "turn result") && !r.scopedBefore);
+        var scopeEnd = cause === "daemon restart" || cause === QUERY_END ||
+          (cause === "turn result" && !r.scopedBefore);
         if (!scopeEnd) self.fail(id + " (" + r.kind + ", owner " + (r.owner || "top-level") + ") was ended by '" + cause + "', outside its scope (I6)");
       }
       r.cause = null;
@@ -617,8 +615,7 @@ function tallyEndings(h, tally) {
     else if (!r.settled) tally.open++;
     else if (OPERATOR_CAUSE.test(r.endedBy)) tally.operator++;
     else if (r.endedBy === "turn result") tally.turn++;
-    else if (r.endedBy === "query end") tally.query++;
-    else if (r.endedBy === VENDOR_QUERY_END) tally.vendorQuery++;
+    else if (r.endedBy === QUERY_END) tally.query++;
     else if (r.endedBy === "daemon restart") tally.restart++;
     else if (r.endedBy.indexOf("abort ") === 0) tally.aborted++;
   });
@@ -668,8 +665,7 @@ async function randomRun(seed, steps, tally) {
         var chatter = Math.floor(rnd() * 70);
         await h.step(function () { return h.userMessage(chatter); });
       } else if (roll < 0.98) {
-        var vendorCancels = rnd() < 0.5;
-        await h.step(function () { return h.queryEnd(vendorCancels); });
+        await h.step(function () { return h.queryEnd(); });
       } else {
         await h.step(function () { return h.restart(); });
       }
@@ -696,7 +692,7 @@ test("random interleavings keep every prompt invariant, for every kind", { timeo
   // Card ack timers must not fire in wall-clock time mid-run.
   if (RENDER) t.mock.timers.enable({ apis: ["setTimeout"] });
   var tally = {
-    opened: 0, subagent: 0, open: 0, dead: 0, operator: 0, turn: 0, query: 0, vendorQuery: 0, restart: 0, aborted: 0,
+    opened: 0, subagent: 0, open: 0, dead: 0, operator: 0, turn: 0, query: 0, restart: 0, aborted: 0,
     "kind:permission": 0, "kind:plan": 0, "kind:ask_user": 0, "kind:elicitation": 0,
   };
   for (var seed = 1; seed <= SEEDS; seed++) {
@@ -832,20 +828,20 @@ test("an HTTP Allow for Session is refused and grants nothing; HTTP never answer
   });
 });
 
-// A backgrounded sub-agent outlives its parent's turn and query: the operator
-// must still be able to answer its prompt, and that answer settles it once.
-test("a backgrounded sub-agent's prompt survives its parent's turn and query end and is answered exactly once", async function (t) {
+// A backgrounded sub-agent outlives its parent's turn while the query stays
+// open: the operator must still be able to answer its prompt, and that answer
+// settles it exactly once.
+test("a backgrounded sub-agent's prompt survives its parent's turn result and is answered exactly once", async function (t) {
   var kinds = ["permission", "plan", "ask_user"];
   for (var i = 0; i < kinds.length; i++) {
     var kind = kinds[i];
-    await scenario(t, "subagent-across-query-end " + kind, 2, async function (h) {
+    await scenario(t, "subagent-across-turn-result " + kind, 2, async function (h) {
       var task = null;
       var r = null;
       await h.step(async function () { task = await h.spawnTask(); });
       await h.step(async function () { r = await h.request(BY_KIND[kind], task); });
       await h.step(function () { return h.turnResult(); });
-      await h.step(function () { return h.queryEnd(); });
-      if (r.settled) { h.fail(r.id + " (" + kind + ") ended with its parent's query (I6)"); return; }
+      if (r.settled) { h.fail(r.id + " (" + kind + ") ended with its parent's turn (I6)"); return; }
       var answer = Object.keys(ANSWERS[kind])[0];
       await h.step(function () { return h.respond(h.clients[0], r, answer); });
       await h.step(function () { return h.respond(h.clients[1], r, answer); });
@@ -856,17 +852,36 @@ test("a backgrounded sub-agent's prompt survives its parent's turn and query end
 });
 
 // The real Claude SDK cancels every callback still waiting when its query
-// closes, a backgrounded sub-agent's included; the prompt then ends with
-// the vendor's cancellation, not left offering an answer nothing can take.
-test("a query end the vendor cancels ends even a sub-agent's prompt, denied and recorded", async function (t) {
-  await scenario(t, "vendor-cancelled-query-end", 2, async function (h) {
-    var task = null;
-    await h.step(async function () { task = await h.spawnTask(); });
-    await h.step(function () { return h.request(BY_KIND.permission, task); });
-    await h.step(function () { return h.request(BY_KIND.ask_user, null); });
-    await h.step(function () { return h.turnResult(); });
-    await h.step(function () { return h.queryEnd(true); });
-  });
+// closes, a backgrounded sub-agent's included (and kills the process hosting
+// that sub-agent), so no operator answer can reach it: the prompt ends denied
+// and recorded, no card offers controls, and a later click is answered stale.
+test("a query close cancels every pending prompt, a sub-agent's included; a later click is stale", async function (t) {
+  var kinds = ["permission", "plan", "ask_user"];
+  for (var i = 0; i < kinds.length; i++) {
+    var kind = kinds[i];
+    await scenario(t, "query-close-cancels-everything " + kind, 2, async function (h) {
+      var task = null;
+      var sub = null;
+      var top = null;
+      await h.step(async function () { task = await h.spawnTask(); });
+      await h.step(async function () { sub = await h.request(BY_KIND[kind], task); });
+      await h.step(async function () { top = await h.request(BY_KIND[kind], null); });
+      await h.step(function () { return h.turnResult(); });
+      await h.step(function () { return h.queryEnd(); });
+      [sub, top].forEach(function (r) {
+        if (!r.settled) { h.fail(r.id + " (" + kind + ") outlived its closed query (I5)"); return; }
+        if (allows(r.outcome)) h.fail(r.id + " (" + kind + ") ended with its query without stopping the call (I5)");
+        h.clients.forEach(function (c) {
+          var card = RENDER ? dom.cardFor(c.view, r.id) : null;
+          if (card && dom.liveControls(card).length > 0) h.fail(c.name + " still offers controls on " + r.id + " after its query closed (I2)");
+        });
+      });
+      var answer = Object.keys(ANSWERS[kind])[0];
+      await h.step(function () { return h.respond(h.clients[0], sub, answer); });
+      await h.step(function () { return h.respond(h.clients[1], top, answer); });
+    });
+    t.mock.timers.reset();
+  }
 });
 
 test("a daemon restart ends every open prompt, of every kind and owner, denied and recorded", async function (t) {

@@ -39,11 +39,23 @@ function flush() {
 }
 
 // An SDK query handle whose stream stays open until ended, like a live query
-// waiting for the next user message.
+// waiting for the next user message. Like the real SDK's Query, closing it
+// aborts the signal of every canUseTool callback it handed out and has not
+// settled, a backgrounded sub-agent's included: the callbacks cannot outlive
+// the query that issued them.
 function makeQueryHandle() {
   var finish = null;
   var ended = false;
+  var controllers = [];
+  function abortIssuedSignals() {
+    controllers.splice(0).forEach(function (c) { c.abort(); });
+  }
   return {
+    issueSignal: function () {
+      var c = new AbortController();
+      controllers.push(c);
+      return c;
+    },
     _adapterState: null,
     [Symbol.asyncIterator]: function () {
       return {
@@ -58,8 +70,8 @@ function makeQueryHandle() {
     pushMessage: function () {},
     endInput: function () {},
     setPermissionMode: function () { return Promise.resolve(); },
-    close: function () { ended = true; if (finish) finish(); },
-    abort: function () { ended = true; if (finish) finish(); },
+    close: function () { abortIssuedSignals(); ended = true; if (finish) finish(); },
+    abort: function () { abortIssuedSignals(); ended = true; if (finish) finish(); },
   };
 }
 
@@ -181,6 +193,12 @@ async function createServer(opts) {
     startQuery: async function () {
       await bridge.startQuery(session, "go", null, null);
       await flush();
+    },
+
+    /** An abort controller whose signal the live query cancels when it closes. */
+    issueSignal: function () {
+      if (!session.queryInstance) throw new Error("no live query to issue a canUseTool signal");
+      return session.queryInstance.issueSignal();
     },
 
     // Closes the live query; its processQueryStream finally runs. A stream
