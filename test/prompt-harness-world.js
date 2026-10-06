@@ -96,14 +96,16 @@ async function createServer(opts) {
   process.env.CLAGENTIC_HOME = home;
   purgeLib();
 
-  var clients = [];
+  // The project's connected sockets, one collection for the transport and
+  // every handler, as lib/project.js keeps them (a Set).
+  var clients = new Set();
   function deliver(ws, msg) {
     if (ws.readyState === 1) ws.send(JSON.stringify(msg));
   }
   var transport = {
     send: function (msg) { clients.forEach(function (ws) { deliver(ws, msg); }); },
     sendTo: function (ws, msg) { deliver(ws, msg); },
-    sendEach: function (fn) { clients.slice().forEach(function (ws) { fn(ws, null); }); },
+    sendEach: function (fn) { Array.from(clients).forEach(function (ws) { fn(ws, null); }); },
   };
 
   var notifications = require(libPath("project-notifications")).attachNotifications({
@@ -144,9 +146,9 @@ async function createServer(opts) {
     pushModule: opts.pushModule || null,
   });
 
-  var handlers = require(libPath("project-sessions")).attachSessions({
+  var handlerContext = {
     cwd: home, slug: "harness", osUsers: false, currentVersion: "0.0.0",
-    sm: sm, sdk: bridge, tm: null, clients: [], opts: {},
+    sm: sm, sdk: bridge, tm: null, clients: clients, opts: {},
     getNotificationsModule: getNotificationsModule,
     send: transport.send, sendTo: transport.sendTo, sendToAdmins: function () {},
     sendToSession: function () {}, sendToSessionOthers: function () {},
@@ -163,7 +165,8 @@ async function createServer(opts) {
     onProcessingChanged: function () {}, broadcastPresence: function () {},
     adapter: adapter, getProjectList: function () { return []; },
     getProjectCount: function () { return 0; }, getScheduleCount: function () { return 0; },
-  });
+  };
+  var handlers = require(libPath("project-sessions")).attachSessions(handlerContext);
 
   var http = require(libPath("project-http")).attachHTTP({
     cwd: home, slug: "harness", sm: sm, send: transport.send,
@@ -185,6 +188,9 @@ async function createServer(opts) {
     sm: sm,
     bridge: bridge,
     handlers: handlers,
+    // What the session handlers were given, so a test can hold the harness
+    // to the shape production gives them.
+    handlerContext: handlerContext,
     notifications: notifications,
     session: session,
     clients: clients,
@@ -252,14 +258,13 @@ async function createServer(opts) {
     connect: function (ws) {
       ws.readyState = 1;
       ws._clagenticActiveSession = session.localId;
-      if (clients.indexOf(ws) === -1) clients.push(ws);
+      clients.add(ws);
       sm.switchSession(session.localId, ws, function (o) { return o; });
     },
 
     disconnect: function (ws) {
       ws.readyState = 3;
-      var i = clients.indexOf(ws);
-      if (i !== -1) clients.splice(i, 1);
+      clients.delete(ws);
     },
 
     // What a daemon going away does: tear the session manager down (which
@@ -268,7 +273,7 @@ async function createServer(opts) {
     shutdown: function () {
       sm.destroy();
       sm.saveSessionFile(session);
-      clients.slice().forEach(function (ws) { server.disconnect(ws); });
+      Array.from(clients).forEach(function (ws) { server.disconnect(ws); });
     },
   };
   return server;
