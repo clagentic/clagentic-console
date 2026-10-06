@@ -48,7 +48,8 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `project-file-watch.js` | File and directory fs.watch wrappers |
 | `sdk-bridge.js` | SDK bridge coordinator: createSDKBridge factory, worker lifecycle, query stream, tool permissions, mention sessions |
 | `prompt-registry.js` | Sole owner of every operator-prompt lifecycle (permission, plan, AskUserQuestion, MCP elicitation, browser-extension command): open/answer/cancel/expire, sub-agent ownership, session grants, notification dismissal, replay state |
-| `prompt-kinds/` | One adapter per prompt kind: payload fields, response parsing, the vendor callback's value for an answer and for an unanswered end |
+| `prompt-kinds/` | One adapter per prompt kind: payload fields, response parsing and validation against the request (answer bounds in `answer-limits.js`), the vendor callback's value for an answer and for an unanswered end |
+| `prompt-access.js` | Who may answer a prompt: the one session-visibility rule the WS and HTTP answer paths both apply |
 | `sdk-skill-discovery.js` | Skill directory scanning, shell segment splitting, SDK/filesystem skill merging |
 | `sdk-message-queue.js` | Async iterable message queue for streaming input to SDK |
 | `sdk-message-processor.js` | SDK stream event processing (message_start, content_block_*), sub-agent message routing |
