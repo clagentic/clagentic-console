@@ -28,7 +28,8 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | Module | Message types | Concern |
 |--------|--------------|---------|
 | `project-knowledge.js` | `knowledge_list`, `knowledge_read`, `knowledge_save`, `knowledge_delete`, `knowledge_promote`, `knowledge_depromote` | Knowledge file CRUD |
-| `project-sessions.js` | `new_session`, `switch_session`, `delete_session`, `rename_session`, `resume_session`, `fork_session`, `rewind_*`, `permission_response`, `elicitation_response`, `set_model`, `set_effort`, `set_thinking`, `set_betas`, `set_*_mode`, `browse_dir`, `add_project`, `create_project`, `clone_project`, `create_worktree`, `remove_project*`, `schedule_move`, `reorder_projects`, `set_project_title`, `set_project_icon`, `get_daemon_config`, `set_pin`, `set_keep_awake`, `set_auto_continue`, `set_image_retention`, `shutdown_server`, `restart_server`, `process_stats`, `stop`, `stop_task`, `kill_process`, `set_update_channel`, `check_update`, `update_now`, `ask_user_response`, `input_sync`, `cursor_*`, `text_select`, `push_subscribe`, `load_more_history`, `search_sessions`, `search_session_content`, `list_cli_sessions`, `set_session_visibility`, `transfer_project_owner`, `set_mate_dm` | Session lifecycle, config, project management, daemon settings, permissions, updates |
+| `project-sessions.js` | `new_session`, `switch_session`, `delete_session`, `rename_session`, `resume_session`, `fork_session`, `rewind_*`, `set_model`, `set_effort`, `set_thinking`, `set_betas`, `set_*_mode`, `browse_dir`, `add_project`, `create_project`, `clone_project`, `create_worktree`, `remove_project*`, `schedule_move`, `reorder_projects`, `set_project_title`, `set_project_icon`, `get_daemon_config`, `set_pin`, `set_keep_awake`, `set_auto_continue`, `set_image_retention`, `shutdown_server`, `restart_server`, `process_stats`, `stop`, `stop_task`, `kill_process`, `set_update_channel`, `check_update`, `update_now`, `input_sync`, `cursor_*`, `text_select`, `push_subscribe`, `load_more_history`, `search_sessions`, `search_session_content`, `list_cli_sessions`, `set_session_visibility`, `transfer_project_owner`, `set_mate_dm` | Session lifecycle, config, project management, daemon settings, permissions, updates |
+| `project-prompt-responses.js` | `prompt_response` (and the older aliases `permission_response`, `ask_user_response`, `elicitation_response`) | Operator answers to prompts of every kind, applied through the prompt registry; the session side effects of a plan decision |
 | `project-filesystem.js` | `fs_list`, `fs_read`, `fs_write`, `fs_watch`, `fs_unwatch`, `fs_file_history`, `fs_git_diff`, `fs_file_at`, `get_project_env`, `set_project_env`, `read_global_claude_md`, `write_global_claude_md`, `get_shared_env`, `set_shared_env` | File browser, file history, project env/settings |
 | `project-user-message.js` | `message`, `note_*`, `term_*`, `context_sources_save`, `browser_tab_list`, `extension_result`, `loop_*` (delegation), `schedule_*`, `send_scheduled_now`, `cancel_scheduled_message` | User message dispatch, sticky notes, terminals, context sources, browser extension |
 | `project-loop.js` | `loop_start`, `loop_stop`, `ralph_wizard_complete`, `ralph_wizard_cancel`, `ralph_cancel_crafting`, `ralph_preview_files`, `loop_registry_*`, `schedule_create`, `hub_schedules_list`, `delete_loop_group` | Loop/Ralph engine, loop registry, scheduling |
@@ -46,6 +47,8 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `project-image.js` | `hydrateImageRefs`, `saveImageFile`, image directory setup |
 | `project-file-watch.js` | File and directory fs.watch wrappers |
 | `sdk-bridge.js` | SDK bridge coordinator: createSDKBridge factory, worker lifecycle, query stream, tool permissions, mention sessions |
+| `prompt-registry.js` | Sole owner of every operator-prompt lifecycle (permission, plan, AskUserQuestion, MCP elicitation, browser-extension command): open/answer/cancel/expire, sub-agent ownership, session grants, notification dismissal, replay state |
+| `prompt-kinds/` | One adapter per prompt kind: payload fields, response parsing, the vendor callback's value for an answer and for an unanswered end |
 | `sdk-skill-discovery.js` | Skill directory scanning, shell segment splitting, SDK/filesystem skill merging |
 | `sdk-message-queue.js` | Async iterable message queue for streaming input to SDK |
 | `sdk-message-processor.js` | SDK stream event processing (message_start, content_block_*), sub-agent message routing |
@@ -130,7 +133,11 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 | `app-panels.js` | Config chip (model/mode/effort/thinking/beta), usage panel, status panel, context panel, context popover |
 | `app-loop-ui.js` | Ralph Loop UI: bars, banners, preview modal, execution modal |
 | `app-loop-wizard.js` | Ralph Loop wizard: step navigation, mode/authorship selection, data collection |
-| `app-notifications.js` | Notification center panel, badge, rendering, click-to-navigate |
+| `app-notifications.js` | Notification center panel, badge, rendering, click-to-navigate; prompt banners answer through `prompt_response` |
+| `prompts.js` | The client's single owner of operator-prompt cards: every prompt message, of every kind and recorded shape, applies through `apply()`; a card is a function of the server's state for its requestId |
+| `prompt-state.js` | Per-requestId mirror of the server's prompt state (terminal states are final) and the mapping of older recorded message shapes onto the one prompt shape |
+| `prompt-card.js` | The card shell every kind shares: pending/sending/confirmed state machine, terminal outcome rendering |
+| `prompt-kinds/` | One renderer per prompt kind (permission, plan, ask-user, elicitation): body and answer controls, outcome labels |
 | `app-skills-install.js` | Skill install dialog, requireSkills |
 | `app-favicon.js` | Dynamic favicon, IO blink, urgent blink, send button mode, activity indicator |
 | `app-header.js` | Session rename, session info popover, progressive history loading |

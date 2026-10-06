@@ -172,9 +172,9 @@ graph TB
 
 User provisioning lives in `daemon.js` (`provisionLinuxUser`, `grantProjectAccess`). All worker spawns route through `os-users.resolveOsUserInfo`.
 
-## Permission Flow
+## Operator Prompts
 
-Every tool call goes through a vendor-neutral approval gate.
+Every tool call goes through a vendor-neutral approval gate, and every other point where an agent waits on the operator (plan approval, AskUserQuestion, an MCP elicitation) uses the same machinery.
 
 ```mermaid
 sequenceDiagram
@@ -192,29 +192,31 @@ sequenceDiagram
 
     Note over Y,S: Approval needed
     V-->>Y: approval request
-    Y->>S: registry.open(request)
-    S-->>B: permission_request (all WS clients)
+    Y->>S: prompts.open(session, kind, request)
+    S-->>B: prompt_request {kind} (all WS clients)
     S-->>B: web-push to phone (if subscribed)
-    B->>S: permission_response (allow / deny)
-    S->>S: registry.respond(requestId, decision)
-    S->>Y: resolve(decision)
-    S-->>B: permission_resolved (all WS clients)
+    B->>S: prompt_response {requestId, kind, answer}
+    S->>S: prompts.respond(requestId, answer)
+    S->>Y: resolve(answer)
+    S-->>B: prompt_resolved (all WS clients)
     Y->>V: continue / abort tool
 ```
 
-### One owner for the request lifecycle
+### One owner for every prompt's lifecycle
 
-`lib/permission-registry.js` is the only code that changes permission-request state. A request is `pending` until exactly one transition settles it — the operator's answer (`resolved`) or the end of the scope that owns it (`cancelled`, with a reason). Every path that ends a request calls a registry transition: the WS response (`project-sessions.js`), the HTTP push response (`project-http.js`), the parent turn's `result` (`sdk-message-processor.js`), query end (`sdk-bridge.js`'s `processQueryStream` finally), the abort signal, worker-side expiry, rewind, context clear and session deletion. Settling always calls the vendor's resolver once, dismisses the notification banner, and records `permission_resolved` / `permission_cancel` so every client — live or replaying later — sees the outcome.
+`lib/prompt-registry.js` is the only code that changes operator-prompt state, for every kind: tool permission, plan approval (ExitPlanMode), AskUserQuestion, MCP elicitation (Claude's `onElicitation` and Codex's `mcpServer/elicitation/request`), and the browser-extension commands the daemon sends a client. A kind (`lib/prompt-kinds/`) is a small adapter: its payload fields, how a response is parsed and validated (an unknown decision fails closed), what the vendor's callback receives for an answer, and what it receives when the prompt ends unanswered (deny for tool calls, reject for elicitation, null for extension commands). No kind keeps its own map or cleanup code. Codex command, file-change and MCP approvals arrive through the same `canUseTool` callback as Claude's.
 
-Ownership decides scope. A top-level request ends with its turn. A backgrounded sub-agent's request survives the parent's turn boundary and its own Task's completion signal, and ends with the query that hosts it (once the query is closed nothing can consume a decision). "Allow for Session" grants are written and consulted only through the registry, keyed by `permissionGrantKey()`, and flushed to the session file immediately.
+A prompt is `pending` until exactly one transition settles it — an answer (`resolved`) or the end of the scope that owns it (`cancelled`, with a reason). Every path that ends a prompt calls a registry transition: the WS answer (`project-prompt-responses.js`), the HTTP push answer (`project-http.js`), the parent turn's `result` (`sdk-message-processor.js`), query end (`sdk-bridge.js`'s `processQueryStream` finally), the abort signal (including an expiry relayed from a worker, and the Codex app-server clearing a request it never got an answer to), a kind's timeout, rewind, context clear, session deletion and daemon shutdown. Settling always calls the vendor's resolver once, dismisses the notification banner, and records `prompt_resolved` / `prompt_cancel` so every client — live or replaying later — sees the outcome.
 
-The registry's state lives where readers already looked for it: `session.pendingPermissions` (pending only), `session.subagentToolOwners`, `session.subagentTasks`, and the session manager's `permissionRequestIndex`.
+Ownership decides scope. A top-level prompt ends with its turn or its query. A prompt whose tool call belongs to a tracked sub-agent (a running Task, or one that reported completion while that prompt was still open) survives the parent's turn and query boundaries, so the operator can still answer a backgrounded sub-agent after its parent finished; it ends only on an answer, its own abort, or the session or daemon ending. "Allow for Session" grants are written and consulted only through the registry, keyed by `permissionGrantKey()`, flushed to the session file immediately, and granted only from the authenticated in-app card: the HTTP push route answers tool approvals with allow or deny only.
+
+The registry's state lives where readers already looked for it: one pending map per store (`session.pendingPermissions` for tool and plan approvals, `session.pendingAskUser`, `session.pendingElicitations`), `session.subagentToolOwners`, `session.activeTaskToolIds` (Task tracking), and the session manager's `permissionRequestIndex`.
 
 ### Clients render server state, not replay order
 
-On connect, session switch and every history page, the server sends the authoritative state of every request it renders: replayed `permission_request` items carry `permissionState` (`pending`, `resolved` + decision, or `cancelled` + reason), and still-pending requests are re-sent as `permission_request_pending`. The client (`lib/public/modules/permission-state.js`, used by `tools.js`) mirrors that state per `requestId`; terminal states are final, so a card is a pure function of the state regardless of whether a page delivered the request before or after its resolution. The notification banner reads the same state: the registry dismisses it on every transition, and permission notifications are not restored after a daemon restart because no resolver survives one.
+On connect, session switch and every history page, the server sends the authoritative state of every prompt it renders: a replayed item that opens a prompt (`prompt_request`, the older `permission_request` / `elicitation_request`, or the AskUserQuestion `tool_executing` that draws its card) carries `promptState` (`pending`, `resolved` with its decision, answers or action, or `cancelled` with a reason), and still-pending prompts are re-sent as `prompt_pending`. One client module (`lib/public/modules/prompts.js`) applies every prompt message of every kind and recorded shape; `prompt-state.js` mirrors the state per `requestId` with final terminal states, so a card is a pure function of the state regardless of whether a page delivered the request before or after its outcome. Every kind shares one card shell (`prompt-card.js`: an answer moves the card to "sending" until the server confirms) and supplies only its body and answer controls (`prompt-kinds/`). The notification banner reads the same state: the registry dismisses it on every transition, and prompt notifications are not restored after a daemon restart because no resolver survives one.
 
-`test/permission-invariants.test.js` generates interleavings of every event above, across several clients and daemon restarts, and checks the lifecycle invariants after each step. `CLAGENTIC_PERMISSION_HARNESS_LIB` points its wire-level checks at another checkout's `lib/`.
+`test/prompt-invariants.test.js` generates interleavings of every event above, for every kind, across several clients and daemon restarts, and checks the lifecycle invariants after each step. `CLAGENTIC_PROMPT_HARNESS_LIB` points its wire-level checks at another checkout's `lib/`; `npm run test:prompt-history` runs its named regression scenarios against the commits before and after each past fix.
 
 `project-notifications.js` formats the alarm and may also fire push.
 
