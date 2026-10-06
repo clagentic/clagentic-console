@@ -1,24 +1,28 @@
 "use strict";
-// The server side of the permission invariant harness: the real session
-// manager, SDK bridge, message processor, WS session handlers, HTTP handler and
+// The server side of the prompt invariant harness: the real session manager,
+// SDK bridge, message processor, WS session handlers, HTTP handler and
 // notifications module of one project, wired to in-memory clients through the
 // same send/sendTo/sendEach transport the daemon gives them. Shared helper,
 // not a test file: the runner only collects test/*.test.js.
 //
 // Every operation goes through an entry point that has existed across the
-// permission work's history (handleCanUseTool, processSDKMessage,
-// handleSessionsMessage, handleHTTP, replayHistory/switchSession), so the same
-// harness can be pointed at an older lib/ via CLAGENTIC_PERMISSION_HARNESS_LIB
-// to show it catches defects that were fixed there.
+// prompt work's history (handleCanUseTool, handleElicitation,
+// processSDKMessage, handleSessionsMessage, handleHTTP,
+// replayHistory/switchSession), so the same harness can be pointed at an
+// older lib/ via CLAGENTIC_PROMPT_HARNESS_LIB to show it catches defects that
+// were fixed there.
 
 var fs = require("fs");
 var os = require("os");
 var path = require("path");
 var { EventEmitter } = require("events");
 
-var LIB_ROOT = process.env.CLAGENTIC_PERMISSION_HARNESS_LIB
-  ? path.resolve(process.env.CLAGENTIC_PERMISSION_HARNESS_LIB)
+var LIB_ROOT = process.env.CLAGENTIC_PROMPT_HARNESS_LIB
+  ? path.resolve(process.env.CLAGENTIC_PROMPT_HARNESS_LIB)
   : path.join(__dirname, "..", "lib");
+
+// Session fields that hold pending prompts, across every lib version.
+var PROMPT_STORES = ["pendingPermissions", "pendingAskUser", "pendingElicitations"];
 
 function libPath(name) { return path.join(LIB_ROOT, name); }
 
@@ -53,9 +57,19 @@ function makeQueryHandle() {
     },
     pushMessage: function () {},
     endInput: function () {},
+    setPermissionMode: function () { return Promise.resolve(); },
     close: function () { ended = true; if (finish) finish(); },
     abort: function () { ended = true; if (finish) finish(); },
   };
+}
+
+/** requestIds of every prompt the session currently holds. */
+function heldPromptIds(session) {
+  var ids = [];
+  PROMPT_STORES.forEach(function (store) {
+    Object.keys(session[store] || {}).forEach(function (id) { ids.push(id); });
+  });
+  return ids;
 }
 
 /**
@@ -65,7 +79,7 @@ function makeQueryHandle() {
  */
 async function createServer(opts) {
   opts = opts || {};
-  var home = opts.home || fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-perm-harness-"));
+  var home = opts.home || fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-prompt-harness-"));
   process.env.CLAGENTIC_HOME = home;
   purgeLib();
 
@@ -158,23 +172,27 @@ async function createServer(opts) {
     notifications: notifications,
     session: session,
     clients: clients,
+    canElicit: typeof bridge.handleElicitation === "function",
 
     startQuery: async function () {
       await bridge.startQuery(session, "go", null, null);
       await flush();
     },
 
-    // Closes the live query; its processQueryStream finally runs.
+    // Closes the live query; its processQueryStream finally runs. A stream
+    // that rejects fails the step that ended it.
     endQuery: async function () {
       var h = session.queryInstance;
       if (h) h.close();
-      if (session.streamPromise) await session.streamPromise.catch(function () {});
+      if (session.streamPromise) await session.streamPromise;
       await flush();
     },
 
     sdk: function (msg) { bridge.processSDKMessage(session, msg); },
 
     record: function (msg) { sm.sendAndRecord(session, msg); },
+
+    heldPromptIds: function () { return heldPromptIds(session); },
 
     httpRespond: function (requestId, decision) {
       var req = new EventEmitter();
@@ -196,11 +214,11 @@ async function createServer(opts) {
       var seen = [];
       var probe = { readyState: 1, _clagenticUser: null, send: function (data) { seen.push(JSON.parse(data)); } };
       sm.switchSession(session.localId, probe, function (o) { return o; });
-      return seen.filter(function (m) { return m.type === "permission_request_pending"; })
+      return seen.filter(function (m) { return m.type === "prompt_pending" || m.type === "permission_request_pending"; })
         .map(function (m) { return m.requestId; });
     },
 
-    /** requestIds that still have a permission notification. */
+    /** requestIds that still have a prompt notification. */
     notifiedRequestIds: function () {
       var state = null;
       notifications.sendConnectionState({}, function (ws, msg) { state = msg; });
@@ -222,11 +240,13 @@ async function createServer(opts) {
       if (i !== -1) clients.splice(i, 1);
     },
 
-    // Flush what a dying process would flush on exit, then drop every client.
+    // What a daemon going away does: tear the session manager down (which
+    // ends every prompt nothing can answer any more, in a lib that does),
+    // flush, then drop every client.
     shutdown: function () {
+      sm.destroy();
       sm.saveSessionFile(session);
       clients.slice().forEach(function (ws) { server.disconnect(ws); });
-      sm.destroy();
     },
   };
   return server;
@@ -238,7 +258,7 @@ function removeHome(home) {
 
 module.exports = {
   LIB_ROOT: LIB_ROOT,
-  overridesLib: !!process.env.CLAGENTIC_PERMISSION_HARNESS_LIB,
+  overridesLib: !!process.env.CLAGENTIC_PROMPT_HARNESS_LIB,
   createServer: createServer,
   removeHome: removeHome,
   flush: flush,
