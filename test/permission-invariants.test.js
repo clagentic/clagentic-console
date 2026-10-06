@@ -208,14 +208,15 @@ Harness.prototype.request = async function (tool, ownerTask) {
   var promise = this.server.bridge.handleCanUseTool(session, tool.toolName, tool.input, { toolUseID: toolUseId, signal: abort.signal });
   var opened = Object.keys(session.pendingPermissions || {}).filter(function (id) { return before.indexOf(id) === -1; });
 
-  if (this.granted[tool.key]) {
-    if (opened.length) this.fail(tool.key + " was granted for the session but prompted again (I7)");
+  if (this.granted[tool.key] && opened.length === 0) {
     var auto = await promise;
     if (!auto || auto.behavior !== "allow") this.fail(tool.key + " was granted for the session but was not auto-approved (I7)");
     await this.settle();
     return null;
   }
-  if (opened.length !== 1) {
+  // A granted key that prompts anyway is still a live request from here on.
+  if (this.granted[tool.key]) this.fail(tool.key + " was granted for the session but prompted again (I7)");
+  else if (opened.length !== 1) {
     this.fail(tool.key + " was never granted but did not open exactly one request (I7); opened " + opened.length);
     await this.settle();
     return null;
@@ -318,7 +319,7 @@ Harness.prototype.checkDecision = function (r, wasPending, decision) {
   if (!r.settled) { this.fail("a " + decision + " for pending " + r.id + " did not settle it (I4)"); return; }
   var want = expectedOutcome(decision, r.tool.input);
   if (r.outcome.behavior !== want.behavior) this.fail(r.id + " answered " + decision + " resolved as " + r.outcome.behavior + " (I5)");
-  if (want.updatedInput && JSON.stringify(r.outcome.updatedInput) !== JSON.stringify(want.updatedInput)) {
+  else if (want.updatedInput && JSON.stringify(r.outcome.updatedInput) !== JSON.stringify(want.updatedInput)) {
     this.fail(r.id + " was allowed with a different input than requested (I4)");
   }
   if (decision === "allow_always") this.granted[r.tool.key] = true;
@@ -624,16 +625,20 @@ test("a top-level request ended by its turn tells every client", async function 
   });
 });
 
+// Filler, then request, a user message, and the resolution: the first replay
+// page starts at that user message, so it carries the resolution while the
+// request only arrives on the older page.
 test("paged replay never revives a resolved request", async function (t) {
   await scenario(t, "paged-replay", 2, async function (h) {
     var r = null;
+    await h.step(function () { return h.userMessage(120); });
     await h.step(async function () { r = await h.request(TOOLS[1], null); });
     await h.step(function () { return h.userMessage(0); });
     await h.step(function () { return h.respond(h.clients[0], r, "allow"); });
-    await h.step(function () { return h.userMessage(130); });
     await h.step(function () { return h.disconnect(h.clients[1]); });
     await h.step(function () { return h.reconnect(h.clients[1]); });
-    await h.step(function () { return h.pageOlder(h.clients[1]); });
+    if (h.clients[1].known[r.id] !== "settled") h.fail("the first page did not carry the resolution; the scenario lost its shape");
+    if (RENDER && dom.cardFor(h.clients[1].view, r.id)) h.fail("the first page already carried the request; the scenario lost its shape");
     await h.step(function () { return h.pageOlder(h.clients[1]); });
     if (RENDER && !dom.cardFor(h.clients[1].view, r.id)) h.fail("paging never reached the request; the scenario lost its shape");
   });
