@@ -1,8 +1,9 @@
 "use strict";
 // The vendor adapters hand every operator prompt an AbortSignal that ends the
 // daemon-side prompt when the vendor side gives up on it: the worker relay
-// (lib/yoke/adapters/claude.js) on a worker-side expiry, the Codex adapter on
-// the app-server clearing a request it never got an answer to. A signal must
+// (lib/yoke/adapters/claude.js) on a worker-side expiry or cancellation and
+// when the worker's query ends, the Codex adapter on the app-server clearing
+// a request it never got an answer to and when its query ends. A signal must
 // only ever end a prompt that is still waiting.
 
 var test = require("node:test");
@@ -78,6 +79,24 @@ test("a permission prompt that settled, either way, is not ended by a later expi
   }
 });
 
+test("a prompt the worker's SDK cancelled, or every prompt once the worker's query ends, ends daemon-side", function () {
+  var worker = fakeWorker();
+  var cb = controlledCallback();
+  var elicit = controlledCallback();
+  claudeAdapter._test_createWorkerQueryHandle(worker, cb.callback, elicit.callback, null);
+  worker.handler({ type: "permission_request", requestId: "w3", toolName: "Bash", input: {}, toolUseId: "tu" });
+  worker.handler({ type: "ask_user_request", toolUseId: "tu-ask", input: { questions: [] } });
+  worker.handler({ type: "elicitation_request", requestId: "e2", serverName: "srv", message: "?" });
+
+  worker.handler({ type: "prompt_cancelled", kind: "ask_user", id: "tu-ask" });
+  assert.equal(cb.calls[1].signal.aborted, true, "the cancelled question ends");
+  assert.equal(cb.calls[0].signal.aborted, false, "nothing else does");
+
+  worker.handler({ type: "query_done" });
+  assert.equal(cb.calls[0].signal.aborted, true);
+  assert.equal(elicit.calls[0].signal.aborted, true);
+});
+
 test("the worker's AskUserQuestion and elicitation prompts get a real abort signal too", function () {
   var worker = fakeWorker();
   var ask = controlledCallback();
@@ -150,8 +169,23 @@ test("a Codex approval answered by the operator is not aborted by the app-server
   cb.calls[0].resolve({ behavior: "allow" });
   await waitFor(function () { return fake.respondCalls.length === 1; });
   fake.dispatch({ method: "serverRequest/resolved", params: { threadId: "thread-1", requestId: 41 } });
+  handle.close();
 
   assert.equal(cb.calls[0].signal.aborted, false);
   assert.deepEqual(fake.respondCalls[0], { id: 41, result: { decision: "accept" } });
+});
+
+test("a Codex approval still waiting when its query ends is ended and not answered", async function () {
+  var fake = codexWithApproval();
+  var cb = controlledCallback();
+  var handle = codexAdapter._test_createCodexQueryHandle(fake.appServer, { approvalPolicy: "on-request", canUseTool: cb.callback });
+  handle.pushMessage("go");
+  await waitFor(function () { return cb.calls.length === 1; });
+
   handle.close();
+  cb.calls[0].resolve({ behavior: "deny", message: "Request cancelled" });
+  await tick();
+
+  assert.equal(cb.calls[0].signal.aborted, true);
+  assert.deepEqual(fake.respondCalls, []);
 });
