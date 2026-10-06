@@ -146,7 +146,9 @@ test("plan decisions map to the vendor outcome and never grant anything", async 
     [{ decision: "allow_clear_context", planContent: "x" }, { behavior: "deny", message: "User chose to clear context and restart" }],
     [{ decision: "deny_with_feedback", feedback: "use make test" }, { behavior: "deny", message: "use make test" }],
     [{ decision: "deny" }, { behavior: "deny", message: "User denied permission" }],
-    [{ decision: "allow_always" }, { behavior: "deny", message: "User denied permission" }],
+    // An older page's "Allow for session" banner button approves a plan.
+    [{ decision: "allow_always" }, { behavior: "allow", updatedInput: { plan: "p" } }],
+    [{ decision: "something-new" }, { behavior: "deny", message: "User denied permission" }],
   ];
   for (var i = 0; i < cases.length; i++) {
     var h = makeRegistry();
@@ -473,6 +475,7 @@ test("replayAnnotator stamps the authoritative state on every prompt opener, fro
     { type: "delta", text: "x" },
   ];
 
+  history.push({ type: "done", code: 0 });
   var annotate = h.registry.replayAnnotator(s, history, 0);
   var states = history.slice(0, 7).map(function (it) { return annotate(it).promptState; });
 
@@ -489,6 +492,40 @@ test("replayAnnotator stamps the authoritative state on every prompt opener, fro
   assert.equal(history[0].promptState, undefined, "stored history is not mutated");
   assert.equal(annotate(history[12]), history[12]);
   assert.ok(liveAsk);
+});
+
+test("an AskUserQuestion card whose prompt has not opened yet is called stale only once its turn has ended", function () {
+  var h = makeRegistry();
+  var s = h.addSession(1);
+  var opening = { type: "tool_executing", id: "tu-opening", name: "AskUserQuestion", input: ASK_INPUT };
+  var abandoned = { type: "tool_executing", id: "tu-abandoned", name: "AskUserQuestion", input: ASK_INPUT };
+
+  var midTurn = h.registry.replayAnnotator(s, [abandoned, { type: "delta", text: "x" }, opening], 0);
+  assert.equal(midTurn(opening).promptState, undefined, "the vendor may still open it: no state is claimed");
+
+  var afterTurn = h.registry.replayAnnotator(s, [abandoned, { type: "result" }, opening], 0);
+  assert.deepEqual(afterTurn(abandoned).promptState, { state: "cancelled", reason: "stale" });
+  assert.equal(afterTurn(opening).promptState, undefined);
+});
+
+test("a WS answer is applied only to a session the answering user can see", function () {
+  withHome(function (tmpHome, sessionsModule) {
+    var sent = [];
+    var sendTo = function (ws, msg) { sent.push(msg); };
+    var sm = sessionsModule.createSessionManager({ cwd: tmpHome, send: function () {}, sendTo: sendTo, sendEach: function () {} });
+    var handlers = attachSessionsFor(tmpHome, sm, sendTo);
+    var session = sm.createSessionRaw({ ownerId: "u-owner", sessionVisibility: "private" });
+    var opened = sm.prompts.open(session, "permission", { toolName: "Bash", toolInput: { command: "make" } });
+
+    handlers.handleSessionsMessage({ _clagenticUser: { id: "u-other" } }, { type: "prompt_response", requestId: opened.requestId, kind: "permission", decision: "allow" });
+    assert.ok(sm.prompts.lookup(opened.requestId), "another user's answer does not reach a private session");
+    assert.equal(sent[sent.length - 1].reason, "stale");
+
+    handlers.handleSessionsMessage({ _clagenticUser: { id: "u-owner" } }, { type: "prompt_response", requestId: opened.requestId, kind: "permission", decision: "deny" });
+    assert.equal(sm.prompts.lookup(opened.requestId), null, "the owner's answer does");
+    sm.destroy();
+    return opened.answer;
+  });
 });
 
 test("promptsFor attaches one registry to a lightweight session manager", function () {
