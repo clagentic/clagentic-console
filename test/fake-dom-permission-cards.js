@@ -113,15 +113,26 @@ function setupGlobals() {
 var MODULES = path.join(__dirname, "..", "lib", "public", "modules");
 function moduleUrl(name) { return pathToFileURL(path.join(MODULES, name)).href; }
 
-async function setupToolsEnv(t) {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  setupGlobals();
-  var tools = await import(moduleUrl("tools.js"));
-  var storeMod = await import(moduleUrl("store.js"));
-  storeMod.createStore({ connected: true });
+/**
+ * One browser's permission UI: a private tools.js instance (module state such
+ * as its card map and permission-state store is per instance) over its own
+ * messages container.
+ *
+ * @param {string} [instanceKey] - distinct keys give independent clients.
+ * @param {function(string): boolean} [transmit] - receives each serialized
+ *   outbound frame; returning false models an unusable socket.
+ */
+async function createClient(instanceKey, transmit) {
+  var tools = await import(moduleUrl("tools.js") + (instanceKey ? "?client=" + encodeURIComponent(instanceKey) : ""));
   var messagesEl = new FakeElement("div");
+  var sent = [];
   var ctx = {
-    ws: { send: function () {} },
+    ws: {
+      send: function (body) {
+        sent.push(JSON.parse(body));
+        if (transmit) transmit(body);
+      },
+    },
     connected: true,
     messagesEl: messagesEl,
     finalizeAssistantBlock: function () {},
@@ -131,8 +142,18 @@ async function setupToolsEnv(t) {
   };
   tools.initTools(ctx);
   tools.resetToolState();
-  tools.clearSettledPermissions();
-  return { tools: tools, messagesEl: messagesEl };
+  tools.clearPermissionStates();
+  return { tools: tools, ctx: ctx, messagesEl: messagesEl, sent: sent };
+}
+
+// Timers are mocked so unconfirmed-card ack timeouts never hold the test
+// process open; node:test restores them per test.
+async function setupToolsEnv(t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  setupGlobals();
+  var storeMod = await import(moduleUrl("store.js"));
+  storeMod.createStore({ connected: true });
+  return createClient();
 }
 
 function cardFor(env, id) { return env.messagesEl.querySelector('[data-request-id="' + id + '"]'); }
@@ -141,4 +162,19 @@ function enabledButtons(card) {
   return card.querySelectorAll("button").filter(function (b) { return !b.disabled; });
 }
 
-module.exports = { setupToolsEnv: setupToolsEnv, cardFor: cardFor, enabledButtons: enabledButtons };
+// The fake DOM does not parse innerHTML, so the decision label is read back
+// from the raw markup the module wrote into the actions container.
+function decisionLabel(card) {
+  var m = /permission-decision-label">([^<]*)</.exec(card.textContent);
+  return m ? m[1] : "";
+}
+
+module.exports = {
+  setupGlobals: setupGlobals,
+  moduleUrl: moduleUrl,
+  createClient: createClient,
+  setupToolsEnv: setupToolsEnv,
+  cardFor: cardFor,
+  enabledButtons: enabledButtons,
+  decisionLabel: decisionLabel,
+};
