@@ -1,7 +1,7 @@
 "use strict";
 // Hand-built DOM (no jsdom in this repo) sufficient to drive the real tools.js
-// permission-card exports. Shared helper, not a test file: the runner only
-// collects test/*.test.js.
+// prompt-card exports for every prompt kind. Shared helper, not a test file:
+// the runner only collects test/*.test.js.
 
 var path = require("path");
 var { pathToFileURL } = require("url");
@@ -66,9 +66,9 @@ function matches(el, sel) {
     return parts.length > 0 && parts.every(function (p) {
       if (p[0] === ".") return el.classList.contains(p.slice(1));
       if (p[0] === "[") {
-        var m = /\[([\w-]+)="([^"]*)"\]/.exec(p);
+        var m = /\[([\w-]+)(?:="([^"]*)")?\]/.exec(p);
         var key = m[1].slice(5).replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
-        return el.dataset[key] === m[2];
+        return m[2] === undefined ? el.dataset[key] !== undefined : el.dataset[key] === m[2];
       }
       return el.tagName === p.toUpperCase();
     });
@@ -114,9 +114,9 @@ var MODULES = path.join(__dirname, "..", "lib", "public", "modules");
 function moduleUrl(name) { return pathToFileURL(path.join(MODULES, name)).href; }
 
 /**
- * One browser's permission UI: a private tools.js instance (module state such
- * as its card map and permission-state store is per instance) over its own
- * messages container.
+ * One browser's prompt UI: a private tools.js instance (module state such as
+ * its prompt controller is per instance) over its own messages container and
+ * main input.
  *
  * @param {string} [instanceKey] - distinct keys give independent clients.
  * @param {function(string): boolean} [transmit] - receives each serialized
@@ -135,6 +135,7 @@ async function createClient(instanceKey, transmit) {
     },
     connected: true,
     messagesEl: messagesEl,
+    inputEl: new FakeElement("textarea"),
     finalizeAssistantBlock: function () {},
     addToMessages: function (el) { messagesEl.appendChild(el); },
     scrollToBottom: function () {},
@@ -142,7 +143,7 @@ async function createClient(instanceKey, transmit) {
   };
   tools.initTools(ctx);
   tools.resetToolState();
-  tools.clearPermissionStates();
+  tools.clearPromptStates();
   return { tools: tools, ctx: ctx, messagesEl: messagesEl, sent: sent };
 }
 
@@ -163,18 +164,28 @@ function enabledButtons(card) {
 }
 
 // The fake DOM does not parse innerHTML, so the decision label is read back
-// from the raw markup the module wrote into the actions container.
+// from the raw markup the module wrote into the actions container, or from
+// the status element a card without an actions row adds.
 function decisionLabel(card) {
   var m = /permission-decision-label">([^<]*)</.exec(card.textContent);
-  return m ? m[1] : "";
+  if (m) return m[1];
+  var status = card.querySelector(".ask-user-status");
+  return status ? status.textContent : "";
+}
+
+/** Controls of a card an operator could still use. */
+function liveControls(card) {
+  return card.querySelectorAll("button, input, select, textarea").filter(function (el) { return !el.disabled; });
 }
 
 module.exports = {
+  FakeElement: FakeElement,
   setupGlobals: setupGlobals,
   moduleUrl: moduleUrl,
   createClient: createClient,
   setupToolsEnv: setupToolsEnv,
   cardFor: cardFor,
   enabledButtons: enabledButtons,
+  liveControls: liveControls,
   decisionLabel: decisionLabel,
 };
