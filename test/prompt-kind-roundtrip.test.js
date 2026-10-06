@@ -14,9 +14,13 @@
 //   render     the live card and both replayed cards read back exactly what
 //              the operator chose, and the vendor got exactly that answer.
 //
-// Each kind supplies a generator of operator actions and a reader for its
-// card. A kind with no entry here fails the coverage test, so a new kind
-// cannot ship without proving its own round trip.
+// Each kind supplies a generator of requests and operator actions and a
+// reader for its card. A kind with no entry here fails the coverage test,
+// so a new kind cannot ship without proving its own round trip. The
+// generators vary the request as well as the answer: question sets with
+// shared labels and shared question text, and requested schemas of every
+// field type, required or optional, with and without defaults, and URL
+// requests with usable and unusable URLs.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -53,6 +57,59 @@ function click(card, selector) {
 // --- per-kind generators and readers --------------------------------------
 
 var LABEL_POOL = ["staging", "prod", "staging, eu", "qa", "eu", "a, b", "b", "Other", "x"];
+
+var OPENABLE_URLS = ["https://example.test/auth", "http://localhost:3000/callback"];
+var URL_POOL = OPENABLE_URLS.concat(["", null, undefined, "javascript:alert(1)", "ftp://files.test/x", "not a url"]);
+
+// Requested-schema properties of every field type, each sometimes with a
+// default that fits it and sometimes with one that does not.
+var FIELD_SHAPES = [
+  { prop: { type: "string" }, defaults: ["preset", 5] },
+  { prop: { type: "string", maxLength: 8 }, defaults: ["short", "far too long a default"] },
+  { prop: {}, defaults: ["untyped"] },
+  { prop: { type: "integer" }, defaults: [7, 1.5, "7"] },
+  { prop: { type: "number" }, defaults: [2.25, "2.25"] },
+  { prop: { type: "boolean" }, defaults: [true, false, "yes"] },
+  { prop: { type: "string", enum: ["eu", "us", "apac"] }, defaults: ["us", "mars"] },
+  { prop: { type: "integer", enum: [1, 2, 3] }, defaults: [2, "2"] },
+];
+
+function randomSchema(p) {
+  var properties = {};
+  var required = [];
+  var count = p.int(1, 5);
+  for (var i = 0; i < count; i++) {
+    var name = "f" + i;
+    var shape = p.one(FIELD_SHAPES);
+    var prop = Object.assign({}, shape.prop);
+    if (p.chance(0.4)) prop.default = p.one(shape.defaults);
+    properties[name] = prop;
+    if (p.chance(0.4)) required.push(name);
+  }
+  if (p.chance(0.1)) required.push("not-a-field");
+  var schema = { type: "object", properties: properties };
+  if (required.length || p.chance(0.5)) schema.required = required;
+  return schema;
+}
+
+// The test's own reading of the schema, independent of the codec under
+// test: whether v is an answer to prop.
+function fits(prop, v) {
+  if (v === undefined || v === null || v === "") return false;
+  if (Array.isArray(prop.enum)) return prop.enum.indexOf(v) !== -1;
+  if (prop.type === "boolean") return typeof v === "boolean";
+  if (prop.type === "integer") return Number.isInteger(v);
+  if (prop.type === "number") return typeof v === "number" && Number.isFinite(v);
+  return typeof v === "string" && (prop.maxLength === undefined || v.length <= prop.maxLength);
+}
+
+function validValue(p, prop) {
+  if (Array.isArray(prop.enum)) return p.one(prop.enum);
+  if (prop.type === "boolean") return p.chance(0.5);
+  if (prop.type === "integer") return p.int(-50, 50);
+  if (prop.type === "number") return p.int(-500, 500) / 4;
+  return "v" + p.int(0, 999);
+}
 
 var SPECS = {
   permission: {
@@ -107,6 +164,9 @@ var SPECS = {
   },
 
   ask_user: {
+    // Options may repeat a label (one choice, which ever of them is
+    // clicked) and questions may repeat their text (one slot in the tool's
+    // answers, which must keep both answers).
     request: function (p) {
       var questions = [];
       var count = p.int(1, 3);
@@ -117,8 +177,9 @@ var SPECS = {
           var l = p.one(LABEL_POOL);
           if (labels.indexOf(l) === -1) labels.push(l);
         }
+        if (p.chance(0.3)) labels.splice(p.int(0, labels.length), 0, p.one(labels));
         questions.push({
-          question: "Question " + i + "?",
+          question: i > 0 && p.chance(0.25) ? questions[0].question : "Question " + i + "?",
           multiSelect: p.chance(0.5),
           options: labels.map(function (label) { return { label: label }; }),
         });
@@ -135,11 +196,16 @@ var SPECS = {
         var qEl = qEls[qi];
         var optionEls = qEl.querySelectorAll(".ask-user-option");
         var other = qEl.querySelector(".ask-user-other input");
-        var labels = q.options.map(function (o) { return o.label; });
+        var optionLabels = q.options.map(function (o) { return o.label; });
+        var labels = optionLabels.filter(function (l, i) { return optionLabels.indexOf(l) === i; });
+        // Clicks one of the options carrying each picked label.
         function choose() {
           var picked = q.multiSelect ? p.subset(labels) : [p.one(labels)];
           if (!picked.length) picked = [labels[0]];
-          picked.forEach(function (label) { optionEls[labels.indexOf(label)].click(); });
+          picked.forEach(function (label) {
+            var carriers = optionEls.filter(function (el, i) { return optionLabels[i] === label; });
+            p.one(carriers).click();
+          });
           return labels.filter(function (label) { return picked.indexOf(label) !== -1; });
         }
         var text = "typed answer " + qi + " " + p.int(0, 999);
@@ -172,22 +238,31 @@ var SPECS = {
       click(card, ".ask-user-submit");
       return { skipped: false, questions: expected };
     },
+    // Which options show as selected (every one carrying a chosen label, no
+    // other) and the "Other" text, per question.
     read: function (card) {
       var label = dom.decisionLabel(card);
       if (label) return { label: label };
       return {
         questions: card.querySelectorAll(".ask-user-question").map(function (qEl) {
           return {
-            labels: qEl.querySelectorAll(".ask-user-option")
-              .filter(function (o) { return o.classList.contains("selected"); })
-              .map(function (o) { return o.querySelector(".option-label").textContent; }),
+            selected: qEl.querySelectorAll(".ask-user-option").map(function (o) { return o.classList.contains("selected"); }),
             other: qEl.querySelector(".ask-user-other input").value,
           };
         }),
       };
     },
-    expectedRead: function (choice) {
-      return choice.skipped ? { label: choice.label } : { questions: choice.questions };
+    expectedRead: function (choice, req) {
+      if (choice.skipped) return { label: choice.label };
+      return {
+        questions: req.input.questions.map(function (q, qi) {
+          var e = choice.questions[qi];
+          return {
+            selected: q.options.map(function (o) { return e.labels.indexOf(o.label) !== -1; }),
+            other: e.other,
+          };
+        }),
+      };
     },
     checkVendor: function (outcome, choice, req) {
       if (choice.skipped) {
@@ -197,75 +272,90 @@ var SPECS = {
       var want = {};
       req.input.questions.forEach(function (q, qi) {
         var e = choice.questions[qi];
-        if (e.labels.length) want[q.question] = e.labels.join(", ");
-        else if (e.other) want[q.question] = e.other;
+        var given = e.labels.length ? e.labels.join(", ") : e.other;
+        if (!given) return;
+        want[q.question] = Object.prototype.hasOwnProperty.call(want, q.question) ? want[q.question] + ", " + given : given;
       });
       assert.equal(outcome.behavior, "allow");
-      assert.deepEqual(outcome.updatedInput.answers, want);
+      assert.deepEqual(outcome.updatedInput.answers, want, "every answer reaches the tool, questions sharing their text included");
     },
   },
 
   elicitation: {
     request: function (p) {
-      var properties = {};
-      var required = [];
-      var count = p.int(1, 4);
-      for (var i = 0; i < count; i++) {
-        var name = "f" + i;
-        properties[name] = p.one([
-          { type: "string" },
-          { type: "integer" },
-          { type: "number" },
-          { type: "boolean" },
-          { type: "string", enum: ["eu", "us", "apac"] },
-        ]);
-        if (p.chance(0.4)) required.push(name);
+      if (p.chance(0.2)) {
+        return {
+          req: {
+            serverName: "srv", message: "?", mode: "url", url: p.one(URL_POOL),
+            requestedSchema: p.chance(0.5) ? randomSchema(p) : null,
+          },
+        };
       }
-      return { req: { serverName: "srv", message: "?", mode: "form", requestedSchema: { type: "object", properties: properties, required: required } } };
+      return { req: { serverName: "srv", message: "?", mode: p.one(["form", undefined]), requestedSchema: randomSchema(p) } };
     },
-    // Fills a random part of the form (always the required part), sometimes
-    // with an integer field given a decimal first, which must be refused
-    // before anything is sent.
+    // A URL request is approved only when its URL is a web page. A form is
+    // worked field by field - filled, cleared, or left as drawn - with
+    // Submit tried first while a required field is empty, or while an
+    // integer field holds a decimal, both of which must be refused before
+    // anything is sent.
     answer: function (card, p, req, sent) {
+      var before = sent.length;
+      if (req.mode === "url") {
+        assert.equal(card.querySelectorAll("[data-prop-name]").length, 0, "a URL request draws no form");
+        var openable = OPENABLE_URLS.indexOf(req.url) !== -1;
+        if (openable && p.chance(0.7)) {
+          global.window.open = function () {};
+          click(card, ".permission-allow");
+          return { reject: false, label: "Submitted", content: {} };
+        }
+        if (!openable) {
+          card.querySelector(".permission-allow").click();
+          assert.equal(sent.length, before, "a URL that is not a web page cannot be approved");
+        }
+        click(card, ".permission-deny");
+        return { reject: true, label: "Denied" };
+      }
       if (p.chance(0.15)) {
         click(card, ".permission-deny");
         return { reject: true, label: "Denied" };
       }
-      var props = req.requestedSchema.properties;
-      var required = req.requestedSchema.required;
+      var schema = req.requestedSchema;
+      var required = Array.isArray(schema.required) ? schema.required : [];
       var content = {};
+      var unanswered = [];
       var badInteger = null;
-      Object.keys(props).forEach(function (name) {
-        var prop = props[name];
+      Object.keys(schema.properties).forEach(function (name) {
+        var prop = schema.properties[name];
         var input = card.querySelector('[data-prop-name="' + name + '"]');
-        var fill = required.indexOf(name) !== -1 || p.chance(0.5);
-        if (prop.type === "boolean") {
-          input.checked = p.chance(0.5);
-          content[name] = input.checked;
-        } else if (prop.enum) {
-          if (fill) { input.value = p.one(prop.enum); content[name] = input.value; } else { input.value = ""; }
-        } else if (!fill) {
+        var action = p.one(["fill", "clear", "untouched"]);
+        if (action === "fill") {
+          var value = validValue(p, prop);
+          if (prop.type === "integer" && !prop.enum && !badInteger && p.chance(0.3)) {
+            badInteger = { input: input, text: String(value) };
+            input.value = value + ".5";
+          } else {
+            input.value = String(value);
+          }
+          content[name] = value;
+        } else if (action === "clear") {
           input.value = "";
-        } else if (prop.type === "integer") {
-          var n = p.int(-50, 50);
-          if (!badInteger && p.chance(0.3)) badInteger = { input: input, value: String(n) };
-          input.value = badInteger && badInteger.input === input ? n + ".5" : String(n);
-          content[name] = n;
-        } else if (prop.type === "number") {
-          var x = p.int(-500, 500) / 4;
-          input.value = String(x);
-          content[name] = x;
-        } else {
-          input.value = "value " + p.int(0, 999);
-          content[name] = input.value;
+        } else if (fits(prop, prop.default)) {
+          content[name] = prop.default;
+        }
+        if (required.indexOf(name) !== -1 && !Object.prototype.hasOwnProperty.call(content, name)) {
+          unanswered.push({ name: name, prop: prop, input: input });
         }
       });
-      if (badInteger) {
-        var before = sent.length;
+      if (badInteger || unanswered.length) {
         click(card, ".permission-allow");
-        assert.equal(sent.length, before, "a decimal in an integer field is refused before anything is sent");
+        assert.equal(sent.length, before, "an empty required field or a decimal in an integer field is refused before anything is sent");
         assert.ok(card.querySelector(".elicitation-error"), "and the operator is told why");
-        badInteger.input.value = badInteger.value;
+        if (badInteger) badInteger.input.value = badInteger.text;
+        unanswered.forEach(function (u) {
+          var value = validValue(p, u.prop);
+          u.input.value = String(value);
+          content[u.name] = value;
+        });
       }
       click(card, ".permission-allow");
       return { reject: false, label: "Submitted", content: content };
@@ -309,7 +399,6 @@ async function roundTrip(kind, seed) {
   var opened = spec.request(p);
   var prompt = server.registry.open(server.session, kind, opened.req, { toolUseId: "tu-" + seed });
 
-  // answer, on the live card the request event draws
   var live = await dom.createClient("roundtrip-live");
   var requestEvent = JSON.parse(JSON.stringify(server.history[0]));
   live.tools.applyPromptMessage(requestEvent);
@@ -320,28 +409,24 @@ async function roundTrip(kind, seed) {
   var sent = JSON.parse(JSON.stringify(live.sent[0]));
   assert.equal(sent.kind, kind);
 
-  // settle
   var outcome = server.registry.respond(sent.requestId, sent, { kinds: [sent.kind] });
   assert.equal(outcome.status, "resolved", where);
   spec.checkVendor(await prompt.answer, choice, opened.req);
 
-  // serialize
   var stored = JSON.parse(JSON.stringify(server.history));
   var resolution = stored.filter(function (m) { return m.type === "prompt_resolved"; });
   assert.equal(resolution.length, 1, where + ": one outcome is recorded");
 
-  // render: the live card, once the server confirms
   live.tools.applyPromptMessage(resolution[0]);
-  var want = spec.expectedRead(choice);
+  var want = spec.expectedRead(choice, opened.req);
   assert.deepEqual(spec.read(card), want, where + ": the live card shows the answer given");
 
-  // replay in order, with the server's stamps
   var replay = await dom.createClient("roundtrip-replay");
   var annotate = server.registry.replayAnnotator(server.session, stored, 0);
   stored.filter(isPromptEvent).forEach(function (m) { replay.tools.applyPromptMessage(annotate(m)); });
   assert.deepEqual(spec.read(dom.cardFor(replay, prompt.requestId)), want, where + ": a replayed card shows the same answer");
 
-  // replay with the outcome on a newer page than its request
+  // Paged history can deliver an outcome before the request it closes.
   var paged = await dom.createClient("roundtrip-paged");
   paged.tools.applyPromptMessage(resolution[0]);
   paged.tools.resetToolState();
@@ -355,6 +440,51 @@ test("every operator-facing prompt kind has a round-trip spec, on the server and
   var serverKinds = Object.keys(promptKinds.KINDS).filter(function (k) { return promptKinds.KINDS[k].journal; });
   assert.deepEqual(serverKinds.sort(), Object.keys(SPECS).sort(), "a kind the operator answers needs a round-trip spec here");
   assert.deepEqual(Object.keys(PROMPT_KINDS).sort(), Object.keys(SPECS).sort(), "every client card kind needs a round-trip spec here");
+});
+
+// An answer that did not come from the card (an older page, a hand-built
+// frame) is held to the same schema: a value of the wrong type never
+// reaches the MCP server, and an acceptance missing a required field, or
+// approving a URL that is not a web page, settles nothing.
+test("elicitation answers that bypass the card are held to the requested schema", async function () {
+  for (var seed = 1; seed <= RUNS_PER_KIND * 2; seed++) {
+    var p = picker(mulberry32(1000 + seed));
+    var where = "elicitation seed " + seed;
+    var server = makeServer();
+    var req = SPECS.elicitation.request(p).req;
+    var submitted = {};
+    var expected = {};
+    var incomplete = false;
+    if (req.mode === "url") {
+      incomplete = OPENABLE_URLS.indexOf(req.url) === -1;
+      submitted.injected = true;
+    } else {
+      var required = Array.isArray(req.requestedSchema.required) ? req.requestedSchema.required : [];
+      Object.keys(req.requestedSchema.properties).forEach(function (name) {
+        var prop = req.requestedSchema.properties[name];
+        var given = p.one(["valid", "wrong", "empty", "null", "missing"]);
+        if (given === "valid") submitted[name] = validValue(p, prop);
+        else if (given === "wrong") submitted[name] = prop.type === "boolean" ? "true" : (prop.type === "string" || !prop.type) && !prop.enum ? 42 : "1";
+        else if (given === "empty") submitted[name] = "";
+        else if (given === "null") submitted[name] = null;
+        if (fits(prop, submitted[name])) expected[name] = submitted[name];
+        else if (required.indexOf(name) !== -1) incomplete = true;
+      });
+      if (p.chance(0.3)) submitted.extra = "x";
+    }
+    var prompt = server.registry.open(server.session, "elicitation", req);
+    var outcome = server.registry.respond(prompt.requestId, { action: "accept", content: submitted });
+    if (incomplete) {
+      assert.equal(outcome.status, "invalid", where + ": an incomplete acceptance is refused");
+      assert.equal(outcome.pending.type, "prompt_pending", where + ": and the prompt is offered again");
+      assert.equal(server.history.filter(function (m) { return m.type === "prompt_resolved"; }).length, 0, where + ": nothing settled");
+      assert.equal(server.registry.respond(prompt.requestId, { action: "reject" }).status, "resolved", where + ": it is still answerable");
+      assert.deepEqual(await prompt.answer, { action: "reject" }, where);
+    } else {
+      assert.equal(outcome.status, "resolved", where);
+      assert.deepEqual(await prompt.answer, { action: "accept", content: expected }, where + ": only the values that fit the schema reach the server");
+    }
+  }
 });
 
 Object.keys(SPECS).forEach(function (kind) {

@@ -240,7 +240,8 @@ test("an abort cancels with reason aborted; a relayed expiry cancels with reason
   assert.deepEqual(eventsOf(h, "prompt_cancel").map(function (m) { return m.reason; }), ["aborted", "expired"]);
 });
 
-test("a signal that is already aborted ends the prompt at once, for every kind", async function () {
+test("a signal that is already aborted is answered as cancelled and never becomes a prompt, for every kind", async function () {
+  var { KINDS } = require("../lib/prompt-kinds");
   var names = Object.keys(KIND_OPENERS);
   for (var i = 0; i < names.length; i++) {
     var h = makeRegistry();
@@ -252,10 +253,13 @@ test("a signal that is already aborted ends the prompt at once, for every kind",
       : names[i] === "ask_user" ? { input: ASK_INPUT } : { serverName: "srv" };
     var opened = h.registry.open(s, names[i], req, { toolUseId: "tu", signal: ac.signal, notification: { title: "t" } });
 
+    assert.equal(opened.pending, false, names[i]);
     assert.equal(isPending(h, opened.requestId), false, names[i]);
-    assert.deepEqual(eventsOf(h, "prompt_cancel").map(function (m) { return m.reason; }), ["aborted"], names[i]);
+    assert.deepEqual(h.recorded, [], names[i] + ": nothing is broadcast or recorded, so no client history holds a phantom prompt");
     assert.deepEqual(h.notified, [], names[i] + ": no banner for a prompt that never waited");
-    await opened.answer;
+    assert.deepEqual(Object.keys(h.index), [], names[i] + ": nothing is indexed");
+    assert.equal(h.badgeRefreshes(), 0, names[i]);
+    assert.deepEqual(await opened.answer, KINDS[names[i]].cancelled("aborted"), names[i] + ": the callback gets the kind's cancelled answer");
   }
 });
 
@@ -642,6 +646,31 @@ test("a WS prompt_response must name the prompt's kind; a mismatch is answered s
     sm.destroy();
     return ask.answer;
   });
+});
+
+test("a WS acceptance missing a required field settles nothing and re-offers the prompt to the responder", async function () {
+  var answer = withHome(function (tmpHome, sessionsModule) {
+    var sent = [];
+    var sendTo = function (ws, msg) { sent.push(msg); };
+    var sm = sessionsModule.createSessionManager({ cwd: tmpHome, send: function () {}, sendTo: sendTo, sendEach: function () {} });
+    var handlers = attachSessionsFor(tmpHome, sm, sendTo);
+    var session = sm.createSessionRaw({});
+    sm.sessions.set(session.localId, session);
+    var schema = { type: "object", properties: { token: { type: "string" }, note: { type: "string" } }, required: ["token"] };
+    var el = sm.prompts.open(session, "elicitation", { serverName: "srv", message: "?", requestedSchema: schema });
+    var ws = { _session: session };
+
+    handlers.handleSessionsMessage(ws, { type: "prompt_response", requestId: el.requestId, kind: "elicitation", action: "accept", content: { note: "n" } });
+    assert.ok(sm.prompts.lookup(el.requestId), "an incomplete form is not passed on");
+    var reoffer = sent.filter(function (m) { return m.requestId === el.requestId; });
+    assert.deepEqual(reoffer.map(function (m) { return m.type; }), ["prompt_pending"], "the responder's card is told the prompt is still open");
+
+    handlers.handleSessionsMessage(ws, { type: "prompt_response", requestId: el.requestId, kind: "elicitation", action: "accept", content: { token: "t" } });
+    assert.equal(sm.prompts.lookup(el.requestId), null);
+    sm.destroy();
+    return el.answer;
+  });
+  assert.deepEqual(await answer, { action: "accept", content: { token: "t" } });
 });
 
 function postJson(handleHTTP, urlPath, body, user) {
