@@ -216,7 +216,7 @@ test("lr-9d4b: a permission with no live sub-agent owner is still cleared normal
   // Clearing settles the resolver: an entry dropped without settling would
   // leave the vendor's canUseTool Promise hanging forever.
   assert.deepEqual(resolvedWith, { behavior: "deny", message: "Session turn ended" });
-  var cancel = session.history.filter(function (e) { return e.type === "permission_cancel"; });
+  var cancel = session.history.filter(function (e) { return e.type === "prompt_cancel"; });
   assert.deepEqual(
     cancel.map(function (e) { return [e.requestId, e.reason]; }),
     [["perm-top-level", "turn_ended"]],

@@ -13,7 +13,7 @@
  * cleanup path never fires there. For worker-path sessions, the turn-boundary
  * cleanup sweep added here is the ONLY place the index entry is ever removed.
  *
- * Fix: every turn-boundary drop goes through lib/permission-registry.js's
+ * Fix: every turn-boundary drop goes through lib/prompt-registry.js's
  * endTurn(), which deletes sm.permissionRequestIndex[id] for every entry NOT
  * preserved, and resolves the dropped resolver with a deny decision so an
  * abandoned canUseTool Promise does not hang forever either.
