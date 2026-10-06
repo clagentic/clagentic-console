@@ -215,22 +215,15 @@ test("lr-8355: finally block still resets state normally when no newer query has
   assert.equal(session.isProcessing, false, "isProcessing should still be reset to false normally");
 });
 
-// --- lr-9d4b -----------------------------------------------------------
-//
-// PEACHES review of PR #310 (lr-9d4b) found that the sub-agent permission
-// preservation added to sdk-message-processor.js's 'result' handler is not
-// enough on its own: THIS finally block (processQueryStream, above) also
-// unconditionally reset pendingPermissions on the normal (non-superseded)
-// completion path -- microseconds after the 'result' message is processed,
-// on the SAME turn. That second wipe re-orphans a backgrounded sub-agent's
-// still-pending permission resolver even when the 'result' handler correctly
-// preserved it moments earlier. This test drives the finally block directly
-// (via the real bridge.startQuery/processQueryStream path used by every
-// other test in this file) with a sub-agent-owned pendingPermissions entry,
-// and asserts it survives -- the actual gap PEACHES flagged.
-test("lr-9d4b: finally block preserves a live backgrounded sub-agent's pendingPermissions entry on normal completion", async function () {
+// The finally block runs only when the query itself ends: it closes the query
+// and aborts its child process, so a backgrounded sub-agent dies with it. A
+// sub-agent permission request kept alive past this point would be a live
+// card whose decision nothing can consume. The parent TURN boundary (the
+// 'result' message) is where sub-agent requests are preserved; the query
+// boundary ends them and tells the clients.
+test("query end settles a backgrounded sub-agent's pending permission and records why", async function () {
   var handleA = makeBlockedHandle();
-  var { bridge, sm } = makeBridge([handleA]);
+  var { bridge, sm, messages } = makeBridge([handleA]);
 
   var session = makeSession();
   sm.sessions.set(session.localId, session);
@@ -240,49 +233,26 @@ test("lr-9d4b: finally block preserves a live backgrounded sub-agent's pendingPe
 
   var taskToolId = "toolu_task_parent";
   var bashToolId = "toolu_sub_bash";
+  bridge.processSDKMessage(session, { yokeType: "tool_start", blockId: 0, toolId: taskToolId, toolName: "Task" });
+  bridge.processSDKMessage(session, { yokeType: "block_stop", blockId: 0 });
+  bridge.processSDKMessage(session, {
+    yokeType: "subagent_message",
+    parentToolUseId: taskToolId,
+    messageRole: "assistant",
+    content: [{ type: "tool_use", id: bashToolId, name: "Bash", input: { command: "npm publish" } }],
+  });
+  var decision = bridge.handleCanUseTool(session, "Bash", { command: "npm publish" }, { toolUseID: bashToolId });
+  var requestId = Object.keys(session.pendingPermissions)[0];
+  assert.ok(requestId, "the sub-agent's request is pending");
 
-  // Simulate the bookkeeping sdk-message-processor.js would already have in
-  // place by the time this sub-agent's permission request came in: the Task
-  // is tracked active, and the Bash tool id is recorded as owned by it.
-  session.activeTaskToolIds[taskToolId] = true;
-  session.subagentToolOwners = {};
-  session.subagentToolOwners[bashToolId] = taskToolId;
-
-  // The sub-agent's own canUseTool-style pending permission, still awaiting
-  // the operator's click when the parent turn ends normally.
-  var resolvedWith = null;
-  session.pendingPermissions["perm-sub-bash"] = {
-    resolve: function (result) { resolvedWith = result; },
-    requestId: "perm-sub-bash",
-    toolName: "Bash",
-    toolInput: { command: "true" },
-    toolUseId: bashToolId,
-  };
-
-  // Normal completion, no rewind, no replacement query -- this is the
-  // finally block's ordinary path (session.queryInstance === myQueryInstance).
   handleA._unblock();
   if (session.streamPromise) { try { await session.streamPromise; } catch (e) {} }
   await new Promise(function (r) { setImmediate(r); });
 
+  assert.deepEqual(session.pendingPermissions, {});
+  assert.deepEqual(await decision, { behavior: "deny", message: "Query ended" });
   assert.ok(
-    session.pendingPermissions["perm-sub-bash"],
-    "a backgrounded sub-agent's pendingPermissions entry must survive processQueryStream's finally block"
-  );
-  assert.equal(resolvedWith, null, "resolver must not have been auto-resolved/dropped by the finally block");
-  assert.ok(
-    session.activeTaskToolIds[taskToolId],
-    "the owning Task's activeTaskToolIds entry must also survive alongside its preserved permission"
-  );
-
-  // Simulate the operator's later permission_response (project-sessions.js
-  // handler): look the entry up and resolve it, proving the resolver that
-  // survived the finally block is still live and functional.
-  var pending = session.pendingPermissions["perm-sub-bash"];
-  pending.resolve({ behavior: "allow", updatedInput: pending.toolInput });
-  assert.deepEqual(
-    resolvedWith,
-    { behavior: "allow", updatedInput: { command: "true" } },
-    "resolving the surviving entry must settle the original canUseTool Promise"
+    messages.some(function (m) { return m.type === "permission_cancel" && m.requestId === requestId && m.reason === "query_ended"; }),
+    "clients are told the request ended"
   );
 });

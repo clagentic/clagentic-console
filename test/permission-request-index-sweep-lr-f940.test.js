@@ -13,11 +13,10 @@
  * cleanup path never fires there. For worker-path sessions, the turn-boundary
  * cleanup sweep added here is the ONLY place the index entry is ever removed.
  *
- * Fix: lib/sdk-permission-ownership.js exports sweepClearedPermissionIndex(),
- * called from both cleanup sites right before session.pendingPermissions is
- * reassigned to keptPermissions. It deletes sm.permissionRequestIndex[id] for
- * every entry NOT preserved, and resolves the dropped resolver with a deny
- * decision so an abandoned canUseTool Promise does not hang forever either.
+ * Fix: every turn-boundary drop goes through lib/permission-registry.js's
+ * endTurn(), which deletes sm.permissionRequestIndex[id] for every entry NOT
+ * preserved, and resolves the dropped resolver with a deny decision so an
+ * abandoned canUseTool Promise does not hang forever either.
  *
  * This test drives the real sdk-message-processor.js 'result' handler (the
  * same code path test/sdk-message-processor-subagent-permission-lr-9d4b.test.js
@@ -187,42 +186,4 @@ test("lr-f940: a sub-agent permission preserved across the result handler keeps 
     "a preserved (not dropped) entry's permissionRequestIndex mapping must NOT be swept"
   );
   assert.equal(resolvedWith, null, "a preserved entry's resolver must not be auto-resolved");
-});
-
-test("lr-f940: sweepClearedPermissionIndex is a no-op (including no resolve side effect) when sm has no permissionRequestIndex", function () {
-  // Production sm always initializes permissionRequestIndex (lib/sessions.js)
-  // — this test documents that a caller without one (e.g. a minimal test
-  // double, like the pre-existing lr-9d4b fixture in
-  // sdk-message-processor-subagent-permission-lr-9d4b.test.js) sees no new
-  // side effect at all from this sweep, preserving its pre-lr-f940 behavior
-  // exactly rather than gaining a surprise resolve() it never asked for.
-  var sm = makeSm();
-  delete sm.permissionRequestIndex;
-  var processor = makeProcessor(sm);
-  var session = makeSession();
-
-  var resolvedWith = null;
-  session.pendingPermissions["perm-no-index"] = {
-    resolve: function (result) { resolvedWith = result; },
-    requestId: "perm-no-index",
-    toolName: "Bash",
-    toolInput: {},
-    toolUseId: "toolu_no_index",
-    decisionReason: "",
-  };
-
-  assert.doesNotThrow(function () {
-    processor.processSDKMessage(session, {
-      yokeType: "result",
-      cost: 0.1,
-      duration: 100,
-      sessionId: "cli-session-lrf940-c",
-    });
-  });
-  assert.deepEqual(session.pendingPermissions, {}, "the entry is still cleared from pendingPermissions as before (unrelated to the sweep)");
-  assert.equal(
-    resolvedWith,
-    null,
-    "no permissionRequestIndex means the sweep is a full no-op — the resolver is not auto-settled"
-  );
 });
