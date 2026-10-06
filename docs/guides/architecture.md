@@ -192,15 +192,31 @@ sequenceDiagram
 
     Note over Y,S: Approval needed
     V-->>Y: approval request
-    Y->>S: pendingPermissions[id] = Promise
+    Y->>S: registry.open(request)
     S-->>B: permission_request (all WS clients)
     S-->>B: web-push to phone (if subscribed)
     B->>S: permission_response (allow / deny)
+    S->>S: registry.respond(requestId, decision)
     S->>Y: resolve(decision)
+    S-->>B: permission_resolved (all WS clients)
     Y->>V: continue / abort tool
 ```
 
-`project-sessions.js` owns `permission_response`. `project-notifications.js` formats the alarm and may also fire push.
+### One owner for the request lifecycle
+
+`lib/permission-registry.js` is the only code that changes permission-request state. A request is `pending` until exactly one transition settles it — the operator's answer (`resolved`) or the end of the scope that owns it (`cancelled`, with a reason). Every path that ends a request calls a registry transition: the WS response (`project-sessions.js`), the HTTP push response (`project-http.js`), the parent turn's `result` (`sdk-message-processor.js`), query end (`sdk-bridge.js`'s `processQueryStream` finally), the abort signal, worker-side expiry, rewind, context clear and session deletion. Settling always calls the vendor's resolver once, dismisses the notification banner, and records `permission_resolved` / `permission_cancel` so every client — live or replaying later — sees the outcome.
+
+Ownership decides scope. A top-level request ends with its turn. A backgrounded sub-agent's request survives the parent's turn boundary and its own Task's completion signal, and ends with the query that hosts it (once the query is closed nothing can consume a decision). "Allow for Session" grants are written and consulted only through the registry, keyed by `permissionGrantKey()`, and flushed to the session file immediately.
+
+The registry's state lives where readers already looked for it: `session.pendingPermissions` (pending only), `session.subagentToolOwners`, `session.subagentTasks`, and the session manager's `permissionRequestIndex`.
+
+### Clients render server state, not replay order
+
+On connect, session switch and every history page, the server sends the authoritative state of every request it renders: replayed `permission_request` items carry `permissionState` (`pending`, `resolved` + decision, or `cancelled` + reason), and still-pending requests are re-sent as `permission_request_pending`. The client (`lib/public/modules/permission-state.js`, used by `tools.js`) mirrors that state per `requestId`; terminal states are final, so a card is a pure function of the state regardless of whether a page delivered the request before or after its resolution. The notification banner reads the same state: the registry dismisses it on every transition, and permission notifications are not restored after a daemon restart because no resolver survives one.
+
+`test/permission-invariants.test.js` generates interleavings of every event above, across several clients and daemon restarts, and checks the lifecycle invariants after each step. `CLAGENTIC_PERMISSION_HARNESS_LIB` points its wire-level checks at another checkout's `lib/`.
+
+`project-notifications.js` formats the alarm and may also fire push.
 
 ## Session Storage
 
