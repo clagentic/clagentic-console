@@ -179,7 +179,9 @@ test("an AskUserQuestion answer becomes the tool's input, keyed by question text
 test("an elicitation answer passes the content on but never records it", async function () {
   var h = makeRegistry();
   var s = h.addSession(1);
-  var el = KIND_OPENERS.elicitation(h, s);
+  var el = h.registry.open(s, "elicitation", {
+    serverName: "srv", message: "?", requestedSchema: { type: "object", properties: { token: { type: "string" } } },
+  });
   h.registry.respond(el.requestId, { action: "accept", content: { token: "secret" } });
   assert.deepEqual(await el.answer, { action: "accept", content: { token: "secret" } });
   assert.deepEqual(eventsOf(h, "prompt_resolved")[0], { type: "prompt_resolved", requestId: el.requestId, kind: "elicitation", action: "accept" });
@@ -567,11 +569,11 @@ function withHome(fn) {
   }
 }
 
-function attachSessionsFor(tmpHome, sm, sendTo) {
+function attachSessionsFor(tmpHome, sm, sendTo, sdk) {
   var { attachSessions } = require("../lib/project-sessions");
   return attachSessions({
     cwd: tmpHome, slug: "test-prompt-registry", osUsers: false, currentVersion: "0.0.0",
-    sm: sm, sdk: null, tm: null, clients: [], opts: {},
+    sm: sm, sdk: sdk || null, tm: null, clients: [], opts: {},
     send: function () {}, sendTo: sendTo, sendToAdmins: function () {},
     sendToSession: function () {}, sendToSessionOthers: function () {},
     usersModule: { isMultiUser: function () { return false; } },
@@ -642,9 +644,10 @@ test("a WS prompt_response must name the prompt's kind; a mismatch is answered s
   });
 });
 
-function postJson(handleHTTP, urlPath, body) {
+function postJson(handleHTTP, urlPath, body, user) {
   var req = new EventEmitter();
   req.method = "POST";
+  req._clagenticUser = user || null;
   var res = {
     status: null, body: null,
     writeHead: function (code) { this.status = code; },
@@ -696,4 +699,177 @@ test("the HTTP push response answers tool approvals with allow or deny only, and
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
+});
+
+// --- one answer path: effects, access, exposure ----------------------------
+
+async function withHomeAsync(fn) {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-prompt-paths-"));
+  ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
+    delete require.cache[require.resolve(m)];
+  });
+  var origHome = process.env.CLAGENTIC_HOME;
+  process.env.CLAGENTIC_HOME = tmpHome;
+  var sessionsModule;
+  try {
+    sessionsModule = require("../lib/sessions");
+  } finally {
+    if (origHome === undefined) delete process.env.CLAGENTIC_HOME;
+    else process.env.CLAGENTIC_HOME = origHome;
+  }
+  try {
+    return await fn(tmpHome, sessionsModule);
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+}
+
+test("every answer path runs the registry's resolution effects: a plan answered over HTTP gets them too", async function () {
+  await withHomeAsync(async function (tmpHome, sessionsModule) {
+    var sm = sessionsModule.createSessionManager({ cwd: tmpHome, send: function () {}, sendTo: function () {}, sendEach: function () {} });
+    var modes = [];
+    attachSessionsFor(tmpHome, sm, function () {}, { setPermissionMode: function (s, mode) { modes.push(mode); } });
+    var { attachHTTP } = require("../lib/project-http");
+    var http = attachHTTP({ cwd: tmpHome, slug: "s", sm: sm, send: function () {} });
+    var session = sm.createSessionRaw({});
+    sm.sessions.set(session.localId, session);
+
+    var viaCard = sm.prompts.open(session, "plan", { toolName: "ExitPlanMode", toolInput: { plan: "p" } });
+    sm.prompts.respond(viaCard.requestId, { decision: "allow_accept_edits" }, { responder: null });
+    assert.deepEqual(modes, ["acceptEdits"], "a plan decision's side effect runs inside respond(), not in one caller");
+    assert.equal(sm.currentPermissionMode, "acceptEdits");
+
+    var seen = [];
+    sm.prompts.onResolved(function (outcome, responder) { seen.push([outcome.kind, outcome.response.decision, responder]); });
+    var viaPush = sm.prompts.open(session, "plan", { toolName: "ExitPlanMode", toolInput: { plan: "q" } });
+    var res = await postJson(http.handleHTTP, "/api/permission-response", { requestId: viaPush.requestId, decision: "allow" });
+    assert.equal(res.status, 200);
+    assert.deepEqual(seen, [["plan", "allow", null]], "the HTTP route reaches the same effects as the card");
+    assert.deepEqual(await viaPush.answer, { behavior: "allow", updatedInput: { plan: "q" } });
+    sm.destroy();
+    await viaCard.answer;
+  });
+});
+
+test("the HTTP push route refuses a user who cannot see the prompt's session, without touching it", async function () {
+  await withHomeAsync(async function (tmpHome, sessionsModule) {
+    var sm = sessionsModule.createSessionManager({ cwd: tmpHome, send: function () {}, sendTo: function () {}, sendEach: function () {} });
+    var { attachHTTP } = require("../lib/project-http");
+    var http = attachHTTP({ cwd: tmpHome, slug: "s", sm: sm, send: function () {} });
+    var session = sm.createSessionRaw({ ownerId: "u-owner", sessionVisibility: "private" });
+    sm.sessions.set(session.localId, session);
+    var opened = sm.prompts.open(session, "permission", { toolName: "Bash", toolInput: { command: "make" } });
+
+    var other = await postJson(http.handleHTTP, "/api/permission-response", { requestId: opened.requestId, decision: "allow" }, { id: "u-other" });
+    assert.equal(other.status, 404, "answered as not found, the same as the WS path's stale reply");
+    assert.ok(sm.prompts.lookup(opened.requestId), "the prompt is untouched");
+
+    var owner = await postJson(http.handleHTTP, "/api/permission-response", { requestId: opened.requestId, decision: "deny" }, { id: "u-owner" });
+    assert.equal(owner.status, 200);
+    assert.deepEqual(await opened.answer, { behavior: "deny", message: "Denied via push notification" });
+    sm.destroy();
+  });
+});
+
+test("lookup and respond expose a deep-frozen copy of the request, never the record or its resolver", async function () {
+  var h = makeRegistry();
+  var s = h.addSession(1);
+  var opened = openBash(h, s, "tu-1");
+
+  var found = h.registry.lookup(opened.requestId);
+  assert.equal(found.session, s);
+  assert.equal(found.prompt.kind, "permission");
+  assert.equal(found.prompt.toolUseId, "tu-1");
+  assert.deepEqual(found.prompt.request, { toolName: "Bash", toolInput: { command: "make" }, decisionReason: "", vendor: "claude" });
+  assert.equal(found.record, undefined);
+  assert.equal(found.prompt.resolve, undefined);
+  assert.throws(function () { found.prompt.request.toolInput.command = "rm -rf"; }, TypeError);
+  assert.throws(function () { found.prompt.request = {}; }, TypeError);
+
+  var outcome = h.registry.respond(opened.requestId, { decision: "allow" });
+  assert.equal(outcome.record, undefined);
+  assert.ok(Object.isFrozen(outcome.prompt));
+  assert.deepEqual(await opened.answer, { behavior: "allow", updatedInput: { command: "make" } }, "the vendor gets the input as requested");
+});
+
+test("open reports whether the prompt is still pending, so nothing announces one that ended at once", function () {
+  var h = makeRegistry();
+  var s = h.addSession(1);
+  var ac = new AbortController();
+  ac.abort();
+  assert.equal(openBash(h, s, "tu-dead", { signal: ac.signal }).pending, false);
+  assert.equal(openBash(h, s, "tu-live").pending, true);
+  assert.equal(h.registry.open(null, "extension", { command: "x" }, { timeoutMs: 10 }).pending, true);
+  h.registry.shutdown();
+});
+
+var MULTI_INPUT = {
+  questions: [
+    { question: "Which targets?", multiSelect: true, options: [{ label: "staging, eu" }, { label: "prod" }, { label: "qa" }] },
+    { question: "Notify?", options: [{ label: "yes" }, { label: "no" }] },
+  ],
+};
+
+test("an AskUserQuestion answer is held to the questions asked: chosen labels, bounded text, nothing else", async function () {
+  var limits = require("../lib/prompt-kinds/answer-limits");
+  var h = makeRegistry();
+  var s = h.addSession(1);
+
+  var ask = h.registry.open(s, "ask_user", { input: MULTI_INPUT }, { toolUseId: "tu-multi" });
+  h.registry.respond("tu-multi", { answers: { 0: ["prod", "staging, eu", "not-an-option", "prod"], 1: "  yes  ", 7: "stray" } });
+  var expected = Object.assign({}, MULTI_INPUT, { answers: { "Which targets?": "prod, staging, eu", "Notify?": "yes" } });
+  assert.deepEqual(await ask.answer, { behavior: "allow", updatedInput: expected, updated_input: expected },
+    "the CLI gets one joined string per question; unknown labels, duplicates and unasked questions are dropped");
+  assert.deepEqual(eventsOf(h, "prompt_resolved")[0].answers, { 0: ["prod", "staging, eu"], 1: "yes" },
+    "the recorded answer keeps the chosen labels as a list, so a replay can show them exactly");
+
+  var cases = [
+    [{ 1: ["yes"] }, "a list for a single-choice question"],
+    [{ 1: "x".repeat(limits.MAX_ANSWER_CHARS + 1) }, "text over the bound"],
+    [{ 1: "   " }, "blank text"],
+    [{ 1: { text: "yes" } }, "a non-string answer"],
+    [{ 0: [] }, "an empty choice"],
+  ];
+  for (var i = 0; i < cases.length; i++) {
+    var p = h.registry.open(s, "ask_user", { input: MULTI_INPUT }, { toolUseId: "tu-bad-" + i });
+    h.registry.respond("tu-bad-" + i, { answers: cases[i][0] });
+    assert.deepEqual(await p.answer, { behavior: "deny", message: "The user skipped the question." },
+      cases[i][1] + " is no answer, and no answer at all is a skip");
+  }
+  var older = h.registry.open(s, "ask_user", { input: MULTI_INPUT }, { toolUseId: "tu-older" });
+  h.registry.respond("tu-older", { answers: { 0: "prod, qa" } });
+  assert.equal((await older.answer).updatedInput.answers["Which targets?"], "prod, qa", "an older page's joined string is still accepted");
+});
+
+test("elicitation content is held to the requested schema: declared fields of the declared type only", async function () {
+  var limits = require("../lib/prompt-kinds/answer-limits");
+  var h = makeRegistry();
+  var s = h.addSession(1);
+  var schema = {
+    type: "object",
+    properties: {
+      name: { type: "string", maxLength: 5 },
+      count: { type: "integer" },
+      ratio: { type: "number" },
+      enabled: { type: "boolean" },
+      region: { type: "string", enum: ["eu", "us"] },
+      note: { type: "string" },
+    },
+  };
+  function submit(content) {
+    var el = h.registry.open(s, "elicitation", { serverName: "srv", requestedSchema: schema });
+    h.registry.respond(el.requestId, { action: "accept", content: content });
+    return el.answer;
+  }
+
+  assert.deepEqual(await submit({ name: "abc", count: 3, ratio: 1.5, enabled: false, region: "eu" }),
+    { action: "accept", content: { name: "abc", count: 3, ratio: 1.5, enabled: false, region: "eu" } });
+  assert.deepEqual(await submit({ name: "toolong", count: 1.5, ratio: "2", enabled: "true", region: "apac", extra: 1 }),
+    { action: "accept", content: {} }, "every field that does not fit its schema is dropped, never coerced");
+  assert.deepEqual(await submit({ ratio: Infinity, note: "y".repeat(limits.MAX_ANSWER_CHARS + 1) }), { action: "accept", content: {} });
+  assert.deepEqual(await submit({}), { action: "accept", content: {} }, "fields the operator left empty stay absent");
+
+  var urlMode = h.registry.open(s, "elicitation", { serverName: "srv", mode: "url", url: "https://example.test/auth" });
+  h.registry.respond(urlMode.requestId, { action: "accept", content: { injected: true } });
+  assert.deepEqual(await urlMode.answer, { action: "accept", content: {} }, "a URL approval carries no content");
 });

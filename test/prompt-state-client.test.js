@@ -188,6 +188,7 @@ test("an elicitation card waits for the server instead of claiming it was submit
   env.tools.applyPromptMessage(elicitationRequest("el-1"));
   var c = cardFor(env, "el-1");
 
+  c.querySelector('[data-prop-name="token"]').value = "abc";
   c.querySelector(".permission-allow").click();
 
   assert.equal(env.sent[0].type, "prompt_response");

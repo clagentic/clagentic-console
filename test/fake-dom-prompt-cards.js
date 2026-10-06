@@ -59,20 +59,38 @@ Object.defineProperty(FakeElement.prototype, "textContent", {
   set: function (v) { this._children = []; this._text = String(v); },
 });
 
-function matches(el, sel) {
-  return sel.split(",").some(function (part) {
-    part = part.trim();
-    var parts = part.match(/\.[\w-]+|\[[^\]]+\]|^[a-z]+/g) || [];
-    return parts.length > 0 && parts.every(function (p) {
-      if (p[0] === ".") return el.classList.contains(p.slice(1));
-      if (p[0] === "[") {
-        var m = /\[([\w-]+)(?:="([^"]*)")?\]/.exec(p);
-        var key = m[1].slice(5).replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
-        return m[2] === undefined ? el.dataset[key] !== undefined : el.dataset[key] === m[2];
-      }
-      return el.tagName === p.toUpperCase();
-    });
+// One compound selector (tag, classes, data attributes; no combinators).
+function matchesCompound(el, compound) {
+  var parts = compound.match(/\.[\w-]+|\[[^\]]+\]|^[a-z]+/g) || [];
+  return parts.length > 0 && parts.every(function (p) {
+    if (p[0] === ".") return el.classList.contains(p.slice(1));
+    if (p[0] === "[") {
+      var m = /\[([\w-]+)(?:="([^"]*)")?\]/.exec(p);
+      var key = m[1].slice(5).replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+      return m[2] === undefined ? el.dataset[key] !== undefined : el.dataset[key] === m[2];
+    }
+    return el.tagName === p.toUpperCase();
   });
+}
+
+// A selector list whose selectors may use the descendant combinator, as in
+// ".ask-user-other input".
+function matches(el, sel) {
+  return sel.split(",").some(function (group) {
+    var chain = group.trim().split(/\s+/);
+    if (!matchesCompound(el, chain[chain.length - 1])) return false;
+    var i = chain.length - 2;
+    for (var node = el._parent; i >= 0 && node; node = node._parent) {
+      if (matchesCompound(node, chain[i])) i--;
+    }
+    return i < 0;
+  });
+}
+
+/** What typing text into a field does: set its value, then fire "input". */
+function typeInto(el, text) {
+  el.value = text;
+  (el._listeners.input || []).slice().forEach(function (fn) { fn({}); });
 }
 FakeElement.prototype.querySelectorAll = function (sel) {
   var out = [];
@@ -188,4 +206,5 @@ module.exports = {
   enabledButtons: enabledButtons,
   liveControls: liveControls,
   decisionLabel: decisionLabel,
+  typeInto: typeInto,
 };

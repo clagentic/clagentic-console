@@ -76,6 +76,7 @@ function heldPromptIds(session) {
  * @param {object} [opts]
  * @param {string} [opts.home] - reuse a CLAGENTIC_HOME (daemon restart).
  * @param {string} [opts.cliSessionId] - session to adopt from disk.
+ * @param {object} [opts.pushModule] - receives the bridge's push sends.
  */
 async function createServer(opts) {
   opts = opts || {};
@@ -128,7 +129,7 @@ async function createServer(opts) {
     adapters: { claude: adapter },
     getNotificationsModule: getNotificationsModule,
     onProcessingChanged: function () {},
-    pushModule: null,
+    pushModule: opts.pushModule || null,
   });
 
   var handlers = require(libPath("project-sessions")).attachSessions({
@@ -141,6 +142,9 @@ async function createServer(opts) {
     userPresence: null, pushModule: null,
     getSessionForWs: function (ws) { return sm.sessions.get(ws._clagenticActiveSession) || null; },
     getLinuxUserForSession: function () { return null; },
+    // Production returns the session's Linux user, which is null without OS
+    // users (lib/project.js ensureProjectAccessForSession); it is the user a
+    // query runs as, not an access verdict, so null rejects nothing.
     ensureProjectAccessForSession: function () { return null; },
     getOsUserInfoForWs: function () { return null; },
     hydrateImageRefs: function (o) { return o; },
