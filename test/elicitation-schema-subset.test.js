@@ -1,6 +1,6 @@
 "use strict";
 // An elicitation whose requested schema is outside the MCP elicitation
-// subset (lib/prompt-kinds/elicitation-codec.js, docs/guides/architecture.md
+// subset (lib/public/modules/prompt-kinds/elicitation-codec.js, docs/guides/architecture.md
 // "Supported elicitation schemas") is refused whole: the card draws no form
 // and offers only Deny, and the server never accepts it, so no answer that
 // was checked against only part of the schema reaches the MCP server.
