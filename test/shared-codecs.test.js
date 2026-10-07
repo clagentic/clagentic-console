@@ -11,7 +11,9 @@ var path = require("path");
 var { pathToFileURL } = require("url");
 
 var LIB = path.join(__dirname, "..", "lib");
-var CODECS = ["ask-user-codec.js", "elicitation-codec.js"];
+var CODECS = ["ask-user-codec.js", "elicitation-codec.js", "own-key.js"];
+// The codecs that bound typed text.
+var ANSWER_CODECS = ["ask-user-codec.js", "elicitation-codec.js"];
 var OPEN = "// <shared-codec>";
 var CLOSE = "// </shared-codec>";
 
@@ -42,11 +44,40 @@ CODECS.forEach(function (name) {
 
 test("both codecs bound typed text by the server's answer limit", async function () {
   var limits = require("../lib/prompt-kinds/answer-limits");
-  for (var i = 0; i < CODECS.length; i++) {
-    (await bothCopies(CODECS[i])).forEach(function (c) {
-      assert.equal(c.codec.MAX_ANSWER_CHARS, limits.MAX_ANSWER_CHARS, CODECS[i] + " (" + c.where + ")");
+  for (var i = 0; i < ANSWER_CODECS.length; i++) {
+    (await bothCopies(ANSWER_CODECS[i])).forEach(function (c) {
+      assert.equal(c.codec.MAX_ANSWER_CHARS, limits.MAX_ANSWER_CHARS, ANSWER_CODECS[i] + " (" + c.where + ")");
     });
   }
+});
+
+// --- own-key: lookups by names from outside --------------------------------
+
+var INHERITED_NAMES = ["__proto__", "constructor", "toString", "hasOwnProperty", "valueOf", "isPrototypeOf", "__defineGetter__"];
+
+test("own-key: a map answers only the names it holds itself, and only for a string", async function () {
+  (await bothCopies("own-key.js")).forEach(function (c) {
+    var k = c.codec;
+    var map = { allow: 1, zero: 0 };
+    INHERITED_NAMES.forEach(function (name) {
+      assert.equal(k.hasOwnKey(map, name), false, c.where + ": " + name);
+      assert.equal(k.ownValue(map, name), undefined, c.where + ": " + name);
+    });
+    assert.equal(k.ownValue(map, "allow"), 1, c.where);
+    assert.equal(k.hasOwnKey(map, "zero"), true, c.where + ": a falsy value is still held");
+    [["allow"], { toString: null }, 0, null, undefined, true].forEach(function (key) {
+      assert.equal(k.hasOwnKey(map, key), false, c.where + ": " + JSON.stringify(key) + " is not a name");
+      assert.equal(k.ownValue(map, key), undefined, c.where);
+    });
+    assert.equal(k.ownValue(null, "allow"), undefined, c.where + ": no map holds nothing");
+    assert.equal(k.ownValue(Object.create(null), "allow"), undefined, c.where);
+
+    var store = {};
+    k.putOwn(store, "__proto__", "entry");
+    assert.equal(Object.getPrototypeOf(store), Object.prototype, c.where + ": writing __proto__ leaves the prototype alone");
+    assert.equal(k.ownValue(store, "__proto__"), "entry", c.where + ": and reads back as an entry");
+    assert.deepEqual(Object.keys(store), ["__proto__"], c.where);
+  });
 });
 
 // --- elicitation: JSON Schema field codec ----------------------------------

@@ -195,14 +195,11 @@ function enabledButtons(card) {
   return card.querySelectorAll("button").filter(function (b) { return !b.disabled; });
 }
 
-// The fake DOM does not parse innerHTML, so the decision label is read back
-// from the raw markup the module wrote into the actions container, or from
-// the status element a card without an actions row adds.
+// The outcome label a settled card shows: the label element in its actions
+// row, or the status element a card without an actions row adds.
 function decisionLabel(card) {
-  var m = /permission-decision-label">([^<]*)</.exec(card.textContent);
-  if (m) return m[1];
-  var status = card.querySelector(".ask-user-status");
-  return status ? status.textContent : "";
+  var label = card.querySelector(".permission-decision-label");
+  return label ? label.textContent : "";
 }
 
 /** Controls of a card an operator could still use. */
