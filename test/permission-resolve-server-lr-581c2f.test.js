@@ -13,13 +13,12 @@ var os = require("os");
 
 var { createSDKBridge } = require("../lib/sdk-bridge");
 var { attachSessions } = require("../lib/project-sessions");
-var { sweepClearedPermissionIndex } = require("../lib/sdk-permission-ownership");
 
 var IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
-function makeSessionManager(tmpHome) {
+function makeSessionManager(tmpHome, notifications) {
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
@@ -35,6 +34,7 @@ function makeSessionManager(tmpHome) {
     send: function () {},
     sendTo: function () {},
     sendEach: function () {},
+    getNotificationsModule: function () { return notifications || null; },
   });
 }
 
@@ -49,8 +49,8 @@ function makeNotifications() {
 
 function makeHarness() {
   var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-perm-resolve-"));
-  var sm = makeSessionManager(tmpHome);
   var notifications = makeNotifications();
+  var sm = makeSessionManager(tmpHome, notifications);
   var adapter = {
     vendor: "claude",
     createQuery: function () { throw new Error("not used"); },
@@ -94,7 +94,7 @@ function makeHarness() {
 }
 
 function cleanup(h) {
-  try { fs.rmSync(h.tmpHome, { recursive: true, force: true }); } catch (_) {}
+  fs.rmSync(h.tmpHome, { recursive: true, force: true });
 }
 
 // Characterization / guard, not a regression test: this passes on main before
@@ -206,25 +206,24 @@ test("aborting a pending request dismisses its notification", function () {
   }
 });
 
-test("the turn-boundary sweep reports every dropped request but not kept ones", function () {
-  var sm = { permissionRequestIndex: { a: 1, b: 1 } };
-  var prev = { a: { resolve: function () {} }, b: { resolve: function () {} } };
-  var dropped = [];
+function purgeNotificationsModule() {
+  ["../lib/config", "../lib/project-notifications"].forEach(function (m) {
+    delete require.cache[require.resolve(m)];
+  });
+}
 
-  sweepClearedPermissionIndex(sm, prev, { b: prev.b }, function (id) { dropped.push(id); });
-
-  assert.deepEqual(dropped, ["a"]);
-});
+// Re-reads CLAGENTIC_HOME, so each call models a fresh daemon process.
+function freshNotificationsModule() {
+  purgeNotificationsModule();
+  return require("../lib/project-notifications");
+}
 
 test("notifications module dismissByRequestId removes only the matching permission banner", function () {
   var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-perm-notif-"));
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
   try {
-    ["../lib/config", "../lib/project-notifications"].forEach(function (m) {
-      try { delete require.cache[require.resolve(m)]; } catch (_) {}
-    });
-    var { attachNotifications } = require("../lib/project-notifications");
+    var { attachNotifications } = freshNotificationsModule();
     var broadcasts = [];
     var nm = attachNotifications({ broadcastAll: function (m) { broadcasts.push(m); }, pushModule: null });
     nm.notify("permission_request", { requestId: "r1", toolName: "Bash" });
@@ -241,9 +240,32 @@ test("notifications module dismissByRequestId removes only the matching permissi
   } finally {
     if (origHome === undefined) delete process.env.CLAGENTIC_HOME;
     else process.env.CLAGENTIC_HOME = origHome;
-    ["../lib/config", "../lib/project-notifications"].forEach(function (m) {
-      try { delete require.cache[require.resolve(m)]; } catch (_) {}
-    });
+    purgeNotificationsModule();
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+// No permission resolver survives a restart, so a persisted permission
+// notification would offer buttons nothing can answer.
+test("a restarted notifications module drops persisted permission banners and keeps the rest", function () {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-perm-notif-restart-"));
+  var origHome = process.env.CLAGENTIC_HOME;
+  process.env.CLAGENTIC_HOME = tmpHome;
+  try {
+    var first = freshNotificationsModule().attachNotifications({ broadcastAll: function () {}, pushModule: null });
+    first.notify("permission_request", { requestId: "r1", toolName: "Bash" });
+    first.notify("response_done", { title: "Done" });
+    assert.equal(first.getUnreadCount(), 2);
+
+    var restarted = freshNotificationsModule().attachNotifications({ broadcastAll: function () {}, pushModule: null });
+    var state = null;
+    restarted.sendConnectionState({}, function (ws, msg) { state = msg; });
+
+    assert.deepEqual(state.notifications.map(function (n) { return n.type; }), ["response_done"]);
+  } finally {
+    if (origHome === undefined) delete process.env.CLAGENTIC_HOME;
+    else process.env.CLAGENTIC_HOME = origHome;
+    purgeNotificationsModule();
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });

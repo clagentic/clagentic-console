@@ -172,9 +172,9 @@ graph TB
 
 User provisioning lives in `daemon.js` (`provisionLinuxUser`, `grantProjectAccess`). All worker spawns route through `os-users.resolveOsUserInfo`.
 
-## Permission Flow
+## Operator Prompts
 
-Every tool call goes through a vendor-neutral approval gate.
+Every tool call goes through a vendor-neutral approval gate, and every other point where an agent waits on the operator (plan approval, AskUserQuestion, an MCP elicitation) uses the same machinery.
 
 ```mermaid
 sequenceDiagram
@@ -192,15 +192,42 @@ sequenceDiagram
 
     Note over Y,S: Approval needed
     V-->>Y: approval request
-    Y->>S: pendingPermissions[id] = Promise
-    S-->>B: permission_request (all WS clients)
+    Y->>S: prompts.open(session, kind, request)
+    S-->>B: prompt_request {kind} (all WS clients)
     S-->>B: web-push to phone (if subscribed)
-    B->>S: permission_response (allow / deny)
-    S->>Y: resolve(decision)
+    B->>S: prompt_response {requestId, kind, answer}
+    S->>S: prompts.respond(requestId, answer)
+    S->>Y: resolve(answer)
+    S-->>B: prompt_resolved (all WS clients)
     Y->>V: continue / abort tool
 ```
 
-`project-sessions.js` owns `permission_response`. `project-notifications.js` formats the alarm and may also fire push.
+### One owner for every prompt's lifecycle
+
+`lib/prompt-registry.js` is the only code that changes operator-prompt state, for every kind: tool permission, plan approval (ExitPlanMode), AskUserQuestion, MCP elicitation (Claude's `onElicitation` and Codex's `mcpServer/elicitation/request`), and the browser-extension commands the daemon sends a client. A kind (`lib/prompt-kinds/`) is a small adapter: its payload fields, how a response is parsed and validated against the request it answers (an unknown decision fails closed; an AskUserQuestion answer keeps only the questions asked, option labels the question offers and bounded text; elicitation content keeps only the schema's fields, each of its declared type and within its constraints, and an acceptance missing a required field, of a schema outside the supported subset (below), or approving a URL that is not http(s) is refused as `invalid`, which settles nothing and re-offers the prompt to the responder), what the vendor's callback receives for an answer, and what it receives when the prompt ends unanswered (deny for tool calls, reject for elicitation, null for extension commands). No kind keeps its own map or cleanup code. What an answer is for the two kinds the operator types into is defined once and shared with the card: `ask-user-codec.js` (chosen labels, options sharing a label as one choice, "Other" text, the tool's text-keyed answers with questions that share their text keeping every answer) and `elicitation-codec.js` (the requested JSON Schema's fields by type, required or optional, a form control's text read as a typed value, empty as absent, defaults shown only when they fit, URL requests). Each, and `own-key.js` (below), has one source: the ES module the browser is served from `lib/public/modules/prompt-kinds/`. The server loads those same files through `lib/prompt-kinds/codecs.js`, once, when the registry is first required: with `require()` where Node can load an ES module that way, else with `import()`, which the daemon awaits (`prompt-registry.js` `ready()`) before it accepts a connection. A codec that fails to load stops the daemon, and one read before it has loaded throws. `test/shared-codecs.test.js` checks that the server's modules are the browser's (same file, same module instance) and that no server copy exists. A callback whose abort signal has already fired is answered as cancelled at once and never becomes a prompt, so nothing is broadcast or recorded for it. Codex command, file-change and MCP approvals arrive through the same `canUseTool` callback as Claude's.
+
+A prompt is `pending` until exactly one transition settles it — an answer (`resolved`) or the end of the scope that owns it (`cancelled`, with a reason). Every path that ends a prompt calls a registry transition: the WS answer (`project-prompt-responses.js`), the HTTP push answer (`project-http.js`), the parent turn's `result` (`sdk-message-processor.js`), query end (`sdk-bridge.js`'s `processQueryStream` finally), the abort signal (including an expiry relayed from a worker, and the Codex app-server clearing a request it never got an answer to), a kind's timeout, rewind, context clear, session deletion and daemon shutdown. Settling always calls the vendor's resolver once, dismisses the notification banner, and records `prompt_resolved` / `prompt_cancel` so every client — live or replaying later — sees the outcome. The session side effects of an answer (a plan decision's permission mode, fresh session or feedback message) are installed with `onResolved()` and run inside `respond()`, so no answer path can settle a prompt and skip them; both answer paths also apply one access rule (`lib/prompt-access.js`). Outside the registry a prompt is visible only as a frozen copy of its request (`lookup()`), never as its record or resolver.
+
+Ownership decides scope. A top-level prompt ends with its turn or its query. A prompt whose tool call belongs to a tracked sub-agent (a running Task, or one that reported completion while that prompt was still open) survives the parent's turn and query boundaries, so the operator can still answer a backgrounded sub-agent after its parent finished; it ends only on an answer, its own abort, or the session or daemon ending. The abort is the vendor's word that the callback is gone: the Claude SDK aborts every callback still waiting when it closes a query, the worker relay does the same when the worker's query ends or the worker cancels a callback, and the Codex adapter when the app-server clears a request or the query ends. The registry never decides on its own that a sub-agent is dead. "Allow for Session" grants are written and consulted only through the registry, keyed by `permissionGrantKey()`, flushed to the session file immediately, and granted only from the authenticated in-app card: the HTTP push route answers tool approvals with allow or deny only.
+
+The registry's state lives where readers already looked for it: one pending map per store (`session.pendingPermissions` for tool and plan approvals, `session.pendingAskUser`, `session.pendingElicitations`), `session.subagentToolOwners`, `session.activeTaskToolIds` (Task tracking), and the session manager's `permissionRequestIndex`. A requestId, message type, decision, cancel reason or kind is whatever a client sent, so every map keyed by one, on the server and in the client, is read through `own-key.js` (`ownValue()` / `hasOwnKey()`: own properties only, strings only) and written through `putOwn()`. A name every object inherits (`constructor`, `__proto__`, `toString`, ...) is no prompt and no table entry: on every answer path it gets the not-found reply (`test/prompt-hostile-request-id.test.js`).
+
+#### Supported elicitation schemas
+
+A form-mode elicitation is drawn and answered only when its requested schema is inside the subset MCP elicitation defines, which `elicitation-codec.js` (`schemaProblem()`) checks before anything else:
+
+- the schema is `{type: "object", properties, required}`, optionally with `$schema`, `title`, `description` and a boolean `additionalProperties`; no schema at all asks for no fields;
+- every property is flat and one of: a string (`minLength`, `maxLength`, `format` of `email`, `uri`, `date` or `date-time`), a number or integer (`minimum`, `maximum`), a boolean, or a string enum (`enum` of strings, `enumNames` naming each value); each may carry `title`, `description` and `default`.
+
+Every keyword in the subset is enforced on the card and again on the server: lengths count characters, bounds are inclusive, formats are checked, `enumNames` label the choices, and a default is shown only when it is itself a valid answer. Nothing outside the subset is supported: nested objects, arrays, `pattern`, `oneOf` / `anyOf` / `const`, other formats, numeric enums, untyped properties and any other keyword. A schema that uses any of them is refused whole: the card draws no form, says why, and offers only Deny, and the server answers an acceptance of it as `invalid`, so no half-checked answer reaches the MCP server.
+
+### Clients render server state, not replay order
+
+On connect, session switch and every history page, the server sends the authoritative state of every prompt it renders: a replayed item that opens a prompt (`prompt_request`, the older `permission_request` / `elicitation_request`, or the AskUserQuestion `tool_executing` that draws its card) carries `promptState` (`pending`, `resolved` with its decision, answers or action, or `cancelled` with a reason), and still-pending prompts are re-sent as `prompt_pending`. One client module (`lib/public/modules/prompts.js`) applies every prompt message of every kind and recorded shape; `prompt-state.js` mirrors the state per `requestId` with final terminal states, so a card is a pure function of the state regardless of whether a page delivered the request before or after its outcome. Every kind shares one card shell (`prompt-card.js`: an answer moves the card to "sending" until the server confirms) and supplies only its body and answer controls (`prompt-kinds/`). The notification banner reads the same state and answers through the same state machine (`prompt-banner.js` over `prompt-card.js`: sending until the server settles the prompt, answerable again on an ack timeout or a dropped connection): the registry dismisses it on every transition, and prompt notifications are not restored after a daemon restart because no resolver survives one.
+
+`test/prompt-invariants.test.js` generates interleavings of every event above, for every kind, across several clients and daemon restarts, and checks the lifecycle invariants after each step. `test/prompt-kind-roundtrip.test.js` checks, for generated requests (question sets with shared labels and shared question text; schemas of every field type, required or optional, with fitting and unfitting defaults; URL requests) and generated answers of every kind, that what the operator chose on the card survives answering, settling, JSON serialization, replay and rendering unchanged; a new kind fails it until it supplies its own round-trip spec. `CLAGENTIC_PROMPT_HARNESS_LIB` points its wire-level checks at another checkout's `lib/`; `npm run test:prompt-history` runs its named regression scenarios against the commits before and after each past fix, and fails unless each fails before its fix and passes after it and on the checkout.
+
+`project-notifications.js` formats the alarm and may also fire push.
 
 ## Session Storage
 

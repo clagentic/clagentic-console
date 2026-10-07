@@ -213,7 +213,15 @@ test("lr-9d4b: a permission with no live sub-agent owner is still cleared normal
     {},
     "a top-level (non-sub-agent) pendingPermissions entry must still be cleared on result, preserving prior behavior"
   );
-  assert.equal(resolvedWith, null, "clearing does not itself resolve/reject -- unchanged from prior behavior");
+  // Clearing settles the resolver: an entry dropped without settling would
+  // leave the vendor's canUseTool Promise hanging forever.
+  assert.deepEqual(resolvedWith, { behavior: "deny", message: "Session turn ended" });
+  var cancel = session.history.filter(function (e) { return e.type === "prompt_cancel"; });
+  assert.deepEqual(
+    cancel.map(function (e) { return [e.requestId, e.reason]; }),
+    [["perm-top-level", "turn_ended"]],
+    "clients are told the request ended, so no card keeps offering it"
+  );
 });
 
 test("lr-9d4b: a sub-agent permission whose Task already completed (not in activeTaskToolIds) is cleared normally", function () {

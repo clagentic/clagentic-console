@@ -13,6 +13,7 @@
     "postinstall": "node scripts/postinstall.js",
     "prepack": "node scripts/write-build-sha.js",
     "test": "node scripts/check-test-count.js test/*.test.js",
+    "test:prompt-history": "node scripts/prompt-harness-history.js",
     "install:local-test": "node scripts/install-local-test.js",
     "verify:installed-build": "node scripts/verify-installed-build.js",
     "semantic-release": "semantic-release"

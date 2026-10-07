@@ -1,7 +1,7 @@
 "use strict";
 // Hand-built DOM (no jsdom in this repo) sufficient to drive the real tools.js
-// permission-card exports. Shared helper, not a test file: the runner only
-// collects test/*.test.js.
+// prompt-card exports for every prompt kind. Shared helper, not a test file:
+// the runner only collects test/*.test.js.
 
 var path = require("path");
 var { pathToFileURL } = require("url");
@@ -40,6 +40,20 @@ FakeElement.prototype.click = function () {
   (this._listeners.click || []).slice().forEach(function (fn) { fn({}); });
 };
 FakeElement.prototype.focus = function () {};
+function dataKey(name) {
+  return name.slice(5).replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+}
+FakeElement.prototype.setAttribute = function (name, value) {
+  if (name.indexOf("data-") === 0) this.dataset[dataKey(name)] = String(value);
+  else (this._attrs = this._attrs || {})[name] = String(value);
+};
+FakeElement.prototype.getAttribute = function (name) {
+  if (name.indexOf("data-") === 0) {
+    var v = this.dataset[dataKey(name)];
+    return v === undefined ? null : v;
+  }
+  return this._attrs && Object.prototype.hasOwnProperty.call(this._attrs, name) ? this._attrs[name] : null;
+};
 FakeElement.prototype.appendChild = function (c) { c._parent = this; this._children.push(c); return c; };
 FakeElement.prototype.remove = function () {
   if (!this._parent) return;
@@ -59,20 +73,38 @@ Object.defineProperty(FakeElement.prototype, "textContent", {
   set: function (v) { this._children = []; this._text = String(v); },
 });
 
-function matches(el, sel) {
-  return sel.split(",").some(function (part) {
-    part = part.trim();
-    var parts = part.match(/\.[\w-]+|\[[^\]]+\]|^[a-z]+/g) || [];
-    return parts.length > 0 && parts.every(function (p) {
-      if (p[0] === ".") return el.classList.contains(p.slice(1));
-      if (p[0] === "[") {
-        var m = /\[([\w-]+)="([^"]*)"\]/.exec(p);
-        var key = m[1].slice(5).replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
-        return el.dataset[key] === m[2];
-      }
-      return el.tagName === p.toUpperCase();
-    });
+// One compound selector (tag, classes, data attributes; no combinators).
+function matchesCompound(el, compound) {
+  var parts = compound.match(/\.[\w-]+|\[[^\]]+\]|^[a-z]+/g) || [];
+  return parts.length > 0 && parts.every(function (p) {
+    if (p[0] === ".") return el.classList.contains(p.slice(1));
+    if (p[0] === "[") {
+      var m = /\[([\w-]+)(?:="([^"]*)")?\]/.exec(p);
+      var key = m[1].slice(5).replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+      return m[2] === undefined ? el.dataset[key] !== undefined : el.dataset[key] === m[2];
+    }
+    return el.tagName === p.toUpperCase();
   });
+}
+
+// A selector list whose selectors may use the descendant combinator, as in
+// ".ask-user-other input".
+function matches(el, sel) {
+  return sel.split(",").some(function (group) {
+    var chain = group.trim().split(/\s+/);
+    if (!matchesCompound(el, chain[chain.length - 1])) return false;
+    var i = chain.length - 2;
+    for (var node = el._parent; i >= 0 && node; node = node._parent) {
+      if (matchesCompound(node, chain[i])) i--;
+    }
+    return i < 0;
+  });
+}
+
+/** What typing text into a field does: set its value, then fire "input". */
+function typeInto(el, text) {
+  el.value = text;
+  (el._listeners.input || []).slice().forEach(function (fn) { fn({}); });
 }
 FakeElement.prototype.querySelectorAll = function (sel) {
   var out = [];
@@ -113,17 +145,29 @@ function setupGlobals() {
 var MODULES = path.join(__dirname, "..", "lib", "public", "modules");
 function moduleUrl(name) { return pathToFileURL(path.join(MODULES, name)).href; }
 
-async function setupToolsEnv(t) {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  setupGlobals();
-  var tools = await import(moduleUrl("tools.js"));
-  var storeMod = await import(moduleUrl("store.js"));
-  storeMod.createStore({ connected: true });
+/**
+ * One browser's prompt UI: a private tools.js instance (module state such as
+ * its prompt controller is per instance) over its own messages container and
+ * main input.
+ *
+ * @param {string} [instanceKey] - distinct keys give independent clients.
+ * @param {function(string): boolean} [transmit] - receives each serialized
+ *   outbound frame; returning false models an unusable socket.
+ */
+async function createClient(instanceKey, transmit) {
+  var tools = await import(moduleUrl("tools.js") + (instanceKey ? "?client=" + encodeURIComponent(instanceKey) : ""));
   var messagesEl = new FakeElement("div");
+  var sent = [];
   var ctx = {
-    ws: { send: function () {} },
+    ws: {
+      send: function (body) {
+        sent.push(JSON.parse(body));
+        if (transmit) transmit(body);
+      },
+    },
     connected: true,
     messagesEl: messagesEl,
+    inputEl: new FakeElement("textarea"),
     finalizeAssistantBlock: function () {},
     addToMessages: function (el) { messagesEl.appendChild(el); },
     scrollToBottom: function () {},
@@ -131,8 +175,18 @@ async function setupToolsEnv(t) {
   };
   tools.initTools(ctx);
   tools.resetToolState();
-  tools.clearSettledPermissions();
-  return { tools: tools, messagesEl: messagesEl };
+  tools.clearPromptStates();
+  return { tools: tools, ctx: ctx, messagesEl: messagesEl, sent: sent };
+}
+
+// Timers are mocked so unconfirmed-card ack timeouts never hold the test
+// process open; node:test restores them per test.
+async function setupToolsEnv(t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  setupGlobals();
+  var storeMod = await import(moduleUrl("store.js"));
+  storeMod.createStore({ connected: true });
+  return createClient();
 }
 
 function cardFor(env, id) { return env.messagesEl.querySelector('[data-request-id="' + id + '"]'); }
@@ -141,4 +195,27 @@ function enabledButtons(card) {
   return card.querySelectorAll("button").filter(function (b) { return !b.disabled; });
 }
 
-module.exports = { setupToolsEnv: setupToolsEnv, cardFor: cardFor, enabledButtons: enabledButtons };
+// The outcome label a settled card shows: the label element in its actions
+// row, or the status element a card without an actions row adds.
+function decisionLabel(card) {
+  var label = card.querySelector(".permission-decision-label");
+  return label ? label.textContent : "";
+}
+
+/** Controls of a card an operator could still use. */
+function liveControls(card) {
+  return card.querySelectorAll("button, input, select, textarea").filter(function (el) { return !el.disabled; });
+}
+
+module.exports = {
+  FakeElement: FakeElement,
+  setupGlobals: setupGlobals,
+  moduleUrl: moduleUrl,
+  createClient: createClient,
+  setupToolsEnv: setupToolsEnv,
+  cardFor: cardFor,
+  enabledButtons: enabledButtons,
+  liveControls: liveControls,
+  decisionLabel: decisionLabel,
+  typeInto: typeInto,
+};
