@@ -18,9 +18,10 @@
 // reader for its card. A kind with no entry here fails the coverage test,
 // so a new kind cannot ship without proving its own round trip. The
 // generators vary the request as well as the answer: question sets with
-// shared labels and shared question text, and requested schemas of every
-// field type, required or optional, with and without defaults, and URL
-// requests with usable and unusable URLs.
+// shared labels and shared question text, requested schemas of every field
+// type and constraint of the MCP elicitation subset, required or optional,
+// with and without defaults, schemas outside the subset (which can only be
+// declined), and URL requests with usable and unusable URLs.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -61,17 +62,35 @@ var LABEL_POOL = ["staging", "prod", "staging, eu", "qa", "eu", "a, b", "b", "Ot
 var OPENABLE_URLS = ["https://example.test/auth", "http://localhost:3000/callback"];
 var URL_POOL = OPENABLE_URLS.concat(["", null, undefined, "javascript:alert(1)", "ftp://files.test/x", "not a url"]);
 
-// Requested-schema properties of every field type, each sometimes with a
-// default that fits it and sometimes with one that does not.
+// Requested-schema properties of every field type and every constraint of
+// the MCP elicitation subset, each sometimes with a default that fits it and
+// sometimes with one that does not.
 var FIELD_SHAPES = [
   { prop: { type: "string" }, defaults: ["preset", 5] },
   { prop: { type: "string", maxLength: 8 }, defaults: ["short", "far too long a default"] },
-  { prop: {}, defaults: ["untyped"] },
+  { prop: { type: "string", minLength: 2, title: "Code", description: "two or more" }, defaults: ["ok", "x"] },
+  { prop: { type: "string", format: "email" }, defaults: ["ops@example.test", "not an address"] },
+  { prop: { type: "string", format: "uri" }, defaults: ["https://example.test/x", "relative/x"] },
+  { prop: { type: "string", format: "date" }, defaults: ["2026-02-28", "2026-02-30"] },
+  { prop: { type: "string", format: "date-time" }, defaults: ["2026-10-06T12:30:00Z", "2026-10-06 12:30"] },
   { prop: { type: "integer" }, defaults: [7, 1.5, "7"] },
+  { prop: { type: "integer", minimum: 0, maximum: 10 }, defaults: [3, 11] },
   { prop: { type: "number" }, defaults: [2.25, "2.25"] },
+  { prop: { type: "number", minimum: -2.5, maximum: 2.5 }, defaults: [0.5, 3] },
   { prop: { type: "boolean" }, defaults: [true, false, "yes"] },
   { prop: { type: "string", enum: ["eu", "us", "apac"] }, defaults: ["us", "mars"] },
-  { prop: { type: "integer", enum: [1, 2, 3] }, defaults: [2, "2"] },
+  { prop: { type: "string", enum: ["s", "m", "l"], enumNames: ["Small", "Medium", "Large"] }, defaults: ["m", "xl"] },
+];
+
+// Properties outside the subset: a schema with any of them is refused whole.
+var UNSUPPORTED_SHAPES = [
+  {},
+  { type: "integer", enum: [1, 2, 3] },
+  { type: "string", pattern: "^[a-z]+$" },
+  { type: "string", format: "hostname" },
+  { type: "array", items: { type: "string", enum: ["a", "b"] } },
+  { type: "object", properties: { inner: { type: "string" } } },
+  { type: "string", oneOf: [{ const: "a", title: "A" }] },
 ];
 
 function randomSchema(p) {
@@ -92,22 +111,67 @@ function randomSchema(p) {
   return schema;
 }
 
+// A schema that is in the subset but for one property somewhere in it.
+function unsupportedSchema(p) {
+  var schema = randomSchema(p);
+  var names = Object.keys(schema.properties);
+  schema.properties[p.one(names)] = Object.assign({}, p.one(UNSUPPORTED_SHAPES));
+  return schema;
+}
+
+// The test's own reading of the subset, independent of the codec under
+// test: whether every property of schema is one this test generates as
+// supported.
+function inSubset(schema) {
+  return Object.keys(schema.properties).every(function (name) {
+    return FIELD_SHAPES.some(function (shape) {
+      var prop = Object.assign({}, schema.properties[name]);
+      delete prop.default;
+      return JSON.stringify(prop) === JSON.stringify(shape.prop);
+    });
+  });
+}
+
+var FORMAT_CHECKS = {
+  email: function (v) { return /^[^\s@]+@[^\s@]+$/.test(v); },
+  uri: function (v) { return /^[a-z][a-z0-9+.-]*:\S+$/i.test(v); },
+  date: function (v) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+    var d = new Date(v + "T00:00:00Z");
+    return !isNaN(d) && d.toISOString().slice(0, 10) === v;
+  },
+  "date-time": function (v) { return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(v) && !isNaN(Date.parse(v)); },
+};
+
 // The test's own reading of the schema, independent of the codec under
 // test: whether v is an answer to prop.
 function fits(prop, v) {
   if (v === undefined || v === null || v === "") return false;
   if (Array.isArray(prop.enum)) return prop.enum.indexOf(v) !== -1;
   if (prop.type === "boolean") return typeof v === "boolean";
-  if (prop.type === "integer") return Number.isInteger(v);
-  if (prop.type === "number") return typeof v === "number" && Number.isFinite(v);
-  return typeof v === "string" && (prop.maxLength === undefined || v.length <= prop.maxLength);
+  if (prop.type === "integer" || prop.type === "number") {
+    var ok = prop.type === "integer" ? Number.isInteger(v) : typeof v === "number" && Number.isFinite(v);
+    return ok && !(v < prop.minimum) && !(v > prop.maximum);
+  }
+  if (typeof v !== "string") return false;
+  if (prop.maxLength !== undefined && v.length > prop.maxLength) return false;
+  if (prop.minLength !== undefined && v.length < prop.minLength) return false;
+  return !prop.format || FORMAT_CHECKS[prop.format](v);
 }
 
 function validValue(p, prop) {
   if (Array.isArray(prop.enum)) return p.one(prop.enum);
   if (prop.type === "boolean") return p.chance(0.5);
-  if (prop.type === "integer") return p.int(-50, 50);
-  if (prop.type === "number") return p.int(-500, 500) / 4;
+  if (prop.type === "integer") return p.int(prop.minimum !== undefined ? prop.minimum : -50, prop.maximum !== undefined ? prop.maximum : 50);
+  if (prop.type === "number") {
+    return p.int(prop.minimum !== undefined ? prop.minimum * 4 : -500, prop.maximum !== undefined ? prop.maximum * 4 : 500) / 4;
+  }
+  switch (prop.format) {
+    case "email": return "u" + p.int(0, 999) + "@example.test";
+    case "uri": return "https://example.test/" + p.int(0, 999);
+    case "date": return "2026-0" + p.int(1, 9) + "-" + (10 + p.int(0, 18));
+    case "date-time": return "2026-10-0" + p.int(1, 9) + "T1" + p.int(0, 9) + ":" + (10 + p.int(0, 49)) + ":00Z";
+  }
   return "v" + p.int(0, 999);
 }
 
@@ -291,7 +355,8 @@ var SPECS = {
           },
         };
       }
-      return { req: { serverName: "srv", message: "?", mode: p.one(["form", undefined]), requestedSchema: randomSchema(p) } };
+      var schema = p.chance(0.15) ? unsupportedSchema(p) : randomSchema(p);
+      return { req: { serverName: "srv", message: "?", mode: p.one(["form", undefined]), requestedSchema: schema } };
     },
     // A URL request is approved only when its URL is a web page. A form is
     // worked field by field - filled, cleared, or left as drawn - with
@@ -312,6 +377,16 @@ var SPECS = {
           card.querySelector(".permission-allow").click();
           assert.equal(sent.length, before, "a URL that is not a web page cannot be approved");
         }
+        click(card, ".permission-deny");
+        return { reject: true, label: "Denied" };
+      }
+      // A schema outside the subset draws no form, says why, and can only
+      // be declined.
+      if (!inSubset(req.requestedSchema)) {
+        assert.equal(card.querySelectorAll("[data-prop-name]").length, 0, "a form outside the subset is not drawn");
+        assert.ok(card.querySelector(".elicitation-unsupported"), "the card says why it cannot be answered");
+        card.querySelector(".permission-allow").click();
+        assert.equal(sent.length, before, "a form outside the subset cannot be submitted");
         click(card, ".permission-deny");
         return { reject: true, label: "Denied" };
       }
@@ -443,9 +518,10 @@ test("every operator-facing prompt kind has a round-trip spec, on the server and
 });
 
 // An answer that did not come from the card (an older page, a hand-built
-// frame) is held to the same schema: a value of the wrong type never
-// reaches the MCP server, and an acceptance missing a required field, or
-// approving a URL that is not a web page, settles nothing.
+// frame) is held to the same schema: a value of the wrong type or outside
+// its constraints never reaches the MCP server, and an acceptance missing a
+// required field, of a schema outside the supported subset, or approving a
+// URL that is not a web page, settles nothing.
 test("elicitation answers that bypass the card are held to the requested schema", async function () {
   for (var seed = 1; seed <= RUNS_PER_KIND * 2; seed++) {
     var p = picker(mulberry32(1000 + seed));
@@ -471,6 +547,8 @@ test("elicitation answers that bypass the card are held to the requested schema"
         else if (required.indexOf(name) !== -1) incomplete = true;
       });
       if (p.chance(0.3)) submitted.extra = "x";
+      // A form outside the subset is never accepted, whatever it carries.
+      if (!inSubset(req.requestedSchema)) incomplete = true;
     }
     var prompt = server.registry.open(server.session, "elicitation", req);
     var outcome = server.registry.respond(prompt.requestId, { action: "accept", content: submitted });

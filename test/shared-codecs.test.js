@@ -203,6 +203,112 @@ test("elicitation codec: submitted content is held to the schema, and a missing 
   });
 });
 
+// [schema, whether a form is drawn for it]: the MCP elicitation subset.
+var SUBSET_TABLE = [
+  [null, true],
+  [undefined, true],
+  [{ type: "object" }, true],
+  [{ type: "object", properties: {} }, true],
+  [{ $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", title: "T", description: "D", additionalProperties: false, properties: { a: { type: "string" } }, required: ["a"] }, true],
+  [{ type: "object", properties: { a: { type: "string", title: "A", description: "d", default: "x", minLength: 1, maxLength: 5 } } }, true],
+  [{ type: "object", properties: { a: { type: "string", format: "email" }, b: { type: "string", format: "uri" }, c: { type: "string", format: "date" }, d: { type: "string", format: "date-time" } } }, true],
+  [{ type: "object", properties: { a: { type: "number", minimum: -1.5, maximum: 2 }, b: { type: "integer", minimum: 0 }, c: { type: "boolean", default: true } } }, true],
+  [{ type: "object", properties: { a: { type: "string", enum: ["x", "y"], enumNames: ["Ex", "Why"] } } }, true],
+  [{ type: "array" }, false],
+  [{ properties: { a: { type: "string" } } }, false],
+  [[], false],
+  [{ type: "object", properties: { a: { type: "string" } }, minProperties: 1 }, false],
+  [{ type: "object", additionalProperties: { type: "string" } }, false],
+  [{ type: "object", required: "a" }, false],
+  [{ type: "object", properties: [] }, false],
+  [{ type: "object", properties: { a: {} } }, false],
+  [{ type: "object", properties: { a: "string" } }, false],
+  [{ type: "object", properties: { a: { type: "object", properties: {} } } }, false],
+  [{ type: "object", properties: { a: { type: "array", items: { type: "string" } } } }, false],
+  [{ type: "object", properties: { a: { type: ["string", "null"] } } }, false],
+  [{ type: "object", properties: { a: { type: "constructor" } } }, false],
+  [{ type: "object", properties: { a: { type: "enum", enum: ["x"] } } }, false],
+  [{ type: "object", properties: { a: { type: "string", pattern: "^x" } } }, false],
+  [{ type: "object", properties: { a: { type: "string", format: "hostname" } } }, false],
+  [{ type: "object", properties: { a: { type: "string", format: "toString" } } }, false],
+  [{ type: "object", properties: { a: { type: "string", minLength: -1 } } }, false],
+  [{ type: "object", properties: { a: { type: "string", minLength: 3, maxLength: 2 } } }, false],
+  [{ type: "object", properties: { a: { type: "string", oneOf: [{ const: "x", title: "X" }] } } }, false],
+  [{ type: "object", properties: { a: { type: "integer", enum: [1, 2] } } }, false],
+  [{ enum: ["x"] }, false],
+  [{ type: "object", properties: { a: { enum: ["x"] } } }, false],
+  [{ type: "object", properties: { a: { type: "string", enum: [] } } }, false],
+  [{ type: "object", properties: { a: { type: "string", enum: ["x", "y"], enumNames: ["Ex"] } } }, false],
+  [{ type: "object", properties: { a: { type: "string", enum: ["x"], maxLength: 3 } } }, false],
+  [{ type: "object", properties: { a: { type: "number", minimum: "1" } } }, false],
+  [{ type: "object", properties: { a: { type: "number", minimum: 2, maximum: 1 } } }, false],
+  [{ type: "object", properties: { a: { type: "integer", exclusiveMinimum: 0 } } }, false],
+  [{ type: "object", properties: { a: { type: "boolean", enumNames: ["x"] } } }, false],
+];
+
+test("elicitation codec: a form is drawn only for a schema inside the MCP elicitation subset, and the reason names what is outside it", async function () {
+  (await bothCopies("elicitation-codec.js")).forEach(function (c) {
+    SUBSET_TABLE.forEach(function (row) {
+      var problem = c.codec.schemaProblem(row[0]);
+      if (row[1]) assert.equal(problem, null, c.where + ": " + JSON.stringify(row[0]));
+      else assert.ok(typeof problem === "string" && problem.length > 0, c.where + ": " + JSON.stringify(row[0]) + " is refused with a reason");
+    });
+    assert.match(c.codec.schemaProblem({ type: "object", properties: { zone: { type: "string", pattern: "x" } } }), /zone: "pattern" is not supported/, c.where);
+  });
+});
+
+// [property, control text, what it reads as]: every constraint of the subset.
+var CONSTRAINT_TABLE = [
+  [{ type: "string", minLength: 2 }, "a", { error: "is too short" }],
+  [{ type: "string", minLength: 2 }, "ab", { value: "ab" }],
+  [{ type: "string", maxLength: 2 }, "\u{1F600}\u{1F600}", { value: "\u{1F600}\u{1F600}" }],
+  [{ type: "string", maxLength: 1 }, "\u{1F600}\u{1F600}", { error: "is too long" }],
+  [{ type: "string", format: "email" }, "a@b.test", { value: "a@b.test" }],
+  [{ type: "string", format: "email" }, "a@", { error: "is not an email address" }],
+  [{ type: "string", format: "email" }, "a b@c", { error: "is not an email address" }],
+  [{ type: "string", format: "uri" }, "https://example.test/x", { value: "https://example.test/x" }],
+  [{ type: "string", format: "uri" }, "urn:isbn:0451450523", { value: "urn:isbn:0451450523" }],
+  [{ type: "string", format: "uri" }, "/relative/path", { error: "is not an absolute URI" }],
+  [{ type: "string", format: "date" }, "2024-02-29", { value: "2024-02-29" }],
+  [{ type: "string", format: "date" }, "2023-02-29", { error: "is not a date (YYYY-MM-DD)" }],
+  [{ type: "string", format: "date" }, "2024-1-01", { error: "is not a date (YYYY-MM-DD)" }],
+  [{ type: "string", format: "date-time" }, "2024-02-29T23:59:60Z", { value: "2024-02-29T23:59:60Z" }],
+  [{ type: "string", format: "date-time" }, "2024-03-01T08:00:00.5+05:30", { value: "2024-03-01T08:00:00.5+05:30" }],
+  [{ type: "string", format: "date-time" }, "2024-03-01T24:00:00Z", { error: "is not a date and time (YYYY-MM-DDThh:mm:ssZ)" }],
+  [{ type: "string", format: "date-time" }, "2024-03-01 08:00:00Z", { error: "is not a date and time (YYYY-MM-DDThh:mm:ssZ)" }],
+  [{ type: "integer", minimum: 1, maximum: 3 }, "0", { error: "must be at least 1" }],
+  [{ type: "integer", minimum: 1, maximum: 3 }, "3", { value: 3 }],
+  [{ type: "integer", minimum: 1, maximum: 3 }, "4", { error: "must be at most 3" }],
+  [{ type: "number", minimum: -0.5 }, "-0.5", { value: -0.5 }],
+  [{ type: "number", maximum: 2.5 }, "2.75", { error: "must be at most 2.5" }],
+];
+
+test("elicitation codec: every constraint of the subset is enforced on a control's text and on a submitted value", async function () {
+  (await bothCopies("elicitation-codec.js")).forEach(function (c) {
+    CONSTRAINT_TABLE.forEach(function (row) {
+      var f = field(c.codec, row[0]);
+      var where = c.where + ": " + JSON.stringify(row[0]) + " reading " + JSON.stringify(row[1]);
+      assert.deepEqual(c.codec.readControl(f, row[1]), row[2], where);
+      var submitted = row[0].type === "string" ? row[1] : Number(row[1]);
+      assert.equal(c.codec.conforms(f, submitted), !row[2].error, where + " (as a submitted value)");
+    });
+    var schema = { type: "object", properties: { n: { type: "integer", maximum: 3 }, d: { type: "string", format: "date" } }, required: ["d"] };
+    assert.deepEqual(c.codec.contentForSchema(schema, { n: 9, d: "2024-13-01" }), { content: {}, errors: ["d is required"] },
+      c.where + ": a value outside its constraints is dropped, and a required one leaves the answer incomplete");
+    assert.equal(c.codec.initialControlText(field(c.codec, { type: "string", minLength: 3, default: "ab" })), "", c.where + ": a default that misses a constraint is not shown");
+  });
+});
+
+test("elicitation codec: an enum choice reads by its enumNames entry", async function () {
+  (await bothCopies("elicitation-codec.js")).forEach(function (c) {
+    var f = field(c.codec, { type: "string", enum: ["eu", "us"], enumNames: ["Europe", "United States"] });
+    assert.equal(c.codec.choiceLabel(f, "eu"), "Europe", c.where);
+    assert.equal(c.codec.choiceLabel(f, "us"), "United States", c.where);
+    assert.deepEqual(c.codec.readControl(f, "us"), { value: "us" }, c.where + ": the value is still the enum value");
+    assert.equal(c.codec.choiceLabel(field(c.codec, { type: "string", enum: ["eu"] }), "eu"), "eu", c.where);
+  });
+});
+
 test("elicitation codec: a URL request is a URL request whatever its URL, and only an http(s) URL can be opened", async function () {
   (await bothCopies("elicitation-codec.js")).forEach(function (c) {
     assert.equal(c.codec.requestMode({ mode: "url", url: "" }), "url", c.where);
