@@ -123,6 +123,8 @@ function unsupportedSchema(p) {
 // test: whether every property of schema is one this test generates as
 // supported.
 function inSubset(schema) {
+  var required = Array.isArray(schema.required) ? schema.required : [];
+  if (!required.every(function (name) { return Object.prototype.hasOwnProperty.call(schema.properties, name); })) return false;
   return Object.keys(schema.properties).every(function (name) {
     return FIELD_SHAPES.some(function (shape) {
       var prop = Object.assign({}, schema.properties[name]);

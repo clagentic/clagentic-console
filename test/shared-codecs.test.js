@@ -199,8 +199,15 @@ test("elicitation codec: a control starts from a default only when the default f
 var SCHEMA = {
   type: "object",
   properties: { name: { type: "string" }, count: { type: "integer" }, on: { type: "boolean" }, region: { enum: ["eu", "us"] } },
-  required: ["name", "ghost"],
+  required: ["name"],
 };
+
+test("elicitation codec: a schema requiring a field it does not define is refused", async function () {
+  var k = await shared("elicitation");
+  var props = { name: { type: "string" } };
+  assert.equal(k.schemaProblem({ type: "object", properties: props, required: ["name"] }), null);
+  assert.match(k.schemaProblem({ type: "object", properties: props, required: ["name", "ghost"] }), /required names ghost, which is not a property/);
+});
 
 test("elicitation codec: the form's content is what was given, typed; empty is absent; a required field must be given", async function () {
   var k = await shared("elicitation");
@@ -269,6 +276,12 @@ var SUBSET_TABLE = [
   [{ type: "object", properties: { a: { type: "number", minimum: 2, maximum: 1 } } }, false],
   [{ type: "object", properties: { a: { type: "integer", exclusiveMinimum: 0 } } }, false],
   [{ type: "object", properties: { a: { type: "boolean", enumNames: ["x"] } } }, false],
+  [{ type: "object", required: ["x"] }, false],
+  [{ type: "object", properties: { a: { type: "string" } }, required: ["x"] }, false],
+  [{ type: "object", properties: { a: { type: "string" } }, required: ["toString"] }, false],
+  [{ type: "object", properties: { a: { type: "string", enum: ["x", ""] } } }, false],
+  [{ type: "object", properties: { a: { type: "string", maxLength: 0 } }, required: ["a"] }, false],
+  [{ type: "object", properties: { a: { type: "string", maxLength: 0 } } }, true],
 ];
 
 test("elicitation codec: a form is drawn only for a schema inside the MCP elicitation subset, and the reason names what is outside it", async function () {
@@ -290,6 +303,12 @@ var CONSTRAINT_TABLE = [
   [{ type: "string", format: "email" }, "a@b.test", { value: "a@b.test" }],
   [{ type: "string", format: "email" }, "a@", { error: "is not an email address" }],
   [{ type: "string", format: "email" }, "a b@c", { error: "is not an email address" }],
+  [{ type: "string", format: "email" }, "a@-b.test", { error: "is not an email address" }],
+  [{ type: "string", format: "email" }, "a@b..test", { error: "is not an email address" }],
+  [{ type: "string", format: "email" }, "a@b.test.", { error: "is not an email address" }],
+  [{ type: "string", format: "email" }, "é@b.test", { error: "is not an email address" }],
+  [{ type: "string", format: "email" }, "a@b@c.test", { error: "is not an email address" }],
+  [{ type: "string", format: "email" }, "a.b+c@x-y.example", { value: "a.b+c@x-y.example" }],
   [{ type: "string", format: "uri" }, "https://example.test/x", { value: "https://example.test/x" }],
   [{ type: "string", format: "uri" }, "urn:isbn:0451450523", { value: "urn:isbn:0451450523" }],
   [{ type: "string", format: "uri" }, "/relative/path", { error: "is not an absolute URI" }],
