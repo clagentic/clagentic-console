@@ -34,7 +34,7 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
-var { execFileSync } = require("child_process");
+var { execFileSync, spawnSync } = require("child_process");
 
 var { resolveProcessBuildStatus } = require("../scripts/verify-installed-build");
 
@@ -123,6 +123,61 @@ test("scripts/verify-installed-build.js: main()'s STALE_PROCESS branch is non-fa
   assert.doesNotMatch(branchBody, /process\.exit\(1\)/,
     "STALE_PROCESS must not exit non-zero -- it is a deliberate non-fatal outcome, not a failure");
   assert.match(branchBody, /return;/, "STALE_PROCESS must return (implicit exit 0), mirroring ARTIFACT_VERIFIED_NO_PROCESS");
+});
+
+// ---------------------------------------------------------------------------
+// 3b. Behavioral counterpart to 3: actually execute the script's CLI entry
+//     (main()) against a stale daemon and assert on the real exit code and
+//     stdout/stderr, so the outcome cannot regress while source-text
+//     assertions still pass. `npm` and `clagentic-console` are replaced by
+//     shims on PATH: npm reports a global root whose installed
+//     build-sha.json matches this tree's HEAD, and the CLI shim behaves like
+//     a daemon predating the get_build_status handler.
+// ---------------------------------------------------------------------------
+
+function runVerifyCli() {
+  var headSha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: path.join(__dirname, ".."),
+  }).toString().trim();
+
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), "lr-71f0c3-cli-"));
+  var globalRoot = path.join(root, "global");
+  var installedLib = path.join(globalRoot, "@clagentic", "console", "lib");
+  fs.mkdirSync(installedLib, { recursive: true });
+  fs.writeFileSync(path.join(installedLib, "build-sha.json"), JSON.stringify({ sha: headSha }));
+
+  var binDir = path.join(root, "bin");
+  fs.mkdirSync(binDir);
+  fs.writeFileSync(
+    path.join(binDir, "npm"),
+    "#!/usr/bin/env node\nprocess.stdout.write(" + JSON.stringify(globalRoot) + " + '\\n');\n",
+    { mode: 0o755 }
+  );
+  fs.writeFileSync(
+    path.join(binDir, "clagentic-console"),
+    "#!/usr/bin/env node\n" +
+      "process.stderr.write('Failed: unknown command: get_build_status\\n');\n" +
+      "process.exit(1);\n",
+    { mode: 0o755 }
+  );
+
+  var result = spawnSync(process.execPath, [path.join(__dirname, "..", "scripts", "verify-installed-build.js")], {
+    env: Object.assign({}, process.env, { PATH: binDir + path.delimiter + process.env.PATH }),
+    encoding: "utf8",
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+  return result;
+}
+
+test("lr-71f0c3: executing the verify-installed-build CLI against a stale daemon exits 0 and prints a sanitized STALE_PROCESS / UNKNOWN message", function () {
+  var result = runVerifyCli();
+
+  assert.equal(result.status, 0, "STALE_PROCESS is non-fatal; stderr was: " + result.stderr);
+  assert.match(result.stdout, /STALE_PROCESS/);
+  assert.match(result.stdout, /UNKNOWN/, "the process build status must be stated as UNKNOWN");
+  assert.match(result.stdout, /restart/i, "the remedy must be stated");
+  assert.doesNotMatch(result.stdout + result.stderr, /unknown command/i,
+    "the raw transport string must not reach the operator");
 });
 
 // ---------------------------------------------------------------------------
