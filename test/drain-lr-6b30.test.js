@@ -7,7 +7,7 @@
 //   4. Signal trigger via enterDrain (SIGUSR1/SIGUSR2 paths).
 //   5. Config-driven drain timeout.
 //   6. Structured log events on enter and exit.
-//   7. onMemoryHighCrossing triggers drain.
+//   7. onMemoryHighCrossing enters pressure (never drain, never exit).
 //   8. Idempotency: multiple enter calls do not double-exit.
 
 'use strict';
@@ -66,10 +66,12 @@ test('isDraining: true after enterDrain', function () {
   assert.strictEqual(h.drain.isDraining(), true);
 });
 
-test('isDraining: true when entered via onMemoryHighCrossing', function () {
+test('onMemoryHighCrossing: pressure, not drain', function () {
   var h = makeDrain({ activeCount: 0 });
   h.drain.onMemoryHighCrossing({ source: 'rss_vs_threshold' });
-  assert.strictEqual(h.drain.isDraining(), true);
+  assert.strictEqual(h.drain.isDraining(), false);
+  assert.strictEqual(h.drain.isUnderPressure(), true);
+  assert.strictEqual(h.drain.isRefusingNewWork(), true);
 });
 
 // ---------------------------------------------------------------------------
@@ -215,15 +217,14 @@ test('drain_exit log emitted when timeout forces exit', function (t, done) {
 // 7. onMemoryHighCrossing triggers drain
 // ---------------------------------------------------------------------------
 
-test('onMemoryHighCrossing: enters drain with memory_high_watermark reason', function () {
+test('onMemoryHighCrossing: logs pressure_enter with the watermark detail', function () {
   var h = makeDrain({ activeCount: 0 });
   h.drain.onMemoryHighCrossing({ source: 'rss_vs_threshold', currentBytes: 1000000 });
-  assert.strictEqual(h.drain.isDraining(), true);
-  var enterLog = h.logs.find(function (l) { return l.event === 'drain_enter'; });
-  assert.ok(enterLog, 'drain_enter log must be emitted');
-  assert.strictEqual(enterLog.reason, 'memory_high_watermark');
+  var enterLog = h.logs.find(function (l) { return l.event === 'pressure_enter'; });
+  assert.ok(enterLog, 'pressure_enter log must be emitted');
   assert.strictEqual(enterLog.source, 'rss_vs_threshold');
   assert.strictEqual(enterLog.currentBytes, 1000000);
+  assert.strictEqual(h.logs.some(function (l) { return l.event === 'drain_enter'; }), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -243,7 +244,7 @@ test('enterDrain is idempotent: second call is a no-op', function (t, done) {
   }, 100);
 });
 
-test('onMemoryHighCrossing followed by signal does not double-exit', function (t, done) {
+test('onMemoryHighCrossing followed by signal exits exactly once', function (t, done) {
   var h = makeDrain({ activeCount: 0, drainTimeoutMs: 5000 });
   h.drain.onMemoryHighCrossing({});
   h.drain.enterDrain('signal_usr1');
@@ -252,6 +253,65 @@ test('onMemoryHighCrossing followed by signal does not double-exit', function (t
     assert.strictEqual(h.shutdownCalled.count, 1, 'gracefulShutdown must be called exactly once');
     done();
   }, 100);
+});
+
+// ---------------------------------------------------------------------------
+// 11. Soft-limit pressure never exits the daemon
+// ---------------------------------------------------------------------------
+
+test('pressure: never calls gracefulShutdown, even with no active sessions', function (t, done) {
+  var h = makeDrain({ activeCount: 0 });
+  h.drain.onMemoryHighCrossing({});
+  setTimeout(function () {
+    assert.strictEqual(h.shutdownCalled.count, 0);
+    done();
+  }, 100);
+});
+
+test('pressure: never force-exits after drainTimeoutMs with active sessions', function (t, done) {
+  var h = makeDrain({ activeCount: 3, drainTimeoutMs: 60 });
+  h.drain.onMemoryHighCrossing({});
+  setTimeout(function () {
+    assert.strictEqual(h.shutdownCalled.count, 0, 'timeout must not exit on pressure');
+    assert.strictEqual(h.drain.isRefusingNewWork(), true);
+    done();
+  }, 250);
+});
+
+test('pressure: falling back under the limit resumes accepting new work', function () {
+  var h = makeDrain({ activeCount: 2 });
+  assert.strictEqual(h.drain.isRefusingNewWork(), false);
+  h.drain.onMemoryHighCrossing({});
+  assert.strictEqual(h.drain.isRefusingNewWork(), true);
+  h.drain.onMemoryHighRecovery({});
+  assert.strictEqual(h.drain.isUnderPressure(), false);
+  assert.strictEqual(h.drain.isRefusingNewWork(), false);
+});
+
+test('pressure: transitions are idempotent and reported once each', function () {
+  var changes = [];
+  var drain = createDrain({
+    gracefulShutdown: function () {},
+    getActiveCount: function () { return 1; },
+    log: function () {},
+    onPressureChange: function (state) { changes.push(state); },
+  });
+  drain.onMemoryHighCrossing({});
+  drain.onMemoryHighCrossing({});
+  drain.onMemoryHighRecovery({});
+  drain.onMemoryHighRecovery({});
+  assert.deepStrictEqual(changes, [true, false]);
+});
+
+test('pressure: a throwing onPressureChange does not break the state change', function () {
+  var drain = createDrain({
+    gracefulShutdown: function () {},
+    getActiveCount: function () { return 1; },
+    log: function () {},
+    onPressureChange: function () { throw new Error('boom'); },
+  });
+  drain.onMemoryHighCrossing({});
+  assert.strictEqual(drain.isUnderPressure(), true);
 });
 
 // ---------------------------------------------------------------------------
