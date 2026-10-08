@@ -33,10 +33,172 @@ test("new-work gate: refusal text follows the brand rule", function () {
   assert.doesNotMatch(REFUSAL_MESSAGE.replace(/Clagentic: Console/g, ""), /clagentic/i);
 });
 
-test("new-work gate: a throwing predicate fails open", function () {
+test("new-work gate: a throwing predicate fails closed and logs the error", function () {
   setNewWorkGate(function () { throw new Error("boom"); });
-  assert.strictEqual(getNewWorkRefusal(), null);
-  setNewWorkGate(null);
+  var logged = [];
+  var origError = console.error;
+  console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+  try {
+    assert.strictEqual(getNewWorkRefusal(), REFUSAL_MESSAGE);
+  } finally {
+    console.error = origError;
+    setNewWorkGate(null);
+  }
+  assert.strictEqual(logged.length, 1);
+  assert.match(logged[0], /new-work-gate/);
+  assert.match(logged[0], /boom/);
+});
+
+test("watcher: unreadable cgroup usage never falls back to daemon RSS", async function () {
+  var written = [];
+  var origWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = function (s) { written.push(String(s)); return true; };
+  var crossings = 0;
+  // Threshold of 1 byte: the daemon's own RSS is far above it, so an RSS
+  // fallback would register a crossing immediately.
+  var watcher = startMemoryHighWatcher({ memoryHigh: "1" }, {
+    pollIntervalMs: 10,
+    readHighCounter: function () { return null; },
+    readCurrentBytes: function () { return null; },
+    onCrossing: function () { crossings++; },
+  });
+  try {
+    await sleep(80);
+  } finally {
+    watcher.stop();
+    process.stderr.write = origWrite;
+  }
+  assert.strictEqual(crossings, 0, "RSS must not be measured as cgroup usage");
+  var warnings = written.filter(function (l) { return /detection unavailable/.test(l); });
+  assert.strictEqual(warnings.length, 1, "unavailability is logged exactly once");
+});
+
+test("watcher: recovery does not fire on a low daemon RSS when cgroup usage is unreadable", async function () {
+  var current = 1200;
+  var unreadable = false;
+  var counter = 1;
+  var recoveries = 0;
+  var origWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = function () { return true; };
+  var watcher = startMemoryHighWatcher({ memoryHigh: "1000000000000" }, {
+    pollIntervalMs: 10,
+    readHighCounter: function () { return counter; },
+    readCurrentBytes: function () { return unreadable ? null : current; },
+    onRecovery: function () { recoveries++; },
+  });
+  try {
+    await sleep(30);
+    counter++; // kernel reports a crossing
+    unreadable = true;
+    // The next two polls keep seeing the counter advance, so the quiet-poll
+    // path cannot complete; daemon RSS (far below 1e12) must not recover it.
+    var bump = setInterval(function () { counter++; }, 5);
+    await sleep(80);
+    clearInterval(bump);
+    assert.strictEqual(recoveries, 0, "RSS reading must not trigger recovery");
+    await sleep(80);
+    assert.strictEqual(recoveries, 1, "recovery still arrives via quiet polls");
+  } finally {
+    watcher.stop();
+    process.stderr.write = origWrite;
+  }
+});
+
+test("startQuery: a new query is refused under pressure and an in-flight session is untouched", async function () {
+  var modPath = require.resolve("../lib/sdk-bridge");
+  delete require.cache[modPath];
+  var { createSDKBridge } = require("../lib/sdk-bridge");
+  var messages = [];
+  var created = 0;
+  var sm = {
+    sessions: new Map(),
+    currentModel: null,
+    currentPermissionMode: null,
+    currentEffort: null,
+    currentBetas: [],
+    modelsByVendor: {},
+    availableVendors: [],
+    installedVendors: [],
+    defaultVendor: "claude",
+    saveSessionFile: function () {},
+    broadcastSessionList: function () {},
+    getActiveSession: function () { return null; },
+    setSlashCommandsForVendor: function () {},
+    sendAndRecord: function (s, obj) { messages.push(obj); },
+    sendToSession: function (s, obj) { messages.push(obj); },
+  };
+  var adapter = {
+    vendor: "claude",
+    createQuery: async function () {
+      created++;
+      return {
+        _adapterState: null,
+        [Symbol.asyncIterator]: function () {
+          return { next: function () { return Promise.resolve({ value: undefined, done: true }); } };
+        },
+        pushMessage: function () {},
+        close: function () {},
+        endInput: function () {},
+        abort: function () {},
+      };
+    },
+    init: function () { return Promise.resolve({ models: [], skills: [] }); },
+    supportedModels: function () { return Promise.resolve([]); },
+    generateTitle: null,
+    renameSession: null,
+    forkSession: null,
+  };
+  var bridge = createSDKBridge({
+    cwd: "/tmp/test-project",
+    slug: "test-project",
+    sessionManager: sm,
+    send: function (msg) { messages.push(msg); },
+    adapter: adapter,
+    adapters: { claude: adapter },
+    onProcessingChanged: function () {},
+    getConfig: null,
+  });
+  var makeSession = function (id) {
+    return {
+      localId: id, queryInstance: null, messageQueue: null, abortController: null,
+      isProcessing: true, cliSessionId: null, history: [], blocks: {},
+      sentToolResults: {}, pendingPermissions: {}, pendingAskUser: {},
+      pendingElicitations: {}, activeTaskToolIds: {}, singleTurn: false,
+      lastActivityAt: Date.now(), _isCountedLive: false,
+      _adapterWorkerState: null, _workerExitPromise: null,
+    };
+  };
+
+  var drain = createDrain({
+    gracefulShutdown: function () {},
+    getActiveCount: function () { return 1; },
+    log: function () {},
+  });
+  setNewWorkGate(drain.isRefusingNewWork);
+  var origWarn = console.warn;
+  console.warn = function () {};
+  try {
+    drain.onMemoryHighCrossing({});
+    var refused = makeSession(9001);
+    sm.sessions.set(refused.localId, refused);
+    await bridge.startQuery(refused, "hello", null, null);
+    assert.strictEqual(created, 0, "no query process created under pressure");
+    assert.strictEqual(refused._isCountedLive, false, "refusal must not claim a slot");
+    assert.strictEqual(refused.isProcessing, false);
+    var errs = messages.filter(function (m) { return m.type === "error"; });
+    assert.strictEqual(errs.length, 1);
+    assert.strictEqual(errs[0].text, REFUSAL_MESSAGE);
+
+    drain.onMemoryHighRecovery({});
+    var accepted = makeSession(9002);
+    sm.sessions.set(accepted.localId, accepted);
+    await bridge.startQuery(accepted, "hello", null, null);
+    if (accepted.streamPromise) await accepted.streamPromise;
+    assert.strictEqual(created, 1, "query accepted after recovery");
+  } finally {
+    console.warn = origWarn;
+    setNewWorkGate(null);
+  }
 });
 
 test("watcher + drain + gate: crossing refuses, existing work and daemon survive, recovery resumes", async function () {
