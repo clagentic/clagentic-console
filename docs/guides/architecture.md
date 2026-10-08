@@ -364,7 +364,8 @@ The daemon polls for MemoryHigh crossings (every 5 s) using either the cgroup v2
 
 This signal feeds two independent consumers of `onCrossing` (`lib/daemon.js`), both wired to the same watermark crossing:
 
-- **Graceful drain (lr-6b30, `lib/drain.js`)** — refuses new connections and exits once in-flight sessions complete (or a timeout forces exit). The "make the daemon go away" response.
+- **Pressure (lr-6b30, `lib/drain.js`)** — refuses new sessions and new query processes (`lib/new-work-gate.js`, consulted by `new_session` in `lib/project-sessions.js` and `startQuery` in `lib/sdk-bridge.js`) and broadcasts a `memory-pressure` diagnostic. It **never exits the daemon**: the memory belongs to the sessions' own child processes, which a restart cannot free, only kill. Existing sessions keep running and clients stay connected. When the watcher's `onRecovery` sees usage back below the threshold (5% hysteresis), new work is accepted again. `MemoryMax` and the kernel remain the hard backstop.
+- **Graceful drain (`lib/drain.js`)** — operator-initiated only (SIGUSR1/SIGUSR2): rejects new WebSocket connections and exits once in-flight sessions complete (or `drainTimeoutMs` forces exit). Memory crossings do not enter this state.
 - **In-process shedding (lr-5e70, `lib/memory-shed.js`)** — an immediate attempt to reduce RSS *before* drain's slower shutdown path completes. Runs first, synchronously, inside the same `onCrossing` callback.
 
 ### In-process memory shedding (lr-5e70)
@@ -378,7 +379,7 @@ This signal feeds two independent consumers of `onCrossing` (`lib/daemon.js`), b
 5. **Emit a structured `memory_shed` log event** to stderr (`beforeBytes`, `afterBytes`, `sessionsTrimmed`, `sessionsEvicted`, `cachesDropped`).
 6. **Rate-limited to at most one pass per 60 s** — the watermark watcher's RSS-based strategy B can re-fire on hysteresis, and a shedding pass should not run back-to-back.
 
-Shedding and drain are independent: a shedding pass that fails, throws, or is rate-limited never blocks drain from entering, and drain entering never skips a shedding attempt.
+Shedding and pressure are independent: a shedding pass that fails, throws, or is rate-limited never blocks pressure from entering, and pressure entering never skips a shedding attempt.
 
 ### Post-hardening consolidation audit (lr-b6fa)
 
