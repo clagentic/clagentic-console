@@ -172,6 +172,14 @@ test("lr-553d27: set_mem_available_threshold rejects a garbage-suffixed numeric 
   return assertRejected("set_mem_available_threshold", "128xyz", "memAvailableMinMB", 256, /./);
 });
 
+test("lr-553d27: set_mem_available_threshold rejects a 400-digit string (parseInt Infinity would serialize as null)", function () {
+  return assertRejected("set_mem_available_threshold", "9".repeat(400), "memAvailableMinMB", 256, /./);
+});
+
+test("lr-553d27: set_tokens_per_mb_headroom rejects a 400-digit string", function () {
+  return assertRejected("set_tokens_per_mb_headroom", "9".repeat(400), "tokensPerMbHeadroom", 240, /10-500/);
+});
+
 test("lr-553d27: set_mem_available_threshold accepts an in-range value and persists it; 0 (disable) is also accepted", function () {
   return send({ cmd: "set_mem_available_threshold", value: 512 }).then(function (resp) {
     assert.equal(resp.ok, true);

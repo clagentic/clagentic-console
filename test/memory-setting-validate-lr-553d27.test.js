@@ -125,3 +125,15 @@ test("validateTokensPerMbHeadroom: still accepts a whitespace-padded clean numer
   assert.equal(result.ok, true, "surrounding whitespace around an otherwise-clean numeric string is not the malformed-input case this fix targets");
   assert.equal(result.value, 300);
 });
+
+test("validators: reject a 400-digit string (parseInt gives Infinity) instead of accepting it", function () {
+  var huge = "9".repeat(400);
+  assert.equal(validateMemAvailableThresholdMB(huge).ok, false, "Infinity must not be accepted as a threshold");
+  assert.equal(validateTokensPerMbHeadroom(huge).ok, false);
+});
+
+test("validators: reject an integer string beyond Number.MAX_SAFE_INTEGER (silent precision loss)", function () {
+  var unsafe = "9007199254740993";
+  assert.equal(validateMemAvailableThresholdMB(unsafe).ok, false);
+  assert.equal(validateMemAvailableThresholdMB(1e20).ok, false);
+});
