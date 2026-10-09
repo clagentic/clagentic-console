@@ -204,3 +204,37 @@ test("push path: contextNote recorded as agent-origin entry; pushMessage third a
   assert.deepStrictEqual(log.file, hist);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("top-level processed-*.json and expired-*.json are normal triggers", function () {
+  var dir = mkdir();
+  var log = newLog();
+  var project = makeProject(log, "sid");
+  fs.writeFileSync(path.join(dir, "processed-abc.json"), JSON.stringify(pushTrigger({ id: "pa", sessionId: "sid" })));
+  fs.writeFileSync(path.join(dir, "expired-abc.json"), JSON.stringify(pushTrigger({ id: "ea", sessionId: "gone", createdAt: OLD })));
+  run(dir, project);
+  assert.strictEqual(log.pushes.length, 1);
+  assert.ok(fs.existsSync(path.join(dir, "processed", "pa.json")));
+  assert.ok(!fs.existsSync(path.join(dir, "processed-abc.json")));
+  assert.ok(fs.existsSync(path.join(dir, "expired", "expired-abc.json")));
+  assert.ok(!fs.existsSync(path.join(dir, "expired-abc.json")));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("future createdAt beyond skew tolerance falls back to mtime and expires", function () {
+  var dir = mkdir();
+  var past = new Date(Date.now() - 10 * TTL_MS);
+  var far = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  var soon = new Date(Date.now() + 60 * 1000).toISOString();
+  var a = path.join(dir, "fa.json");
+  fs.writeFileSync(a, JSON.stringify(pushTrigger({ id: "fa", createdAt: far })));
+  fs.utimesSync(a, past, past);
+  // Within skew tolerance createdAt is trusted (age ~0), so it stays despite old mtime.
+  var b = path.join(dir, "fb.json");
+  fs.writeFileSync(b, JSON.stringify(pushTrigger({ id: "fb", createdAt: soon })));
+  fs.utimesSync(b, past, past);
+  run(dir, makeProject(newLog(), "other"));
+  assert.ok(fs.existsSync(path.join(dir, "expired", "fa.json")));
+  assert.ok(!fs.existsSync(a));
+  assert.ok(fs.existsSync(b));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
