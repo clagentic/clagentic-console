@@ -18,6 +18,7 @@ var os = require("os");
 var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-oldsock-test-"));
 process.env.CLAGENTIC_HOME = tmpHome;
 // Ensure non-dev mode for these tests
+delete process.env.CLAGENTIC_CONSOLE_DEV;
 delete process.env.CLAGENTIC_DEV;
 delete process.env.CLAY_DEV;
 
