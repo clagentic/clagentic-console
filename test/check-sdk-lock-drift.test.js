@@ -132,8 +132,13 @@ test("the SDK pair is pinned to exact versions so the install cannot float past 
   });
 });
 
-test("verify:installed-build runs the drift check after the artifact check", function () {
+test("verify:installed-build runs the drift check after the artifact check, without short-circuiting", function () {
   var pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
   var cmd = pkg.scripts["verify:installed-build"];
-  assert.match(cmd, /verify-installed-build\.js\s*&&\s*node scripts\/check-sdk-lock-drift\.js/);
+  // A `&&` chain would skip the drift check whenever the artifact check fails
+  // (PROCESS_MISMATCH after every merge). The wrapper runs both; see
+  // verify-installed-all.test.js for its behaviour.
+  assert.equal(cmd, "node scripts/verify-installed.js");
+  var checks = require(path.join(REPO, "scripts", "verify-installed.js")).CHECKS;
+  assert.deepEqual(checks.map(function (c) { return c.script; }), ["verify-installed-build.js", "check-sdk-lock-drift.js"]);
 });
