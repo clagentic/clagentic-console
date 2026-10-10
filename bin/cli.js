@@ -43,8 +43,16 @@ var args = process.argv.slice(2);
 // start exits 78 (EX_CONFIG), which the unit lists in RestartPreventExitStatus
 // so a mis-installed package is not restart-looped.
 if (args[0] === "daemon") {
-  var { findLinkTrap, linkTrapMessage } = require("../lib/link-trap");
-  var linkTrap = findLinkTrap(path.resolve(__dirname, ".."), { binPath: process.argv[1] });
+  var { findLinkTrap, linkTrapMessage, LinkTrapProbeError } = require("../lib/link-trap");
+  var linkTrap = null;
+  try {
+    linkTrap = findLinkTrap(path.resolve(__dirname, ".."), { binPath: process.argv[1] });
+  } catch (probeErr) {
+    // An uninspectable path is treated as a trap: fail closed, same exit code.
+    if (!(probeErr instanceof LinkTrapProbeError)) throw probeErr;
+    console.error("ERROR: " + probeErr.message + "; refusing to start (path: " + probeErr.path + ", errno: " + probeErr.errno + ")");
+    process.exit(78);
+  }
   if (linkTrap) {
     console.error(linkTrapMessage(linkTrap));
     process.exit(78);

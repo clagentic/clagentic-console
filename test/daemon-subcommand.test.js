@@ -8,7 +8,7 @@ var fs = require("fs");
 var os = require("os");
 var path = require("path");
 var { spawnSync } = require("child_process");
-var { findLinkTrap, linkTrapMessage } = require("../lib/link-trap");
+var { findLinkTrap, linkTrapMessage, LinkTrapProbeError } = require("../lib/link-trap");
 
 var CLI = path.resolve(__dirname, "..", "bin", "cli.js");
 
@@ -76,6 +76,65 @@ test("`clagentic-console daemon` starts lib/daemon.js in the same process: EX_CO
   assert.strictEqual(res.status, 78, "stderr: " + res.stderr);
   assert.match(res.stderr, /CLAGENTIC_CONSOLE_HOME appears to point at the console\/ socket subdirectory/);
   assert.ok(!fs.existsSync(path.join(consoleDir, "daemon.json")));
+});
+
+// --- link-trap probe failures fail closed ---
+
+function fsThatFailsWith(code) {
+  return {
+    lstatSync: function (p) {
+      var e = new Error(code + ": simulated lstat failure for " + p);
+      e.code = code;
+      throw e;
+    },
+  };
+}
+
+test("only ENOENT and ENOTDIR mean 'no trap'", function () {
+  var pkgDir = "/g/lib/node_modules/@clagentic/console";
+  assert.strictEqual(findLinkTrap(pkgDir, { fs: fsThatFailsWith("ENOENT") }), null);
+  assert.strictEqual(findLinkTrap(pkgDir, { fs: fsThatFailsWith("ENOTDIR") }), null);
+});
+
+["EACCES", "ELOOP", "EIO"].forEach(function (code) {
+  test("lstat " + code + " is not read as 'no trap': findLinkTrap throws naming the path and errno", function () {
+    var pkgDir = "/g/lib/node_modules/@clagentic/console";
+    assert.throws(function () { findLinkTrap(pkgDir, { fs: fsThatFailsWith(code) }); }, function (err) {
+      assert.ok(err instanceof LinkTrapProbeError);
+      assert.strictEqual(err.code, "LINK_TRAP_PROBE_FAILED");
+      assert.strictEqual(err.errno, code);
+      assert.strictEqual(err.path, "/g/lib/node_modules/clagentic-console");
+      assert.ok(err.message.indexOf(err.path) !== -1 && err.message.indexOf(code) !== -1, err.message);
+      return true;
+    });
+  });
+});
+
+test("a lstat failure on the bin-path candidate also throws", function () {
+  assert.throws(function () {
+    findLinkTrap("/work/checkout", { binPath: "/p/bin/clagentic-console", fs: fsThatFailsWith("EACCES") });
+  }, LinkTrapProbeError);
+});
+
+test("`clagentic-console daemon` exits 78 and names the path and errno when the candidate cannot be inspected (ELOOP)", function () {
+  if (process.platform === "win32") return;
+  var root = tmp();
+  fs.mkdirSync(path.join(root, "bin"), { recursive: true });
+  fs.mkdirSync(path.join(root, "lib"), { recursive: true });
+  // <root>/lib/node_modules points at itself, so lstat on a path beneath it fails with ELOOP.
+  fs.symlinkSync(path.join(root, "lib", "node_modules"), path.join(root, "lib", "node_modules"));
+  var binLink = path.join(root, "bin", "clagentic-console");
+  fs.symlinkSync(CLI, binLink);
+
+  var res = spawnSync(process.execPath, [binLink, "daemon"], {
+    env: { PATH: process.env.PATH, HOME: root, CLAGENTIC_CONSOLE_HOME: path.join(root, "home") },
+    encoding: "utf8",
+    timeout: 30000,
+  });
+  assert.strictEqual(res.status, 78, "stderr: " + res.stderr);
+  assert.match(res.stderr, /ELOOP/);
+  assert.ok(res.stderr.indexOf(path.join(root, "lib", "node_modules", "clagentic-console")) !== -1, res.stderr);
+  assert.ok(!fs.existsSync(path.join(root, "home")), "the daemon must not have started");
 });
 
 test("the unit and the subcommand agree: ExecStart ends in `daemon`", function () {
