@@ -129,7 +129,14 @@ test.before(function () {
     });
     daemonProc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
     daemonProc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
-    return waitForIpc(DAEMON_READY_MS);
+    return waitForIpc(DAEMON_READY_MS).then(function () {
+      // The daemon records its own PID in daemon.json through the async
+      // saveConfig queue right after it starts listening, and the IPC socket
+      // can answer before that write lands. Without waiting for it, the first
+      // "file is byte-identical" snapshot races the startup write and fails on
+      // fast hosts with the file changed by the daemon, not by the rejected value.
+      return waitForPersisted(function (c) { return c.pid === daemonProc.pid; }, DAEMON_READY_MS);
+    });
   });
 });
 
