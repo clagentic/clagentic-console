@@ -122,6 +122,16 @@ test("the repo lock agrees with package.json and pins one version across the age
   });
 });
 
+test("the SDK pair is pinned to exact versions so the install cannot float past the lock", function () {
+  var pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
+  var lock = JSON.parse(fs.readFileSync(path.join(REPO, "package-lock.json"), "utf8"));
+  drift.TRACKED_PACKAGES.forEach(function (name) {
+    var spec = pkg.dependencies[name];
+    assert.match(spec, /^\d+\.\d+\.\d+$/, name + " must be an exact version, got " + spec);
+    assert.equal(lock.packages["node_modules/" + name].version, spec, name + " lock version must equal the pin");
+  });
+});
+
 test("verify:installed-build runs the drift check after the artifact check", function () {
   var pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
   var cmd = pkg.scripts["verify:installed-build"];

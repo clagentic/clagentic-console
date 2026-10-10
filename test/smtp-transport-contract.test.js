@@ -57,8 +57,10 @@ function loadSmtpWithStub(stub) {
   var savedNodemailer = require.cache[nodemailerPath];
   var mods = ["../lib/config", "../lib/users", "../lib/users-auth", "../lib/users-permissions",
     "../lib/users-preferences", "../lib/store", "../lib/smtp"];
+  // No catch: a renamed or missing module must fail the test loudly rather than
+  // leave a stale cache entry bound to another CLAGENTIC_HOME.
   mods.forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   require.cache[nodemailerPath] = {
     id: nodemailerPath, filename: nodemailerPath, loaded: true, exports: stub.exports,

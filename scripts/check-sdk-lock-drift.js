@@ -5,15 +5,28 @@
 // Agent SDK than the one package-lock.json pins.
 //
 // WHY: `npm install -g <tarball>` ignores package-lock.json (the lock is not
-// published and there is no npm-shrinkwrap.json), so the caret ranges in
-// package.json resolve afresh at install time. `npm ci` / `npm test` in a
-// checkout exercise the locked SDK while the running service executes whatever
-// the registry resolved at install time. This check closes that gap after the
-// fact: it compares the versions of the SDK packages inside the globally
-// installed build against the versions recorded in this tree's lock and exits
-// non-zero on any difference. It runs as part of `npm run verify:installed-build`,
-// the post-merge step that is already configured on_failure: fail, so drift
-// blocks the merge chain instead of being logged and ignored.
+// published and there is no npm-shrinkwrap.json), so a range in package.json
+// resolves afresh at install time. `npm ci` / `npm test` in a checkout exercise
+// the locked SDK while the running service executes whatever the registry
+// resolved at install time. This check closes that gap after the fact: it
+// compares the versions of the SDK packages inside the globally installed build
+// against the versions recorded in this tree's lock and exits non-zero on any
+// difference. It runs as part of `npm run verify:installed-build`, the
+// post-merge step that is already configured on_failure: fail, so drift blocks
+// the merge chain instead of being logged and ignored.
+//
+// The SDK pair is pinned to exact versions in package.json (no caret), so the
+// install-time resolution cannot move on an upstream publish: this check fails
+// only on a real mismatch between the installed build and the lock, never
+// because the registry gained a newer release. A test asserts the pins stay
+// exact.
+//
+// TOOL CONSIDERED: `npm ls -g --json`. It does not fit: it reports the whole
+// global tree and exits non-zero on unrelated tree problems (extraneous,
+// invalid or missing optional packages), which would turn an unrelated install
+// quirk into a false drift failure, and the lock side still needs its own
+// reader. Reading the two package.json files and the lock directly is smaller
+// and fails only on the comparison that matters.
 //
 // WHY A CHECK AND NOT npm-shrinkwrap.json: a shrinkwrap would make this lock —
 // a generated file maintained for CI — the install-time source of truth for
@@ -89,8 +102,7 @@ function formatDrift(drift, installedRoot) {
     `[check-sdk-lock-drift] SDK_LOCK_DRIFT: the installed build (${installedRoot}) does not match package-lock.json:\n` +
     `${lines.join('\n')}\n` +
     'The running service would execute a different SDK than the one `npm ci` / `npm test` exercised. ' +
-    'Bump package.json and package-lock.json to the version the install resolved, or pin the range, ' +
-    'then reinstall.'
+    'Bump the exact pins in package.json and package-lock.json together, then reinstall.'
   );
 }
 
