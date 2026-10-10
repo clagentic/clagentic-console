@@ -130,6 +130,12 @@ test.before(function () {
     daemonProc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
     daemonProc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
     return waitForIpc(DAEMON_READY_MS);
+  }).then(function () {
+    // The daemon answers IPC before its queued startup write of `pid` into
+    // daemon.json lands. Without this wait the first assertRejected() takes its
+    // "before" snapshot ahead of that write and reads the pid as a persisted
+    // change; on a slow runner it did so every time.
+    return waitForPersisted(function (c) { return c.pid === daemonProc.pid; }, DAEMON_READY_MS);
   });
 });
 
