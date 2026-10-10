@@ -74,7 +74,7 @@ Requires Chrome extension + `clagentic-mcp-bridge` native host installed on the 
 Console integrates with [Clagentic: Lite](https://clagentic.ai) as an optional companion. When Lite is installed, Console surfaces enrollment controls without requiring any manual configuration.
 
 **Detection** (`lib/lite-detect.js`):
-- Lite is considered installed if `~/.clagentic/lite/` exists (or `$CLAGENTIC_HOME`) and the `clagentic-lite` binary is on PATH
+- Lite is considered installed if `~/.clagentic/lite/` exists (or `$CLAGENTIC_LITE_HOME`) and the `clagentic-lite` binary is on PATH
 - Per-project enrollment status: presence of `<projectDir>/.clagentic/lite/audit.db`
 
 **Console surfaces:**

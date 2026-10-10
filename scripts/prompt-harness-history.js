@@ -104,8 +104,8 @@ function materializeLib(commit, root) {
 // The invariants a run violated, e.g. ["I2", "I8"], or [] for a pass.
 function runScenario(row, libDir) {
   var env = Object.assign({}, process.env);
-  if (libDir) env.CLAGENTIC_PROMPT_HARNESS_LIB = libDir;
-  else delete env.CLAGENTIC_PROMPT_HARNESS_LIB;
+  if (libDir) env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB = libDir;
+  else delete env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB;
   var res = spawnSync(process.execPath, [
     "--test", "--test-reporter=tap", "--test-name-pattern=^" + escapeRegExp(row.title) + "$", HARNESS,
   ], { env: env, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });

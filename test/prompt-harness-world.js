@@ -9,7 +9,7 @@
 // prompt work's history (handleCanUseTool, handleElicitation,
 // processSDKMessage, handleSessionsMessage, handleHTTP,
 // replayHistory/switchSession), so the same harness can be pointed at an
-// older lib/ via CLAGENTIC_PROMPT_HARNESS_LIB to show it catches defects that
+// older lib/ via CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB to show it catches defects that
 // were fixed there.
 
 var fs = require("fs");
@@ -17,8 +17,8 @@ var os = require("os");
 var path = require("path");
 var { EventEmitter } = require("events");
 
-var LIB_ROOT = process.env.CLAGENTIC_PROMPT_HARNESS_LIB
-  ? path.resolve(process.env.CLAGENTIC_PROMPT_HARNESS_LIB)
+var LIB_ROOT = process.env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB
+  ? path.resolve(process.env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB)
   : path.join(__dirname, "..", "lib");
 
 // Session fields that hold pending prompts, across every lib version.
@@ -93,7 +93,9 @@ function heldPromptIds(session) {
 async function createServer(opts) {
   opts = opts || {};
   var home = opts.home || fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-prompt-harness-"));
+  // Older lib/ checkouts (CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB) read the un-scoped name.
   process.env.CLAGENTIC_HOME = home;
+  process.env.CLAGENTIC_CONSOLE_HOME = home;
   purgeLib();
 
   // The project's connected sockets, one collection for the transport and
@@ -285,7 +287,7 @@ function removeHome(home) {
 
 module.exports = {
   LIB_ROOT: LIB_ROOT,
-  overridesLib: !!process.env.CLAGENTIC_PROMPT_HARNESS_LIB,
+  overridesLib: !!process.env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB,
   createServer: createServer,
   removeHome: removeHome,
   flush: flush,
