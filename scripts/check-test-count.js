@@ -185,6 +185,41 @@ function emitAnnotation(message) {
   writeFullySync(1, "::error::" + escaped + "\n");
 }
 
+// Caps keep the annotation inside GitHub's message size limits and readable
+// when a systemic failure (e.g. a broken fixture) fails hundreds of tests.
+var MAX_NAMED_FAILURES = 25;
+var MAX_FAILURE_NAME_LENGTH = 200;
+
+// extractFailedTests(tap) — every `not ok` line of a TAP stream, in order,
+// with nesting indentation dropped. Subtests and their enclosing suite both
+// report `not ok`, so a leaf failure is listed alongside its parents; that is
+// deliberate, the parent chain locates the leaf. A `# SKIP`/`# TODO` directive
+// is not a failure and is ignored.
+function extractFailedTests(tap) {
+  var names = [];
+  String(tap || "").split("\n").forEach(function (line) {
+    var match = /^\s*not ok \d+(?: - (.*))?$/.exec(line);
+    if (!match) return;
+    var name = (match[1] || "(unnamed)").trim();
+    if (/#\s*(SKIP|TODO)\b/i.test(name)) return;
+    names.push(name);
+  });
+  return names;
+}
+
+function formatFailedTests(names) {
+  var shown = names.slice(0, MAX_NAMED_FAILURES).map(function (name) {
+    var clipped = name.length > MAX_FAILURE_NAME_LENGTH
+      ? name.slice(0, MAX_FAILURE_NAME_LENGTH) + "..."
+      : name;
+    return "  not ok - " + clipped;
+  });
+  if (names.length > MAX_NAMED_FAILURES) {
+    shown.push("  ... and " + (names.length - MAX_NAMED_FAILURES) + " more");
+  }
+  return shown.join("\n");
+}
+
 // classifyRun() is the pure decision core of this script: given the raw
 // spawnSync() result plus the bucketed RESULT-line data, decide whether the
 // run passes and, if not, exactly WHY. Pulled out of the top-level script
@@ -285,13 +320,19 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
   }
 
   if (result.status !== 0) {
+    // Name the failing tests in the verdict itself: the annotation is the only
+    // channel a crew agent can read from CI, and "see the TAP above" points at
+    // a log it cannot fetch.
+    var failed = extractFailedTests(result.stdout);
+    var named = formatFailedTests(failed);
     return {
       ok: false,
       exitCode: result.status,
       kind: "test-failure",
       reason: (
         "node --test exited " + result.status + " with a named test failure above (see the TAP `not ok` " +
-        "line(s)) — this is an ordinary test failure, not a wrapper-level condition."
+        "line(s)) — this is an ordinary test failure, not a wrapper-level condition." +
+        (named ? "\nFailing tests (" + failed.length + "):\n" + named : "")
       ),
     };
   }
@@ -302,6 +343,7 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
 module.exports = {
   classifyRun: classifyRun,
   emitAnnotation: emitAnnotation,
+  extractFailedTests: extractFailedTests,
   writeFullySync: writeFullySync,
 };
 
