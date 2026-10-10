@@ -28,7 +28,6 @@ scope:
     - "package.json"
     - "package-lock.json"
     - "README.md"
-    - "CLAUDE.md"
     - "CHANGELOG.md"
     - ".gitignore"
     - "release.config.js"
