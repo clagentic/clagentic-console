@@ -3,24 +3,32 @@
 
 // postinstall.js — installs/updates the systemd service unit on Linux global npm installs.
 // Runs automatically after `npm install -g @clagentic/console`.
-// Silently exits on non-Linux platforms and non-root invocations.
+// Does nothing on non-Linux platforms, on non-global installs (a local `npm ci` /
+// `npm install` in a dev checkout or worktree must never touch /etc/systemd or
+// /usr/local/bin), and for non-root invocations.
+//
+// All host effects go through the `deps` object so tests can stub the filesystem,
+// systemctl and the environment; the exported run() is what main() calls with real ones.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const {
+  LEGACY_WRAPPER_PATH,
+  isLegacyWrapperContent,
+  isGlobalInstall,
+  resolveCliBin,
+  renderUnit,
+} = require('../lib/service-install');
+
 const PREFIX = '[clagentic-console postinstall]';
-const { applyDropIn, parseMemoryLimit } = require('../lib/memory-limits');
 
-function log(msg) {
-  console.log(`${PREFIX} ${msg}`);
-}
-
-function runCmd(cmd, args) {
-  // Returns stdout string on success, throws on failure.
-  // stderr is captured in err.stderr on failure.
-  return execFileSync(cmd, args, { stdio: 'pipe' }).toString().trim();
-}
+const SYSTEMD_DIR = '/etc/systemd/system';
+const NEW_UNIT = 'clagentic-console.service';
+const OLD_UNIT = 'clagentic.service';
+const UNIT_SRC = path.join(__dirname, '..', 'deploy', 'clagentic-console.service');
+const PKG_DIR = path.join(__dirname, '..');
 
 function errMsg(err) {
   // execFileSync puts detail in err.stderr; fall back to err.message.
@@ -28,137 +36,61 @@ function errMsg(err) {
   return stderr || err.message;
 }
 
-// Skip silently on non-Linux platforms.
-if (process.platform !== 'linux') {
-  process.exit(0);
+function realDeps() {
+  return {
+    fs,
+    env: process.env,
+    platform: process.platform,
+    getuid: () => process.getuid(),
+    systemdDir: SYSTEMD_DIR,
+    legacyWrapperPath: LEGACY_WRAPPER_PATH,
+    pkgDir: PKG_DIR,
+    unitSrc: UNIT_SRC,
+    log: (msg) => console.log(`${PREFIX} ${msg}`),
+    // Returns stdout string on success, throws on failure.
+    runCmd: (cmd, args) => execFileSync(cmd, args, { stdio: 'pipe' }).toString().trim(),
+    loadConfig: () => require('../lib/config').loadConfig(),
+    applyDropIn: (limits, logFn) => require('../lib/memory-limits').applyDropIn(limits, logFn),
+    parseMemoryLimit: (v) => require('../lib/memory-limits').parseMemoryLimit(v),
+  };
 }
 
-// Skip silently when not running as root — cannot write to /etc/systemd/system/.
-if (process.getuid() !== 0) {
-  log('skipping (not root)');
-  process.exit(0);
-}
-
-// When the daemon triggers its own in-app update it passes CLAGENTIC_SELF_UPDATE=1.
-// In that case, skip restarting the service — the daemon calls gracefulShutdown()
-// immediately after npm install completes, and systemd Restart=always handles the
-// supervised restart. Issuing systemctl restart here would race with gracefulShutdown
-// and tear down sessions before state is flushed.
-const selfUpdate = process.env.CLAGENTIC_SELF_UPDATE === '1';
-if (selfUpdate) {
-  log('self-update detected (CLAGENTIC_SELF_UPDATE=1) — skipping service restart');
-}
-
-const SYSTEMD_DIR = '/etc/systemd/system';
-const NEW_UNIT = 'clagentic-console.service';
-const OLD_UNIT = 'clagentic.service';
-const NEW_UNIT_DEST = path.join(SYSTEMD_DIR, NEW_UNIT);
-const OLD_UNIT_PATH = path.join(SYSTEMD_DIR, OLD_UNIT);
-const UNIT_SRC = path.join(__dirname, '..', 'deploy', 'clagentic-console.service');
-
-// Step 1: Copy the new unit file.
-log(`installing unit file -> ${NEW_UNIT_DEST}`);
-try {
-  fs.copyFileSync(UNIT_SRC, NEW_UNIT_DEST);
-} catch (err) {
-  log(`ERROR copying unit file: ${errMsg(err)}`);
-  // Cannot continue without the unit file in place.
-  process.exit(0);
-}
-
-// Step 2: daemon-reload to pick up the new unit file.
-log('running systemctl daemon-reload');
-try {
-  runCmd('systemctl', ['daemon-reload']);
-} catch (err) {
-  log(`WARNING: daemon-reload failed: ${errMsg(err)}`);
-}
-
-// Step 3: Enable the new unit if not already enabled.
-log(`enabling ${NEW_UNIT}`);
-try {
-  runCmd('systemctl', ['enable', NEW_UNIT]);
-} catch (err) {
-  log(`WARNING: enable ${NEW_UNIT} failed: ${errMsg(err)}`);
-}
-
-// Step 4: Handle rename — migrate from old clagentic.service if present.
-let wasRunningUnderOldUnit = false;
-if (fs.existsSync(OLD_UNIT_PATH)) {
-  log(`old unit file detected: ${OLD_UNIT_PATH} — performing rename cutover`);
-
-  // Detect whether the old unit is currently active before stopping it.
+// Removes the hand-placed legacy wrapper only when it is byte-for-byte the known
+// legacy content; an operator-modified file is left alone.
+function removeLegacyWrapper(deps) {
+  const { fs: fsx, log, legacyWrapperPath } = deps;
+  let content;
   try {
-    const activeState = runCmd('systemctl', ['is-active', OLD_UNIT]);
-    if (activeState === 'active') {
-      wasRunningUnderOldUnit = true;
-    }
-  } catch (_) {
-    // is-active exits non-zero when not active — not an error.
-  }
-
-  // Disable the old unit.
-  log(`disabling ${OLD_UNIT}`);
-  try {
-    runCmd('systemctl', ['disable', OLD_UNIT]);
+    content = fsx.readFileSync(legacyWrapperPath, 'utf8');
   } catch (err) {
-    log(`WARNING: disable ${OLD_UNIT} failed (ignored): ${errMsg(err)}`);
+    if (err.code === 'ENOENT') return 'absent';
+    log(`WARNING: could not read ${legacyWrapperPath}: ${errMsg(err)}`);
+    return 'unreadable';
   }
-
-  // Stop the old unit.
-  log(`stopping ${OLD_UNIT}`);
-  try {
-    runCmd('systemctl', ['stop', OLD_UNIT]);
-  } catch (err) {
-    log(`WARNING: stop ${OLD_UNIT} failed (ignored): ${errMsg(err)}`);
+  if (!isLegacyWrapperContent(content)) {
+    log(`${legacyWrapperPath} differs from the known legacy wrapper — leaving it in place`);
+    return 'modified';
   }
-
-  // Remove the old unit file.
-  log(`removing ${OLD_UNIT_PATH}`);
   try {
-    fs.unlinkSync(OLD_UNIT_PATH);
+    fsx.unlinkSync(legacyWrapperPath);
+    log(`removed legacy wrapper ${legacyWrapperPath} (the unit now runs "clagentic-console daemon")`);
+    return 'removed';
   } catch (err) {
-    log(`WARNING: remove ${OLD_UNIT_PATH} failed: ${errMsg(err)}`);
-  }
-
-  // daemon-reload again to clear the old unit from systemd's view.
-  log('running systemctl daemon-reload (post-rename)');
-  try {
-    runCmd('systemctl', ['daemon-reload']);
-  } catch (err) {
-    log(`WARNING: daemon-reload (post-rename) failed: ${errMsg(err)}`);
+    log(`WARNING: remove ${legacyWrapperPath} failed: ${errMsg(err)}`);
+    return 'failed';
   }
 }
 
-// Step 5: Start clagentic-console.service only if it was running under the old unit
-// and needs to be moved to the new one. Never restart a running service — that kills
-// live sessions. Never auto-start on a fresh install — the daemon needs configuration.
-// Self-updates use gracefulShutdown() + Restart=always; postinstall must not interfere.
-if (selfUpdate) {
-  log('skipping start (self-update — gracefulShutdown will hand off to systemd)');
-} else if (wasRunningUnderOldUnit) {
-  // Stopped the old unit during rename cutover — start under the new one now.
-  log(`starting ${NEW_UNIT} (was running under ${OLD_UNIT})`);
-  try {
-    runCmd('systemctl', ['start', NEW_UNIT]);
-  } catch (err) {
-    log(`WARNING: start ${NEW_UNIT} failed: ${errMsg(err)}`);
-  }
-} else {
-  log(`skipping start (daemon was not running or is already running — operator controls restarts)`);
-}
-
-// Step 6: Apply the memory-limit drop-in (lr-c10f6d).
-// When the operator has NOT set memoryHigh/memoryMax in daemon.json, the
-// drop-in is still written — with ABSOLUTE byte values computed from
-// /proc/meminfo MemTotal (floor(60%) / floor(75%)) — because a `%` directive
-// in the shipped unit file is resolved by systemd against the wrong MemTotal
-// inside an LXC container; only userspace sees the lxcfs-corrected value.
-// Recomputed on every postinstall so it tracks RAM changes. Operator
-// overrides in daemon.json always keep precedence (unchanged from lr-de07).
-(function applyMemoryDropIn() {
-  const { loadConfig } = require('../lib/config');
-  const cfg = loadConfig();
+function applyMemoryDropIn(deps) {
+  const { log, runCmd } = deps;
+  // When the operator has NOT set memoryHigh/memoryMax in daemon.json, the
+  // drop-in is still written — with ABSOLUTE byte values computed from
+  // /proc/meminfo MemTotal (floor(60%) / floor(75%)) — because a `%` directive
+  // in the shipped unit file is resolved by systemd against the wrong MemTotal
+  // inside an LXC container; only userspace sees the lxcfs-corrected value.
+  // Recomputed on every postinstall so it tracks RAM changes. Operator
+  // overrides in daemon.json always keep precedence.
+  const cfg = deps.loadConfig();
   const memoryHigh = cfg && cfg.memoryHigh ? String(cfg.memoryHigh) : null;
   const memoryMax  = cfg && cfg.memoryMax  ? String(cfg.memoryMax)  : null;
 
@@ -166,14 +98,14 @@ if (selfUpdate) {
   // (Computed defaults are always well-formed bare-byte strings, so no
   // validation is needed for that path.)
   if (memoryHigh) {
-    const vr = parseMemoryLimit(memoryHigh);
+    const vr = deps.parseMemoryLimit(memoryHigh);
     if (!vr.ok) {
       log(`WARNING: ignoring invalid memoryHigh value in daemon.json: ${vr.error}`);
       return;
     }
   }
   if (memoryMax) {
-    const vr = parseMemoryLimit(memoryMax);
+    const vr = deps.parseMemoryLimit(memoryMax);
     if (!vr.ok) {
       log(`WARNING: ignoring invalid memoryMax value in daemon.json: ${vr.error}`);
       return;
@@ -181,7 +113,7 @@ if (selfUpdate) {
   }
 
   try {
-    applyDropIn({ memoryHigh, memoryMax }, (msg) => log(msg.replace(/^\[memory-limits\] /, '')));
+    deps.applyDropIn({ memoryHigh, memoryMax }, (msg) => log(msg.replace(/^\[memory-limits\] /, '')));
     log('running systemctl daemon-reload (memory drop-in updated)');
     try {
       runCmd('systemctl', ['daemon-reload']);
@@ -191,6 +123,151 @@ if (selfUpdate) {
   } catch (err) {
     log(`WARNING: memory drop-in apply failed: ${err.message}`);
   }
-})();
+}
 
-log('done');
+function run(deps) {
+  const { fs: fsx, env, log, runCmd } = deps;
+
+  // Skip silently on non-Linux platforms.
+  if (deps.platform !== 'linux') return 'skipped-platform';
+
+  // A local install (npm ci / npm install in a checkout, a crew worktree, or an npx
+  // cache) is not the production install. Acting on it as root rewrote the live unit
+  // and ran daemon-reload on the production host.
+  if (!isGlobalInstall(env)) {
+    log('skipping (not a global install: npm_config_global/npm_config_location not set)');
+    return 'skipped-not-global';
+  }
+
+  // Skip when not running as root — cannot write to /etc/systemd/system/.
+  if (deps.getuid() !== 0) {
+    log('skipping (not root)');
+    return 'skipped-not-root';
+  }
+
+  // When the daemon triggers its own in-app update it passes CLAGENTIC_CONSOLE_SELF_UPDATE=1.
+  // In that case, skip restarting the service — the daemon calls gracefulShutdown()
+  // immediately after npm install completes, and systemd Restart=always handles the
+  // supervised restart. Issuing systemctl restart here would race with gracefulShutdown
+  // and tear down sessions before state is flushed.
+  const { readConsoleEnv } = require('../lib/env-compat');
+  const selfUpdate = readConsoleEnv('CLAGENTIC_CONSOLE_SELF_UPDATE', { env }) === '1';
+  if (selfUpdate) {
+    log('self-update detected (CLAGENTIC_CONSOLE_SELF_UPDATE=1) — skipping service restart');
+  }
+
+  const newUnitDest = path.join(deps.systemdDir, NEW_UNIT);
+  const oldUnitPath = path.join(deps.systemdDir, OLD_UNIT);
+
+  // Step 0: Resolve the installed bin the unit will run; refuse to write a unit that
+  // points nowhere.
+  const cliBin = resolveCliBin({ env, pkgDir: deps.pkgDir });
+  if (!cliBin) {
+    log(`ERROR: cannot determine the global clagentic-console bin path from ${deps.pkgDir}; unit not installed`);
+    return 'error-no-bin';
+  }
+
+  // Step 1: Render and write the new unit file.
+  log(`installing unit file -> ${newUnitDest} (ExecStart=${cliBin} daemon)`);
+  try {
+    const rendered = renderUnit(fsx.readFileSync(deps.unitSrc, 'utf8'), cliBin);
+    fsx.writeFileSync(newUnitDest, rendered);
+  } catch (err) {
+    log(`ERROR installing unit file: ${errMsg(err)}`);
+    // Cannot continue without the unit file in place.
+    return 'error-unit';
+  }
+
+  // Step 2: daemon-reload to pick up the new unit file.
+  log('running systemctl daemon-reload');
+  try {
+    runCmd('systemctl', ['daemon-reload']);
+  } catch (err) {
+    log(`WARNING: daemon-reload failed: ${errMsg(err)}`);
+  }
+
+  // Step 3: Enable the new unit if not already enabled.
+  log(`enabling ${NEW_UNIT}`);
+  try {
+    runCmd('systemctl', ['enable', NEW_UNIT]);
+  } catch (err) {
+    log(`WARNING: enable ${NEW_UNIT} failed: ${errMsg(err)}`);
+  }
+
+  // Step 3b: The unit no longer runs the hand-placed wrapper; clean it up if untouched.
+  removeLegacyWrapper(deps);
+
+  // Step 4: Handle rename — migrate from old clagentic.service if present.
+  let wasRunningUnderOldUnit = false;
+  if (fsx.existsSync(oldUnitPath)) {
+    log(`old unit file detected: ${oldUnitPath} — performing rename cutover`);
+
+    // Detect whether the old unit is currently active before stopping it.
+    try {
+      const activeState = runCmd('systemctl', ['is-active', OLD_UNIT]);
+      if (activeState === 'active') {
+        wasRunningUnderOldUnit = true;
+      }
+    } catch (_) {
+      // is-active exits non-zero when not active — not an error.
+    }
+
+    log(`disabling ${OLD_UNIT}`);
+    try {
+      runCmd('systemctl', ['disable', OLD_UNIT]);
+    } catch (err) {
+      log(`WARNING: disable ${OLD_UNIT} failed (ignored): ${errMsg(err)}`);
+    }
+
+    log(`stopping ${OLD_UNIT}`);
+    try {
+      runCmd('systemctl', ['stop', OLD_UNIT]);
+    } catch (err) {
+      log(`WARNING: stop ${OLD_UNIT} failed (ignored): ${errMsg(err)}`);
+    }
+
+    log(`removing ${oldUnitPath}`);
+    try {
+      fsx.unlinkSync(oldUnitPath);
+    } catch (err) {
+      log(`WARNING: remove ${oldUnitPath} failed: ${errMsg(err)}`);
+    }
+
+    // daemon-reload again to clear the old unit from systemd's view.
+    log('running systemctl daemon-reload (post-rename)');
+    try {
+      runCmd('systemctl', ['daemon-reload']);
+    } catch (err) {
+      log(`WARNING: daemon-reload (post-rename) failed: ${errMsg(err)}`);
+    }
+  }
+
+  // Step 5: Start clagentic-console.service only if it was running under the old unit
+  // and needs to be moved to the new one. Never restart a running service — that kills
+  // live sessions. Never auto-start on a fresh install — the daemon needs configuration.
+  // Self-updates use gracefulShutdown() + Restart=always; postinstall must not interfere.
+  if (selfUpdate) {
+    log('skipping start (self-update — gracefulShutdown will hand off to systemd)');
+  } else if (wasRunningUnderOldUnit) {
+    log(`starting ${NEW_UNIT} (was running under ${OLD_UNIT})`);
+    try {
+      runCmd('systemctl', ['start', NEW_UNIT]);
+    } catch (err) {
+      log(`WARNING: start ${NEW_UNIT} failed: ${errMsg(err)}`);
+    }
+  } else {
+    log('skipping start (daemon was not running or is already running — operator controls restarts)');
+  }
+
+  // Step 6: Apply the memory-limit drop-in.
+  applyMemoryDropIn(deps);
+
+  log('done');
+  return 'installed';
+}
+
+module.exports = { run, realDeps, removeLegacyWrapper };
+
+if (require.main === module) {
+  run(realDeps());
+}
