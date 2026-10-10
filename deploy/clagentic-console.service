@@ -1,13 +1,17 @@
 [Unit]
-Description=Clagentic Console daemon
+Description=Clagentic: Console daemon
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/clagentic-daemon.sh
+# Template: scripts/postinstall.js fills the BIN placeholders in this file with the
+# absolute path of the globally installed clagentic-console bin at install time.
+# Do not copy this file into /etc/systemd/system by hand.
+ExecStart=@CLAGENTIC_CONSOLE_BIN@ daemon
 Restart=always
 RestartSec=5
-# EX_CONFIG (78) is a fatal configuration error (mis-set CLAGENTIC_HOME, unsupported Node) — do not restart-loop
+# EX_CONFIG (78) is a fatal configuration error (mis-set CLAGENTIC_CONSOLE_HOME, unsupported Node,
+# npm-link symlink trap) — do not restart-loop
 RestartPreventExitStatus=78
 KillMode=mixed
 TimeoutStopSec=20
@@ -31,9 +35,9 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=clagentic-console
 Environment=SHELL=/bin/bash
-Environment=PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# TODO(lr-9452): rename to CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS once sdk-bridge.js is updated
-Environment=CLAGENTIC_MAX_CONCURRENT_SESSIONS=50
+# The bin dir leads PATH so `#!/usr/bin/env node` finds the node that installed the package.
+Environment=PATH=@CLAGENTIC_CONSOLE_BIN_DIR@:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS=50
 
 [Install]
 WantedBy=multi-user.target

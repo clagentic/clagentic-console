@@ -16,9 +16,9 @@ var fs = require("fs");
 var path = require("path");
 
 // Detect dev mode — dev and prod use separate daemon files so they can run simultaneously
-var _isDev = (process.argv[1] && path.basename(process.argv[1]) === "clagentic-dev") || process.argv.includes("--dev");
+var _isDev = (process.argv[1] && path.basename(process.argv[1]) === "clagentic-console-dev") || process.argv.includes("--dev");
 if (_isDev) {
-  process.env.CLAGENTIC_DEV = "1";
+  process.env.CLAGENTIC_CONSOLE_DEV = "1";
 }
 
 // Preserve console output in dev/debug mode so logs remain readable
@@ -36,6 +36,30 @@ var { log, a, sym } = require("../lib/cli/tui");
 var { handleShutdown, handleRestart, handleAdd, handleRemove, handleList, handleActivityDiagnostics, handleProcessBuildStatus } = require("../lib/cli/ipc-subcommands");
 
 var args = process.argv.slice(2);
+
+// --- `daemon` subcommand: run the daemon in the foreground, in this process ---
+// This is what the systemd unit's ExecStart invokes (Type=simple needs the
+// supervised PID to be the daemon itself, so no fork/detach here). A refused
+// start exits 78 (EX_CONFIG), which the unit lists in RestartPreventExitStatus
+// so a mis-installed package is not restart-looped.
+if (args[0] === "daemon") {
+  var { findLinkTrap, linkTrapMessage, LinkTrapProbeError } = require("../lib/link-trap");
+  var linkTrap = null;
+  try {
+    linkTrap = findLinkTrap(path.resolve(__dirname, ".."), { binPath: process.argv[1] });
+  } catch (probeErr) {
+    // An uninspectable path is treated as a trap: fail closed, same exit code.
+    if (!(probeErr instanceof LinkTrapProbeError)) throw probeErr;
+    console.error("ERROR: " + probeErr.message + "; refusing to start (path: " + probeErr.path + ", errno: " + probeErr.errno + ")");
+    process.exit(78);
+  }
+  if (linkTrap) {
+    console.error(linkTrapMessage(linkTrap));
+    process.exit(78);
+  }
+  require("../lib/daemon");
+  return;
+}
 
 // --- `release` subcommand group (release-engineering helpers, lr-01c6) ---
 // Positional subcommand, handled before flag parsing: `clagentic-console release list-betas`.
@@ -96,7 +120,7 @@ for (var i = 0; i < args.length; i++) {
   } else if (args[i] === "--no-update" || args[i] === "--skip-update") {
     skipUpdate = true;
   } else if (args[i] === "--dev") {
-    // Already handled above for CLAGENTIC_HOME, just skip
+    // Already handled above (sets CLAGENTIC_CONSOLE_DEV), just skip
   } else if (args[i] === "--watch" || args[i] === "-w") {
     watchMode = true;
   } else if (args[i] === "--debug") {
@@ -141,6 +165,7 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --activity-diagnostics  Print activity-divergence probe totals as JSON (agent-readable)");
   console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
   console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");
+  console.log("       clagentic-console daemon            Run the daemon in the foreground (used by the systemd unit)");
     console.log("");
     console.log("Options:");
     console.log("  -p, --port <port>  Port to listen on (default: 2633)");
@@ -435,7 +460,7 @@ var currentVersion = require("../package.json").version;
       if (autoRestorable.length > 0 && autoYes) {
         console.log("  " + sym.done + "  Restoring " + autoRestorable.length + " previous project(s)");
       }
-      // Add cwd if it has history in .clagentic-rc, or if there are no other projects to restore
+      // Add cwd if it has history in the recent-projects file, or if there are no other projects to restore
       var cwdInRc = (autoRc.recentProjects || []).some(function (p) {
         return p.path === cwd;
       });
@@ -448,7 +473,7 @@ var currentVersion = require("../package.json").version;
         // Keep the crash-watcher/getCliOpts() snapshot current now that the
         // wizard has chosen a port (see the analogous re-sync above).
         setDaemonWatcherOpts(currentCliOpts());
-        // Check ~/.clagentic-rc for previous projects to restore
+        // Check the recent-projects file for previous projects to restore
         var rc = loadClayrc();
         var restorable = (rc.recentProjects || []).filter(function (p) {
           return p.path !== cwd && fs.existsSync(p.path);

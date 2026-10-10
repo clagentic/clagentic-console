@@ -28,7 +28,7 @@
 //       turns and restart, and nothing else
 //   I8  every prompt that ends records exactly one terminal event
 //
-// Set CLAGENTIC_PROMPT_HARNESS_LIB to another checkout's lib/ to run the
+// Set CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB to another checkout's lib/ to run the
 // wire-level checks against it; the client render layer always exercises
 // this checkout's tools.js, so it is skipped for a foreign lib. The named
 // scenarios below are the shapes behind past regressions; `npm run

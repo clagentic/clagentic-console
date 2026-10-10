@@ -15,7 +15,7 @@
     "test": "node scripts/check-test-count.js test/*.test.js",
     "test:prompt-history": "node scripts/prompt-harness-history.js",
     "install:local-test": "node scripts/install-local-test.js",
-    "verify:installed-build": "node scripts/verify-installed-build.js && node scripts/check-sdk-lock-drift.js",
+    "verify:installed-build": "node scripts/verify-installed.js",
     "semantic-release": "semantic-release"
   },
   "files": [

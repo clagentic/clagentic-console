@@ -101,11 +101,20 @@ function materializeLib(commit, root) {
   return path.join(dir, "lib");
 }
 
+// Environment for one harness run. The un-scoped name is cleared as well as the
+// scoped one: an inherited value of either must not steer a HEAD (libDir-less)
+// run at an older checkout.
+function harnessEnv(baseEnv, libDir) {
+  var env = Object.assign({}, baseEnv);
+  delete env.CLAGENTIC_PROMPT_HARNESS_LIB;
+  if (libDir) env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB = libDir;
+  else delete env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB;
+  return env;
+}
+
 // The invariants a run violated, e.g. ["I2", "I8"], or [] for a pass.
 function runScenario(row, libDir) {
-  var env = Object.assign({}, process.env);
-  if (libDir) env.CLAGENTIC_PROMPT_HARNESS_LIB = libDir;
-  else delete env.CLAGENTIC_PROMPT_HARNESS_LIB;
+  var env = harnessEnv(process.env, libDir);
   var res = spawnSync(process.execPath, [
     "--test", "--test-reporter=tap", "--test-name-pattern=^" + escapeRegExp(row.title) + "$", HARNESS,
   ], { env: env, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
@@ -190,4 +199,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { MATRIX: MATRIX, rowProblems: rowProblems };
+module.exports = { MATRIX: MATRIX, rowProblems: rowProblems, harnessEnv: harnessEnv };
