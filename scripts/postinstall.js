@@ -183,7 +183,11 @@ function run(deps) {
   try {
     runCmd('systemctl', ['daemon-reload']);
   } catch (err) {
-    log(`WARNING: daemon-reload failed: ${errMsg(err)}`);
+    // systemd still holds the previous ExecStart, which points at the legacy
+    // wrapper. Removing the wrapper now would make the next Restart=always fail,
+    // so keep it, stop here and fail the install step with the reason.
+    log(`ERROR: daemon-reload failed: ${errMsg(err)}; the new unit is written but not loaded, the legacy wrapper ${deps.legacyWrapperPath} is kept. Run "systemctl daemon-reload" and reinstall.`);
+    return 'error-reload';
   }
 
   // Step 3: Enable the new unit if not already enabled.
@@ -194,7 +198,8 @@ function run(deps) {
     log(`WARNING: enable ${NEW_UNIT} failed: ${errMsg(err)}`);
   }
 
-  // Step 3b: The unit no longer runs the hand-placed wrapper; clean it up if untouched.
+  // Step 3b: The reload above succeeded, so systemd now runs the new ExecStart and the
+  // hand-placed wrapper is unreferenced; clean it up if untouched.
   removeLegacyWrapper(deps);
 
   // Step 4: Handle rename — migrate from old clagentic.service if present.
@@ -269,5 +274,5 @@ function run(deps) {
 module.exports = { run, realDeps, removeLegacyWrapper };
 
 if (require.main === module) {
-  run(realDeps());
+  if (run(realDeps()) === 'error-reload') process.exitCode = 1;
 }

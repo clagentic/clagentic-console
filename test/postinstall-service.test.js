@@ -182,9 +182,85 @@ test("isGlobalInstall reads npm's lifecycle environment", function () {
   assert.strictEqual(svc.isGlobalInstall({ npm_config_global: "" }), false);
 });
 
-test("package.json still runs postinstall.js on install, and the script is a no-op as a module load", function () {
+test("package.json still runs postinstall.js on install", function () {
   var pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
   assert.strictEqual(pkg.scripts.postinstall, "node scripts/postinstall.js");
-  // require() above did not execute run(): require.main !== module.
-  assert.strictEqual(typeof postinstall.run, "function");
+});
+
+test("loading the module has no host effect: zero filesystem writes and zero process spawns", function (t) {
+  var childProcess = require("child_process");
+  var writers = ["writeFileSync", "appendFileSync", "mkdirSync", "unlinkSync", "rmSync", "renameSync",
+    "copyFileSync", "symlinkSync", "chmodSync", "chownSync", "writeFile", "unlink", "rm"];
+  var spawners = ["execFileSync", "execSync", "spawnSync", "spawn", "exec", "execFile", "fork"];
+  var seen = [];
+  writers.forEach(function (name) {
+    t.mock.method(fs, name, function () { seen.push("fs." + name); });
+  });
+  spawners.forEach(function (name) {
+    t.mock.method(childProcess, name, function () { seen.push("child_process." + name); });
+  });
+
+  var modPath = require.resolve("../scripts/postinstall");
+  var svcPath = require.resolve("../lib/service-install");
+  var savedPost = require.cache[modPath];
+  var savedSvc = require.cache[svcPath];
+  delete require.cache[modPath];
+  delete require.cache[svcPath];
+  var fresh;
+  try {
+    fresh = require("../scripts/postinstall");
+  } finally {
+    delete require.cache[modPath];
+    delete require.cache[svcPath];
+    if (savedPost) require.cache[modPath] = savedPost;
+    if (savedSvc) require.cache[svcPath] = savedSvc;
+  }
+
+  assert.deepStrictEqual(seen, [], "require() must not write files or spawn processes");
+  assert.strictEqual(typeof fresh.run, "function");
+});
+
+test("the main guard is what runs postinstall: executed as a script it acts, required it does not", function () {
+  var src = fs.readFileSync(path.join(REPO, "scripts", "postinstall.js"), "utf8");
+  var tail = src.slice(src.lastIndexOf("module.exports"));
+  assert.match(tail, /if \(require\.main === module\) \{[\s\S]*run\(realDeps\(\)\)/);
+  assert.doesNotMatch(src.slice(0, src.lastIndexOf("module.exports")), /^run\(/m);
+});
+
+test("daemon-reload failure: the new unit is written but the legacy wrapper is kept and the result is an error", function () {
+  var wrapper = "/usr/local/bin/clagentic-daemon.sh";
+  var h;
+  h = makeDeps({
+    files: { [wrapper]: svc.LEGACY_WRAPPER_CONTENT },
+    runCmd: function (cmd, args) {
+      if (args[0] === "daemon-reload") { var e = new Error("boom"); e.stderr = Buffer.from("Failed to connect to bus"); throw e; }
+      return "";
+    },
+  });
+  assert.strictEqual(postinstall.run(h.deps), "error-reload");
+  assert.deepStrictEqual(h.calls.unlinks, [], "wrapper must survive a failed reload");
+  assert.ok(h.files[wrapper], "wrapper still on disk");
+  assert.ok(h.files["/etc/systemd/system/clagentic-console.service"], "unit written");
+  assert.ok(h.calls.logs.some(function (l) { return /daemon-reload failed: Failed to connect to bus/.test(l) && /kept/.test(l); }), "reason logged");
+  assert.ok(!h.calls.cmds.some(function (c) { return /^systemctl (enable|start|restart)/.test(c); }), "nothing proceeds on top of an unloaded unit");
+});
+
+test("daemon-reload success: the wrapper is removed only after the reload, with the new unit already in place", function () {
+  var wrapper = "/usr/local/bin/clagentic-daemon.sh";
+  var atReload = null;
+  var h = makeDeps({
+    files: { [wrapper]: svc.LEGACY_WRAPPER_CONTENT },
+    runCmd: function (cmd, args) {
+      if (args[0] === "daemon-reload" && atReload === null) {
+        atReload = {
+          wrapperPresent: Object.prototype.hasOwnProperty.call(h.files, wrapper),
+          unitPresent: Object.prototype.hasOwnProperty.call(h.files, "/etc/systemd/system/clagentic-console.service"),
+        };
+      }
+      return "";
+    },
+  });
+  assert.strictEqual(postinstall.run(h.deps), "installed");
+  assert.deepStrictEqual(atReload, { wrapperPresent: true, unitPresent: true }, "at reload time the wrapper still exists and the unit is written");
+  assert.deepStrictEqual(h.calls.unlinks, [wrapper]);
 });
