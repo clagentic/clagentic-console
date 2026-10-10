@@ -196,26 +196,58 @@ var MAX_FAILURE_NAME_LENGTH = 200;
 // deliberate, the parent chain locates the leaf. A `# SKIP`/`# TODO` directive
 // is not a failure and is ignored.
 function extractFailedTests(tap) {
-  var names = [];
-  String(tap || "").split("\n").forEach(function (line) {
-    var match = /^\s*not ok \d+(?: - (.*))?$/.exec(line);
-    if (!match) return;
-    var name = (match[1] || "(unnamed)").trim();
-    if (/#\s*(SKIP|TODO)\b/i.test(name)) return;
-    names.push(name);
-  });
-  return names;
+  return extractFailures(tap).map(function (f) { return f.name; });
 }
 
-function formatFailedTests(names) {
-  var shown = names.slice(0, MAX_NAMED_FAILURES).map(function (name) {
-    var clipped = name.length > MAX_FAILURE_NAME_LENGTH
-      ? name.slice(0, MAX_FAILURE_NAME_LENGTH) + "..."
-      : name;
-    return "  not ok - " + clipped;
+// extractFailures(tap) — like extractFailedTests but each entry also carries
+// `detail`: the error/expected/actual lines from the YAML block node's TAP
+// reporter prints under a failing test, so the annotation says WHY it failed
+// and not only which test did. Multi-line values (`error: |-`) contribute
+// their first content line.
+var MAX_FAILURE_DETAIL_LENGTH = 600;
+var DETAIL_KEY = /^\s+(error|expected|actual|failureType|code):\s*(.*)$/;
+
+function extractFailures(tap) {
+  var failures = [];
+  var current = null;
+  var lines = String(tap || "").split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var match = /^\s*not ok \d+(?: - (.*))?$/.exec(line);
+    if (match) {
+      var name = (match[1] || "(unnamed)").trim();
+      if (/#\s*(SKIP|TODO)\b/i.test(name)) { current = null; continue; }
+      current = { name: name, detail: "" };
+      failures.push(current);
+      continue;
+    }
+    if (/^\s*(ok \d+|# Subtest:)/.test(line)) { current = null; continue; }
+    if (!current) continue;
+    var detailMatch = DETAIL_KEY.exec(line);
+    if (!detailMatch) continue;
+    var value = detailMatch[2].trim();
+    if ((value === "|-" || value === "|") && i + 1 < lines.length) {
+      value = lines[i + 1].trim();
+    }
+    if (current.detail.length < MAX_FAILURE_DETAIL_LENGTH) {
+      current.detail += (current.detail ? "; " : "") + detailMatch[1] + ": " + value;
+    }
+  }
+  return failures;
+}
+
+function clip(text, max) {
+  return text.length > max ? text.slice(0, max) + "..." : text;
+}
+
+function formatFailedTests(failures) {
+  var shown = [];
+  failures.slice(0, MAX_NAMED_FAILURES).forEach(function (f) {
+    shown.push("  not ok - " + clip(f.name, MAX_FAILURE_NAME_LENGTH));
+    if (f.detail) shown.push("      " + clip(f.detail, MAX_FAILURE_DETAIL_LENGTH));
   });
-  if (names.length > MAX_NAMED_FAILURES) {
-    shown.push("  ... and " + (names.length - MAX_NAMED_FAILURES) + " more");
+  if (failures.length > MAX_NAMED_FAILURES) {
+    shown.push("  ... and " + (failures.length - MAX_NAMED_FAILURES) + " more");
   }
   return shown.join("\n");
 }
@@ -323,7 +355,7 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
     // Name the failing tests in the verdict itself: the annotation is the only
     // channel a crew agent can read from CI, and "see the TAP above" points at
     // a log it cannot fetch.
-    var failed = extractFailedTests(result.stdout);
+    var failed = extractFailures(result.stdout);
     var named = formatFailedTests(failed);
     return {
       ok: false,
@@ -344,6 +376,7 @@ module.exports = {
   classifyRun: classifyRun,
   emitAnnotation: emitAnnotation,
   extractFailedTests: extractFailedTests,
+  extractFailures: extractFailures,
   writeFullySync: writeFullySync,
 };
 

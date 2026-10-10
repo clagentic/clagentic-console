@@ -19,6 +19,10 @@ var FIXTURE_TAP = [
   "    not ok 2 - ws upgrade echoes subprotocol",
   "      ---",
   "      duration_ms: 1.5",
+  "      failureType: 'testCodeFailure'",
+  "      error: |-",
+  "        Expected values to be strictly equal:",
+  "      code: 'ERR_ASSERTION'",
   "      ...",
   "not ok 1 - suite one",
   "ok 2 - skipped one # SKIP not today",
@@ -55,6 +59,12 @@ test("test-failure verdict names the failing tests", function () {
   assert.ok(verdict.reason.indexOf("ws upgrade echoes subprotocol") !== -1, verdict.reason);
   assert.ok(verdict.reason.indexOf("top level failing test") !== -1, verdict.reason);
   assert.ok(verdict.reason.indexOf("inner passes") === -1, "passing tests must not be named");
+});
+
+test("test-failure verdict carries the error detail of the failing test", function () {
+  var verdict = failingRun(FIXTURE_TAP);
+  assert.ok(verdict.reason.indexOf("Expected values to be strictly equal:") !== -1, verdict.reason);
+  assert.ok(verdict.reason.indexOf("code: 'ERR_ASSERTION'") !== -1, verdict.reason);
 });
 
 test("test-failure verdict caps the number and length of named tests", function () {
