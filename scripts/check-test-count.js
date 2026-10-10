@@ -185,6 +185,73 @@ function emitAnnotation(message) {
   writeFullySync(1, "::error::" + escaped + "\n");
 }
 
+// Caps keep the annotation inside GitHub's message size limits and readable
+// when a systemic failure (e.g. a broken fixture) fails hundreds of tests.
+var MAX_NAMED_FAILURES = 25;
+var MAX_FAILURE_NAME_LENGTH = 200;
+
+// extractFailedTests(tap) — every `not ok` line of a TAP stream, in order,
+// with nesting indentation dropped. Subtests and their enclosing suite both
+// report `not ok`, so a leaf failure is listed alongside its parents; that is
+// deliberate, the parent chain locates the leaf. A `# SKIP`/`# TODO` directive
+// is not a failure and is ignored.
+function extractFailedTests(tap) {
+  return extractFailures(tap).map(function (f) { return f.name; });
+}
+
+// extractFailures(tap) — like extractFailedTests but each entry also carries
+// `detail`: the error/expected/actual lines from the YAML block node's TAP
+// reporter prints under a failing test, so the annotation says WHY it failed
+// and not only which test did. Multi-line values (`error: |-`) contribute
+// their first content line.
+var MAX_FAILURE_DETAIL_LENGTH = 600;
+var DETAIL_KEY = /^\s+(error|expected|actual|failureType|code):\s*(.*)$/;
+
+function extractFailures(tap) {
+  var failures = [];
+  var current = null;
+  var lines = String(tap || "").split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var match = /^\s*not ok \d+(?: - (.*))?$/.exec(line);
+    if (match) {
+      var name = (match[1] || "(unnamed)").trim();
+      if (/#\s*(SKIP|TODO)\b/i.test(name)) { current = null; continue; }
+      current = { name: name, detail: "" };
+      failures.push(current);
+      continue;
+    }
+    if (/^\s*(ok \d+|# Subtest:)/.test(line)) { current = null; continue; }
+    if (!current) continue;
+    var detailMatch = DETAIL_KEY.exec(line);
+    if (!detailMatch) continue;
+    var value = detailMatch[2].trim();
+    if ((value === "|-" || value === "|") && i + 1 < lines.length) {
+      value = lines[i + 1].trim();
+    }
+    if (current.detail.length < MAX_FAILURE_DETAIL_LENGTH) {
+      current.detail += (current.detail ? "; " : "") + detailMatch[1] + ": " + value;
+    }
+  }
+  return failures;
+}
+
+function clip(text, max) {
+  return text.length > max ? text.slice(0, max) + "..." : text;
+}
+
+function formatFailedTests(failures) {
+  var shown = [];
+  failures.slice(0, MAX_NAMED_FAILURES).forEach(function (f) {
+    shown.push("  not ok - " + clip(f.name, MAX_FAILURE_NAME_LENGTH));
+    if (f.detail) shown.push("      " + clip(f.detail, MAX_FAILURE_DETAIL_LENGTH));
+  });
+  if (failures.length > MAX_NAMED_FAILURES) {
+    shown.push("  ... and " + (failures.length - MAX_NAMED_FAILURES) + " more");
+  }
+  return shown.join("\n");
+}
+
 // classifyRun() is the pure decision core of this script: given the raw
 // spawnSync() result plus the bucketed RESULT-line data, decide whether the
 // run passes and, if not, exactly WHY. Pulled out of the top-level script
@@ -285,13 +352,19 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
   }
 
   if (result.status !== 0) {
+    // Name the failing tests in the verdict itself: the annotation is the only
+    // channel a crew agent can read from CI, and "see the TAP above" points at
+    // a log it cannot fetch.
+    var failed = extractFailures(result.stdout);
+    var named = formatFailedTests(failed);
     return {
       ok: false,
       exitCode: result.status,
       kind: "test-failure",
       reason: (
         "node --test exited " + result.status + " with a named test failure above (see the TAP `not ok` " +
-        "line(s)) — this is an ordinary test failure, not a wrapper-level condition."
+        "line(s)) — this is an ordinary test failure, not a wrapper-level condition." +
+        (named ? "\nFailing tests (" + failed.length + "):\n" + named : "")
       ),
     };
   }
@@ -302,6 +375,8 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
 module.exports = {
   classifyRun: classifyRun,
   emitAnnotation: emitAnnotation,
+  extractFailedTests: extractFailedTests,
+  extractFailures: extractFailures,
   writeFullySync: writeFullySync,
 };
 
