@@ -109,17 +109,47 @@ test("a session is readable by its owner, by anyone when shared, and by an admin
 
 test("in single-user mode a connection with no user is the implicit owner with admin rights and every project", function () {
   var access = accessWith({ open: { visibility: "public" }, closed: { visibility: "private", ownerId: "owner" } }, SINGLE_USER);
-  var principal = access.principalFor(null);
+  var proof = { authenticated: true };
+  var principal = access.principalFor(null, proof);
   assert.deepEqual({ id: principal.id, implicit: principal.implicit, admin: principal.admin }, { id: null, implicit: true, admin: true });
-  assert.equal(access.isAdmin(null), true);
-  assert.equal(access.isAdmin(undefined), true);
-  assert.equal(access.canAccess(null, "open"), true);
-  assert.equal(access.canAccess(null, "closed"), true);
-  assert.equal(access.canAccess(null, "a--worktree"), true, "a worktree slug needs no lookup for the owner");
-  assert.equal(access.canAccess(null, undefined), false, "a slug that is not a name is still refused");
-  assert.deepEqual(access.filterProjectList(null, [{ slug: "open" }, { slug: "closed" }, null]).map(function (p) { return p.slug; }), ["open", "closed"]);
-  assert.equal(access.canReadSession(null, { ownerId: "someone", sessionVisibility: "private" }), true);
-  assert.equal(access.canReadSession(null, null), false);
+  assert.equal(access.isAdmin(null, proof), true);
+  assert.equal(access.isAdmin(undefined, proof), true);
+  assert.equal(access.canAccess(null, "open", proof), true);
+  assert.equal(access.canAccess(null, "closed", proof), true);
+  assert.equal(access.canAccess(null, "a--worktree", proof), true, "a worktree slug needs no lookup for the owner");
+  assert.equal(access.canAccess(null, undefined, proof), false, "a slug that is not a name is still refused");
+  assert.deepEqual(access.filterProjectList(null, [{ slug: "open" }, { slug: "closed" }, null], proof).map(function (p) { return p.slug; }), ["open", "closed"]);
+  assert.equal(access.canReadSession(null, { ownerId: "someone", sessionVisibility: "private" }, proof), true);
+  assert.equal(access.canReadSession(null, null, proof), false);
+});
+
+test("in single-user mode no user is nobody unless the caller proved the login, whatever the proof's shape", function () {
+  var access = accessWith({ open: { visibility: "public" } }, SINGLE_USER);
+  [undefined, null, {}, { authenticated: false }, { authenticated: "true" }, { authenticated: 1 }, "authenticated", true].forEach(function (proof) {
+    var shown = JSON.stringify(proof);
+    assert.equal(access.principalFor(null, proof), null, shown);
+    assert.equal(access.isAdmin(null, proof), false, shown);
+    assert.equal(access.canAccess(null, "open", proof), false, shown);
+    assert.deepEqual(access.filterProjectList(null, [{ slug: "open" }], proof), [], shown);
+    assert.equal(access.canReadSession(null, { ownerId: "owner" }, proof), false, shown);
+  });
+  assert.equal(access.principalFor(null), null, "no proof argument at all");
+});
+
+test("a named user needs no proof, and a proof alone does not make a user", function () {
+  var access = accessWith({ open: { visibility: "public" } }, SINGLE_USER);
+  assert.equal(access.principalFor(PEOPLE.member).id, "member");
+  assert.equal(access.canAccess("member", "open"), true);
+  assert.equal(access.principalFor({}, { authenticated: true }), null, "a record with no id stays refused");
+});
+
+test("authOf reads the proof a socket or request carries and nothing else", function () {
+  var access = accessWith({}, SINGLE_USER);
+  assert.deepEqual(access.authOf({ _clagenticAuthenticated: true }), { authenticated: true });
+  [null, undefined, {}, { _clagenticAuthenticated: false }, { _clagenticAuthenticated: "true" }, { authenticated: true }, { _clagenticUser: PEOPLE.owner }].forEach(function (conn) {
+    assert.deepEqual(access.authOf(conn), { authenticated: false }, JSON.stringify(conn));
+  });
+  assert.equal(access.canAccess(null, "x", access.authOf({ _clagenticAuthenticated: true })), true);
 });
 
 test("in single-user mode a named user keeps exactly the rights of that user", function () {
@@ -133,13 +163,15 @@ test("in multi-user mode, with no mode wired, or when the mode cannot be read, n
   [accessWith({ open: { visibility: "public" } }, MULTI_USER),
    accessWith({ open: { visibility: "public" } }, undefined),
    accessWith({ open: { visibility: "public" } }, function () { throw new Error("users.json unreadable"); })].forEach(function (access) {
+    var proof = { authenticated: true };
     assert.equal(access.principalFor(null), null);
-    assert.equal(access.principalFor(undefined), null);
-    assert.equal(access.principalFor({}), null, "a record with no id is no principal");
-    assert.equal(access.isAdmin(null), false);
-    assert.equal(access.canAccess(null, "open"), false);
-    assert.deepEqual(access.filterProjectList(null, [{ slug: "open" }]), []);
-    assert.equal(access.canReadSession(null, { ownerId: "owner" }), false);
+    assert.equal(access.principalFor(null, proof), null, "a proven login without a user is still nobody");
+    assert.equal(access.principalFor(undefined, proof), null);
+    assert.equal(access.principalFor({}, proof), null, "a record with no id is no principal");
+    assert.equal(access.isAdmin(null, proof), false);
+    assert.equal(access.canAccess(null, "open", proof), false);
+    assert.deepEqual(access.filterProjectList(null, [{ slug: "open" }], proof), []);
+    assert.equal(access.canReadSession(null, { ownerId: "owner" }, proof), false);
   });
 });
 
@@ -157,7 +189,7 @@ test("the daemon's mode is read from the stored users and defaults to multi-user
     fs.writeFileSync(file, "{ not json");
     assert.throws(function () { realUsers.isMultiUser(); }, "a corrupt file is an error, which the resolver reads as multi-user");
     var viaResolver = createProjectAccess({ users: users, onGetProjectAccess: null, isMultiUser: realUsers.isMultiUser });
-    assert.equal(viaResolver.principalFor(null), null);
+    assert.equal(viaResolver.principalFor(null, { authenticated: true }), null);
   } finally {
     fs.rmSync(file, { force: true });
   }
@@ -241,14 +273,23 @@ test("a message that is not a JSON object is refused without an error to send", 
 
 test("the gate lets the single-user owner (no user record) act on the current and any other project", function () {
   var gate = gateWith(TABLE, SINGLE_USER);
-  var own = gate.authorize({ _clagenticUser: null }, { type: "x" });
+  var owner = { _clagenticUser: null, _clagenticAuthenticated: true };
+  var own = gate.authorize(owner, { type: "x" });
   assert.equal(own.allowed, true);
-  var other = gate.authorize({ _clagenticUser: null }, { type: "x", targetSlug: "there", id: 4 });
+  var other = gate.authorize(owner, { type: "x", targetSlug: "there", id: 4 });
   assert.equal(other.allowed, true);
   assert.equal(other.target.slug, "there");
   assert.deepEqual(other.message, { type: "x", id: 4 });
-  assert.equal(gate.authorize({ _clagenticUser: null }, { type: "x", targetSlug: "nowhere" }).allowed, false, "a project that does not exist is still refused");
-  assert.equal(gate.authorize({ _clagenticUser: null }, { type: "x", targetSlug: 5 }).allowed, false);
+  assert.equal(gate.authorize(owner, { type: "x", targetSlug: "nowhere" }).allowed, false, "a project that does not exist is still refused");
+  assert.equal(gate.authorize(owner, { type: "x", targetSlug: 5 }).allowed, false);
+});
+
+test("the gate refuses a single-user connection that never passed the upgrade login check", function () {
+  var gate = gateWith(TABLE, SINGLE_USER);
+  [{ _clagenticUser: null }, { _clagenticUser: null, _clagenticAuthenticated: false }, {}, null].forEach(function (ws) {
+    assert.equal(gate.authorize(ws, { type: "x" }).allowed, false, JSON.stringify(ws));
+    assert.equal(gate.authorize(ws, { type: "x", targetSlug: "there" }).allowed, false, JSON.stringify(ws));
+  });
 });
 
 test("the gate refuses a connection with no user in multi-user mode, on every message shape", function () {

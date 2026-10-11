@@ -70,8 +70,8 @@ var PROJECT_LOOP_JS = readMod("lib/project-loop.js");
 test("lib/project-loop.js: hub_recent_sessions_list threads the connecting client's userId into getAllProjectSessions", function () {
   assert.match(
     PROJECT_LOOP_JS,
-    /getAllProjectSessions\s*\(\s*true\s*,\s*hubUserId\s*\)/,
-    "expected getAllProjectSessions(true, hubUserId) — userId threaded from the connecting ws"
+    /getAllProjectSessions\s*\(\s*true\s*,\s*hubUserId\s*,\s*authOf\(ws\)\s*\)/,
+    "expected getAllProjectSessions(true, hubUserId, authOf(ws)) — userId and login proof threaded from the connecting ws"
   );
   assert.match(
     PROJECT_LOOP_JS,

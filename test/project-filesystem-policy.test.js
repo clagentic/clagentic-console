@@ -69,8 +69,10 @@ var usersModule = attachPermissions({
   },
 });
 
-function fakeSocket(user, osInfo) {
-  return { readyState: 1, _clagenticUser: user || null, osInfo: osInfo || null, sent: [] };
+// A connection that passed the WebSocket upgrade's login check, which is what
+// marks it authenticated. `unproven` builds one that never did.
+function fakeSocket(user, osInfo, unproven) {
+  return { readyState: 1, _clagenticUser: user || null, _clagenticAuthenticated: !unproven, osInfo: osInfo || null, sent: [] };
 }
 
 // A project's filesystem handler wired as lib/project.js wires it.
@@ -232,6 +234,20 @@ test("multi-user mode, no user: every file, settings and git message is refused 
   assert.deepEqual(rig.calls.sharedEnv, []);
   assert.deepEqual(rig.calls.watch, []);
   assert.equal(fs.readFileSync(path.join(REPO, "src", "a.txt"), "utf8"), "one\ntwo\n", "nothing was written");
+});
+
+test("single-user mode, no user and no proof of login: every file, settings and git message is refused", function () {
+  var rig = build();
+  var stranger = fakeSocket(null, null, true);
+  ["read_global_claude_md", "write_global_claude_md", "get_shared_env", "set_shared_env"].forEach(function (type) {
+    assert.equal(send(stranger, rig, { type: type, content: "x", envrc: "X=1" }).last.type, "error", type);
+  });
+  ["fs_list", "fs_read", "fs_write", "fs_search", "fs_watch", "fs_file_history", "fs_git_diff", "fs_file_at"].forEach(function (type) {
+    var res = send(stranger, rig, { type: type, path: "src/a.txt", content: "x", query: "a", hash: HASH }).last;
+    assert.match(res.error, /Authentication required/, type);
+  });
+  assert.deepEqual(rig.calls.sharedEnv, []);
+  assert.deepEqual(rig.calls.watch, []);
 });
 
 // --- The file gate covers every fs_* message but fs_unwatch ------------------
@@ -450,6 +466,39 @@ test("a repository whose owner cannot be established fails closed", function () 
   assert.equal(exec.calls.length, 0, "git was not started");
 });
 
+test("a project in a subdirectory of its repository runs git as the repository's owner", function () {
+  var exec = recordingExec();
+  var sub = path.join(REPO, "src");
+  var st = fs.statSync(path.join(REPO, ".git"));
+  assert.equal(projectGit.findRepositoryRoot(sub), REPO);
+  assert.equal(projectGit.findRepositoryRoot(REPO), REPO);
+  assert.deepEqual(projectGit.repositoryOwner(sub), { uid: st.uid, gid: st.gid });
+  projectGit.runGit(["log", "-1"], { cwd: sub, osUsers: true, exec: exec });
+  assert.equal(exec.calls[0].opts.uid, st.uid);
+  assert.equal(exec.calls[0].opts.gid, st.gid);
+  assert.equal(exec.calls[0].opts.cwd, sub, "git still runs in the project directory");
+});
+
+test("the nearest enclosing repository decides the owner, and a .git file counts", function () {
+  var outer = fs.mkdtempSync(path.join(SANDBOX, "nested-"));
+  fs.mkdirSync(path.join(outer, ".git"));
+  var inner = path.join(outer, "inner");
+  fs.mkdirSync(inner);
+  fs.writeFileSync(path.join(inner, ".git"), "gitdir: ../elsewhere\n");
+  var deep = path.join(inner, "a", "b");
+  fs.mkdirSync(deep, { recursive: true });
+  assert.equal(projectGit.findRepositoryRoot(deep), inner, "a worktree's .git file is the nearest entry");
+  assert.equal(projectGit.findRepositoryRoot(path.join(outer, "other-dir-that-does-not-exist")), outer);
+});
+
+test("a directory with no repository above it is refused, and so is an unreadable one", function () {
+  var exec = recordingExec();
+  var bare = fs.mkdtempSync(path.join(SANDBOX, "bare-"));
+  assert.equal(projectGit.findRepositoryRoot(bare), null);
+  assert.throws(function () { projectGit.runGit(["log", "-1"], { cwd: path.join(bare, "sub"), osUsers: true, exec: exec }); }, /repository owner/);
+  assert.equal(exec.calls.length, 0);
+});
+
 test("every call switches off the programs a repository can name, and diff rendering skips external drivers and textconv", function () {
   var exec = recordingExec();
   ["diff", "show", "log"].forEach(function (sub) {
@@ -563,5 +612,21 @@ test("as another user: git runs as the repository's owner and its config program
   assert.match(out, /second/);
   projectGit.runGit(["diff", repo.hash + "~1", repo.hash, "--", "f.txt"], { cwd: repo.dir, osUsers: true });
   projectGit.runGit(["status"], { cwd: repo.dir, osUsers: true });
+  assert.deepEqual(fs.readdirSync(repo.markers), [], "no marker was created by any program");
+});
+
+test("as another user: a project in a repository subdirectory still reads its history as the repository's owner", function (t) {
+  if (typeof process.getuid !== "function" || process.getuid() !== 0) {
+    t.skip("needs root to run git as another uid");
+    return;
+  }
+  var repo = hostileRepo();
+  var sub = path.join(repo.dir, "pkg");
+  fs.mkdirSync(sub);
+  var OWNER = 65534;
+  execFileSync("chown", ["-R", OWNER + ":" + OWNER, repo.dir, repo.markers]);
+  fs.chmodSync(SANDBOX, 0o755);
+  var out = projectGit.runGit(["log", "--format=%s", "-1"], { cwd: sub, osUsers: true });
+  assert.match(out, /second/);
   assert.deepEqual(fs.readdirSync(repo.markers), [], "no marker was created by any program");
 });
