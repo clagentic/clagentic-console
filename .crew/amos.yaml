@@ -24,6 +24,7 @@ scope:
     - "CLAUDE.md"
     - ".env"
     - ".env.*"
+    - ".git/**"
     - "node_modules/**"
 
 # OPTION B — explicit allowlist (use for projects where only specific
