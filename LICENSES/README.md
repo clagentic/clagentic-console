@@ -9,4 +9,7 @@ the MIT terms in `MIT-legacy.txt` (a verbatim copy of the previous `LICENSE`).
 This notice does not narrow or revoke those grants. Releases published before
 this change remain under MIT.
 
+The FSL-1.1-MIT license applies from commit db3c533 (PR #434) onward; the first
+release cut after that commit is the first FSL release.
+
 Third-party components keep their own licenses.
