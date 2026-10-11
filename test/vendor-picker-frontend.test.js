@@ -10,6 +10,7 @@ var path = require("path");
 var { pathToFileURL } = require("url");
 var yoke = require("../lib/yoke");
 var { buildVendorRegistryMessage } = require("../lib/vendor-registry-message");
+var fakeDom = require("./fake-dom-prompt-cards");
 
 var PUBLIC = path.join(__dirname, "..", "lib", "public");
 
@@ -134,15 +135,96 @@ test("before any registry arrives a control reads as unavailable with a generic 
   assert.ok(gate.reason.length > 0);
 });
 
-test("the page no longer hardcodes agent buttons; the picker script renders from the registry", function () {
+test("the page no longer hardcodes agent buttons; the picker mounts into an empty container", function () {
   var html = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8");
   assert.equal(html.indexOf("vendor-btn-"), -1, "no hardcoded vendor buttons in index.html");
   assert.match(html, /<div id="vendor-toggle-wrap"><\/div>/);
-  var panels = fs.readFileSync(path.join(PUBLIC, "modules", "app-panels.js"), "utf8");
-  assert.equal(panels.indexOf("vendor-btn-"), -1);
-  assert.match(panels, /pickerRows\(/);
-  assert.match(panels, /recheck_vendors/);
-  assert.match(panels, /Re-check/);
+});
+
+// The picker as the browser draws it: a registry message in, DOM out.
+async function renderPickerFrom(registryState, current) {
+  fakeDom.setupGlobals();
+  var [VR, storeMod] = await modules();
+  var picker = await import(pathToFileURL(path.join(PUBLIC, "modules", "vendor-picker.js")).href);
+  storeMod.createStore({});
+  yoke.registry.register(fakeDescriptor());
+  try {
+    var msg = JSON.parse(JSON.stringify(buildVendorRegistryMessage(registryState)));
+    VR.applyVendorRegistry(msg);
+    var container = new fakeDom.FakeElement("div");
+    var selected = [];
+    var rechecks = [];
+    picker.renderVendorPicker(container, VR.pickerRows(storeMod.store.get("vendorRegistry"), current), {
+      onSelect: function (id) { selected.push(id); },
+      onRecheck: function () { rechecks.push(true); },
+    });
+    return { container: container, selected: selected, rechecks: rechecks };
+  } finally {
+    yoke.registry.unregister("fake");
+  }
+}
+
+function pickerButton(container, id) {
+  return container.querySelector('[data-vendor="' + id + '"]');
+}
+
+test("picker DOM: a registered fake agent is a disabled button with its install hint, and Re-check asks the server again", async function () {
+  var view = await renderPickerFrom({ installedVendors: ["claude"], availableVendors: ["claude"], capabilitiesByVendor: {} }, "claude");
+  var buttons = view.container.querySelectorAll(".vendor-toggle-btn");
+  assert.deepEqual(buttons.map(function (b) { return b.dataset.vendor; }), ["claude", "codex", "fake"]);
+
+  var claude = pickerButton(view.container, "claude");
+  assert.ok(claude.classList.contains("active"));
+  assert.ok(!claude.classList.contains("disabled"));
+  assert.equal(claude.getAttribute("aria-disabled"), null);
+
+  var fake = pickerButton(view.container, "fake");
+  assert.ok(fake.classList.contains("disabled"));
+  assert.equal(fake.getAttribute("aria-disabled"), "true");
+  assert.match(fake.title, /Fake Agent is not installed\. Install fake-agent from its release page\./);
+  assert.equal(fake.querySelector(".vendor-toggle-label").textContent, "Fake Agent");
+  assert.equal(fake.querySelector("img").src, "/fake-avatar.png");
+  assert.equal(fake.querySelector(".vendor-toggle-note"), null, "not installed is not a failed check");
+
+  fake.click();
+  claude.click();
+  assert.deepEqual(view.selected, ["fake", "claude"], "the click reaches the caller; refusing an agent that is not installed is the caller's rule");
+
+  var recheck = view.container.querySelector(".vendor-recheck-btn");
+  assert.ok(recheck, "a Re-check action is offered while an agent is missing");
+  assert.equal(recheck.textContent, "Re-check");
+  recheck.click();
+  assert.equal(view.rechecks.length, 1);
+});
+
+test("picker DOM: when every agent is installed there is no Re-check action", async function () {
+  var view = await renderPickerFrom({ installedVendors: ["claude", "codex", "fake"], availableVendors: ["claude"], capabilitiesByVendor: {} }, "codex");
+  assert.equal(view.container.querySelector(".vendor-recheck-btn"), null);
+  assert.ok(pickerButton(view.container, "codex").classList.contains("active"));
+  assert.equal(view.container.querySelectorAll(".disabled").length, 0);
+});
+
+test("picker DOM: an agent whose install lookup failed says it could not be checked, not that it is missing", async function () {
+  var view = await renderPickerFrom({ installedVendors: ["claude"], probeFailures: {}, availableVendors: ["claude"], capabilitiesByVendor: {} }, "claude");
+  assert.equal(pickerButton(view.container, "fake").querySelector(".vendor-toggle-note"), null);
+
+  fakeDom.setupGlobals();
+  var [VR] = await modules();
+  var rows = VR.pickerRows([
+    { id: "claude", displayName: "Claude Code", installed: false, probeFailure: "timeout", installHint: "Install it." },
+    { id: "codex", displayName: "Codex", installed: false, probeFailure: null, installHint: "Install Codex." },
+  ], "claude");
+  assert.equal(rows[0].checkFailed, true);
+  assert.match(rows[0].title, /Could not check: timeout/);
+  assert.doesNotMatch(rows[0].title, /not installed/);
+  assert.equal(rows[1].checkFailed, false);
+  assert.match(rows[1].title, /Codex is not installed\. Install Codex\./);
+
+  var picker = await import(pathToFileURL(path.join(PUBLIC, "modules", "vendor-picker.js")).href);
+  var container = new fakeDom.FakeElement("div");
+  picker.renderVendorPicker(container, rows, { onSelect: function () {}, onRecheck: function () {} });
+  assert.equal(pickerButton(container, "claude").querySelector(".vendor-toggle-note").textContent, "Could not check");
+  assert.equal(pickerButton(container, "codex").querySelector(".vendor-toggle-note"), null);
 });
 
 test("no front-end control compares the current vendor to a literal agent name for the gated controls", function () {

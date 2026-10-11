@@ -96,6 +96,33 @@ test("in-process listing (Codex bridge): the same rule, through the shared liste
   assert.deepEqual(mcpToolSchema.listServerTools("none", null, z.toJSONSchema, null), []);
 });
 
+test("tool table: a server whose SDK private table is gone or changed shape is reported, not silently emptied", function () {
+  [
+    { instance: {} },
+    { instance: { _registeredTools: null } },
+    { instance: { _registeredTools: new Map() } },
+    { instance: { _registeredTools: [] } },
+  ].forEach(function (server) {
+    assert.equal(mcpToolSchema.readRegisteredTools(server).ok, false);
+    var skipped = [];
+    var tools;
+    captureConsoleError(function () {
+      tools = mcpToolSchema.listServerTools("files", server, z.toJSONSchema, function (d) { skipped.push(d); });
+    });
+    assert.deepEqual(tools, []);
+    assert.equal(skipped.length, 1);
+    assert.equal(skipped[0].source, "mcp");
+    assert.match(skipped[0].message, /files was left out because its tools could not be listed/);
+  });
+});
+
+test("tool table: a plain config without an instance is not an SDK change", function () {
+  var skipped = [];
+  assert.deepEqual(mcpToolSchema.listServerTools("cfg", { type: "stdio" }, z.toJSONSchema, function (d) { skipped.push(d); }), []);
+  assert.equal(skipped.length, 0);
+  assert.equal(mcpToolSchema.readRegisteredTools(serverWith({ a: CONVERTIBLE })).ok, true);
+});
+
 test("worker rebuild: a descriptor the worker cannot turn into a schema is skipped and reported over IPC, the rest are registered", function () {
   var registered = [];
   var sdk = {
