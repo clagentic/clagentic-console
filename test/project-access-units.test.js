@@ -13,7 +13,8 @@ var SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-access-units-"));
 process.env.CLAGENTIC_CONSOLE_HOME = path.join(SANDBOX, "data");
 
 var { attachPermissions } = require("../lib/users-permissions");
-var { createProjectAccess, canReadSession } = require("../lib/project-access");
+var { createProjectAccess } = require("../lib/project-access");
+var realUsers = require("../lib/users");
 var { createMessageGate, DENIED } = require("../lib/project-message-gate");
 var daemonProjects = require("../lib/daemon-projects");
 
@@ -46,15 +47,19 @@ test("a project record with no visibility is private, not public", function () {
 
 // --- resolver ---------------------------------------------------------------
 
-function accessWith(table) {
+function accessWith(table, isMultiUser) {
   return createProjectAccess({
     users: users,
+    isMultiUser: isMultiUser,
     onGetProjectAccess: function (slug) {
       if (slug === "throws") throw new Error("lookup exploded");
       return Object.prototype.hasOwnProperty.call(table, slug) ? table[slug] : { error: "Project not found" };
     },
   });
 }
+
+var SINGLE_USER = function () { return false; };
+var MULTI_USER = function () { return true; };
 
 test("a lookup that cannot be completed is a refusal, for every user including administrators", function () {
   var access = accessWith({ open: { visibility: "public" } });
@@ -89,21 +94,85 @@ test("a project list is filtered to what the user may see and is empty for no us
 });
 
 test("a session is readable by its owner, by anyone when shared, and by an administrator when legacy", function () {
-  assert.equal(canReadSession(users, PEOPLE.owner, { ownerId: "owner", sessionVisibility: "private" }), true);
-  assert.equal(canReadSession(users, PEOPLE.member, { ownerId: "owner", sessionVisibility: "private" }), false);
-  assert.equal(canReadSession(users, PEOPLE.member, { ownerId: "owner" }), true);
-  assert.equal(canReadSession(users, PEOPLE.member, { ownerId: null }), false);
-  assert.equal(canReadSession(users, PEOPLE.admin, { ownerId: null }), true);
-  assert.equal(canReadSession(users, null, { ownerId: "owner" }), false);
-  assert.equal(canReadSession(users, PEOPLE.owner, null), false);
+  var access = accessWith({}, MULTI_USER);
+  var canReadSession = access.canReadSession;
+  assert.equal(canReadSession(PEOPLE.owner, { ownerId: "owner", sessionVisibility: "private" }), true);
+  assert.equal(canReadSession(PEOPLE.member, { ownerId: "owner", sessionVisibility: "private" }), false);
+  assert.equal(canReadSession(PEOPLE.member, { ownerId: "owner" }), true);
+  assert.equal(canReadSession(PEOPLE.member, { ownerId: null }), false);
+  assert.equal(canReadSession(PEOPLE.admin, { ownerId: null }), true);
+  assert.equal(canReadSession(null, { ownerId: "owner" }), false);
+  assert.equal(canReadSession(PEOPLE.owner, null), false);
+});
+
+// --- mode: "no user" is decided by the daemon's mode, never by absence alone ----
+
+test("in single-user mode a connection with no user is the implicit owner with admin rights and every project", function () {
+  var access = accessWith({ open: { visibility: "public" }, closed: { visibility: "private", ownerId: "owner" } }, SINGLE_USER);
+  var principal = access.principalFor(null);
+  assert.deepEqual({ id: principal.id, implicit: principal.implicit, admin: principal.admin }, { id: null, implicit: true, admin: true });
+  assert.equal(access.isAdmin(null), true);
+  assert.equal(access.isAdmin(undefined), true);
+  assert.equal(access.canAccess(null, "open"), true);
+  assert.equal(access.canAccess(null, "closed"), true);
+  assert.equal(access.canAccess(null, "a--worktree"), true, "a worktree slug needs no lookup for the owner");
+  assert.equal(access.canAccess(null, undefined), false, "a slug that is not a name is still refused");
+  assert.deepEqual(access.filterProjectList(null, [{ slug: "open" }, { slug: "closed" }, null]).map(function (p) { return p.slug; }), ["open", "closed"]);
+  assert.equal(access.canReadSession(null, { ownerId: "someone", sessionVisibility: "private" }), true);
+  assert.equal(access.canReadSession(null, null), false);
+});
+
+test("in single-user mode a named user keeps exactly the rights of that user", function () {
+  var access = accessWith({ closed: { visibility: "private", ownerId: "owner" } }, SINGLE_USER);
+  assert.equal(access.canAccess("member", "closed"), false);
+  assert.equal(access.isAdmin(PEOPLE.member), false);
+  assert.equal(access.isAdmin(PEOPLE.admin), true);
+});
+
+test("in multi-user mode, with no mode wired, or when the mode cannot be read, no user is a stranger", function () {
+  [accessWith({ open: { visibility: "public" } }, MULTI_USER),
+   accessWith({ open: { visibility: "public" } }, undefined),
+   accessWith({ open: { visibility: "public" } }, function () { throw new Error("users.json unreadable"); })].forEach(function (access) {
+    assert.equal(access.principalFor(null), null);
+    assert.equal(access.principalFor(undefined), null);
+    assert.equal(access.principalFor({}), null, "a record with no id is no principal");
+    assert.equal(access.isAdmin(null), false);
+    assert.equal(access.canAccess(null, "open"), false);
+    assert.deepEqual(access.filterProjectList(null, [{ slug: "open" }]), []);
+    assert.equal(access.canReadSession(null, { ownerId: "owner" }), false);
+  });
+});
+
+test("the daemon's mode is read from the stored users and defaults to multi-user", function () {
+  var dir = path.join(process.env.CLAGENTIC_CONSOLE_HOME, "console");
+  fs.mkdirSync(dir, { recursive: true });
+  var file = path.join(dir, "users.json");
+  try {
+    fs.rmSync(file, { force: true });
+    assert.equal(realUsers.isMultiUser(), true, "no users file");
+    fs.writeFileSync(file, JSON.stringify({ users: [] }));
+    assert.equal(realUsers.isMultiUser(), true, "flag absent");
+    fs.writeFileSync(file, JSON.stringify({ multiUser: false, users: [] }));
+    assert.equal(realUsers.isMultiUser(), false);
+    fs.writeFileSync(file, "{ not json");
+    assert.throws(function () { realUsers.isMultiUser(); }, "a corrupt file is an error, which the resolver reads as multi-user");
+    var viaResolver = createProjectAccess({ users: users, onGetProjectAccess: null, isMultiUser: realUsers.isMultiUser });
+    assert.equal(viaResolver.principalFor(null), null);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
 });
 
 // --- message gate -------------------------------------------------------------
 
 function gateFor(projects, extra) {
+  return gateWith(projects, MULTI_USER, extra);
+}
+
+function gateWith(projects, isMultiUser, extra) {
   var contexts = {};
   Object.keys(projects).forEach(function (slug) { contexts[slug] = { slug: slug }; });
-  var access = accessWith(projects);
+  var access = accessWith(projects, isMultiUser);
   return createMessageGate(Object.assign({
     slug: "here",
     canAccess: access.canAccess,
@@ -168,6 +237,26 @@ test("a message that is not a JSON object is refused without an error to send", 
     assert.equal(r.allowed, false);
     assert.equal(r.error, null);
   });
+});
+
+test("the gate lets the single-user owner (no user record) act on the current and any other project", function () {
+  var gate = gateWith(TABLE, SINGLE_USER);
+  var own = gate.authorize({ _clagenticUser: null }, { type: "x" });
+  assert.equal(own.allowed, true);
+  var other = gate.authorize({ _clagenticUser: null }, { type: "x", targetSlug: "there", id: 4 });
+  assert.equal(other.allowed, true);
+  assert.equal(other.target.slug, "there");
+  assert.deepEqual(other.message, { type: "x", id: 4 });
+  assert.equal(gate.authorize({ _clagenticUser: null }, { type: "x", targetSlug: "nowhere" }).allowed, false, "a project that does not exist is still refused");
+  assert.equal(gate.authorize({ _clagenticUser: null }, { type: "x", targetSlug: 5 }).allowed, false);
+});
+
+test("the gate refuses a connection with no user in multi-user mode, on every message shape", function () {
+  var gate = gateWith(TABLE, MULTI_USER);
+  assert.equal(gate.authorize({ _clagenticUser: null }, { type: "x" }).allowed, false);
+  assert.equal(gate.authorize({ _clagenticUser: null }, { type: "x", targetSlug: "there" }).allowed, false);
+  assert.equal(gate.authorize({}, { type: "x" }).allowed, false);
+  assert.equal(gate.authorize(null, { type: "x" }).allowed, false);
 });
 
 test("a context with no access policy handles its own messages but never forwards to another project", function () {

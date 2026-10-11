@@ -24,6 +24,7 @@ var { attachPermissions } = require("../lib/users-permissions");
 var { attachFilesystem } = require("../lib/project-filesystem");
 var { createFileAccess, resolveGitPath } = require("../lib/project-file-scope");
 var projectGit = require("../lib/project-git");
+var { createProjectAccess } = require("../lib/project-access");
 var { validateEnvString } = require("../lib/project");
 
 var REPO = path.join(SANDBOX, "repo");
@@ -73,11 +74,19 @@ function fakeSocket(user, osInfo) {
 }
 
 // A project's filesystem handler wired as lib/project.js wires it.
+//   options.osUsers     os-users mode
+//   options.multiUser   the daemon's mode; single-user otherwise, where a socket
+//                       with no user is the implicit owner
 function build(options) {
   options = options || {};
   var calls = { env: [], sharedEnv: [], fsAsUser: [], watch: [], unwatch: 0, dirWatch: [] };
   var sessions = new Map();
   var osUsers = !!options.osUsers;
+  var projectAccess = createProjectAccess({
+    users: usersModule,
+    onGetProjectAccess: null,
+    isMultiUser: function () { return !!options.multiUser; },
+  });
   function getOsUserInfoForWs(ws) { return osUsers ? ws.osInfo : null; }
   function fsAsUser(op, args, info) {
     calls.fsAsUser.push({ op: op, args: args, info: info });
@@ -87,7 +96,7 @@ function build(options) {
     return { ok: true };
   }
   var fileAccess = createFileAccess({
-    osUsers: osUsers, usersModule: usersModule, fsAsUser: fsAsUser,
+    osUsers: osUsers, usersModule: usersModule, fsAsUser: fsAsUser, projectAccess: projectAccess,
     getOsUserInfoForWs: getOsUserInfoForWs,
     binaryExts: new Set([".png"]), maxSize: 512 * 1024,
   });
@@ -102,6 +111,7 @@ function build(options) {
     stopFileWatch: function () { calls.unwatch++; },
     startDirWatch: function (ws, p) { calls.dirWatch.push(p); },
     usersModule: usersModule, fsAsUser: fsAsUser, validateEnvString: validateEnvString,
+    projectAccess: projectAccess,
     opts: {
       onGetProjectEnv: function (s) { calls.env.push(["get", s]); return { envrc: "A=1" }; },
       onSetProjectEnv: function (s, e) { calls.env.push(["set", s, e]); return { ok: true }; },
@@ -151,7 +161,7 @@ test("project env still needs the projectSettings permission", function () {
 test("the global CLAUDE.md and the shared environment are for administrators only", function () {
   var globalMd = path.join(process.env.HOME, ".claude", "CLAUDE.md");
   fs.writeFileSync(globalMd, "original");
-  var rig = build();
+  var rig = build({ multiUser: true });
   var member = fakeSocket(USERS.member);
   ["read_global_claude_md", "write_global_claude_md", "get_shared_env", "set_shared_env"].forEach(function (type) {
     var res = send(member, rig, { type: type, content: "pwned", envrc: "X=1" }).last;
@@ -159,7 +169,10 @@ test("the global CLAUDE.md and the shared environment are for administrators onl
     assert.match(res.text, /admin/i);
   });
   var anonymous = fakeSocket(null);
-  assert.equal(send(anonymous, rig, { type: "read_global_claude_md" }).last.type, "error");
+  ["read_global_claude_md", "write_global_claude_md", "get_shared_env", "set_shared_env"].forEach(function (type) {
+    var res = send(anonymous, rig, { type: type, content: "pwned", envrc: "X=1" }).last;
+    assert.equal(res.type, "error", type + " is refused when there is no user in multi-user mode");
+  });
   assert.equal(fs.readFileSync(globalMd, "utf8"), "original");
   assert.deepEqual(rig.calls.sharedEnv, []);
 
@@ -169,6 +182,56 @@ test("the global CLAUDE.md and the shared environment are for administrators onl
   assert.equal(fs.readFileSync(globalMd, "utf8"), "updated");
   assert.equal(send(admin, rig, { type: "get_shared_env" }).last.envrc, "S=1");
   assert.equal(send(admin, rig, { type: "set_shared_env", envrc: "S=2" }).last.ok, true);
+});
+
+// --- Single-user mode: the connection with no user is the owner -------------------
+
+test("single-user mode, no user: the owner reads and writes the global CLAUDE.md and the shared environment", function () {
+  var globalMd = path.join(process.env.HOME, ".claude", "CLAUDE.md");
+  fs.writeFileSync(globalMd, "owner-original");
+  var rig = build();
+  var owner = fakeSocket(null);
+  assert.equal(send(owner, rig, { type: "read_global_claude_md" }).last.content, "owner-original");
+  assert.equal(send(owner, rig, { type: "write_global_claude_md", content: "owner-updated" }).last.ok, true);
+  assert.equal(fs.readFileSync(globalMd, "utf8"), "owner-updated");
+  assert.equal(send(owner, rig, { type: "get_shared_env" }).last.envrc, "S=1");
+  assert.equal(send(owner, rig, { type: "set_shared_env", envrc: "S=3" }).last.ok, true);
+  assert.deepEqual(rig.calls.sharedEnv, ["get", ["set", "S=3"]]);
+});
+
+test("single-user mode, no user: project env, files, search, watch, history, diff and file-at all work", function () {
+  var rig = build();
+  var owner = fakeSocket(null);
+  assert.equal(send(owner, rig, { type: "get_project_env", slug: "someone-elses" }).last.slug, "mine");
+  assert.equal(send(owner, rig, { type: "set_project_env", envrc: "B=2" }).last.ok, true);
+  assert.deepEqual(send(owner, rig, { type: "fs_list", path: "src" }).last.entries.map(function (e) { return e.name; }), ["a.txt"]);
+  assert.equal(send(owner, rig, { type: "fs_read", path: "src/a.txt" }).last.content, "one\ntwo\n");
+  assert.equal(send(owner, rig, { type: "fs_search", query: "a.t" }).last.entries[0].path, "src/a.txt");
+  send(owner, rig, { type: "fs_watch", path: "src/a.txt" });
+  assert.deepEqual(rig.calls.watch, ["src/a.txt"]);
+  var file = path.join(REPO, "src", "a.txt");
+  rig.sessions.set(1, editSession(1, "someone", "private", "legacy-private", file));
+  var history = send(owner, rig, { type: "fs_file_history", path: "src/a.txt" }).last;
+  assert.equal(history.entries.filter(function (e) { return e.source === "git"; }).length, 2);
+  assert.deepEqual(history.entries.filter(function (e) { return e.source === "session"; }).map(function (e) { return e.sessionTitle; }), ["legacy-private"], "the owner sees every session's edits");
+  assert.match(send(owner, rig, { type: "fs_git_diff", path: "src/a.txt", hash: HASH }).last.diff, /\+two/);
+  assert.equal(send(owner, rig, { type: "fs_file_at", path: "src/a.txt", hash: HASH }).last.content, "one\ntwo\n");
+});
+
+test("multi-user mode, no user: every file, settings and git message is refused and nothing throws", function () {
+  var rig = build({ multiUser: true });
+  var stranger = fakeSocket(null);
+  ["read_global_claude_md", "get_shared_env"].forEach(function (type) {
+    assert.equal(send(stranger, rig, { type: type }).last.type, "error", type);
+  });
+  assert.equal(send(stranger, rig, { type: "set_shared_env", envrc: "X=1" }).last.type, "error");
+  ["fs_list", "fs_read", "fs_write", "fs_search", "fs_watch", "fs_file_history", "fs_git_diff", "fs_file_at"].forEach(function (type) {
+    var res = send(stranger, rig, { type: type, path: "src/a.txt", content: "x", query: "a", hash: HASH }).last;
+    assert.match(res.error, /Authentication required/, type);
+  });
+  assert.deepEqual(rig.calls.sharedEnv, []);
+  assert.deepEqual(rig.calls.watch, []);
+  assert.equal(fs.readFileSync(path.join(REPO, "src", "a.txt"), "utf8"), "one\ntwo\n", "nothing was written");
 });
 
 // --- The file gate covers every fs_* message but fs_unwatch ------------------
@@ -349,17 +412,156 @@ test("in os-users mode files are read, listed and written as the user's own iden
   assert.equal(fs.readFileSync(path.join(REPO, "src", "a.txt"), "utf8"), "one\ntwo\n", "the daemon wrote nothing itself");
 });
 
-test("git runs as the user's OS identity in os-users mode and refuses without one", function (t) {
-  assert.throws(function () { projectGit.runGit(["status"], { cwd: REPO, osUsers: true, osUserInfo: null }); }, /OS user identity/);
+// --- Git runs as the repository's owner, with repo-driven programs off --------
+
+function recordingExec() {
+  var calls = [];
+  function exec(bin, argv, execOpts) { calls.push({ bin: bin, argv: argv, opts: execOpts }); return ""; }
+  exec.calls = calls;
+  return exec;
+}
+
+test("in os-users mode git runs as the uid that owns the repository, never as the viewer, with no safe.directory override", function () {
+  var exec = recordingExec();
+  projectGit.runGit(["log", "-1"], { cwd: REPO, osUsers: true, exec: exec, osUserInfo: { uid: 4242, gid: 4242, home: "/home/viewer" } });
+  var st = fs.statSync(path.join(REPO, ".git"));
+  var call = exec.calls[0];
+  assert.equal(call.opts.uid, st.uid, "the owner's uid, not the viewer's 4242");
+  assert.equal(call.opts.gid, st.gid);
+  assert.ok(call.opts.uid !== 4242);
+  assert.equal(JSON.stringify(call).indexOf("safe.directory"), -1, "no safe.directory in argv or env");
+  assert.equal(call.opts.env.GIT_CONFIG_COUNT, undefined);
+  assert.notEqual(call.opts.env.HOME, "/home/viewer");
+});
+
+test("outside os-users mode git keeps the daemon's identity", function () {
+  var exec = recordingExec();
+  projectGit.runGit(["log", "-1"], { cwd: REPO, osUsers: false, exec: exec });
+  assert.equal(exec.calls[0].opts.uid, undefined);
+  assert.equal(exec.calls[0].opts.gid, undefined);
+});
+
+test("a repository whose owner cannot be established fails closed", function () {
+  var exec = recordingExec();
+  var noRepo = path.join(SANDBOX, "not-a-repo");
+  fs.mkdirSync(noRepo, { recursive: true });
+  assert.throws(function () { projectGit.runGit(["log", "-1"], { cwd: noRepo, osUsers: true, exec: exec }); }, /repository owner/);
+  assert.throws(function () { projectGit.repositoryOwner(path.join(SANDBOX, "missing-dir")); }, /repository owner/);
+  assert.equal(exec.calls.length, 0, "git was not started");
+});
+
+test("every call switches off the programs a repository can name, and diff rendering skips external drivers and textconv", function () {
+  var exec = recordingExec();
+  ["diff", "show", "log"].forEach(function (sub) {
+    projectGit.runGit([sub, "x"], { cwd: REPO, exec: exec });
+  });
+  projectGit.runGit(["status"], { cwd: REPO, exec: exec });
+  exec.calls.forEach(function (call) {
+    var joined = call.argv.join(" ");
+    assert.match(joined, /-c core\.fsmonitor=false/);
+    assert.match(joined, /-c core\.hooksPath=\/dev\/null/);
+    assert.match(joined, /-c diff\.external= /);
+  });
+  exec.calls.slice(0, 3).forEach(function (call) {
+    assert.ok(call.argv.indexOf("--no-ext-diff") > -1 && call.argv.indexOf("--no-textconv") > -1, call.argv[6]);
+  });
+  assert.equal(exec.calls[3].argv.indexOf("--no-ext-diff"), -1);
+});
+
+// A repository whose own config tries to run a program in every way git allows.
+function hostileRepo() {
+  var dir = fs.mkdtempSync(path.join(SANDBOX, "hostile-"));
+  var markers = path.join(dir, "..", path.basename(dir) + "-markers");
+  fs.mkdirSync(markers);
+  // One program per mechanism, each leaving a marker named for it.
+  function program(name, body) {
+    var file = path.join(SANDBOX, "mark-" + path.basename(dir) + "-" + name + ".sh");
+    fs.writeFileSync(file, "#!/bin/sh\ntouch \"" + markers + "/" + name + "\"\n" + (body || ""), { mode: 0o755 });
+    return file;
+  }
+  function g(args) {
+    return execFileSync("git", args, {
+      cwd: dir, encoding: "utf8",
+      env: Object.assign({}, process.env, { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" }),
+    });
+  }
+  g(["init", "-q"]);
+  fs.writeFileSync(path.join(dir, "f.txt"), "one\n");
+  fs.writeFileSync(path.join(dir, ".gitattributes"), "*.txt diff=evil\n");
+  g(["add", "f.txt", ".gitattributes"]);
+  g(["commit", "-q", "-m", "first"]);
+  fs.writeFileSync(path.join(dir, "f.txt"), "one\ntwo\n");
+  g(["commit", "-q", "-am", "second"]);
+  var scripts = [program("textconv", "cat \"$1\"\n"), program("external"), program("fsmonitor")];
+  g(["config", "diff.evil.textconv", scripts[0]]);
+  g(["config", "diff.external", scripts[1]]);
+  g(["config", "core.fsmonitor", scripts[2]]);
+  return { dir: dir, markers: markers, scripts: scripts, git: g, hash: g(["rev-parse", "HEAD"]).trim() };
+}
+
+test("a repository whose config names textconv, diff.external and fsmonitor programs never runs them during history, diff or file-at", function () {
+  var repo = hostileRepo();
+
+  // The repository is hostile: git run without the hardening does run its programs.
+  repo.git(["diff", "HEAD~1", "HEAD"]);
+  repo.git(["diff", "--no-ext-diff", "--textconv", "HEAD~1", "HEAD"]);
+  repo.git(["status"]);
+  assert.deepEqual(fs.readdirSync(repo.markers).sort(), ["external", "fsmonitor", "textconv"], "the control run fires the configured programs");
+  fs.readdirSync(repo.markers).forEach(function (m) { fs.unlinkSync(path.join(repo.markers, m)); });
+
+  var calls = [
+    ["log", "--format=%H|%at|%an|%s", "--follow", "--", "f.txt"],
+    ["diff", repo.hash + "~1", repo.hash, "--", "f.txt"],
+    ["show", repo.hash, "--format=", "--", "f.txt"],
+    ["show", repo.hash + ":f.txt"],
+    ["status"],
+  ];
+  calls.forEach(function (args) {
+    projectGit.runGit(args, { cwd: repo.dir });
+  });
+  assert.deepEqual(fs.readdirSync(repo.markers), [], "no program named by the repository's config ran");
+});
+
+test("the same hostile repository stays inert through the WebSocket handlers", function () {
+  var repo = hostileRepo();
+  var handlers = attachFilesystem({
+    cwd: repo.dir, slug: "mine", osUsers: false,
+    sm: { sessions: new Map(), readSessionHistoryFromDisk: function () { return []; } },
+    send: function () {}, sendTo: function (ws, obj) { ws.sent.push(obj); },
+    fileAccess: createFileAccess({
+      osUsers: false, usersModule: usersModule, fsAsUser: function () {},
+      getOsUserInfoForWs: function () { return null; }, binaryExts: new Set(), maxSize: 512 * 1024,
+    }),
+    getOsUserInfoForWs: function () { return null; },
+    startFileWatch: function () {}, stopFileWatch: function () {}, startDirWatch: function () {},
+    usersModule: usersModule, fsAsUser: function () {}, validateEnvString: validateEnvString,
+    projectAccess: createProjectAccess({ users: usersModule, onGetProjectAccess: null, isMultiUser: function () { return false; } }),
+    opts: {}, IGNORED_DIRS: new Set([".git"]), IMAGE_EXTS: new Set(),
+  });
+  var ws = fakeSocket(null);
+  ["fs_file_history", "fs_git_diff", "fs_file_at"].forEach(function (type) {
+    handlers.handleFilesystemMessage(ws, { type: type, path: "f.txt", hash: repo.hash });
+  });
+  var diff = ws.sent.filter(function (m) { return m.type === "fs_git_diff_result"; })[0];
+  assert.match(diff.diff, /\+two/, "the diff is still produced from the committed blobs");
+  assert.deepEqual(fs.readdirSync(repo.markers), []);
+});
+
+test("as another user: git runs as the repository's owner and its config programs stay inert", function (t) {
   if (typeof process.getuid !== "function" || process.getuid() !== 0) {
     t.skip("needs root to run git as another uid");
     return;
   }
-  var me = { uid: 0, gid: 0, home: SANDBOX };
-  assert.match(projectGit.runGit(["log", "--format=%s", "-1"], { cwd: REPO, osUsers: true, osUserInfo: me }), /second/);
-  assert.equal(projectGit.runGit(["config", "--get", "safe.directory"], { cwd: REPO, osUsers: true, osUserInfo: me }).trim(), REPO);
-  var nobody = { uid: 65534, gid: 65534, home: SANDBOX };
-  assert.throws(function () {
-    projectGit.runGit(["log", "-1"], { cwd: REPO, osUsers: true, osUserInfo: nobody });
-  }, "an identity that cannot read the repository cannot read its history");
+  var repo = hostileRepo();
+  var OWNER = 65534;
+  execFileSync("chown", ["-R", OWNER + ":" + OWNER, repo.dir, repo.markers]);
+  fs.chmodSync(SANDBOX, 0o755);
+  // The daemon (root) does not own this repository; git would refuse it as
+  // "dubious ownership" unless it runs as the owner.
+  assert.throws(function () { projectGit.runGit(["log", "-1"], { cwd: repo.dir, osUsers: false }); });
+  var out = projectGit.runGit(["log", "--format=%s", "-1"], { cwd: repo.dir, osUsers: true });
+  assert.match(out, /second/);
+  projectGit.runGit(["diff", repo.hash + "~1", repo.hash, "--", "f.txt"], { cwd: repo.dir, osUsers: true });
+  projectGit.runGit(["status"], { cwd: repo.dir, osUsers: true });
+  assert.deepEqual(fs.readdirSync(repo.markers), [], "no marker was created by any program");
 });

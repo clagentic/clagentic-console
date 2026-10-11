@@ -42,7 +42,9 @@ function userRecord(spec) {
  *                 `noRecord` leaves the access lookup without an answer for it.
  *                 `files` maps a relative path to its text content.
  * spec.osUsers    run the server in os-users mode
+ * spec.multiUser  false stores the daemon as single-user (default true)
  * spec.serverOpts extra createServer options
+ * spec.beforeServer function called before lib/server is first required
  */
 async function start(spec) {
   var home = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-access-"));
@@ -60,7 +62,7 @@ async function start(spec) {
     return rec;
   });
   fs.writeFileSync(path.join(consoleDir, "users.json"), JSON.stringify({
-    multiUser: true, setupCode: null, users: records, invites: [], smtp: null,
+    multiUser: spec.multiUser !== false, setupCode: null, users: records, invites: [], smtp: null,
   }), { mode: 0o600 });
 
   var tokens = {};
@@ -95,6 +97,9 @@ async function start(spec) {
     return out;
   }
 
+  // Runs once the data directory is set and before lib/ is loaded, so a test
+  // can substitute a lib module the server is about to use.
+  if (typeof spec.beforeServer === "function") spec.beforeServer();
   var serverModule = require("../lib/server");
   var relay = serverModule.createServer(Object.assign({
     port: 0,
@@ -183,13 +188,35 @@ async function start(spec) {
     });
   }
 
+  // Teardown faults fail the test that owns the server: the sockets and the
+  // projects are all released first, then the first error seen is thrown.
   async function stop() {
-    sockets.forEach(function (ws) { try { ws.terminate(); } catch (e) {} });
-    try { await relay.destroyAll(); } catch (e) {}
+    var failures = [];
+    sockets.forEach(function (ws) {
+      try { ws.terminate(); } catch (e) { failures.push(e); }
+    });
+    try {
+      await relay.destroyAll();
+    } catch (e) {
+      failures.push(e);
+    }
     await new Promise(function (resolve) { relay.server.close(function () { resolve(); }); });
     if (typeof relay.server.closeAllConnections === "function") relay.server.closeAllConnections();
-    // An adapter may still be writing under HOME as the server shuts down.
-    fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    // An adapter may still be writing under HOME as the server shuts down:
+    // give those writes time to land, and retry the removal while one races it.
+    await settle(300);
+    var removed = false;
+    for (var attempt = 0; attempt < 5 && !removed; attempt++) {
+      try {
+        fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        removed = true;
+      } catch (e) {
+        if (e.code !== "ENOTEMPTY" || attempt === 4) failures.push(e);
+        if (e.code !== "ENOTEMPTY") break;
+        await settle(300);
+      }
+    }
+    if (failures.length) throw failures[0];
   }
 
   return {
