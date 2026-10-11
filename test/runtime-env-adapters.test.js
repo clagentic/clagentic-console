@@ -28,16 +28,31 @@ function FakeAppServer(executablePath, opts) {
   this.proc = null;
   this.stopped = false;
   this.queriesServed = 0;
+  this.calls = [];
   appServers.push(this);
 }
 FakeAppServer.prototype.start = function () { this.started = true; return Promise.resolve(); };
 FakeAppServer.prototype.stop = function () { this.started = false; this.stopped = true; };
 FakeAppServer.prototype.notify = function () {};
-FakeAppServer.prototype.send = function (method) {
-  if (method === "model/list") return Promise.resolve({ data: [{ model: "gpt-test", displayName: "GPT Test", isDefault: true }] });
+// What a server answers depends on the environment it was started with: its
+// model list and default model follow env.MODEL_TAG, as an endpoint's would.
+FakeAppServer.prototype.send = function (method, params) {
+  this.calls.push({ method: method, params: params });
+  if (method === "model/list") {
+    var tag = this.opts.env && this.opts.env.MODEL_TAG;
+    if (!tag) return Promise.resolve({ data: [{ model: "gpt-test", displayName: "GPT Test", isDefault: true }] });
+    return Promise.resolve({ data: [
+      { model: "gpt-" + tag + "-mini", displayName: "mini " + tag },
+      { model: "gpt-" + tag, displayName: "main " + tag, isDefault: true },
+    ] });
+  }
   if (method === "skills/list") return Promise.resolve({ data: [] });
+  if (method === "thread/resume") return Promise.resolve({ thread: { id: params.threadId } });
+  if (method === "thread/fork") return Promise.resolve({ thread: { id: "fork-of-" + params.threadId } });
+  if (method === "thread/rollback" && FakeAppServer.rollbackFailure) return Promise.reject(new Error(FakeAppServer.rollbackFailure));
   return Promise.resolve({});
 };
+FakeAppServer.rollbackFailure = null;
 // A query handle registers its event handler on the server it was given.
 FakeAppServer.prototype.addEventHandler = function () { this.queriesServed++; return {}; };
 FakeAppServer.prototype.removeEventHandler = function () {};
@@ -203,7 +218,12 @@ async function startWorker() {
     },
     send: function (msg) { connection.write(JSON.stringify(msg) + "\n"); },
     stop: async function () {
-      try { child.kill("SIGKILL"); } catch (e) { /* already gone */ }
+      try {
+        child.kill("SIGKILL");
+      } catch (e) {
+        // Only a child that has already exited is expected here.
+        if (e.code !== "ESRCH") throw e;
+      }
       await new Promise(function (resolve) { server.close(resolve); if (connection) connection.destroy(); });
       fs.rmSync(dir, { recursive: true, force: true });
     },
@@ -270,15 +290,15 @@ test("the Codex app-server is started with the complete environment and the Sett
 
 test("a Codex app-server started with no Settings variables is given no environment of its own", async function () {
   var adapter = codexAdapter();
-  await adapter.init({});
+  await adapter.init({ runtimeEnv: null });
   assert.equal(appServers[appServers.length - 1].opts.env, undefined);
   await adapter.shutdown();
 });
 
 // A query handle takes its server's event handler when it starts running, which
 // a first message does: that is what shows which server a query runs on.
-async function openQuery(adapter, env) {
-  var handle = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: env });
+async function openQuery(adapter, env, resumeSessionId) {
+  var handle = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: env, resumeSessionId: resumeSessionId });
   handle.pushMessage("go");
   return handle;
 }
@@ -325,7 +345,7 @@ test("a Codex query that names no Settings variables is not served by a server t
   var withVariables = await openQuery(adapter, { ONE: "1" });
   var serverWith = appServers[appServers.length - 1];
   var count = appServers.length;
-  var without = await openQuery(adapter, undefined);
+  var without = await openQuery(adapter, null);
   assert.equal(appServers.length, count + 1);
   var serverWithout = appServers[appServers.length - 1];
   assert.equal(serverWithout.opts.env, undefined, "it inherits the daemon's environment, nothing added");
@@ -371,5 +391,203 @@ test("a Codex app-server that fails to start leaves nothing behind, so the next 
   var recovered = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "1" } });
   assert.equal(appServers[appServers.length - 1].started, true);
   recovered.close();
+  await adapter.shutdown();
+});
+
+// --- Codex: what depends on the environment belongs to its server ---
+
+var ENV_A = { MODEL_TAG: "a" };
+var ENV_B = { MODEL_TAG: "b" };
+
+function modelValues(models) {
+  return models.map(function (m) { return typeof m === "string" ? m : m.value; });
+}
+
+async function until(predicate, label) {
+  for (var i = 0; i < 100; i++) {
+    if (predicate()) return;
+    await sleep(10);
+  }
+  throw new Error("timed out waiting for " + label);
+}
+
+// Opens a query that resumes a thread and returns the server it runs on, once
+// the server has been told to resume it.
+async function openOnThread(adapter, env, threadId) {
+  var handle = await openQuery(adapter, env, threadId);
+  var holder = null;
+  await until(function () {
+    holder = appServers.filter(function (s) {
+      return s.calls.some(function (c) { return c.method === "thread/resume" && c.params.threadId === threadId; });
+    }).pop() || null;
+    return !!holder;
+  }, "the thread to be resumed");
+  await sleep(20);
+  return { handle: handle, server: holder };
+}
+
+function callsOf(server, method) {
+  return server.calls.filter(function (c) { return c.method === method; });
+}
+
+test("two Codex environments each see their own models and default model, whichever ran last", async function () {
+  var adapter = codexAdapter();
+  var a = await adapter.init({ runtimeEnv: ENV_A });
+  var b = await adapter.init({ runtimeEnv: ENV_B });
+  assert.deepEqual(modelValues(a.models), ["gpt-a-mini", "gpt-a"]);
+  assert.equal(a.defaultModel, "gpt-a");
+  assert.deepEqual(modelValues(b.models), ["gpt-b-mini", "gpt-b"]);
+  assert.equal(b.defaultModel, "gpt-b");
+
+  // A is started and populated: its second init is answered from A's own
+  // server, not from whichever server filled a list last.
+  var again = await adapter.init({ runtimeEnv: ENV_A });
+  assert.equal(again.defaultModel, "gpt-a");
+  assert.deepEqual(modelValues(again.models), ["gpt-a-mini", "gpt-a"]);
+
+  assert.deepEqual(modelValues(await adapter.supportedModels({ runtimeEnv: ENV_A })), ["gpt-a-mini", "gpt-a"]);
+  assert.deepEqual(modelValues(await adapter.supportedModels({ runtimeEnv: ENV_B })), ["gpt-b-mini", "gpt-b"]);
+  assert.deepEqual(modelValues(await adapter.supportedModels({ runtimeEnv: null })), ["gpt-test"]);
+  await adapter.shutdown();
+});
+
+test("a Codex query that names no model runs on its own environment's default model", async function () {
+  var adapter = codexAdapter();
+  await adapter.init({ runtimeEnv: ENV_A });
+  var b = await adapter.createQuery({ cwd: os.tmpdir(), runtimeEnv: ENV_B });
+  b.pushMessage("go");
+  var serverB = appServers[appServers.length - 1];
+  await until(function () { return callsOf(serverB, "thread/start").length > 0; }, "the thread to start");
+  assert.equal(callsOf(serverB, "thread/start")[0].params.model, "gpt-b");
+  b.close();
+  await adapter.shutdown();
+});
+
+test("Codex title generation uses the default model of the caller's environment", async function () {
+  var adapter = codexAdapter();
+  await adapter.init({ runtimeEnv: ENV_A });
+  var pending = adapter.generateTitle(["fix the build"], { cwd: os.tmpdir(), runtimeEnv: ENV_B });
+  await until(function () {
+    var last = appServers[appServers.length - 1];
+    return last.opts.env && last.opts.env.MODEL_TAG === "b" && callsOf(last, "thread/start").length > 0;
+  }, "the title thread to start");
+  var serverB = appServers[appServers.length - 1];
+  assert.equal(callsOf(serverB, "thread/start")[0].params.model, "gpt-b");
+  await adapter.shutdown();
+  await pending.then(null, function () {});
+});
+
+test("a Codex call that states no environment is refused, never served by another one", async function () {
+  var adapter = codexAdapter();
+  await adapter.init({ runtimeEnv: ENV_A });
+  var count = appServers.length;
+  var refusal = /needs runtimeEnv/;
+  await assert.rejects(adapter.init({}), refusal);
+  await assert.rejects(adapter.init(), refusal);
+  await assert.rejects(adapter.supportedModels(), refusal);
+  await assert.rejects(adapter.supportedModels({}), refusal);
+  await assert.rejects(adapter.createQuery({ cwd: os.tmpdir() }), refusal);
+  await assert.rejects(adapter.generateTitle(["x"], { cwd: os.tmpdir() }), refusal);
+  await assert.rejects(adapter.forkSession("thread-a", { upToMessageId: "m" }), refusal);
+  await assert.rejects(adapter.rollbackThread("thread-a", 1), refusal);
+  await assert.rejects(adapter.rollbackThread("thread-a", 1, {}), refusal);
+  assert.equal(appServers.length, count, "no server was started for any of them");
+  await adapter.shutdown();
+});
+
+test("a thread of environment A is forked and rolled back on A's server after B ran", async function () {
+  var adapter = codexAdapter();
+  var a = await openOnThread(adapter, ENV_A, "thread-a");
+  var b = await openOnThread(adapter, ENV_B, "thread-b");
+  assert.notEqual(a.server, b.server);
+
+  var forked = await adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_A });
+  assert.equal(forked.sessionId, "fork-of-thread-a");
+  await adapter.rollbackThread("thread-a", 2, { runtimeEnv: ENV_A });
+
+  assert.equal(callsOf(a.server, "thread/fork").length, 1);
+  assert.equal(callsOf(a.server, "thread/rollback").length, 1);
+  assert.equal(callsOf(b.server, "thread/fork").length, 0, "B's server never saw A's thread");
+  assert.equal(callsOf(b.server, "thread/rollback").length, 0);
+
+  // The fork lives where it was made: rolling it back goes there as well.
+  await adapter.rollbackThread("fork-of-thread-a", 1, { runtimeEnv: ENV_A });
+  assert.equal(callsOf(a.server, "thread/rollback").length, 2);
+
+  a.handle.close();
+  b.handle.close();
+  await adapter.shutdown();
+});
+
+test("a thread operation for a session with no environment settings uses the instance that holds the thread", async function () {
+  var adapter = codexAdapter();
+  var plain = await openOnThread(adapter, null, "thread-plain");
+  var other = await openOnThread(adapter, ENV_B, "thread-b");
+
+  await adapter.rollbackThread("thread-plain", 1, { runtimeEnv: null });
+  assert.equal(callsOf(plain.server, "thread/rollback").length, 1);
+  assert.equal(callsOf(other.server, "thread/rollback").length, 0);
+
+  plain.handle.close();
+  other.handle.close();
+  await adapter.shutdown();
+});
+
+test("a thread operation after A's server was reclaimed restarts the server for the caller's environment", async function () {
+  var adapter = codexAdapter();
+  var a = await openOnThread(adapter, ENV_A, "thread-a");
+  var b = await openOnThread(adapter, ENV_B, "thread-b");
+  a.handle.close();
+  b.handle.close();
+  await sleep(20);
+  assert.equal(await adapter.shutdownIfIdle(0), true);
+  assert.equal(a.server.stopped, true);
+  assert.equal(b.server.stopped, true);
+
+  var count = appServers.length;
+  await adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_A });
+  assert.equal(appServers.length, count + 1, "A's server was started again");
+  var restarted = appServers[appServers.length - 1];
+  assert.equal(restarted.opts.env.MODEL_TAG, "a", "with the environment the caller stated");
+  assert.equal(callsOf(restarted, "thread/rollback").length, 1);
+
+  var forked = await adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_A });
+  assert.equal(forked.sessionId, "fork-of-thread-a");
+  assert.equal(appServers.length, count + 1, "the restarted server serves the fork too");
+  assert.equal(callsOf(restarted, "thread/fork").length, 1);
+  await adapter.shutdown();
+});
+
+test("a rollback the server refuses rejects, so the caller can leave its history alone", async function () {
+  var adapter = codexAdapter();
+  var a = await openOnThread(adapter, ENV_A, "thread-a");
+  FakeAppServer.rollbackFailure = "thread not found";
+  try {
+    await assert.rejects(adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_A }), /thread not found/);
+  } finally {
+    FakeAppServer.rollbackFailure = null;
+  }
+  a.handle.close();
+  await adapter.shutdown();
+});
+
+test("a server asked to do a thread operation is not reclaimed while the operation runs", async function () {
+  var adapter = codexAdapter();
+  var a = await openOnThread(adapter, ENV_A, "thread-a");
+  a.handle.close();
+  await sleep(20);
+
+  var release = null;
+  var realSend = a.server.send;
+  a.server.send = function (method) {
+    if (method === "thread/rollback") return new Promise(function (resolve) { release = resolve; });
+    return realSend.apply(this, arguments);
+  };
+  var rolling = adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_A });
+  await until(function () { return !!release; }, "the rollback to be sent");
+  assert.equal(await adapter.shutdownIfIdle(0), false, "the server doing the rollback is in use");
+  release({});
+  await rolling;
+  assert.equal(await adapter.shutdownIfIdle(0), true, "and idle again once it is done");
   await adapter.shutdown();
 });
