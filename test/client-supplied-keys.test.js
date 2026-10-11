@@ -86,43 +86,70 @@ test("a known vendor is still accepted", async function () {
   assert.ok(vendors.indexOf("codex") !== -1);
 });
 
-test("a browser tab list keyed by hostile ids does not reach the prototype", async function () {
-  var ext = await H.connect("pub", "alice");
-  ext.send({ type: "browser_tab_list", tabs: [
+// The handlers are driven directly (with the project's real session manager and
+// prompt registry): the browser tools only exist when an agent CLI is installed.
+function messageHandlers(extra) {
+  var { attachUserMessage } = require("../lib/project-user-message");
+  return attachUserMessage(Object.assign({ sm: projectCtx("pub").sm, opts: {}, clients: new Set() }, extra));
+}
+
+test("a browser tab list keyed by hostile ids does not reach the prototype", function () {
+  var browserState = { _browserTabList: Object.create(null), _extensionWs: null };
+  var list = browserState._browserTabList;
+  var handlers = messageHandlers({ browserState: browserState });
+  var ws = { readyState: 1 };
+  handlers.handleUserMessage(ws, { type: "browser_tab_list", tabs: [
     { id: "__proto__", url: "https://polluted.example", title: "polluted" },
     { id: "constructor", url: "u" },
     { id: 7, url: "https://seven.example", title: "seven" },
-    null, 5, "tab", { url: "no id" },
+    null, 5, "tab", { url: "no id" }, { id: NaN },
   ] });
-  await harness.settle(150);
-  var handler = projectCtx("pub").getMcpBridgeHandler();
-  var tools = await handler.listTools();
-  var listTool = tools.filter(function (t) { return t.name === "browser_list_tabs"; })[0];
-  assert.ok(listTool, "the browser tools are offered once an extension has connected");
-  var result = await handler.callTool(listTool.server, "browser_list_tabs", {});
-  var tabs = JSON.parse(result.content[0].text);
-  assert.deepEqual(tabs.map(function (t) { return t.id; }), [7], "only a tab with a numeric id is listed");
+  assert.equal(browserState._extensionWs, ws);
+  assert.deepEqual(Object.keys(list), ["7"], "only a tab with a numeric id is kept");
+  assert.equal(Object.getPrototypeOf(list), null);
+  assert.equal(browserState._browserTabList, list, "the list is updated in place, so every holder sees it");
   assertPrototypesClean();
+
+  handlers.handleUserMessage(ws, { type: "browser_tab_list", tabs: "not a list" });
+  assert.deepEqual(Object.keys(list), [], "a new report replaces the old one");
+  handlers.handleUserMessage(ws, { type: "browser_tab_list" });
 });
 
 test("only the socket an extension command was sent to can answer it", async function () {
-  var ext = await H.connect("pub", "alice");
-  ext.send({ type: "browser_tab_list", tabs: [{ id: 1, url: "https://a.example", title: "a" }] });
-  await harness.settle(150);
-  var forger = await H.connect("pub", "bob");
+  var { createExtensionCommands } = require("../lib/extension-commands");
+  var sm = projectCtx("pub").sm;
+  var sent = [];
+  var commands = createExtensionCommands({
+    getSessionManager: function () { return sm; },
+    sendTo: function (ws, msg) { sent.push({ ws: ws, msg: msg }); },
+  });
+  var extension = { readyState: 1 };
+  var forger = { readyState: 1 };
+  var handlers = messageHandlers({ mayAnswerExtensionCommand: commands.mayAnswer });
 
-  var handler = projectCtx("pub").getMcpBridgeHandler();
   var settled = false;
-  var call = handler.callTool("clay-browser", "browser_close", { tabId: 1 }).then(function (r) { settled = true; return r; });
-  var command = await ext.waitFor(function (m) { return m.type === "extension_command" && m.command === "tab_close"; });
+  var call = commands.send(extension, "tab_close", { tabId: 1 }, 10000).then(function (r) { settled = true; return r; });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].ws, extension, "the command went to the extension socket");
+  var requestId = sent[0].msg.requestId;
+  assert.equal(commands.mayAnswer(requestId, extension), true);
+  assert.equal(commands.mayAnswer(requestId, forger), false);
 
-  forger.send({ type: "extension_result", requestId: command.requestId, result: { forged: true } });
-  await harness.settle(250);
+  handlers.handleUserMessage(forger, { type: "extension_result", requestId: requestId, result: { forged: true } });
+  await harness.settle(100);
   assert.equal(settled, false, "another client's extension_result does not settle the command");
 
-  ext.send({ type: "extension_result", requestId: command.requestId, result: { ok: true } });
-  var result = await call;
-  assert.match(result.content[0].text, /Closed tab 1/);
+  handlers.handleUserMessage(extension, { type: "extension_result", requestId: requestId, result: { ok: true } });
+  assert.deepEqual(await call, { ok: true });
+  assert.equal(commands.mayAnswer(requestId, extension), false, "a settled command is forgotten");
+  HOSTILE.forEach(function (id) { assert.equal(commands.mayAnswer(id, extension), false); });
+});
+
+test("with no binding to the sockets commands went to, nothing may answer one", function () {
+  var handlers = messageHandlers({});
+  assert.doesNotThrow(function () {
+    handlers.handleUserMessage({ readyState: 1 }, { type: "extension_result", requestId: "anything", result: {} });
+  });
 });
 
 test("an extension_result for a request that was never sent is ignored", async function () {

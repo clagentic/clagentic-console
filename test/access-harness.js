@@ -188,7 +188,8 @@ async function start(spec) {
     try { await relay.destroyAll(); } catch (e) {}
     await new Promise(function (resolve) { relay.server.close(function () { resolve(); }); });
     if (typeof relay.server.closeAllConnections === "function") relay.server.closeAllConnections();
-    fs.rmSync(home, { recursive: true, force: true });
+    // An adapter may still be writing under HOME as the server shuts down.
+    fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 
   return {

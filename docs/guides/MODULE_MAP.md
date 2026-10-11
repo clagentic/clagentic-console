@@ -50,6 +50,7 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `project-message-gate.js` | The per-message access gate at the entry of `handleMessage`: authorizes the current project and any `targetSlug`, strips the slug before handlers run |
 | `project-file-scope.js` | File policy shared by the WS file handlers, `GET /api/file` and the watchers: fileBrowser permission, OS-identity requirement, one path resolver, reads and listings as the caller |
 | `project-git.js` | Git for a connected client: hex-only revisions, run as the caller's OS identity |
+| `extension-commands.js` | Commands sent to the browser extension; each remembers the socket it went to, and only that socket may answer it |
 | `ws-origin.js` | WebSocket upgrade origin check: host and port against the request host, operator allow-list |
 | `sdk-bridge.js` | SDK bridge coordinator: createSDKBridge factory, worker lifecycle, query stream, tool permissions, mention sessions |
 | `prompt-registry.js` | Sole owner of every operator-prompt lifecycle (permission, plan, AskUserQuestion, MCP elicitation, browser-extension command): open/answer/cancel/expire, sub-agent ownership, session grants, notification dismissal, replay state |
