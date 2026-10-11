@@ -17,7 +17,6 @@ var PUBLIC_DIR = path.join(LIB, "public");
 var MODULES_DIR = path.join(PUBLIC_DIR, "modules");
 // accessor on lib/prompt-kinds/codecs.js -> the file the browser imports
 var SHARED = { ownKey: "own-key.js", askUser: "ask-user-codec.js", elicitation: "elicitation-codec.js" };
-// The codecs that bound typed text.
 var ANSWER_CODECS = ["askUser", "elicitation"];
 
 function browserPath(file) { return path.join(MODULES_DIR, "prompt-kinds", file); }

@@ -80,6 +80,9 @@ YOKE is the vendor-agnostic interface layer. Each adapter implements the same co
 | `yoke/index.js` | Adapter factory, wraps createQuery with project instructions |
 | `yoke/interface.js` | YOKE interface contract definition |
 | `yoke/adapters/claude.js` | Claude adapter using `@anthropic-ai/claude-agent-sdk`. In-process + worker (OS user isolation) paths |
+| `yoke/adapters/permission-relay.js` | The wire shape of a tool-permission ask between a Claude worker and the daemon, including the SDK's presentation hints (`suppressAlwaysAllowRule`, `defaultToNo`, `matchedAskRule`); both sides build and read it here |
+| `yoke/adapters/effort-control.js` | Changing a running Claude session's effort through `applyFlagSettings({effortLevel})`; shared by the in-process handle and the worker |
+| `yoke/adapters/claude-capabilities.js` | What a Claude session can do, sent to the client (including the `permissionModes` the mode picker offers) |
 | `yoke/adapters/codex.js` | Codex adapter using `codex app-server` JSON-RPC protocol. Handles approval events, skill injection, MCP bridge config |
 | `yoke/codex-app-server.js` | Codex `app-server` child process manager. JSON-RPC 2.0 over stdin/stdout, request ID tracking, event routing |
 | `yoke/mcp-bridge-server.js` | Stdio MCP server spawned by Codex. Proxies tool list/call to the daemon via HTTP at `/api/mcp-bridge` |
@@ -144,7 +147,8 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 | `prompts.js` | The client's single owner of operator-prompt cards: every prompt message, of every kind and recorded shape, applies through `apply()`; a card is a function of the server's state for its requestId |
 | `prompt-state.js` | Per-requestId mirror of the server's prompt state (terminal states are final) and the mapping of older recorded message shapes onto the one prompt shape |
 | `prompt-card.js` | The card shell every kind shares: pending/sending/confirmed state machine, terminal outcome rendering |
-| `prompt-kinds/` | One renderer per prompt kind (permission, plan, ask-user, elicitation): body and answer controls, outcome labels |
+| `prompt-kinds/` | One renderer per prompt kind (permission, plan, ask-user, elicitation): body and answer controls, outcome labels. `permission-choices.js` decides which answers a tool-permission ask offers, and in what order, from the SDK's hints; the card and the banner both read it |
+| `mode-options.js` | The permission modes the config chip offers: the three every session has, Don't ask and Auto only for a vendor that declares them, Full auto when the daemon allows it |
 | `app-skills-install.js` | Skill install dialog, requireSkills |
 | `app-favicon.js` | Dynamic favicon, IO blink, urgent blink, send button mode, activity indicator |
 | `app-header.js` | Session rename, session info popover, progressive history loading |

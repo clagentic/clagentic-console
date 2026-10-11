@@ -101,7 +101,6 @@ function matches(el, sel) {
   });
 }
 
-/** What typing text into a field does: set its value, then fire "input". */
 function typeInto(el, text) {
   el.value = text;
   (el._listeners.input || []).slice().forEach(function (fn) { fn({}); });

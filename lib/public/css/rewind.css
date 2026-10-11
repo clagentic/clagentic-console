@@ -616,6 +616,23 @@
 .permission-deny { background: transparent; border-color: var(--border); color: var(--text-muted); }
 .permission-deny:hover { background: var(--error-8); border-color: var(--error); color: var(--error); opacity: 1; }
 
+/* The user's own ask rule that forced the prompt. */
+.permission-rule { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+/* An ask that must open on No: the approve choices lose their primary
+   styling and the decline choice leads. */
+.permission-container[data-default-to-no="true"] .permission-allow,
+.permission-container[data-default-to-no="true"] .perm-allow,
+.permission-container[data-default-to-no="true"] .perm-allow:hover {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.permission-container[data-default-to-no="true"] [data-default-choice="true"] {
+  border-color: var(--text-dimmer);
+  color: var(--text);
+}
+
 /* Resolved states */
 .permission-container.resolved .permission-btn { display: none; }
 .permission-decision-label { font-size: 13px; font-weight: 500; }

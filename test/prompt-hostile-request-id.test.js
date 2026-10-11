@@ -36,10 +36,7 @@ var WS_ANSWERS = [
   { path: "elicitation_response", stale: "prompt_cancel", build: function (id) { return { type: "elicitation_response", requestId: id, action: "accept", content: { token: "t" } }; } },
 ];
 
-function client() {
-  var inbox = [];
-  return { inbox: inbox, ws: { readyState: 1, _clagenticUser: null, send: function (data) { inbox.push(JSON.parse(data)); } } };
-}
+var client = world.client;
 
 // One prompt of every kind, pending, so every store and the index hold a
 // real entry while the hostile answers arrive.
@@ -56,7 +53,9 @@ function openOneOfEach(server) {
   var settled = {};
   Object.keys(opened).forEach(function (kind) {
     var answer = kind === "extension" ? opened[kind].answer : opened[kind];
-    answer.then(function () { settled[kind] = true; });
+    // A callback that fails is settled too, and must not read as pending.
+    var mark = function () { settled[kind] = true; };
+    answer.then(mark, mark);
   });
   var ids = { extension: opened.extension.requestId };
   prompts.pendingMessages(session).forEach(function (m) { ids[m.kind] = m.requestId; });
@@ -69,16 +68,7 @@ function assertPrototypesClean() {
   assert.equal(typeof Object.prototype.hasOwnProperty, "function");
 }
 
-async function withServer(fn) {
-  var server = await world.createServer();
-  try {
-    await server.startQuery();
-    await fn(server);
-  } finally {
-    server.shutdown();
-    world.removeHome(server.home);
-  }
-}
+var withServer = world.withServer;
 
 test("an inherited name is no prompt on any WS answer path: a stale reply, no throw, nothing settled", async function () {
   await withServer(async function (server) {
