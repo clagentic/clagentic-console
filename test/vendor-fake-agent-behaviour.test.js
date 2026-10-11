@@ -20,8 +20,10 @@ var PUBLIC_MODULES = path.join(__dirname, "..", "lib", "public", "modules");
 
 function lib(name) { return require(path.join(world.LIB_ROOT, name)); }
 
-function frontend(name) {
-  return import(pathToFileURL(path.join(PUBLIC_MODULES, name)).href);
+// A distinct tag loads a private instance of the module (its own state), the
+// way the prompt-card tests do for tools.js.
+function frontend(name, tag) {
+  return import(pathToFileURL(path.join(PUBLIC_MODULES, name)).href + (tag ? "?case=" + encodeURIComponent(tag) : ""));
 }
 
 // Each case is a capability set and the adapter traits that go with it.
@@ -79,6 +81,76 @@ async function withFakeAgent(testCase, fn) {
     server.shutdown();
     world.removeHome(server.home);
   }
+}
+
+// The page's elements by id. The modules cache the elements they look up, so
+// the same element answers every case and a case empties it before use.
+var PAGE_ELEMENTS = {};
+
+// Layout reads and focus calls the shell makes while it wires itself up.
+function withLayoutStubs(el) {
+  el.getBoundingClientRect = function () { return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }; };
+  el.closest = function () { return null; };
+  el.blur = function () {};
+  el.select = function () {};
+  return el;
+}
+
+var PAGE_LAYOUT = withLayoutStubs(new fakeDom.FakeElement("div"));
+
+function pageElement(id) {
+  if (!PAGE_ELEMENTS[id]) {
+    PAGE_ELEMENTS[id] = withLayoutStubs(new fakeDom.FakeElement("div"));
+    PAGE_ELEMENTS[id].parentElement = PAGE_LAYOUT;
+    if (id === "resume-modal") PAGE_ELEMENTS[id].appendChild(Object.assign(new fakeDom.FakeElement("div"), { className: "confirm-backdrop" }));
+  }
+  return PAGE_ELEMENTS[id];
+}
+
+function unescapeAttr(text) {
+  return text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+}
+
+// The shared fake element drops markup assigned through innerHTML. The modules
+// under test build their action rows that way, so here each <button> in the
+// markup becomes a child with its class, title and disabled state.
+function markupAwareElement(tag) {
+  var el = new fakeDom.FakeElement(tag);
+  var plain = Object.getOwnPropertyDescriptor(fakeDom.FakeElement.prototype, "innerHTML");
+  Object.defineProperty(el, "innerHTML", {
+    configurable: true,
+    get: plain.get,
+    set: function (markup) {
+      plain.set.call(el, markup);
+      var tagPattern = /<button\s+class="([^"]*)"([^>]*)>/g;
+      var found;
+      while ((found = tagPattern.exec(String(markup)))) {
+        var button = new fakeDom.FakeElement("button");
+        button.className = found[1];
+        button.disabled = /(^|\s)disabled(\s|$)/.test(found[2]);
+        var title = /title="([^"]*)"/.exec(found[2]);
+        button.title = title ? unescapeAttr(title[1]) : "";
+        el.appendChild(button);
+      }
+    },
+  });
+  return el;
+}
+
+function prepareBrowser() {
+  fakeDom.setupGlobals();
+  global.document.createElement = markupAwareElement;
+  // The module graph of the panels reaches a few browser globals at load.
+  global.document.querySelectorAll = function () { return []; };
+  global.document.removeEventListener = function () {};
+  global.document.getElementById = function (id) {
+    return ["session-list", "messages", "resume-modal", "resume-cancel", "resume-picker-loading", "resume-picker-empty", "resume-picker-list"].indexOf(id) !== -1
+      ? pageElement(id)
+      : null;
+  };
+  global.marked.setOptions = function () {};
+  global.mermaid.render = function () { return Promise.resolve({ svg: "" }); };
+  global.ResizeObserver = function () { this.observe = function () {}; this.disconnect = function () {}; };
 }
 
 function historyOf(session, type) {
@@ -161,12 +233,7 @@ CASES.forEach(function (testCase) {
 
   test("a fake agent declaring the " + testCase.name + " capability set: the browser's picker and gated controls follow it", async function () {
     await withFakeAgent(testCase, async function (server, caps) {
-      fakeDom.setupGlobals();
-      // The module graph of the panels reaches a few browser globals at load.
-      global.document.querySelectorAll = function () { return []; };
-      global.document.removeEventListener = function () {};
-      global.marked.setOptions = function () {};
-      global.mermaid.render = function () { return Promise.resolve({ svg: "" }); };
+      prepareBrowser();
 
       var VR = await frontend("vendor-registry.js");
       var storeMod = await frontend("store.js");
@@ -202,6 +269,80 @@ CASES.forEach(function (testCase) {
       var button = rewindHost.querySelector(".msg-user-rewind-btn");
       assert.ok(button, "a rewind button is drawn");
       assert.equal(button.disabled, !caps.rewind, "rewind button");
+    });
+  });
+
+  test("a fake agent declaring the " + testCase.name + " capability set: the sidebar, notification and message modules follow it", async function () {
+    await withFakeAgent(testCase, async function (server, caps) {
+      prepareBrowser();
+      var VR = await frontend("vendor-registry.js");
+      var storeMod = await frontend("store.js");
+      var messages = await frontend("app-messages.js");
+      var rendering = await frontend("app-rendering.js");
+      var notifications = await frontend("app-notifications.js");
+      var sidebar = await frontend("sidebar-sessions.js", testCase.name);
+      storeMod.createStore({ connected: true, cachedAllUsers: [] });
+      var store = storeMod.store;
+
+      // The registry arrives as a message, the agent under test first in the
+      // order the server sends them.
+      var registryMessage = JSON.parse(JSON.stringify(lib("vendor-registry-message").buildVendorRegistryMessage(server.sm)));
+      registryMessage.vendors.sort(function (a, b) { return (b.id === FAKE_ID) - (a.id === FAKE_ID); });
+      messages.processMessage(registryMessage);
+      var byId = {};
+      registryMessage.vendors.forEach(function (v) { byId[v.id] = v; });
+      assert.equal(VR.defaultVendorId(), FAKE_ID, "the default agent is the registry's first");
+      assert.equal(VR.VENDOR_NAMES[FAKE_ID], "Acme Agent");
+      store.set({ currentVendor: FAKE_ID });
+
+      // Message module: the user message's Fork and Rewind buttons carry the
+      // agent's own gate, disabled with the reason when it cannot do them.
+      pageElement("messages")._children = [];
+      rendering.addUserMessage("hello");
+      var actions = pageElement("messages").querySelector(".msg-actions");
+      var fork = actions.querySelector(".msg-action-fork");
+      var rewind = actions.querySelector(".msg-action-rewind");
+      assert.equal(fork.disabled, !caps.fork, "fork button");
+      assert.equal(rewind.disabled, !caps.rewind, "rewind button");
+      if (!caps.rewind) assert.ok(rewind.title.indexOf(VR.capabilityGate("rewind").reason) !== -1, "the reason is in the title");
+
+      // Notification module: a not-logged-in notice for the agent names the
+      // agent's own sign-in command, and an explicit command is kept.
+      assert.deepEqual(notifications.authLoginFor({ type: "auth_required", vendor: FAKE_ID }), { vendor: FAKE_ID, loginCommand: "acme-agent signin" });
+      assert.equal(notifications.authLoginFor({ meta: { vendor: FAKE_ID } }).loginCommand, "acme-agent signin");
+      assert.deepEqual(notifications.authLoginFor({}), { vendor: FAKE_ID, loginCommand: "acme-agent signin" }, "no agent named: the default agent");
+      assert.equal(notifications.authLoginFor({ vendor: FAKE_ID, loginCommand: "other login" }).loginCommand, "other login");
+      notifications.initAppNotifications();
+      notifications.showAuthRequiredBanner({ vendor: FAKE_ID, title: "Acme Agent is not logged in." });
+      var banner = global.document.body.querySelector('[data-auth-banner="true"]');
+      assert.ok(banner, "the banner is shown");
+      assert.ok(banner.innerHTML.indexOf("Acme Agent is not logged in.") !== -1);
+
+      // Sidebar: the Agent Chat entry follows the capability of the agent in use,
+      // on first render and when the agent changes underneath it.
+      function agentChat() {
+        return pageElement("session-list").querySelectorAll("button.session-top-action").filter(function (b) {
+          return b.innerHTML.indexOf("Agent Chat") !== -1;
+        })[0];
+      }
+      pageElement("session-list")._children = [];
+      global.document.getElementById = pageElement;
+      var shell = await frontend("sidebar.js");
+      shell.initSidebar(new Proxy({ projectName: "Acme", $: pageElement }, {
+        get: function (target, key) { return key in target ? target[key] : pageElement("ctx." + String(key)); },
+      }));
+      sidebar.renderSessionList([]);
+      Object.keys(byId).forEach(function (id) {
+        store.set({ currentVendor: id });
+        var button = agentChat();
+        assert.ok(button, "Agent Chat is listed for " + id);
+        var enabled = byId[id].capabilities.agentInjection === true;
+        assert.equal(button.disabled, !enabled, "Agent Chat for " + id);
+        if (!enabled) {
+          assert.ok(VR.capabilityGate("agentInjection").reason, "the registry gives a reason for " + id);
+          assert.equal(button.title, VR.capabilityGate("agentInjection").reason, "reason as title for " + id);
+        }
+      });
     });
   });
 });
