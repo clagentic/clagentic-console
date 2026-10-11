@@ -23,7 +23,9 @@
     "lib/",
     "scripts/",
     "deploy/",
-    "CREDITS.md"
+    "CREDITS.md",
+    "LICENSE",
+    "LICENSES/"
   ],
   "keywords": [
     "claude",
@@ -67,7 +69,7 @@
     "web-push": "^3.6.7",
     "ws": "^8.22.0"
   },
-  "license": "MIT",
+  "license": "FSL-1.1-MIT",
   "engines": {
     "node": ">=20.0.0"
   },
