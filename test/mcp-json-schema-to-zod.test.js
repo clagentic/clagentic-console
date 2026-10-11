@@ -9,6 +9,7 @@ var z = require("zod");
 var { buildZodShape, UnsupportedSchemaError } = require("../lib/mcp-json-schema-to-zod");
 var workerMcp = require("../lib/yoke/adapters/worker-mcp-servers");
 var mcpToolSchema = require("../lib/mcp-tool-schema");
+var { attachMcp } = require("../lib/project-mcp");
 
 function accepts(inputSchema, value) {
   return z.object(buildZodShape(z, inputSchema)).safeParse(value).success;
@@ -160,4 +161,134 @@ test("a zod that cannot be loaded is reported with the cause, for the worker and
   } finally {
     console.error = originalError;
   }
+});
+
+// A schema generated from a Python model: shared shapes under $defs, referenced
+// from properties, from array items and from inside another definition.
+var MODEL_SCHEMA = {
+  type: "object",
+  $defs: {
+    Address: {
+      type: "object",
+      properties: { city: { type: "string", minLength: 1 }, zip: { $ref: "#/$defs/Zip" } },
+      required: ["city"],
+      additionalProperties: false,
+    },
+    Zip: { type: "string", pattern: "^[0-9]{5}$" },
+  },
+  properties: {
+    home: { $ref: "#/$defs/Address" },
+    others: { type: "array", items: { $ref: "#/$defs/Address" } },
+    legacy: { $ref: "#/definitions/Old" },
+  },
+  definitions: { Old: { type: "integer", minimum: 0 } },
+  required: ["home"],
+};
+
+test("local references are inlined and the result validates exactly", function () {
+  assert.equal(accepts(MODEL_SCHEMA, { home: { city: "Boston", zip: "02101" } }), true);
+  assert.equal(accepts(MODEL_SCHEMA, { home: { city: "Boston" }, others: [{ city: "Salem" }], legacy: 3 }), true);
+  assert.equal(accepts(MODEL_SCHEMA, {}), false, "home is required");
+  assert.equal(accepts(MODEL_SCHEMA, { home: { city: "" } }), false, "city bound from the definition");
+  assert.equal(accepts(MODEL_SCHEMA, { home: { city: "B", zip: "12" } }), false, "pattern from a nested reference");
+  assert.equal(accepts(MODEL_SCHEMA, { home: { city: "B", extra: 1 } }), false, "additionalProperties from the definition");
+  assert.equal(accepts(MODEL_SCHEMA, { home: { city: "B" }, others: [{ city: 5 }] }), false, "a reference inside array items");
+  assert.equal(accepts(MODEL_SCHEMA, { home: { city: "B" }, legacy: -1 }), false, "a definitions reference");
+});
+
+test("a description beside a reference is kept and other validation keywords beside it are refused", function () {
+  var schema = { type: "object", $defs: { N: { type: "number" } }, properties: { n: { $ref: "#/$defs/N", description: "count" } } };
+  assert.equal(accepts(schema, { n: 1 }), true);
+  assert.equal(accepts(schema, { n: "1" }), false);
+  var bad = { type: "object", $defs: { N: { type: "number" } }, properties: { n: { $ref: "#/$defs/N", minimum: 2 } } };
+  assert.throws(function () { buildZodShape(z, bad); }, /keyword 'minimum' next to a \$ref/);
+});
+
+test("a recursive reference, a non-local reference and an undefined reference are refused by name", function () {
+  var recursive = {
+    type: "object",
+    $defs: { Node: { type: "object", properties: { next: { $ref: "#/$defs/Node" } } } },
+    properties: { head: { $ref: "#/$defs/Node" } },
+  };
+  assert.throws(function () { buildZodShape(z, recursive); }, function (err) {
+    assert.equal(err.code, "UNSUPPORTED_SCHEMA");
+    assert.match(err.message, /\$ref/);
+    assert.match(err.message, /recursive/);
+    assert.match(err.message, /head\.next/, "the path names where the cycle closes");
+    return true;
+  });
+  assert.throws(function () { buildZodShape(z, objectSchema({ a: { $ref: "https://example.com/s.json" } })); }, /not a local/);
+  assert.throws(function () { buildZodShape(z, objectSchema({ a: { $ref: "#/$defs/Missing" } })); }, /not defined/);
+  var shared = { type: "object", $defs: { S: { type: "string" } }, properties: { a: { $ref: "#/$defs/S" }, b: { $ref: "#/$defs/S" } } };
+  assert.equal(accepts(shared, { a: "x", b: "y" }), true, "the same definition used twice is not a cycle");
+});
+
+test("the worker publishes a tool with local references and skips recursive and oneOf tools with a diagnostic naming the keyword", function () {
+  var registered = [];
+  var sdk = {
+    tool: function (name, description, shape) { registered.push({ name: name, shape: shape }); return { name: name }; },
+    createSdkMcpServer: function (def) { return def; },
+  };
+  var reported = [];
+  var originalError = console.error;
+  console.error = function () {};
+  try {
+    workerMcp.buildMcpServersFromDescriptors([{
+      serverName: "py",
+      tools: [
+        { name: "model", description: "d", inputSchema: MODEL_SCHEMA },
+        { name: "tree", description: "d", inputSchema: { type: "object", $defs: { T: { type: "object", properties: { kids: { type: "array", items: { $ref: "#/$defs/T" } } } } }, properties: { root: { $ref: "#/$defs/T" } } } },
+        { name: "either", description: "d", inputSchema: objectSchema({ v: { oneOf: [{ type: "string" }, { type: "number" }] } }) },
+      ],
+    }], sdk, {
+      loadZod: function () { return z; },
+      createHandler: function () { return function () {}; },
+      onSkipped: function (d) { reported.push(d); },
+    });
+  } finally {
+    console.error = originalError;
+  }
+  assert.deepEqual(registered.map(function (r) { return r.name; }), ["model"]);
+  assert.equal(z.object(registered[0].shape).safeParse({ home: { city: "B", zip: "1" } }).success, false, "exact validation after the worker rebuild");
+  assert.equal(reported.length, 2);
+  reported.forEach(function (d) {
+    assert.equal(d.type, "diagnostic");
+    assert.equal(d.source, "mcp", "the source the diagnostics panel shows");
+  });
+  assert.match(reported[0].message, /py\/tree/);
+  assert.match(reported[0].message, /\$ref/);
+  assert.match(reported[1].message, /py\/either/);
+  assert.match(reported[1].message, /oneOf/);
+});
+
+test("the project bridge sends the diagnostic to the panel for a skipped remote tool and registers the tool with references", function () {
+  var sent = [];
+  var ext = { readyState: 1 };
+  var mcp = attachMcp({
+    send: function (msg) { sent.push(msg); },
+    sendTo: function () {},
+    slug: "p",
+    getExtensionWs: function () { return ext; },
+    getEnabledMcpServers: function () { return ["srv"]; },
+    setEnabledMcpServers: function () {},
+  });
+  var originalError = console.error;
+  console.error = function () {};
+  try {
+    mcp.handleMcpMessage(ext, { type: "mcp_servers_available", hostConnected: true, servers: [{
+      name: "srv",
+      tools: [
+        { name: "model", description: "d", inputSchema: MODEL_SCHEMA },
+        { name: "either", description: "d", inputSchema: objectSchema({ v: { oneOf: [{ type: "string" }] } }) },
+      ],
+    }] });
+  } finally {
+    console.error = originalError;
+  }
+  var diagnostics = sent.filter(function (m) { return m.type === "diagnostic"; });
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].source, "mcp");
+  assert.match(diagnostics[0].message, /srv\/either/);
+  assert.match(diagnostics[0].message, /oneOf/);
+  assert.ok(mcp.getMcpServers().srv, "the server with the convertible tool is still published");
 });
