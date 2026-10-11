@@ -64,6 +64,12 @@ var KIND_OPENERS = {
   },
 };
 
+// A table keyed by ids from outside has no prototype and no entries left.
+function assertEmptyTable(table) {
+  assert.equal(Object.getPrototypeOf(table), null, "the table has no prototype");
+  assert.deepEqual(Object.getOwnPropertyNames(table), []);
+}
+
 function eventsOf(h, type) {
   return h.recorded.filter(function (m) { return m.type === type; });
 }
@@ -118,7 +124,7 @@ test("an answer settles exactly once; a second answer is stale and still retires
   assert.equal(second.status, "stale");
   assert.deepEqual(await opened.answer, { behavior: "allow", updatedInput: { command: "make" } });
   assert.deepEqual(eventsOf(h, "prompt_resolved"), [{ type: "prompt_resolved", requestId: opened.requestId, kind: "permission", decision: "allow" }]);
-  assert.deepEqual(Object.keys(s.pendingPermissions), []);
+  assertEmptyTable(s.pendingPermissions);
   assert.equal(h.index[opened.requestId], undefined);
   assert.deepEqual(h.dismissed, [opened.requestId, opened.requestId]);
 });
@@ -398,8 +404,8 @@ test("query end ends only that query's prompts; an owner also ends unstamped one
   assert.equal(s.activeTaskToolIds["task-1"], true, "a superseded query does not touch the session's Task tracking");
 
   h.registry.endQuery(s, newQuery, true);
-  assert.deepEqual(Object.keys(s.pendingPermissions), []);
-  assert.deepEqual(Object.keys(s.activeTaskToolIds), []);
+  assertEmptyTable(s.pendingPermissions);
+  assertEmptyTable(s.activeTaskToolIds);
   assert.ok(eventsOf(h, "prompt_cancel").every(function (m) { return m.reason === "query_ended"; }));
 });
 

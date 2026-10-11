@@ -30,10 +30,16 @@ var os = require("os");
 
 var { createSDKBridge } = require("../lib/sdk-bridge");
 
-// A session's grant map has no prototype (its keys are tool names), so
-// deepEqual against an object literal compares a plain copy.
+// A session's grant map has no prototype (its keys are tool names). That is
+// asserted here, then the own keys are copied with defineProperty so an own
+// "__proto__" key stays visible to deepEqual (assignment would swallow it).
 function plain(map) {
-  return Object.assign({}, map);
+  assert.equal(Object.getPrototypeOf(map), null, "the grant map has no prototype");
+  var copy = {};
+  Object.getOwnPropertyNames(map).forEach(function (key) {
+    Object.defineProperty(copy, key, { value: map[key], enumerable: true, writable: true, configurable: true });
+  });
+  return copy;
 }
 
 function makeTempHome() {

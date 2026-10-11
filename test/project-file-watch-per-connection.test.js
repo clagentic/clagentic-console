@@ -133,11 +133,30 @@ test("a watch ends when its connection loses the permission, without sending the
 test("a path outside the project is not watched", async function () {
   var w = engine();
   var ws = socket("escaper", { id: "u5" });
+  var outsideFile = path.join(SANDBOX, "outside-watched.txt");
+  fs.writeFileSync(outsideFile, "o0");
   w.startFileWatch(ws, "../project/../../etc/hostname");
+  w.startFileWatch(ws, "../outside-watched.txt");
+  w.startFileWatch(ws, outsideFile);
   w.startFileWatch(ws, 7);
   w.startFileWatch(ws, "watched.txt\u0000");
   w.startDirWatch(ws, "..");
-  assert.deepEqual(ws.sent, []);
+  w.startDirWatch(ws, SANDBOX);
+
+  // A control watch that is allowed shows that changes are being delivered
+  // in this window, so silence on the escaper is a real result.
+  var control = socket("control", { id: "u6" });
+  w.startFileWatch(control, "watched.txt");
+
+  // Change everything a wrongly started watch would have been watching.
+  fs.writeFileSync(outsideFile, "o1");
+  fs.writeFileSync(path.join(SANDBOX, "created-in-parent.txt"), "p");
+  fs.writeFileSync(path.join(ROOT, "watched.txt"), "inside-change");
+  await pause(800);
+
+  assert.ok(changed(control).length >= 1, "the permitted watch saw the change");
+  assert.deepEqual(ws.sent, [], "no escaping watch was started, so nothing was sent");
+  w.stopFileWatch(control);
 });
 
 test("in os-users mode a change is read as each connection's own identity, never as the daemon", async function () {

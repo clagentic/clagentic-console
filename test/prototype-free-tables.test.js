@@ -27,12 +27,40 @@ var TABLES = {
   "lib/public/modules/app-messages.js": ["handlers"],
 };
 
+function plainLiteral(name) {
+  return new RegExp("\\b" + name + "\\s*(?:=\\s*(?:[^;=\\n]*\\|\\|\\s*)?|:\\s*)\\{");
+}
+
+test("the sweep recognises every way a table can be given a plain object", function () {
+  [
+    "var handlers = {};",
+    "var handlers = { a: f };",
+    "var handlers = opts.handlers || {};",
+    "handlers = x || { a: 1 };",
+    "return { handlers: {} };",
+    "return { handlers: { a: f } };",
+    "var o = { handlers:{} };",
+  ].forEach(function (source) {
+    assert.equal(plainLiteral("handlers").test(source), true, source);
+  });
+  [
+    "var handlers = Object.create(null);",
+    "var handlers = opts.handlers || Object.create(null);",
+    "handlers[key] = { a: 1 };",
+    "var other = {};",
+  ].forEach(function (source) {
+    assert.equal(plainLiteral("handlers").test(source), false, source);
+  });
+});
+
 Object.keys(TABLES).forEach(function (file) {
   test(file + ": its tables keyed by outside names are prototype-free", function () {
     var source = fs.readFileSync(path.join(ROOT, file), "utf8");
     TABLES[file].forEach(function (name) {
-      var plain = new RegExp("\\b" + name + "\\s*=\\s*(?:[^;=\\n]*\\|\\|\\s*)?\\{\\s*\\}");
-      assert.equal(plain.test(source), false, name + " is assigned a plain {}");
+      // Any object literal is a plain object, empty or not: `name = {}`,
+      // `name = x || {}`, `name = { a: f }`, and a property `name: {}` or
+      // `name: { a: f }` in a returned or passed object.
+      assert.equal(plainLiteral(name).test(source), false, name + " is given a plain object literal");
       var safe = new RegExp("\\b" + name + "\\s*=\\s*(?:[^;=\\n]*\\|\\|\\s*)?Object\\.create\\(null\\)");
       assert.equal(safe.test(source), true, name + " is never made with Object.create(null)");
     });
