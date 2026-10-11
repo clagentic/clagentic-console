@@ -33,8 +33,42 @@ function testFiles(dir) {
   return out;
 }
 
+// Words after which a "/" starts a regular expression rather than a division.
+var REGEX_AFTER_WORD = /^(?:return|typeof|case|in|of|delete|void|throw|new|else|do|instanceof|yield|await)$/;
+var REGEX_AFTER_CHAR = "(,=:[!&|?{};+-*%<>~^";
+
+// Whether the "/" at `i` opens a regular expression literal, judged from the
+// last significant token before it. A "/" after an identifier, number, ")" or
+// "]" is a division. "}" is read as a division too, which misreads only a
+// regex literal that starts a statement straight after a block.
+function opensRegex(source, i) {
+  var j = i - 1;
+  while (j >= 0 && /\s/.test(source[j])) j--;
+  if (j < 0) return true;
+  if (REGEX_AFTER_CHAR.indexOf(source[j]) !== -1) return true;
+  var end = j + 1;
+  while (j >= 0 && /[A-Za-z0-9_$]/.test(source[j])) j--;
+  return REGEX_AFTER_WORD.test(source.slice(j + 1, end));
+}
+
+// Index of the "/" that closes the regex literal opened at `open`, or -1.
+function regexEnd(source, open) {
+  var inClass = false;
+  for (var i = open + 1; i < source.length; i++) {
+    var c = source[i];
+    if (c === "\n") return -1;
+    if (c === "\\") i++;
+    else if (c === "[") inClass = true;
+    else if (c === "]") inClass = false;
+    else if (c === "/" && !inClass) return i;
+  }
+  return -1;
+}
+
 // Index of the brace that closes the one opened at `open`, skipping string
-// literals and comments, or -1 when it never closes.
+// literals, regular expression literals and comments, or -1 when it never
+// closes. Not parsed: code nested inside a template literal's ${...}, so a
+// quote or brace written there can still throw the count off.
 function closingBrace(source, open) {
   var depth = 0;
   for (var i = open; i < source.length; i++) {
@@ -48,6 +82,10 @@ function closingBrace(source, open) {
       var end = source.indexOf("*/", i + 2);
       if (end === -1) return -1;
       i = end + 1;
+    } else if (c === "/" && opensRegex(source, i)) {
+      var close = regexEnd(source, i);
+      if (close === -1) return -1;
+      i = close;
     } else if (c === '"' || c === "'" || c === "`") {
       for (i = i + 1; i < source.length && source[i] !== c; i++) {
         if (source[i] === "\\") i++;
@@ -62,8 +100,11 @@ function closingBrace(source, open) {
   return -1;
 }
 
-function isOnlyComments(text) {
-  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").trim() === "";
+// A catch body that does nothing: only comments, empty statements (";") and
+// the no-op expression "void 0;".
+function isEmptyBody(text) {
+  var code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  return code.replace(/\bvoid\s+0\b/g, "").replace(/[;\s]/g, "") === "";
 }
 
 // The try statements in `source` that call require.resolve and whose catch is empty.
@@ -82,7 +123,7 @@ function emptyCatchesAroundResolve(source) {
     var catchOpen = close + 1 + after[0].length - 1;
     var catchClose = closingBrace(source, catchOpen);
     if (catchClose === -1) continue;
-    if (isOnlyComments(source.slice(catchOpen + 1, catchClose))) {
+    if (isEmptyBody(source.slice(catchOpen + 1, catchClose))) {
       found.push(source.slice(m.index, catchClose + 1).replace(/\s+/g, " ").slice(0, 100));
     }
   }
@@ -117,6 +158,13 @@ test("the guard recognises the pattern it forbids", function () {
     'try { if (fresh) { delete require.cache[require.resolve(m)]; } } catch (_) {}',
     'try {\n  forEach(function (n) { if (n) { delete require.cache[require.resolve(n)]; } });\n} catch {\n  // nothing\n}',
     "try { const s = '}'; delete require.cache[require.resolve(m)]; } catch (_) {}",
+    'try { var q = /"/; delete require.cache[require.resolve(m)]; } catch (_) {}',
+    "try { var b = /}/.test(x); delete require.cache[require.resolve(m)]; } catch (_) {}",
+    "try { var c = /[}'\"]/g; delete require.cache[require.resolve(m)]; } catch (_) {}",
+    "try { return /{/.test(x) && require.resolve(m); } catch (_) {}",
+    'try { delete require.cache[require.resolve(m)]; } catch (_) { ; }',
+    'try { delete require.cache[require.resolve(m)]; } catch (_) { void 0; }',
+    'try { delete require.cache[require.resolve(m)]; } catch (_) { /* x */ ; void 0; ; }',
   ];
   bad.forEach(function (source) {
     assert.equal(emptyCatchesAroundResolve(source).length, 1, source);
@@ -126,6 +174,8 @@ test("the guard recognises the pattern it forbids", function () {
     'try { delete require.cache[require.resolve(m)]; } catch (e) { throw new Error("stale " + m); }',
     'try { if (x) { fs.rmSync(dir, { recursive: true }); } } catch (_) {}',
     'try { if (x) { delete require.cache[require.resolve(m)]; } } catch (e) { if (e) { throw e; } }',
+    'try { var half = total / 2; delete require.cache[require.resolve(m)]; } catch (e) { log(half / 2); }',
+    'try { delete require.cache[require.resolve(m)]; } catch (_) { void 1; }',
   ];
   fine.forEach(function (source) {
     assert.deepEqual(emptyCatchesAroundResolve(source), [], source);
