@@ -101,13 +101,15 @@ test("a connecting client is told its own identity's install state, not another 
     var yoke = lib("yoke");
     var stub = stubLookup(yoke, { alice: ["claude", "codex"], "": ["claude"] });
     try {
+      // A non-empty daemon state first, so a fallback that returned an empty
+      // list instead of the daemon's would be caught.
+      server.bridge.recheckVendors(null);
+      assert.deepEqual(server.sm.installedVendors, ["claude"]);
       server.bridge.recheckVendors("alice");
       var message = lib("vendor-registry-message");
       assert.deepEqual(installedIn(message.buildVendorRegistryMessage(server.sm, "alice")), ["claude", "codex"]);
-      assert.deepEqual(installedIn(message.buildVendorRegistryMessage(server.sm, "bob")), [], "an identity never looked up falls back to the daemon list");
-      assert.deepEqual(server.sm.installedVendors || [], [], "a user's lookup does not overwrite the daemon account's list");
-      server.bridge.recheckVendors(null);
-      assert.deepEqual(server.sm.installedVendors, ["claude"]);
+      assert.deepEqual(installedIn(message.buildVendorRegistryMessage(server.sm, "bob")), ["claude"], "an identity never looked up falls back to the daemon list");
+      assert.deepEqual(server.sm.installedVendors, ["claude"], "a user's lookup does not overwrite the daemon account's list");
     } finally {
       stub.restore();
     }
