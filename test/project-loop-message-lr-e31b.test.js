@@ -104,7 +104,7 @@ function makeEngine(cwd, ctxOpts) {
 
   ["../lib/config", "../lib/utils", "../lib/store", "../lib/scheduler", "../lib/project-loop", "../lib/loop-handoff"]
     .forEach(function(m) {
-      try { delete require.cache[require.resolve(m)]; } catch(_) {}
+      delete require.cache[require.resolve(m)];
     });
 
   var origHome = process.env.CLAGENTIC_HOME;

@@ -30,6 +30,12 @@ var os = require("os");
 
 var { createSDKBridge } = require("../lib/sdk-bridge");
 
+// A session's grant map has no prototype (its keys are tool names), so
+// deepEqual against an object literal compares a plain copy.
+function plain(map) {
+  return Object.assign({}, map);
+}
+
 function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-8b2e-"));
 }
@@ -37,7 +43,7 @@ function makeTempHome() {
 function makeSessionManager(tmpHome) {
   // Bust require cache so a fresh instance picks up the temp CLAGENTIC_HOME.
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
@@ -108,7 +114,7 @@ test("lr-8b2e: grant survives loadSessions() rehydration — auto-approve HITS f
       if (s.cliSessionId === "sess-lr-8b2e-grant") rebuilt = s;
     });
     assert.ok(rebuilt, "rebuilt session should be found after rehydration");
-    assert.deepEqual(rebuilt.allowedTools, { Write: true },
+    assert.deepEqual(plain(rebuilt.allowedTools), { Write: true },
       "allowedTools must be hydrated from the persisted meta record");
 
     // Assert the auto-approve early-return at lib/sdk-bridge.js:691 HITS for
@@ -190,7 +196,7 @@ test("lr-8b2e: saveSessionFile omits allowedTools entirely when no grant was eve
       if (s.cliSessionId === "sess-lr-8b2e-empty") rebuilt = s;
     });
     assert.ok(rebuilt);
-    assert.deepEqual(rebuilt.allowedTools, {}, "no-grant sessions must rehydrate to an empty allowedTools object");
+    assert.deepEqual(plain(rebuilt.allowedTools), {}, "no-grant sessions must rehydrate to an empty allowedTools object");
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
@@ -210,7 +216,7 @@ test("lr-8b2e: resumeSession() hydrates allowedTools from opts when rebuilding a
       allowedTools: { Bash: true },
     }, null);
 
-    assert.deepEqual(resumed.allowedTools, { Bash: true },
+    assert.deepEqual(plain(resumed.allowedTools), { Bash: true },
       "resumeSession must hydrate allowedTools from opts, not default to {}");
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
@@ -226,7 +232,7 @@ test("lr-8b2e: resumeSession() defaults to empty allowedTools when opts carries 
       title: "Resumed",
     }, null);
 
-    assert.deepEqual(resumed.allowedTools, {},
+    assert.deepEqual(plain(resumed.allowedTools), {},
       "resumeSession must default to {} when no persisted grant exists — never invents an approval");
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
@@ -258,7 +264,7 @@ test("lr-8b2e hardening: a legit persisted grant still hydrates and auto-approve
       if (s.cliSessionId === "sess-lr-8b2e-hardening-legit") rebuilt = s;
     });
     assert.ok(rebuilt, "rebuilt session should be found after rehydration");
-    assert.deepEqual(rebuilt.allowedTools, { Write: true },
+    assert.deepEqual(plain(rebuilt.allowedTools), { Write: true },
       "a legitimately-granted tool must still round-trip exactly as before hardening");
 
     var bridge = makeBridge(sm2);
@@ -301,7 +307,7 @@ test("lr-8b2e hardening: a persisted allowedTools with a non-boolean value is re
       if (s.cliSessionId === "sess-lr-8b2e-hardening-nonbool") rebuilt = s;
     });
     assert.ok(rebuilt, "rebuilt session should be found after loading the crafted meta record");
-    assert.deepEqual(rebuilt.allowedTools, {},
+    assert.deepEqual(plain(rebuilt.allowedTools), {},
       "non-boolean-value entries must be dropped, not hydrated as truthy grants");
 
     // Use "Edit" (not "Bash") so the assertion isolates the allowedTools
@@ -344,7 +350,7 @@ test("lr-8b2e hardening: a non-object allowedTools value hydrates as empty and d
         if (s.cliSessionId === "sess-lr-8b2e-hardening-nonobject") rebuilt = s;
       });
       assert.ok(rebuilt, "rebuilt session should be found after loading the crafted meta record");
-      assert.deepEqual(rebuilt.allowedTools, {},
+      assert.deepEqual(plain(rebuilt.allowedTools), {},
         "a non-object allowedTools value must hydrate as empty, never throw");
     });
   } finally {
@@ -354,11 +360,11 @@ test("lr-8b2e hardening: a non-object allowedTools value hydrates as empty and d
 
 test("lr-8b2e hardening: sanitizeAllowedTools utility rejects arrays, null, and mixed-shape entries directly", function () {
   var utils = require("../lib/utils");
-  assert.deepEqual(utils.sanitizeAllowedTools(null), {});
-  assert.deepEqual(utils.sanitizeAllowedTools(undefined), {});
-  assert.deepEqual(utils.sanitizeAllowedTools(["Bash"]), {});
-  assert.deepEqual(utils.sanitizeAllowedTools("Bash"), {});
-  assert.deepEqual(utils.sanitizeAllowedTools({ Bash: true, Edit: false, Write: "true", Read: 1 }), { Bash: true });
+  assert.deepEqual(plain(utils.sanitizeAllowedTools(null)), {});
+  assert.deepEqual(plain(utils.sanitizeAllowedTools(undefined)), {});
+  assert.deepEqual(plain(utils.sanitizeAllowedTools(["Bash"])), {});
+  assert.deepEqual(plain(utils.sanitizeAllowedTools("Bash")), {});
+  assert.deepEqual(plain(utils.sanitizeAllowedTools({ Bash: true, Edit: false, Write: "true", Read: 1 })), { Bash: true });
 });
 
 test("lr-8b2e hardening: resumeSession() sanitizes a malformed allowedTools passed via opts", function () {
@@ -371,7 +377,7 @@ test("lr-8b2e hardening: resumeSession() sanitizes a malformed allowedTools pass
       allowedTools: { Bash: true, Edit: "yes" },
     }, null);
 
-    assert.deepEqual(resumed.allowedTools, { Bash: true },
+    assert.deepEqual(plain(resumed.allowedTools), { Bash: true },
       "resumeSession must sanitize opts.allowedTools defense-in-depth, dropping non-boolean entries");
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });

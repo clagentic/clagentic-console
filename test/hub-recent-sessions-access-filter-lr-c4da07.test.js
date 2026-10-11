@@ -92,7 +92,7 @@ function makeTempHome() {
 
 function loadRealUsers(tmpHome) {
   ["../lib/config", "../lib/users", "../lib/users-auth", "../lib/users-permissions", "../lib/users-preferences", "../lib/store"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
@@ -313,7 +313,7 @@ function makeEngine(cwd, getAllProjectSessionsStub) {
   var tmpHome = makeTempHomeLoop();
   ["../lib/config", "../lib/utils", "../lib/store", "../lib/scheduler", "../lib/project-loop", "../lib/loop-handoff"]
     .forEach(function (m) {
-      try { delete require.cache[require.resolve(m)]; } catch (_) {}
+      delete require.cache[require.resolve(m)];
     });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;

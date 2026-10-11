@@ -29,7 +29,7 @@ function makeTempHome() {
 
 function freshSessionsModule(tmpHome) {
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
