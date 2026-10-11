@@ -519,7 +519,44 @@ test("a thread of environment A is forked and rolled back on A's server after B 
   await adapter.shutdown();
 });
 
-test("a thread operation for a session with no environment settings uses the instance that holds the thread", async function () {
+test("fork and rollback run on the caller's environment's server, never on the one that holds the thread", async function () {
+  var adapter = codexAdapter();
+  var a = await openOnThread(adapter, ENV_A, "thread-a");
+  var b = await openOnThread(adapter, ENV_B, "thread-b");
+
+  var forked = await adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_B });
+  assert.equal(forked.sessionId, "fork-of-thread-a");
+  await adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_B });
+
+  assert.equal(callsOf(b.server, "thread/fork").length, 1);
+  assert.equal(callsOf(b.server, "thread/rollback").length, 1);
+  assert.equal(callsOf(a.server, "thread/fork").length, 0, "A's server never saw the operation");
+  assert.equal(callsOf(a.server, "thread/rollback").length, 0);
+
+  a.handle.close();
+  b.handle.close();
+  await adapter.shutdown();
+});
+
+test("a rollback the caller's server cannot do fails even when another server holds the thread", async function () {
+  var adapter = codexAdapter();
+  var a = await openOnThread(adapter, ENV_A, "thread-a");
+  var b = await openOnThread(adapter, ENV_B, "thread-b");
+  var realSend = b.server.send;
+  b.server.send = function (method) {
+    if (method === "thread/rollback") return Promise.reject(new Error("thread not found"));
+    return realSend.apply(this, arguments);
+  };
+
+  await assert.rejects(adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_B }), /thread not found/);
+  assert.equal(callsOf(a.server, "thread/rollback").length, 0, "the thread's holder was not asked instead");
+
+  a.handle.close();
+  b.handle.close();
+  await adapter.shutdown();
+});
+
+test("a thread operation for a session with no environment settings runs on the no-environment instance", async function () {
   var adapter = codexAdapter();
   var plain = await openOnThread(adapter, null, "thread-plain");
   var other = await openOnThread(adapter, ENV_B, "thread-b");
