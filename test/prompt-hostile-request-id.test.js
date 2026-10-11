@@ -56,7 +56,9 @@ function openOneOfEach(server) {
   var settled = {};
   Object.keys(opened).forEach(function (kind) {
     var answer = kind === "extension" ? opened[kind].answer : opened[kind];
-    answer.then(function () { settled[kind] = true; });
+    // A callback that fails is settled too, and must not read as pending.
+    var mark = function () { settled[kind] = true; };
+    answer.then(mark, mark);
   });
   var ids = { extension: opened.extension.requestId };
   prompts.pendingMessages(session).forEach(function (m) { ids[m.kind] = m.requestId; });

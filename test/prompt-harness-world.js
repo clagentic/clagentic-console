@@ -75,7 +75,6 @@ function makeQueryHandle() {
   };
 }
 
-/** requestIds of every prompt the session currently holds. */
 function heldPromptIds(session) {
   var ids = [];
   PROMPT_STORES.forEach(function (store) {
@@ -126,9 +125,13 @@ async function createServer(opts) {
   });
 
   var handles = [];
+  // The options each query was created with, for tests that check what the
+  // bridge asks the adapter to start (permission mode, effort).
+  var queryOptions = [];
   var adapter = {
     vendor: "claude",
-    createQuery: function () {
+    createQuery: function (queryOpts) {
+      queryOptions.push(queryOpts);
       var h = makeQueryHandle();
       handles.push(h);
       return Promise.resolve(h);
@@ -185,6 +188,7 @@ async function createServer(opts) {
     sm.saveSessionFile(session);
   }
 
+  var askSeq = 0;
   var server = {
     home: home,
     sm: sm,
@@ -207,6 +211,23 @@ async function createServer(opts) {
     issueSignal: function () {
       if (!session.queryInstance) throw new Error("no live query to issue a canUseTool signal");
       return session.queryInstance.issueSignal();
+    },
+
+    queryOptions: queryOptions,
+
+    /**
+     * A canUseTool call as the SDK makes it, in process. hints carries the
+     * SDK's presentation hints (suppressAlwaysAllowRule, defaultToNo,
+     * matchedAskRule); the vendor's own options (toolUseID, signal) are the
+     * harness's. Returns the call's promise, the id of the prompt it opened
+     * (null when it was answered without one) and every id it opened.
+     */
+    ask: function (toolName, input, hints) {
+      var before = heldPromptIds(session);
+      var opts = Object.assign({ toolUseID: "tu-ask-" + (++askSeq), signal: server.issueSignal().signal }, hints || {});
+      var promise = bridge.handleCanUseTool(session, toolName, input, opts);
+      var opened = heldPromptIds(session).filter(function (id) { return before.indexOf(id) === -1; });
+      return { promise: promise, id: opened[0] || null, opened: opened };
     },
 
     // Closes the live query; its processQueryStream finally runs. A stream

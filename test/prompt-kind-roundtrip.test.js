@@ -55,6 +55,41 @@ function click(card, selector) {
   el.click();
 }
 
+// --- the SDK's presentation hints -------------------------------------------
+
+var RULES = [
+  { source: "projectSettings", toolName: "Bash", ruleContent: "make:*" },
+  { source: "userSettings", toolName: "Write" },
+];
+
+// Hints on a request, generated for every kind: a kind that does not use them
+// must be unmoved by them, and the permission kind must hold to them.
+function hintsFor(p) {
+  var hints = {};
+  if (p.chance(0.4)) hints.suppressAlwaysAllowRule = true;
+  if (p.chance(0.4)) hints.defaultToNo = true;
+  if (p.chance(0.4)) hints.matchedAskRule = p.one(RULES);
+  return hints;
+}
+
+var HINT_KEYS = ["suppressAlwaysAllowRule", "defaultToNo", "matchedAskRule"];
+
+// What the permission card shows for an ask with these hints.
+function assertHintsShown(card, req) {
+  var session = card.querySelector(".permission-allow-session, .perm-always");
+  assert.equal(!!session, !req.suppressAlwaysAllowRule, "Allow for session is offered exactly when the ask may offer it");
+  var buttons = card.querySelectorAll(".permission-actions button");
+  var approvals = buttons.filter(function (b) { return /permission-allow|perm-allow|perm-always/.test(b.className); });
+  approvals.forEach(function (b) { assert.equal(b.dataset.defaultChoice, undefined, "no approve choice is the default"); });
+  if (req.defaultToNo) {
+    assert.match(buttons[0].className, /permission-deny|perm-deny/, "the ask opens on No");
+    assert.equal(buttons[0].dataset.defaultChoice, "true");
+  } else {
+    assert.match(buttons[buttons.length - 1].className, /permission-deny|perm-deny/, "an ordinary ask keeps its order");
+  }
+  assert.equal(/Asked because of your rule/.test(card.textContent), !!req.matchedAskRule, "the rule that forced the ask is shown");
+}
+
 // --- per-kind generators and readers --------------------------------------
 
 var LABEL_POOL = ["staging", "prod", "staging, eu", "qa", "eu", "a, b", "b", "Other", "x"];
@@ -69,14 +104,19 @@ var FIELD_SHAPES = [
   { prop: { type: "string" }, defaults: ["preset", 5] },
   { prop: { type: "string", maxLength: 8 }, defaults: ["short", "far too long a default"] },
   { prop: { type: "string", minLength: 2, title: "Code", description: "two or more" }, defaults: ["ok", "x"] },
+  { prop: { type: "string", minLength: 2, maxLength: 5 }, defaults: ["abc", "abcdef"] },
   { prop: { type: "string", format: "email" }, defaults: ["ops@example.test", "not an address"] },
   { prop: { type: "string", format: "uri" }, defaults: ["https://example.test/x", "relative/x"] },
   { prop: { type: "string", format: "date" }, defaults: ["2026-02-28", "2026-02-30"] },
   { prop: { type: "string", format: "date-time" }, defaults: ["2026-10-06T12:30:00Z", "2026-10-06 12:30"] },
   { prop: { type: "integer" }, defaults: [7, 1.5, "7"] },
   { prop: { type: "integer", minimum: 0, maximum: 10 }, defaults: [3, 11] },
+  { prop: { type: "integer", minimum: 1 }, defaults: [5, 0] },
+  { prop: { type: "integer", maximum: 9 }, defaults: [3, 10] },
   { prop: { type: "number" }, defaults: [2.25, "2.25"] },
   { prop: { type: "number", minimum: -2.5, maximum: 2.5 }, defaults: [0.5, 3] },
+  { prop: { type: "number", minimum: 0.5 }, defaults: [1.5, 0] },
+  { prop: { type: "number", maximum: 0.5 }, defaults: [0, 1] },
   { prop: { type: "boolean" }, defaults: [true, false, "yes"] },
   { prop: { type: "string", enum: ["eu", "us", "apac"] }, defaults: ["us", "mars"] },
   { prop: { type: "string", enum: ["s", "m", "l"], enumNames: ["Small", "Medium", "Large"] }, defaults: ["m", "xl"] },
@@ -184,12 +224,18 @@ var SPECS = {
         req: { toolName: p.one(["Bash", "Write"]), toolInput: { command: "make " + p.int(0, 9) }, decisionReason: "", vendor: "claude" },
       };
     },
-    answer: function (card, p) {
-      var choice = p.one([
+    // The hints (generated for every kind, see hintsFor) decide what the card
+    // offers: no Allow for session when suppressed, Deny first when the ask
+    // must open on No.
+    answer: function (card, p, req) {
+      var choices = [
         { selector: ".permission-allow, .perm-allow", label: "Allowed", allows: true },
         { selector: ".permission-allow-session, .perm-always", label: "Allowed for session", allows: true },
         { selector: ".permission-deny, .perm-deny", label: "Denied", allows: false },
-      ]);
+      ];
+      assertHintsShown(card, req);
+      if (req.suppressAlwaysAllowRule) choices.splice(1, 1);
+      var choice = p.one(choices);
       click(card, choice.selector);
       return choice;
     },
@@ -474,13 +520,27 @@ async function roundTrip(kind, seed) {
   var where = kind + " seed " + seed;
   var server = makeServer();
   var opened = spec.request(p);
+  Object.assign(opened.req, hintsFor(p));
   var prompt = server.registry.open(server.session, kind, opened.req, { toolUseId: "tu-" + seed });
 
   var live = await dom.createClient("roundtrip-live");
   var requestEvent = JSON.parse(JSON.stringify(server.history[0]));
+  HINT_KEYS.forEach(function (key) {
+    if (kind === "permission") assert.deepEqual(requestEvent[key], opened.req[key], where + ": the request carries " + key);
+    else assert.equal(requestEvent[key], undefined, where + ": " + kind + " does not carry " + key);
+  });
+  var pendingMessage = JSON.parse(JSON.stringify(server.registry.pendingMessages(server.session)[0]));
   live.tools.applyPromptMessage(requestEvent);
   var card = dom.cardFor(live, prompt.requestId);
   assert.ok(card, where + ": the request draws a card");
+
+  // The connect snapshot of a prompt that is still pending draws the same
+  // card, with the same restrictions.
+  if (kind === "permission") {
+    var snapshot = await dom.createClient("roundtrip-snapshot");
+    snapshot.tools.applyPromptMessage(pendingMessage);
+    assertHintsShown(dom.cardFor(snapshot, prompt.requestId), opened.req);
+  }
   var choice = spec.answer(card, p, opened.req, live.sent);
   assert.equal(live.sent.length, 1, where + ": one answer is sent");
   var sent = JSON.parse(JSON.stringify(live.sent[0]));
@@ -493,6 +553,8 @@ async function roundTrip(kind, seed) {
   var stored = JSON.parse(JSON.stringify(server.history));
   var resolution = stored.filter(function (m) { return m.type === "prompt_resolved"; });
   assert.equal(resolution.length, 1, where + ": one outcome is recorded");
+  assert.deepEqual(resolution[0].matchedAskRule, kind === "permission" ? opened.req.matchedAskRule : undefined,
+    where + ": the rule that forced an ask is recorded with its outcome");
 
   live.tools.applyPromptMessage(resolution[0]);
   var want = spec.expectedRead(choice, opened.req);
@@ -563,6 +625,39 @@ test("elicitation answers that bypass the card are held to the requested schema"
     } else {
       assert.equal(outcome.status, "resolved", where);
       assert.deepEqual(await prompt.answer, { action: "accept", content: expected }, where + ": only the values that fit the schema reach the server");
+    }
+  }
+});
+
+// An answer that did not come from the card is held to the ask's hints too:
+// Allow for session to an ask that may not offer it settles nothing and
+// grants nothing, and any other answer behaves as it always did.
+test("permission answers that bypass the card are held to the ask's hints", async function () {
+  for (var seed = 1; seed <= RUNS_PER_KIND * 2; seed++) {
+    var p = picker(mulberry32(2000 + seed));
+    var where = "permission seed " + seed;
+    var server = makeServer();
+    var req = SPECS.permission.request(p).req;
+    Object.assign(req, hintsFor(p));
+    var prompt = server.registry.open(server.session, "permission", req, { toolUseId: "tu-" + seed });
+    var decision = p.one(["allow", "allow_always", "deny", "bogus", undefined]);
+
+    var outcome = server.registry.respond(prompt.requestId, { decision: decision });
+    var grants = Object.keys(server.session.allowedTools || {}).length;
+    if (decision === "allow_always" && req.suppressAlwaysAllowRule) {
+      assert.equal(outcome.status, "invalid", where + ": refused");
+      assert.equal(outcome.pending.type, "prompt_pending", where + ": and offered again");
+      assert.equal(outcome.pending.suppressAlwaysAllowRule, true, where + ": with the restriction");
+      assert.equal(grants, 0, where + ": nothing was granted");
+      assert.equal(server.history.filter(function (m) { return m.type === "prompt_resolved"; }).length, 0, where + ": nothing settled");
+      assert.equal(server.registry.respond(prompt.requestId, { decision: "allow" }).status, "resolved", where + ": still answerable");
+      assert.equal((await prompt.answer).behavior, "allow", where);
+      assert.equal(Object.keys(server.session.allowedTools || {}).length, 0, where + ": Allow once grants nothing");
+    } else {
+      assert.equal(outcome.status, "resolved", where);
+      assert.equal(grants, decision === "allow_always" ? 1 : 0, where + ": a grant is written exactly for an accepted Allow for session");
+      var expected = decision === "allow" || decision === "allow_always" ? "allow" : "deny";
+      assert.equal((await prompt.answer).behavior, expected, where + ": an unknown answer fails closed");
     }
   }
 });

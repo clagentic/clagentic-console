@@ -27,6 +27,11 @@
 //   I7  Allow for Session auto-approves the same grant key afterwards, across
 //       turns and restart, and nothing else
 //   I8  every prompt that ends records exactly one terminal event
+//   I9  an ask carrying the SDK's hints is held to them: Allow for session on
+//       a suppressAlwaysAllowRule ask is refused on every path (the card and
+//       its aliases, the banner) and writes no grant, and no standing approval
+//       answers an ask marked suppressAlwaysAllowRule, defaultToNo or
+//       matchedAskRule
 //
 // Set CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB to another checkout's lib/ to run the
 // wire-level checks against it; the client render layer always exercises
@@ -55,7 +60,25 @@ var PROMPTS = [
     key: "Elicit", kind: "elicitation",
     request: { serverName: "deploy", message: "Token?", mode: "form", requestedSchema: { type: "object", properties: { token: { type: "string" } } } },
   },
+  // Asks carrying the SDK's presentation hints. Each uses a tool of its own,
+  // so no Allow for session on another entry can stand in for them.
+  { key: "Edit!", kind: "permission", toolName: "Edit", input: { file_path: "/srv/app/main.js" }, hints: { suppressAlwaysAllowRule: true } },
+  {
+    key: "Drop!", kind: "permission", toolName: "mcp__db__drop", input: { table: "users" },
+    hints: { defaultToNo: true, matchedAskRule: { source: "projectSettings", toolName: "mcp__db__drop", ruleContent: "*" } },
+  },
 ];
+
+// An ask the SDK marked as not offering a persistent choice.
+function suppressesAlways(prompt) {
+  return !!(prompt.hints && prompt.hints.suppressAlwaysAllowRule);
+}
+
+// An ask a standing approval may not answer: a grant for its tool is broader
+// than what the SDK says the ask itself allows.
+function needsOwnAnswer(prompt) {
+  return !!(prompt.hints && (prompt.hints.suppressAlwaysAllowRule || prompt.hints.defaultToNo || prompt.hints.matchedAskRule));
+}
 var BY_KIND = {};
 PROMPTS.forEach(function (p) { if (!BY_KIND[p.kind]) BY_KIND[p.kind] = p; });
 
@@ -168,6 +191,7 @@ function Harness(label) {
   this.queryGen = 0;
   this.clients = [];
   this.terminalEvents = {};
+  this.unexpressible = 0;
 }
 
 Harness.prototype.fail = function (msg) {
@@ -309,10 +333,11 @@ Harness.prototype.request = async function (prompt, ownerTask) {
   var abort = this.server.issueSignal();
   var promise = prompt.kind === "elicitation"
     ? this.server.bridge.handleElicitation(session, prompt.request, { signal: abort.signal })
-    : this.server.bridge.handleCanUseTool(session, prompt.toolName, prompt.input, { toolUseID: toolUseId, signal: abort.signal });
+    : this.server.bridge.handleCanUseTool(session, prompt.toolName, prompt.input, Object.assign({ toolUseID: toolUseId, signal: abort.signal }, prompt.hints || {}));
   var opened = this.server.heldPromptIds().filter(function (id) { return before.indexOf(id) === -1; });
 
-  var grantable = prompt.kind === "permission";
+  // A standing approval never answers an ask that needs its own answer (I9).
+  var grantable = prompt.kind === "permission" && !needsOwnAnswer(prompt);
   if (grantable && this.granted[prompt.key] && opened.length === 0) {
     var auto = await promise;
     if (!allows(auto)) this.fail(prompt.key + " was granted for the session but was not auto-approved (I7)");
@@ -405,12 +430,28 @@ Harness.prototype.respond = async function (client, r, answer) {
   if (!clicked) {
     var legacy = world.overridesLib || this.toolSeq % 2 === 0;
     var msg = responseMessage(r.kind, r.id, answer, legacy);
-    if (msg.type !== "prompt_response" || !world.overridesLib) {
-      this.server.handlers.handleSessionsMessage(client.ws, msg);
+    // A lib that predates prompt_response has no message that can carry an
+    // answer only prompt_response expresses (an AskUserQuestion skip), so the
+    // step cannot be made there. It is counted, and a run against this
+    // checkout fails if any step was lost this way, instead of judging a
+    // message that was never sent.
+    if (msg.type === "prompt_response" && world.overridesLib) {
+      this.unexpressible++;
+      return;
     }
+    this.server.handlers.handleSessionsMessage(client.ws, msg);
   }
   var replies = client.inbox.filter(function (m) { return isEnding(m) && promptIdOf(m) === r.id; });
+  var reoffered = client.inbox.some(function (m) { return PENDING[m.type] && promptIdOf(m) === r.id; });
   await this.settle();
+  if (wasPending && answer === "allow_always" && suppressesAlways(r.prompt)) {
+    // I9: an ask that may not offer Allow for session is refused it whatever
+    // the client sent: nothing settles, nothing is granted, and the responder
+    // is shown the prompt again.
+    if (r.settled) this.fail(r.id + " was settled by an Allow for session its ask may not offer (I9)");
+    else if (client.connected && !reoffered) this.fail(client.name + "'s refused Allow for session on " + r.id + " was not offered again (I9)");
+    return;
+  }
   if (client.connected) {
     var stale = replies.some(function (m) { return m.reason === "stale"; });
     var resolved = replies.some(function (m) { return m.type !== "prompt_cancel" && m.type !== "permission_cancel"; });
@@ -599,6 +640,7 @@ Harness.prototype.close = function () {
 
 Harness.prototype.assertClean = function () {
   assert.deepEqual(this.violations, [], "ops: " + this.log.join(" | "));
+  if (!world.overridesLib) assert.equal(this.unexpressible, 0, "every answer the run chose could be sent to this checkout");
 };
 
 // --- random interleavings -------------------------------------------------
