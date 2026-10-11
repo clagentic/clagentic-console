@@ -142,19 +142,26 @@ test("an inherited name is no prompt on the push notification's HTTP route: 404,
 test("an inherited name is no prompt on the browser extension's result path: no throw, nothing settled", async function () {
   await withServer(async function (server) {
     var real = openOneOfEach(server);
-    var userMessages = attachUserMessage({ sm: server.sm, clients: server.clients, opts: {} });
+    // The socket the extension commands were sent to. Which request ids it may
+    // answer is the project's concern (test/extension-result-binding.test.js);
+    // here every id reaches the registry so its handling of inherited names is what is tested.
+    var extensionSocket = { readyState: 1 };
+    var userMessages = attachUserMessage({
+      sm: server.sm, clients: server.clients, opts: {},
+      mayAnswerExtensionCommand: function (requestId, ws) { return ws === extensionSocket; },
+    });
     var ids = HOSTILE_IDS.concat(NON_STRING_IDS);
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
       assert.doesNotThrow(function () {
-        userMessages.handleUserMessage({ readyState: 1 }, { type: "extension_result", requestId: id, result: { ok: true } });
+        userMessages.handleUserMessage(extensionSocket, { type: "extension_result", requestId: id, result: { ok: true } });
       }, "extension_result with requestId " + JSON.stringify(id));
     }
     await world.flush();
     assert.deepEqual(real.settled, {}, "nothing settled");
     assertPrototypesClean();
 
-    userMessages.handleUserMessage({ readyState: 1 }, { type: "extension_result", requestId: real.ids.extension, result: { ok: true } });
+    userMessages.handleUserMessage(extensionSocket, { type: "extension_result", requestId: real.ids.extension, result: { ok: true } });
     assert.deepEqual(await real.opened.extension.answer, { ok: true }, "the real extension prompt is still answerable");
   });
 });

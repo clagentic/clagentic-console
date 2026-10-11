@@ -30,7 +30,7 @@ function makeTempHome() {
 function makeSessionManager(tmpHome) {
   // Bust require cache so a fresh instance picks up the temp CLAGENTIC_HOME.
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function(m) {
-    try { delete require.cache[require.resolve(m)]; } catch(_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;

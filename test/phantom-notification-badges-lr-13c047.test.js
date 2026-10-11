@@ -80,7 +80,7 @@ function makeTempHome() {
 
 function makeSessionManager(tmpHome, onSessionDeleted) {
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
@@ -143,7 +143,7 @@ test("lib/sessions.js: onSessionDeleted defaults to a no-op when not supplied (n
   var tmpHome = makeTempHome();
   try {
     ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
-      try { delete require.cache[require.resolve(m)]; } catch (_) {}
+      delete require.cache[require.resolve(m)];
     });
     var origHome = process.env.CLAGENTIC_HOME;
     process.env.CLAGENTIC_HOME = tmpHome;
@@ -334,7 +334,7 @@ function requireFreshTerminalManager() {
   // cached `.exports` in place specifically so that busting-then-refreshing
   // it wouldn't discard the stub before terminal-manager.js's own
   // `require("./terminal")` call picks it up.
-  try { delete require.cache[require.resolve("../lib/terminal-manager")]; } catch (_) {}
+  delete require.cache[require.resolve("../lib/terminal-manager")];
   return require("../lib/terminal-manager");
 }
 

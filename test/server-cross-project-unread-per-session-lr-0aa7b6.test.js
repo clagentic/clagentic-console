@@ -75,7 +75,7 @@ function makeTempHome() {
 
 function makeSessionManager(tmpHome, onSessionDone) {
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
@@ -345,7 +345,7 @@ function makeEngine(cwd, sessionsByProject, unreadBySessKey) {
   var tmpHome = makeTempHomeLoop();
   ["../lib/config", "../lib/utils", "../lib/store", "../lib/scheduler", "../lib/project-loop", "../lib/loop-handoff"]
     .forEach(function (m) {
-      try { delete require.cache[require.resolve(m)]; } catch (_) {}
+      delete require.cache[require.resolve(m)];
     });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;

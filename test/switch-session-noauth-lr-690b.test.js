@@ -28,7 +28,7 @@ function makeSessionManager(tmpHome, extraOpts) {
   ["../lib/config", "../lib/sessions", "../lib/users", "../lib/utils",
    "../lib/store", "../lib/users-auth", "../lib/users-permissions",
    "../lib/users-preferences"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;

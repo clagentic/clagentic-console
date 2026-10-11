@@ -35,7 +35,7 @@ function makeAuth(tmpHome) {
   ["../lib/config", "../lib/users", "../lib/users-auth", "../lib/users-permissions",
    "../lib/users-preferences", "../lib/store", "../lib/server-auth", "../lib/smtp",
    "../lib/pages"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;

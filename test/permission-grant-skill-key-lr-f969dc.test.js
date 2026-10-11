@@ -34,6 +34,18 @@ var os = require("os");
 var { createSDKBridge } = require("../lib/sdk-bridge");
 var utils = require("../lib/utils");
 
+// A session's grant map has no prototype (its keys are tool names). That is
+// asserted here, then the own keys are copied with defineProperty so an own
+// "__proto__" key stays visible to deepEqual (assignment would swallow it).
+function plain(map) {
+  assert.equal(Object.getPrototypeOf(map), null, "the grant map has no prototype");
+  var copy = {};
+  Object.getOwnPropertyNames(map).forEach(function (key) {
+    Object.defineProperty(copy, key, { value: map[key], enumerable: true, writable: true, configurable: true });
+  });
+  return copy;
+}
+
 function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-f969dc-"));
 }
@@ -41,7 +53,7 @@ function makeTempHome() {
 function makeSessionManager(tmpHome) {
   // Bust require cache so a fresh instance picks up the temp CLAGENTIC_HOME.
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
-    try { delete require.cache[require.resolve(m)]; } catch (_) {}
+    delete require.cache[require.resolve(m)];
   });
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
@@ -165,7 +177,7 @@ test("lr-f969dc: a Skill grant survives loadSessions() rehydration and stays sco
       if (s.cliSessionId === "sess-lr-f969dc-rehydrate") rebuilt = s;
     });
     assert.ok(rebuilt, "rebuilt session should be found after rehydration");
-    assert.deepEqual(rebuilt.allowedTools, { "Skill:claude-api": true },
+    assert.deepEqual(plain(rebuilt.allowedTools), { "Skill:claude-api": true },
       "the composite Skill grant key must round-trip through persist/rehydrate intact");
 
     var bridge = makeBridge(sm2);
@@ -201,7 +213,7 @@ test("lr-f969dc: resumeSession() hydrates a composite Skill grant and it stays s
       allowedTools: { "Skill:claude-api": true },
     }, null);
 
-    assert.deepEqual(resumed.allowedTools, { "Skill:claude-api": true },
+    assert.deepEqual(plain(resumed.allowedTools), { "Skill:claude-api": true },
       "resumeSession must hydrate the composite Skill grant key from opts");
 
     var bridge = makeBridge(sm);
@@ -231,7 +243,7 @@ test("lr-f969dc: composite Skill keys survive sanitizeAllowedTools() — strict-
     "Skill": "yes", // malformed — non-boolean value must still be dropped
     "Bash": true,
   });
-  assert.deepEqual(sanitized, {
+  assert.deepEqual(plain(sanitized), {
     "Skill:claude-api": true,
     "Skill:lore-commit": true,
     "Bash": true,

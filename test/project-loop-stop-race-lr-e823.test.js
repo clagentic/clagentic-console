@@ -78,7 +78,7 @@ function makeEngine(cwd) {
   // Bust config cache so the fresh CLAGENTIC_HOME is picked up.
   ["../lib/config", "../lib/utils", "../lib/store", "../lib/scheduler", "../lib/project-loop"]
     .forEach(function(m) {
-      try { delete require.cache[require.resolve(m)]; } catch(_) {}
+      delete require.cache[require.resolve(m)];
     });
 
   var origHome = process.env.CLAGENTIC_HOME;
