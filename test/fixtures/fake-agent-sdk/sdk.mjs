@@ -10,8 +10,16 @@
 // carry, and report the answer it got.
 
 export function query({ prompt, options }) {
+  // The real SDK hands the Claude Code subprocess options.env when it is set
+  // and REPLACES the inherited environment with it; without it the subprocess
+  // inherits process.env. This is the environment that subprocess would get.
+  const effectiveEnv = options.env === undefined ? { ...process.env } : { ...options.env };
+  globalThis.__fakeAgentSdkQueries = globalThis.__fakeAgentSdkQueries || [];
+  globalThis.__fakeAgentSdkQueries.push({ env: effectiveEnv, cwd: options.cwd });
+
   const events = [];
   let wake = null;
+  let closed = false;
   function emit(event) {
     events.push(event);
     if (wake) {
@@ -40,6 +48,7 @@ export function query({ prompt, options }) {
   })();
 
   emit({ type: "system", subtype: "init" });
+  emit({ type: "fake_probe", call: "env", env: effectiveEnv });
 
   return {
     async applyFlagSettings(settings) {
@@ -52,10 +61,20 @@ export function query({ prompt, options }) {
     async getContextUsage() {
       return null;
     },
+    // Like the real Query, closing ends the stream.
+    close() {
+      closed = true;
+      if (wake) {
+        const w = wake;
+        wake = null;
+        w();
+      }
+    },
     [Symbol.asyncIterator]() {
       return {
         async next() {
-          while (!events.length) await new Promise((resolve) => { wake = resolve; });
+          while (!events.length && !closed) await new Promise((resolve) => { wake = resolve; });
+          if (!events.length) return { value: undefined, done: true };
           return { value: events.shift(), done: false };
         },
       };
