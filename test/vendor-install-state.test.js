@@ -152,21 +152,72 @@ test("every declared credential group is owned whole, for every registered agent
   registry.list().forEach(function (vendor) {
     vendor.credentialGroups.forEach(function (group) {
       groupsSeen++;
+      group.prefixes.forEach(function (prefix) {
+        assert.ok(vendor.ownedEnvPrefixes.indexOf(prefix) !== -1, vendor.id + " declares group " + group.id + " but does not own " + prefix);
+      });
       group.envNames.forEach(function (name) {
-        assert.ok(vendor.ownedEnvNames.indexOf(name) !== -1, vendor.id + " declares group " + group.id + " but does not own " + name);
+        assert.ok(registry.ownsEnvName(vendor.id, name), vendor.id + " declares group " + group.id + " but does not own " + name);
       });
     });
   });
   assert.ok(groupsSeen >= 4, "claude's three cloud providers and codex's endpoint are declared");
 
-  var claude = registry.get("claude");
   [
     "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK",
     "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION", "GOOGLE_APPLICATION_CREDENTIALS",
     "ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_RESOURCE",
   ].forEach(function (name) {
-    assert.ok(claude.ownedEnvNames.indexOf(name) !== -1, "claude owns " + name);
+    assert.ok(registry.ownsEnvName("claude", name), "claude owns " + name);
   });
+});
+
+test("credential ownership is by namespace: names no list mentions are owned and cleaned", function () {
+  var registry = lib("yoke").registry;
+  var credentials = lib("yoke/provider-credentials");
+  var unlisted = {
+    AWS_ROLE_ARN: "bedrock", AWS_CA_BUNDLE: "bedrock", AWS_WEB_IDENTITY_TOKEN_FILE: "bedrock",
+    GOOGLE_CLOUD_PROJECT: "vertex", GCLOUD_PROJECT: "vertex", CLOUDSDK_CORE_PROJECT: "vertex",
+    CLOUD_ML_PROJECT: "vertex", ANTHROPIC_VERTEX_BASE_URL: "vertex",
+    ANTHROPIC_FOUNDRY_ORG: "foundry",
+  };
+  Object.keys(unlisted).forEach(function (name) {
+    assert.equal(credentials.groupOf(name), unlisted[name], name + " belongs to " + unlisted[name]);
+    assert.equal(registry.ownsEnvName("claude", name), true, "claude owns " + name);
+    assert.equal(registry.ownerOfEnvName(name), "claude");
+  });
+  assert.equal(credentials.groupOf("PATH"), null);
+  assert.equal(credentials.groupOf("AWSOME"), null, "a prefix needs its separator");
+  assert.equal(registry.ownerOfEnvName("HOME"), null);
+
+  var daemonEnv = Object.assign({ PATH: "/usr/bin", HOME: "/h", OPENAI_API_KEY: "o" }, Object.keys(unlisted).reduce(function (acc, n) {
+    acc[n] = "x";
+    return acc;
+  }, {}));
+  var cleaned = registry.withoutOwnedEnv("claude", daemonEnv);
+  assert.deepEqual(Object.keys(cleaned).sort(), ["HOME", "OPENAI_API_KEY", "PATH"], "only the claude-owned names are removed");
+});
+
+test("the registry refuses a descriptor that declares a credential namespace it does not own", function () {
+  var registry = lib("yoke").registry;
+  var descriptor = {
+    id: "nsless", displayName: "Nsless", priority: 97, binaryNames: ["nsless-agent"],
+    probeInstalled: function () { return false; }, checkAuth: function () { return true; },
+    installHint: "x", loginCommand: "x", osUsersSupported: false, needsRuntimeEnv: false,
+    ownedEnvNames: [],
+    credentialGroups: [{ id: "cloud", prefixes: ["NSLESS_"] }],
+    nativeInstructionFiles: [], interruptMessage: "x",
+    capabilities: {}, createAdapter: function () { return {}; },
+  };
+  assert.throws(function () { registry.register(descriptor); }, /does not own the NSLESS_ namespace/);
+  assert.equal(registry.isKnown("nsless"), false);
+});
+
+test("Bedrock web-identity authentication is a complete credential source", function () {
+  var auth = lib("yoke/auth-checks");
+  var base = { CLAUDE_CODE_USE_BEDROCK: "1" };
+  assert.equal(auth.hasThirdPartyProviderAuth(Object.assign({ AWS_ROLE_ARN: "arn:aws:iam::1:role/r" }, base)), null);
+  assert.equal(auth.hasThirdPartyProviderAuth(Object.assign({ AWS_WEB_IDENTITY_TOKEN_FILE: "/t" }, base)), null);
+  assert.equal(auth.hasThirdPartyProviderAuth(Object.assign({ AWS_ROLE_ARN: "arn:aws:iam::1:role/r", AWS_WEB_IDENTITY_TOKEN_FILE: "/t" }, base)), "bedrock");
 });
 
 test("the registry refuses a descriptor that owns only part of a declared credential group", function () {
