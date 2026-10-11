@@ -37,7 +37,8 @@ function fakeDescriptor(overrides) {
     ownedEnvNames: [],
     nativeInstructionFiles: [],
     interruptMessage: "Stopped the fake agent.",
-    capabilities: { activityTokens: true, agentInjection: true },
+    activityTokens: true,
+    capabilities: { agentInjection: true },
     createAdapter: function () { return fakeAdapter("fake"); },
   }, overrides || {});
 }
@@ -84,7 +85,7 @@ test("an agent declaring activityTokens holds a token per tool block, released a
   });
 });
 
-test("the capability, not the name, decides: switching Codex's declaration off turns its tokens off", async function () {
+test("the trait, not the name, decides: switching Codex's activityTokens trait off turns its tokens off", async function () {
   await withHarness(async function (server) {
     var registry = lib("yoke").registry;
     var activity = lib("session-activity");
@@ -94,14 +95,14 @@ test("the capability, not the name, decides: switching Codex's declaration off t
     server.bridge.processSDKMessage(session, { yokeType: "tool_start", blockId: "blk_1", toolId: "tool-1", toolName: "Bash" });
     assert.equal(activity.isSessionActive(session), true, "Codex declares activityTokens");
 
-    codex.capabilities.activityTokens = false;
+    codex.activityTokens = false;
     try {
       var other = server.sm.createSessionRaw({});
       other.vendor = "codex";
       server.bridge.processSDKMessage(other, { yokeType: "tool_start", blockId: "blk_1", toolId: "tool-9", toolName: "Bash" });
       assert.equal(activity.isSessionActive(other), false);
     } finally {
-      codex.capabilities.activityTokens = true;
+      codex.activityTokens = true;
     }
   });
 });
@@ -170,33 +171,65 @@ test("a session bound to an agent that is not registered is stopped with a named
   });
 });
 
-test("agent identity is injected only for an agent declaring agentInjection", async function () {
+test("agent identity follows the RESOLVED agentInjection of the default agent: declared true, live false sends no agent option", async function () {
   await withHarness(async function (server) {
     var registry = lib("yoke").registry;
-    var claude = registry.get("claude");
+    var caps = lib("session-capabilities");
 
     var withAgent = server.sm.createSessionRaw({});
     withAgent.vendor = "claude";
     withAgent.agentName = "Helper";
     await server.bridge.startQuery(withAgent, "hi", null, null);
-    assert.equal(server.queryOptions[0].adapterOptions.CLAUDE.agent, "Helper", "Claude declares agentInjection");
+    assert.equal(server.queryOptions[0].adapterOptions.CLAUDE.agent, "Helper", "declared and live agree: injected");
 
-    claude.capabilities.agentInjection = false;
-    try {
-      var without = server.sm.createSessionRaw({});
-      without.vendor = "claude";
-      without.agentName = "Helper";
-      await server.bridge.startQuery(without, "hi", null, null);
-      assert.equal(server.queryOptions[1].adapterOptions.CLAUDE.agent, undefined, "the same adapter, once it declares otherwise");
-    } finally {
-      claude.capabilities.agentInjection = true;
-    }
+    // The live session withdraws the capability; the declaration is untouched.
+    caps.recordCapabilities(server.sm, "claude", { agentInjection: false });
+    assert.equal(registry.declaredCapabilities("claude").agentInjection, true, "still declared");
+    var without = server.sm.createSessionRaw({});
+    without.vendor = "claude";
+    without.agentName = "Helper";
+    await server.bridge.startQuery(without, "hi", null, null);
+    assert.equal(server.queryOptions[1].adapterOptions.CLAUDE.agent, undefined, "the guard reads the resolved set");
   });
 });
 
-test("binding a session to an agent without agentInjection clears its agent identity; one with it keeps the identity", async function () {
+async function fakeSessionAgentOption(advertised) {
+  var option;
+  var registryMsg;
   await withHarness(async function (server) {
     var registry = lib("yoke").registry;
+    registry.register(fakeDescriptor());
+    try {
+      assert.equal(registry.declaredCapabilities("fake").agentInjection, true, "declared");
+      var served = world.serveVendor(server, "fake", advertised);
+      var session = server.sm.createSessionRaw({});
+      session.vendor = "fake";
+      session.agentName = "Helper";
+      await served.bridge.startQuery(session, "hi", null, null);
+      assert.equal(served.created.length, 1, "the query started on the fake agent");
+      option = served.created[0].adapterOptions.CLAUDE.agent;
+      registryMsg = served.sent.filter(function (m) { return m.type === "vendor_registry"; }).pop();
+    } finally {
+      registry.unregister("fake");
+    }
+  });
+  return { agent: option, registry: registryMsg };
+}
+
+test("agent identity follows the RESOLVED agentInjection of a NON-default agent: declared true, live false sends no agent option", async function () {
+  var withdrawn = await fakeSessionAgentOption({ agentInjection: false });
+  assert.equal(withdrawn.agent, undefined, "its live session withdrew injection: no agent option");
+  assert.ok(withdrawn.registry, "recording the live capabilities re-sends the registry");
+  assert.equal(withdrawn.registry.vendors.filter(function (v) { return v.id === "fake"; })[0].capabilities.agentInjection, false);
+
+  var silent = await fakeSessionAgentOption({});
+  assert.equal(silent.agent, "Helper", "a live session that says nothing leaves the declaration");
+});
+
+test("binding a session to an agent decides agent identity on the same resolved set as the query guard", async function () {
+  await withHarness(async function (server) {
+    var registry = lib("yoke").registry;
+    var caps = lib("session-capabilities");
     registry.register(fakeDescriptor());
     try {
       var c = world.client();
@@ -206,16 +239,47 @@ test("binding a session to an agent without agentInjection clears its agent iden
       server.session.agentName = "Helper";
       server.handlers.handleSessionsMessage(c.ws, { type: "set_vendor", vendor: "codex" });
       assert.equal(server.session.vendor, "codex");
-      assert.equal(server.session.agentName, null, "Codex declares no agentInjection");
+      assert.equal(server.session.agentName, null, "Codex has no agentInjection");
 
+      caps.seedCapabilities(server.sm);
       server.session.vendor = null;
       server.session.agentName = "Helper";
       server.handlers.handleSessionsMessage(c.ws, { type: "set_vendor", vendor: "fake" });
       assert.equal(server.session.vendor, "fake");
-      assert.equal(server.session.agentName, "Helper", "the fake agent declares agentInjection");
+      assert.equal(server.session.agentName, "Helper", "resolved: the fake agent injects");
+
+      // Declared true, live false: set_vendor clears, exactly where the guard would skip.
+      caps.recordCapabilities(server.sm, "fake", { agentInjection: false });
+      server.session.vendor = null;
+      server.session.agentName = "Helper";
+      server.handlers.handleSessionsMessage(c.ws, { type: "set_vendor", vendor: "fake" });
+      assert.equal(server.session.agentName, null, "resolved: the fake agent no longer injects");
 
       server.handlers.handleSessionsMessage(c.ws, { type: "set_vendor", vendor: "ghost" });
       assert.equal(server.session.vendor, "fake", "an unregistered agent is never bound");
+    } finally {
+      registry.unregister("fake");
+    }
+  });
+});
+
+test("lazy adapter creation hands the init result to the caller, which records the live capabilities", async function () {
+  await withHarness(async function (server) {
+    var registry = lib("yoke").registry;
+    registry.register(fakeDescriptor({
+      createAdapter: function () {
+        var adapter = fakeAdapter("fake");
+        adapter.init = function () { return Promise.resolve({ models: [], skills: [], capabilities: { agentInjection: false } }); };
+        return adapter;
+      },
+    }));
+    try {
+      var yoke = lib("yoke");
+      var adapters = {};
+      var recorded = null;
+      await yoke.lazyCreateAdapter(adapters, "fake", { cwd: server.home }, function (initResult) { recorded = initResult; });
+      assert.deepEqual(recorded.capabilities, { agentInjection: false }, "lazy creation hands the init result to the caller");
+      assert.ok(adapters.fake, "the adapter is kept");
     } finally {
       registry.unregister("fake");
     }

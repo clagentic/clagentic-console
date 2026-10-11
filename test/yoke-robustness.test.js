@@ -427,9 +427,9 @@ test("8: INTERFACE_VERSION is exported and is a semver string", function() {
   );
 });
 
-test("8: INTERFACE_VERSION is 0.3.0 after the capability ledger and vendor registry migration", function() {
-  assert.strictEqual(INTERFACE_VERSION, "0.3.0",
-    "INTERFACE_VERSION must be 0.3.0 after the capability ledger and vendor registry migration");
+test("8: INTERFACE_VERSION is 0.4.0 after adapter traits left the capability ledger", function() {
+  assert.strictEqual(INTERFACE_VERSION, "0.4.0",
+    "INTERFACE_VERSION must be 0.4.0 after adapter traits left the capability ledger");
 });
 
 test("8: DIAGNOSTIC_SEVERITIES contains info, warning, error", function() {

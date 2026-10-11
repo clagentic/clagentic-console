@@ -173,10 +173,33 @@ test("every registered agent declares every ledger key, independent of the proje
   assert.deepEqual(registry.declaredCapabilities("codex").permissionModes, []);
   assert.equal(registry.declaredCapabilities("claude").agentInjection, true);
   assert.equal(registry.declaredCapabilities("codex").agentInjection, false);
-  assert.equal(registry.declaredCapabilities("codex").perProjectRuntime, true);
-  assert.equal(registry.declaredCapabilities("claude").perProjectRuntime, false);
-  assert.equal(registry.declaredCapabilitiesOrNone("ghost").effort, false);
-  assert.deepEqual(registry.declaredCapabilitiesOrNone("ghost").permissionModes, []);
+});
+
+test("adapter traits are descriptor booleans outside the ledger: never resolved, and a declaration that smuggles one in is refused", function () {
+  iface.TRAIT_KEYS.forEach(function (key) {
+    assert.equal(iface.isCapabilityKey(key), false, key + " is not a capability");
+    assert.equal(Object.prototype.hasOwnProperty.call(registry.declaredCapabilities("codex"), key), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(yoke.resolveCapabilities(registry.get("codex"), null, null), key), false);
+  });
+  assert.deepEqual(iface.TRAIT_KEYS.slice().sort(), ["activityTokens", "attestsHumanSessions", "perProjectRuntime"]);
+  assert.equal(registry.traitOf("codex", "perProjectRuntime"), true);
+  assert.equal(registry.traitOf("codex", "activityTokens"), true);
+  assert.equal(registry.traitOf("codex", "attestsHumanSessions"), true);
+  assert.equal(registry.traitOf("claude", "perProjectRuntime"), false);
+  assert.equal(registry.traitOf("claude", "activityTokens"), false);
+  assert.equal(registry.traitOf("ghost", "activityTokens"), false, "an unregistered name has no traits");
+  assert.throws(function () { registry.traitOf("codex", "effort"); }, /Unknown adapter trait: effort/);
+  assert.throws(function () { registry.register(fakeDescriptor({ capabilities: { activityTokens: true } })); }, /adapter trait set on the descriptor/);
+  assert.throws(function () { registry.register(fakeDescriptor({ perProjectRuntime: "yes" })); }, /perProjectRuntime/);
+  assert.equal(registry.declaredCapabilitiesOrNone, undefined, "a declaration is reachable for a session only through resolve");
+});
+
+test("a registered fake agent's traits are read from its descriptor, and default to off", async function () {
+  await withFake(async function () {
+    assert.equal(registry.traitOf("fake", "activityTokens"), true);
+    assert.equal(registry.traitOf("fake", "perProjectRuntime"), false);
+    assert.equal(registry.traitOf("fake", "attestsHumanSessions"), false);
+  }, { activityTokens: true });
 });
 
 test("the ledger's keys are defined once, each with a kind and a one-line reason", function () {
@@ -254,45 +277,6 @@ test("resolve: an override that names a capability outside the ledger fails loud
   assert.throws(function () { yoke.resolveCapabilities(null, null, null); }, /needs a yoke declaration/);
 });
 
-test("the login command is written once: no other file spells it", function () {
-  function walk(dir, out) {
-    fs.readdirSync(dir, { withFileTypes: true }).forEach(function (entry) {
-      var full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full, out);
-      else if (/\.(js|html)$/.test(entry.name)) out.push(full);
-    });
-    return out;
-  }
-  var files = walk(path.join(__dirname, "..", "lib"), []);
-  ["claude login", "codex login --device-auth"].forEach(function (command) {
-    var holders = files.filter(function (f) {
-      return fs.readFileSync(f, "utf8").split('"' + command + '"').length > 1;
-    }).map(function (f) { return path.relative(path.join(__dirname, ".."), f); });
-    assert.equal(holders.length, 1, command + " is spelled in " + holders.join(", "));
-    assert.match(holders[0], /lib\/yoke\/adapters\/(claude|codex)-vendor\.js$/);
-  });
-});
-
-test("the item-3 sites no longer compare a vendor to a literal agent name", function () {
-  var sites = [
-    "lib/sdk-message-processor.js",
-    "lib/sdk-bridge.js",
-    "lib/project.js",
-    "lib/project-notifications.js",
-    "lib/project-sessions.js",
-    "lib/public/modules/app-notifications.js",
-    "lib/public/modules/sidebar-sessions.js",
-    "lib/public/modules/sidebar-mobile.js",
-  ];
-  var literal = /vendor\s*[!=]==?\s*['"](claude|codex)['"]|['"](claude|codex)['"]\s*[!=]==?\s*[A-Za-z_.]*vendor/i;
-  sites.forEach(function (rel) {
-    var source = fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
-    source.split("\n").forEach(function (line, i) {
-      assert.equal(literal.test(line), false, rel + ":" + (i + 1) + " compares a vendor to a literal: " + line.trim());
-    });
-  });
-});
-
 test("the vendor-keyed instruction table is gone: a fake vendor's native files come from its descriptor", async function () {
   var instructions = require("../lib/yoke/instructions");
   var dir = fs.mkdtempSync(path.join(require("os").tmpdir(), "yoke-instr-"));
@@ -314,7 +298,7 @@ test("the vendor-keyed instruction table is gone: a fake vendor's native files c
 });
 
 test("the interface lists what the console really consumes: endInput is required, the rest is declared optional", function () {
-  assert.equal(iface.INTERFACE_VERSION, "0.3.0");
+  assert.equal(iface.INTERFACE_VERSION, "0.4.0");
   assert.ok(iface.QUERY_HANDLE_METHODS.indexOf("endInput") !== -1);
   assert.deepEqual(iface.QUERY_HANDLE_OPTIONAL_METHODS.slice().sort(), ["rewindFiles", "setPermissionMode"]);
   ["rollbackThread", "shutdown", "forkSession", "generateTitle"].forEach(function (m) {

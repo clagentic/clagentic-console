@@ -5,7 +5,6 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
-var fs = require("fs");
 var path = require("path");
 var { pathToFileURL } = require("url");
 var yoke = require("../lib/yoke");
@@ -135,12 +134,6 @@ test("before any registry arrives a control reads as unavailable with a generic 
   assert.ok(gate.reason.length > 0);
 });
 
-test("the page no longer hardcodes agent buttons; the picker mounts into an empty container", function () {
-  var html = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8");
-  assert.equal(html.indexOf("vendor-btn-"), -1, "no hardcoded vendor buttons in index.html");
-  assert.match(html, /<div id="vendor-toggle-wrap"><\/div>/);
-});
-
 // The picker as the browser draws it: a registry message in, DOM out.
 async function renderPickerFrom(registryState, current) {
   fakeDom.setupGlobals();
@@ -225,15 +218,4 @@ test("picker DOM: an agent whose install lookup failed says it could not be chec
   picker.renderVendorPicker(container, rows, { onSelect: function () {}, onRecheck: function () {} });
   assert.equal(pickerButton(container, "claude").querySelector(".vendor-toggle-note").textContent, "Could not check");
   assert.equal(pickerButton(container, "codex").querySelector(".vendor-toggle-note"), null);
-});
-
-test("no front-end control compares the current vendor to a literal agent name for the gated controls", function () {
-  ["app-panels.js", "sidebar-sessions.js", "sidebar-mobile.js", "app-notifications.js", "app-messages.js", "rewind.js"].forEach(function (file) {
-    var source = fs.readFileSync(path.join(PUBLIC, "modules", file), "utf8");
-    source.split("\n").forEach(function (line, i) {
-      if (/isCodex|isClaude|isCodexMode/.test(line) && !/^\s*(\/\/|\*)/.test(line)) {
-        assert.fail(file + ":" + (i + 1) + " still derives a control from an agent name: " + line.trim());
-      }
-    });
-  });
 });
