@@ -121,3 +121,29 @@ test("in multi-user mode a missing owner on either side, or an unknown mode, app
   assert.equal(applies({ projectOwnerId: "a", sessionOwnerId: "b" }), false, "no mode given is treated as multi-user");
   assert.equal(applies(undefined), false);
 });
+
+test("NUL and carriage return are refused when saved, in names and values, quoted or not", function () {
+  ["A=b\u0000c", "A=b\rc", "A=\"x\u0000y\"", "A=\"x\ry\"", "A\u0000B=1", "A\rB=1"].forEach(function (text) {
+    assert.match(runtimeEnv.validateEnvText(text), /Invalid character at line 1/, JSON.stringify(text));
+  });
+  assert.match(runtimeEnv.validateEnvText("OK=1\nBAD=a\u0000b"), /line 2/);
+});
+
+test("a quoted value with shell characters is still accepted", function () {
+  assert.equal(runtimeEnv.validateEnvText("URL=\"https://api.example.invalid/v1?a=1&b=2\""), null);
+});
+
+test("NUL and carriage return are dropped when built, with the lines around them kept and no value logged", function () {
+  var out = sink();
+  var overlay = runtimeEnv.buildRuntimeEnvOverlay([{ label: "shared", text: "KEEP=1\nBAD_NUL=secret\u0000value\nBAD_CR=\"secret\rvalue\"\nALSO_KEEP=2" }], out);
+  assert.deepEqual(overlay, { KEEP: "1", ALSO_KEEP: "2" });
+  assert.equal(out.lines.length, 2);
+  out.lines.forEach(function (line) { assert.equal(line.indexOf("secret"), -1, "a warning never carries a value"); });
+});
+
+test("an overlay handed straight to the composer loses NUL and carriage return too", function () {
+  var out = sink();
+  var env = runtimeEnv.composeRuntimeEnv({ PATH: "/bin" }, { GOOD: "1", NUL_VALUE: "a\u0000b", CR_VALUE: "a\rb", "NUL\u0000NAME": "1" }, out);
+  assert.deepEqual(env, { PATH: "/bin", GOOD: "1" });
+  assert.equal(out.lines.length, 3);
+});

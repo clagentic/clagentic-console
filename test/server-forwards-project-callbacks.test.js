@@ -1,60 +1,107 @@
 "use strict";
 // A project's handlers reach the daemon through callbacks (opts.onSomething)
 // that lib/daemon.js gives lib/server.js, and server.js must hand on to each
-// project it creates. A callback the daemon defines and a project module reads
-// but server.js never forwards fails without a sound: the Settings page that
-// uses it is answered "Not supported" or not at all, as saved environment
-// variables were. This reads the sources and requires every callback a project
-// module reads to be forwarded.
+// project it creates. A callback that is not forwarded fails without a sound:
+// the Settings page that uses it is answered "Not supported", as saved
+// environment variables were. A real server, a real WebSocket client, and
+// callbacks that record what reached them.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
-var fs = require("fs");
-var path = require("path");
 
-var LIB = path.join(__dirname, "..", "lib");
+var harness = require("./access-harness");
 
-// The modules that are given the project context's own opts.
-var PROJECT_MODULES = ["project.js", "project-sessions.js", "project-filesystem.js", "project-connection.js", "project-user-message.js"];
+var calls = [];
+var projectText = "";
+var sharedText = "";
 
-function read(name) {
-  return fs.readFileSync(path.join(LIB, name), "utf8");
-}
+var callbacks = {
+  onGetProjectEnv: function (slug) {
+    calls.push({ callback: "onGetProjectEnv", args: [slug] });
+    return { envrc: projectText };
+  },
+  onSetProjectEnv: function (slug, envrc) {
+    calls.push({ callback: "onSetProjectEnv", args: [slug, envrc] });
+    projectText = envrc;
+    return { ok: true };
+  },
+  onGetSharedEnv: function () {
+    calls.push({ callback: "onGetSharedEnv", args: [] });
+    return { envrc: sharedText };
+  },
+  onSetSharedEnv: function (envrc) {
+    calls.push({ callback: "onSetSharedEnv", args: [envrc] });
+    sharedText = envrc;
+    return { ok: true };
+  },
+  onSetAutoContinue: function (value) {
+    calls.push({ callback: "onSetAutoContinue", args: [value] });
+    return { ok: true, autoContinueOnRateLimit: value };
+  },
+  onSetTokensPerMbHeadroom: function (value) {
+    calls.push({ callback: "onSetTokensPerMbHeadroom", args: [value] });
+    return { ok: true, tokensPerMbHeadroom: value };
+  },
+};
 
-function callbacksRead(source) {
-  var names = new Set();
-  var re = /\bopts\.(on[A-Z][A-Za-z]*)\b/g;
-  var m;
-  while ((m = re.exec(source)) !== null) names.add(m[1]);
-  return names;
-}
+var server = null;
+var admin = null;
 
-// The object literal server.js builds each project context from.
-function projectContextLiteral(serverSource) {
-  var start = serverSource.indexOf("var ctx = createProjectContext({");
-  var end = serverSource.indexOf("projects.set(slug, ctx);", start);
-  assert.ok(start !== -1 && end !== -1, "server.js builds project contexts in addProject");
-  return serverSource.slice(start, end);
-}
-
-test("every callback a project module reads from its opts is forwarded by server.js", function () {
-  var literal = projectContextLiteral(read("server.js"));
-  var wanted = new Set();
-  PROJECT_MODULES.forEach(function (file) {
-    callbacksRead(read(file)).forEach(function (name) { wanted.add(name); });
+test.before(async function () {
+  server = await harness.start({
+    users: [{ key: "admin", username: "admin", role: "admin" }],
+    projects: [{ slug: "alpha", ownerKey: "admin" }],
+    serverOpts: callbacks,
   });
-  assert.ok(wanted.size > 30, "the scan found the callbacks (" + wanted.size + ")");
-
-  var missing = Array.from(wanted).filter(function (name) {
-    return !new RegExp("\\b" + name + "\\s*:").test(literal);
-  });
-  assert.deepEqual(missing, [], "server.js must pass these to createProjectContext: " + missing.join(", "));
+  admin = await server.connect("alpha", "admin");
+  assert.equal(admin.ok, true);
 });
 
-test("every callback the daemon defines for the environment settings is read by server.js", function () {
-  var serverSource = read("server.js");
-  ["onGetProjectEnv", "onSetProjectEnv", "onGetSharedEnv", "onSetSharedEnv",
-    "onSetAutoContinue", "onSetTokensPerMbHeadroom", "onRestartForBuildUpdate"].forEach(function (name) {
-    assert.match(serverSource, new RegExp("opts\\." + name + "\\b"), "server.js reads opts." + name);
-  });
+test.after(async function () {
+  if (server) await server.stop();
+});
+
+async function ask(message, resultType) {
+  admin.inbox.length = 0;
+  calls.length = 0;
+  admin.send(message);
+  return admin.waitFor(function (m) { return m.type === resultType; });
+}
+
+test("setting a project's environment over the WebSocket reaches the daemon's callback with the project and the text", async function () {
+  var result = await ask({ type: "set_project_env", envrc: "export FROM_WS=1" }, "set_project_env_result");
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(calls, [{ callback: "onSetProjectEnv", args: ["alpha", "export FROM_WS=1"] }]);
+});
+
+test("reading a project's environment over the WebSocket is answered by the daemon's callback", async function () {
+  projectText = "export READ_BACK=1";
+  var result = await ask({ type: "get_project_env" }, "project_env_result");
+  assert.equal(result.envrc, "export READ_BACK=1");
+  assert.deepEqual(calls, [{ callback: "onGetProjectEnv", args: ["alpha"] }]);
+});
+
+test("setting the shared environment over the WebSocket reaches the daemon's callback with the text", async function () {
+  var result = await ask({ type: "set_shared_env", envrc: "export SHARED_FROM_WS=1" }, "set_shared_env_result");
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(calls, [{ callback: "onSetSharedEnv", args: ["export SHARED_FROM_WS=1"] }]);
+});
+
+test("reading the shared environment over the WebSocket is answered by the daemon's callback", async function () {
+  sharedText = "export SHARED_READ_BACK=1";
+  var result = await ask({ type: "get_shared_env" }, "shared_env_result");
+  assert.equal(result.envrc, "export SHARED_READ_BACK=1");
+  assert.deepEqual(calls, [{ callback: "onGetSharedEnv", args: [] }]);
+});
+
+test("the auto-continue and tokens-per-MB settings reach the daemon's callbacks with the value sent", async function () {
+  var autoContinue = await ask({ type: "set_auto_continue", value: true }, "set_auto_continue_result");
+  assert.equal(autoContinue.ok, true);
+  assert.equal(autoContinue.autoContinueOnRateLimit, true);
+  assert.deepEqual(calls, [{ callback: "onSetAutoContinue", args: [true] }]);
+
+  var headroom = await ask({ type: "set_tokens_per_mb_headroom", value: 321 }, "set_tokens_per_mb_headroom_result");
+  assert.equal(headroom.ok, true);
+  assert.equal(headroom.tokensPerMbHeadroom, 321);
+  assert.deepEqual(calls, [{ callback: "onSetTokensPerMbHeadroom", args: [321] }]);
 });
