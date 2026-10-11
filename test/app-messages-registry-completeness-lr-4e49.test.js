@@ -91,6 +91,8 @@ var ORIGINAL_CASE_LABELS = [
   // The single operator-prompt shape (lib/prompt-registry.js); the
   // per-kind types above stay registered as aliases for recorded history.
   "prompt_request", "prompt_pending", "prompt_resolved", "prompt_cancel",
+  // The agent registry the picker and the capability-gated controls render from.
+  "vendor_registry",
 ];
 
 var REGISTRY_FILES = [

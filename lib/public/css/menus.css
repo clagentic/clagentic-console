@@ -537,6 +537,16 @@
   flex-direction: column;
 }
 
+/* A setting the current agent cannot support: kept in view, dimmed, with the reason. */
+.config-unavailable-note {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-dimmer);
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .config-radio-item {
   display: flex;
   align-items: center;
