@@ -15,24 +15,25 @@ branch_conventions:
     - refactor/
   # include_task_id: true
 
+# Deny list, like the rest of the Clagentic family: AMoS may write anywhere in
+# the project tree except blocked_paths (deny always wins).
+# CLAUDE.md is the operator's untracked local file; .env files hold secrets.
 scope:
-  allowed_paths:
-    - "bin/**"
-    - "lib/**"
-    - ".crew/**"
-    - ".clagentic/**"
-    - "test/**"
-    - "deploy/**"
-    - "scripts/**"
-    - "docs/**"
-    - "package.json"
-    - "package-lock.json"
-    - "README.md"
-    - "CHANGELOG.md"
-    - ".gitignore"
-    - "release.config.js"
-    - ".github/workflows/pr-checks.yml"
-    - ".github/workflows/release.yml"
+  allow_all: true
+  blocked_paths:
+    - "CLAUDE.md"
+    - ".env"
+    - ".env.*"
+    - ".git/**"
+    - "node_modules/**"
+
+# OPTION B — explicit allowlist (use for projects where only specific
+#   paths should be touched automatically)
+# scope:
+#   allowed_paths:
+#     - "src/**"
+#     - "tests/**"
+#     - "docs/**"
 
 focus:
   - "Product name in user-facing text: 'Clagentic: Console' (capital C, colon, space, capital C)"

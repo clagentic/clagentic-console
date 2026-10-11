@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://clagentic.ai"><img src="https://img.shields.io/badge/-clagentic.ai-00CFFF?style=flat&logoColor=white" alt="clagentic.ai" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat" alt="License: MIT" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue?style=flat" alt="License: FSL-1.1-MIT" /></a>
   <a href="https://github.com/clagentic/clagentic-console/actions/workflows/pr-checks.yml"><img src="https://github.com/clagentic/clagentic-console/actions/workflows/pr-checks.yml/badge.svg?branch=main" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat&logo=node.js&logoColor=white" alt="Node.js 20+" />
   <a href="https://www.npmjs.com/package/@clagentic/console"><img src="https://img.shields.io/npm/v/@clagentic/console?style=flat&label=npm" alt="npm version" /></a>
@@ -250,4 +250,10 @@ Not affiliated with Anthropic or OpenAI. Claude is a trademark of Anthropic. Cod
 
 ## License
 
-[MIT](LICENSE)
+[FSL-1.1-MIT](LICENSE) — Functional Source License 1.1, with MIT as the Change License.
+
+Free for personal, internal-business, evaluation, research, and non-commercial use.
+Not free for offering this tool (or a substantial fork) as a competing commercial product.
+Each release auto-converts to MIT on its second anniversary.
+
+Code from releases before this change remains available under MIT ([LICENSES/MIT-legacy.txt](LICENSES/MIT-legacy.txt)).
