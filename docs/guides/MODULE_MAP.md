@@ -67,7 +67,8 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `daemon-projects.js` | Worktree tracking (scan, rescan, cleanup), removed project filtering |
 | `runtime-env.js` | The environment of an agent runtime: reads the shared and per-project Settings texts, checks one before it is saved, builds the variables they add, lays them over a runtime's own environment (always the complete one) |
 | `runtime-env-keys.js` | The one list of variables Settings may not set (identity, loader, shell/interpreter/tool launchers, console-internal), by class |
-| `daemon-env-settings.js` | Where the shared and per-project environment texts are stored (`sharedEnv`, a project's `envrc`) and the callbacks the Settings pages use; tells each project's bridge when one changed |
+| `daemon-env-settings.js` | Where the shared and per-project environment texts are stored (`sharedEnv`, a project's `envrc`) and the callbacks the Settings pages use; tells each project's bridge when one changed; removes a project's text when its owner changes |
+| `idle-adapter-reaper.js` | The daemon's timer that has each project context end the agent runtimes (Codex app-servers) its adapters keep while nothing uses them |
 | `ws-schema.js` | WebSocket message type registry (328 message types, informational) |
 | `server-hub-sessions.js` | `computeAllProjectSessions` — pure cross-project session gather + per-user access filter for the Home Hub recent-sessions list, extracted from `lib/server.js`'s `getAllProjectSessions` for direct unit testability |
 
