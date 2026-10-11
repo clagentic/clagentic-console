@@ -114,6 +114,38 @@ test("a connecting client is told its own identity's install state, not another 
   });
 });
 
+function modelInfoMessages(c) {
+  return c.inbox.filter(function (m) { return m.type === "model_info"; });
+}
+
+test("model_info never carries install state, so it cannot overwrite an OS user's per-identity state", async function () {
+  await withHarness(async function (server) {
+    var yoke = lib("yoke");
+    var stub = stubLookup(yoke, { alice: ["claude", "codex"], "": ["claude"] });
+    try {
+      server.bridge.recheckVendors("alice");
+      server.bridge.recheckVendors(null);
+      var handlers = lib("project-sessions").attachSessions(Object.assign({}, server.handlerContext, { osUsers: [{}] }));
+      var alice = userClient("alice");
+      server.connect(alice.ws);
+      alice.inbox.length = 0;
+
+      handlers.handleSessionsMessage(alice.ws, { type: "set_vendor", vendor: "codex" });
+      var infos = modelInfoMessages(alice);
+      assert.ok(infos.length > 0, "set_vendor answers with a model_info");
+
+      infos.forEach(function (m) {
+        assert.equal(Object.prototype.hasOwnProperty.call(m, "installedVendors"), false, "install state comes only from the registry message");
+      });
+      var registry = lib("vendor-registry-message");
+      assert.deepEqual(installedIn(registry.buildVendorRegistryMessage(server.sm, "alice")), ["claude", "codex"], "alice's state stands apart from the project-wide list");
+      assert.deepEqual(server.sm.installedVendors, ["claude"]);
+    } finally {
+      stub.restore();
+    }
+  });
+});
+
 test("every declared credential group is owned whole, for every registered agent", function () {
   var registry = lib("yoke").registry;
   var groupsSeen = 0;
