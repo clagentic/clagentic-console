@@ -157,6 +157,25 @@ For deeper Codex integration patterns and gotchas, see [CODEX-INTEGRATION.md](./
 
 **Mid-session controls.** The Claude SDK's `Query` has no `setEffort`; the Claude adapter changes a running session's effort through `applyFlagSettings({effortLevel})` (`yoke/adapters/effort-control.js`, shared by the in-process handle and the worker). A QueryHandle's `setEffort` settles on the real outcome and rejects when the change did not take effect, so the bridge announces a new effort only after the query has taken it and shows the operator the failure otherwise; Codex reads its effort on the next turn. Which permission modes a session accepts is a capability: the Claude adapter lists `permissionModes` (including `dontAsk` and `auto`, which are Claude Code modes) in the capabilities it sends with `session_switched`, the mode picker (`public/modules/mode-options.js`) offers those two only when the session's vendor declares them, and `set_permission_mode` refuses them for a session whose vendor does not. A vendor whose capabilities are not known is treated as declaring nothing.
 
+## Agent-runtime environment
+
+Settings hold two environment texts of `KEY=VALUE` lines (the pages write each row as `export KEY=VALUE`): the **shared** text (`sharedEnv` on the daemon config, administrators only) and one per **project** (`envrc` on the project's record). `daemon-env-settings.js` stores them; `server.js` hands its callbacks to every project, which is how the Settings pages reach them.
+
+Every agent-runtime start takes its environment from one builder, `lib/runtime-env.js`: the runtime's own environment first, then the shared text, then the project text (a later layer wins). The SDK bridge reads both texts fresh at each start and passes the result down as `runtimeEnv` on the YOKE call, so a change reaches the next runtime without a restart of the daemon:
+
+| Start | Where the variables are applied |
+|---|---|
+| Claude query in process (and its rewind query, title generation, model-list warmup) | `claude.js` sets the SDK's `options.env` to the complete environment: `process.env` with the variables laid over it |
+| Claude query for an OS user | The daemon sends only the variables in `query_start`; `claude-worker.js` lays them over the worker's own (OS user's, `build-user-env.js`) environment and hands the SDK the complete result |
+| Codex app-server | `codex.js` starts it with the complete environment (`CodexAppServer` `opts.env`) |
+| Title generation, either vendor | The bridge passes the variables in the options of `generateTitle` |
+
+The Claude Agent SDK's `options.env` REPLACES the subprocess environment (it is not merged with `process.env`), so nothing hands it only the additions; `PATH` and `HOME` survive because the base is always the whole environment. Values are never logged (a warning names the variable and the settings layer), never sent to the browser beyond what the Settings lists show, and never written to session files.
+
+**Protected variables.** Settings may not set or override `HOME`, `PATH`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`, the loader (`LD_*`, `DYLD_*`), `NODE_OPTIONS`, `NODE_PATH`, the console's own variables (`CLAGENTIC_*`, `CLAY_*`), and every variable that makes a shell, interpreter or tool run code on its own (`BASH_ENV`, `PROMPT_COMMAND`, `PYTHONSTARTUP`, `GIT_SSH_COMMAND`, `GIT_CONFIG_*`, `CLAUDE_CODE_PROCESS_WRAPPER`, ...). In multi-user mode a project's text is written by its owner and applies to other users' sessions in that project, so such a variable would be a cross-user code-execution channel. The list is `lib/runtime-env-keys.js`, grouped by class and compared without regard to case. It is enforced twice: a save that sets one is refused with a message naming the variable and line, and the builder drops one that is already in a saved text (and in the overlay a worker receives), with one warning per variable and layer.
+
+**Applying a change.** A change applies to new runtimes. When Settings change, each affected project's bridge ends the Claude queries that are idle and were started with different variables (`applyRuntimeEnvChange`), so the next message starts a fresh one; a runtime in the middle of a turn, with a prompt pending, or running a loop iteration is not touched, and is retired a few seconds after its turn ends (and by the idle reaper as a backstop). The Codex app-server is restarted by its adapter on the next query once no query is using it. A running turn is never killed.
+
 ## Multi-User and OS-Level Isolation
 
 Clagentic:Console supports two modes:
@@ -202,7 +221,7 @@ Authorization is not opt-in per handler. One resolver (`lib/project-access.js`) 
 | `GET /api/palette/search` | `appHandler` has no login check ahead of it, so the route proves authentication itself (`isRequestAuthed(req)`) before a principal is resolved; no proof is a 401 in every mode |
 | Palette results, session rename, delete and search, file history | the session's own owner/visibility rule (`canReadSession`) is applied before anything is read |
 
-Global settings (the global CLAUDE.md, shared environment variables) are administrator-only. The per-project environment messages act on the project the message arrived in, never on a slug the message carries.
+Global settings (the global CLAUDE.md, shared environment variables) are administrator-only. What those environment variables do once saved is under "Agent-runtime environment" below. The per-project environment messages act on the project the message arrived in, never on a slug the message carries.
 
 **File policy** (`lib/project-file-scope.js`) is shared by the WebSocket `fs_*` handlers, `GET /api/file` and the watchers. The `fileBrowser` permission applies to every `fs_*` message except `fs_unwatch`. A path is resolved once, by one function that refuses non-strings, null bytes and anything outside the project after symlink resolution. In os-users mode a user with no resolved OS identity is refused; there is no fallback to a read as the daemon user. Watches (`project-file-watch.js`) belong to the connection that opened them: a change is read as that user and sent to that connection only, and a watch ends when its connection does.
 
