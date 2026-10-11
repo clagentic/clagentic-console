@@ -27,6 +27,7 @@ function FakeAppServer(executablePath, opts) {
   this.started = false;
   this.proc = null;
   this.stopped = false;
+  this.queriesServed = 0;
   appServers.push(this);
 }
 FakeAppServer.prototype.start = function () { this.started = true; return Promise.resolve(); };
@@ -37,7 +38,8 @@ FakeAppServer.prototype.send = function (method) {
   if (method === "skills/list") return Promise.resolve({ data: [] });
   return Promise.resolve({});
 };
-FakeAppServer.prototype.addEventHandler = function () { return {}; };
+// A query handle registers its event handler on the server it was given.
+FakeAppServer.prototype.addEventHandler = function () { this.queriesServed++; return {}; };
 FakeAppServer.prototype.removeEventHandler = function () {};
 FakeAppServer.prototype.updateHandlerThreadId = function () {};
 codexAppServerModule.CodexAppServer = FakeAppServer;
@@ -273,43 +275,101 @@ test("a Codex app-server started with no Settings variables is given no environm
   await adapter.shutdown();
 });
 
-test("an idle Codex app-server is restarted when the Settings variables changed, a busy one is not", async function () {
+// A query handle takes its server's event handler when it starts running, which
+// a first message does: that is what shows which server a query runs on.
+async function openQuery(adapter, env) {
+  var handle = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: env });
+  handle.pushMessage("go");
+  return handle;
+}
+
+test("a Codex query whose environment differs runs on its own app-server, and the query already running is unaffected", async function () {
   var adapter = codexAdapter();
-  var first = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "1" } });
-  var firstServer = appServers[appServers.length - 1];
-  assert.equal(firstServer.opts.env.ONE, "1");
+  var a = await openQuery(adapter, { ENDPOINT: "https://a.example.invalid" });
+  var serverA = appServers[appServers.length - 1];
+  assert.equal(serverA.opts.env.ENDPOINT, "https://a.example.invalid");
 
-  // The same variables again: the app-server is kept.
+  // Query A is open. Query B asks for another environment.
   var count = appServers.length;
-  var second = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "1" } });
-  assert.equal(appServers.length, count, "no restart for the same variables");
+  var b = await openQuery(adapter, { ENDPOINT: "https://b.example.invalid" });
+  assert.equal(appServers.length, count + 1, "B gets a server of its own");
+  var serverB = appServers[appServers.length - 1];
+  assert.notEqual(serverB, serverA);
+  assert.equal(serverB.opts.env.ENDPOINT, "https://b.example.invalid", "B runs with env B");
+  assert.equal(serverA.opts.env.ENDPOINT, "https://a.example.invalid", "A's server keeps env A");
+  assert.equal(serverA.queriesServed, 1, "A's server served A only");
+  assert.equal(serverB.queriesServed, 1, "B's server served B only");
+  assert.equal(serverA.stopped, false, "A is not disturbed");
 
-  // Changed variables while two queries are using it: a running turn is not killed.
-  var busy = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "2" } });
-  assert.equal(appServers.length, count, "no restart while a query is using the app-server");
-  assert.equal(firstServer.stopped, false);
+  a.close();
+  b.close();
+  await adapter.shutdown();
+  assert.equal(serverA.stopped, true);
+  assert.equal(serverB.stopped, true);
+});
 
-  // Once nothing is using it, the next query picks the change up.
+test("Codex queries with the same environment share one app-server", async function () {
+  var adapter = codexAdapter();
+  var first = await openQuery(adapter, { ONE: "1" });
+  var count = appServers.length;
+  var second = await openQuery(adapter, { ONE: "1" });
+  assert.equal(appServers.length, count, "no second server for the same variables");
+  assert.equal(appServers[appServers.length - 1].queriesServed, 2);
   first.close();
   second.close();
-  busy.close();
-  await sleep(20);
-  var after = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "2" } });
-  assert.equal(appServers.length, count + 1, "restarted once idle");
-  assert.equal(firstServer.stopped, true);
-  assert.equal(appServers[appServers.length - 1].opts.env.ONE, "2");
-  after.close();
   await adapter.shutdown();
 });
 
-test("a Codex query that names no Settings variables does not restart the app-server", async function () {
+test("a Codex query that names no Settings variables is not served by a server that has some", async function () {
   var adapter = codexAdapter();
-  var first = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "1" } });
-  first.close();
-  await sleep(20);
+  var withVariables = await openQuery(adapter, { ONE: "1" });
+  var serverWith = appServers[appServers.length - 1];
   var count = appServers.length;
-  var second = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test" });
-  assert.equal(appServers.length, count);
-  second.close();
+  var without = await openQuery(adapter, undefined);
+  assert.equal(appServers.length, count + 1);
+  var serverWithout = appServers[appServers.length - 1];
+  assert.equal(serverWithout.opts.env, undefined, "it inherits the daemon's environment, nothing added");
+  assert.equal(serverWith.queriesServed, 1);
+  assert.equal(serverWithout.queriesServed, 1);
+  withVariables.close();
+  without.close();
+  await adapter.shutdown();
+});
+
+test("an app-server nothing is using is reclaimed when idle, one in use is not", async function () {
+  var adapter = codexAdapter();
+  var busy = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "1" } });
+  var busyServer = appServers[appServers.length - 1];
+  var done = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "2" } });
+  var doneServer = appServers[appServers.length - 1];
+  done.close();
+  await sleep(20);
+
+  assert.equal(await adapter.shutdownIfIdle(0), true);
+  assert.equal(doneServer.stopped, true, "the idle server is ended");
+  assert.equal(busyServer.stopped, false, "the server a query is using is not");
+
+  // The environment that was reclaimed gets a fresh server on its next query.
+  var count = appServers.length;
+  var again = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "2" } });
+  assert.equal(appServers.length, count + 1);
+  assert.equal(appServers[appServers.length - 1].opts.env.ONE, "2");
+  busy.close();
+  again.close();
+  await adapter.shutdown();
+});
+
+test("a Codex app-server that fails to start leaves nothing behind, so the next query starts again", async function () {
+  var adapter = codexAdapter();
+  var realStart = FakeAppServer.prototype.start;
+  FakeAppServer.prototype.start = function () { return Promise.reject(new Error("no binary")); };
+  try {
+    await assert.rejects(adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "1" } }), /no binary/);
+  } finally {
+    FakeAppServer.prototype.start = realStart;
+  }
+  var recovered = await adapter.createQuery({ cwd: os.tmpdir(), model: "gpt-test", runtimeEnv: { ONE: "1" } });
+  assert.equal(appServers[appServers.length - 1].started, true);
+  recovered.close();
   await adapter.shutdown();
 });

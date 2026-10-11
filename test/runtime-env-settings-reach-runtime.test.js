@@ -55,10 +55,13 @@ async function waitFor(predicate, label) {
 }
 
 // Starts one query in the project and returns the session and the environment
-// the Claude Code subprocess was given.
+// the Claude Code subprocess was given. The session belongs to the project's
+// owner (the administrator here): in multi-user mode a project's variables
+// reach the owner's sessions, and test/runtime-env-owner-scope.test.js covers
+// everyone else's.
 async function startQueryIn(ctx, session) {
   var before = fakeQueries().length;
-  session = session || ctx.sm.createSessionRaw({});
+  session = session || ctx.sm.createSessionRaw({ ownerId: server.people.admin.id });
   await ctx.sdk.startQuery(session, "go", null, null);
   await waitFor(function () { return fakeQueries().length > before; }, "the query to start");
   return { session: session, env: fakeQueries()[fakeQueries().length - 1].env };

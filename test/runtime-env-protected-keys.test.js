@@ -77,11 +77,23 @@ Object.keys(SPEC).forEach(function (cls) {
     var sink = capture();
     var base = { PATH: "/usr/bin", HOME: "/home/alice" };
     var overlay = {};
-    SPEC[cls].forEach(function (name) { overlay[name] = "attacker"; });
+    // defineProperty makes an OWN key of every name, "__proto__" included:
+    // plain assignment of it would run the prototype setter and leave the
+    // overlay with no such key, so the gate would never be exercised.
+    SPEC[cls].forEach(function (name) {
+      Object.defineProperty(overlay, name, { value: "attacker", enumerable: true, configurable: true, writable: true });
+    });
+    SPEC[cls].forEach(function (name) {
+      assert.ok(Object.prototype.hasOwnProperty.call(overlay, name) && Object.keys(overlay).indexOf(name) !== -1,
+        name + " is an own key of the overlay");
+    });
     var env = runtimeEnv.composeRuntimeEnv(base, overlay, sink);
     SPEC[cls].forEach(function (name) {
       assert.notEqual(env[name], "attacker", name + " must not take the overlay's value");
+      // The gate is what dropped it, not a no-op assignment: it reported the name.
+      assert.ok(sink.lines.some(function (line) { return line.indexOf(name) !== -1; }), name + " was dropped by the gate");
     });
+    assert.equal(Object.getPrototypeOf(env), Object.prototype, "the environment object itself is untouched");
     assert.equal(env.PATH, "/usr/bin");
     assert.equal(env.HOME, "/home/alice");
   });

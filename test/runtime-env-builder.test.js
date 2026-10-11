@@ -103,3 +103,21 @@ test("the checks the pages already had still hold", function () {
   assert.match(runtimeEnv.validateEnvText("NOEQUALSSIGN"), /expected KEY=VALUE/);
   assert.match(runtimeEnv.validateEnvText("export "), /Invalid format|expected KEY=VALUE/);
 });
+
+test("a project's text applies to every session in single-user mode, and only to the owner's in multi-user mode", function () {
+  var applies = runtimeEnv.projectEnvApplies;
+  assert.equal(applies({ multiUser: false, projectOwnerId: null, sessionOwnerId: null }), true);
+  assert.equal(applies({ multiUser: false, projectOwnerId: "a", sessionOwnerId: "b" }), true);
+  assert.equal(applies({ multiUser: true, projectOwnerId: "a", sessionOwnerId: "a" }), true);
+  assert.equal(applies({ multiUser: true, projectOwnerId: "a", sessionOwnerId: "b" }), false);
+});
+
+test("in multi-user mode a missing owner on either side, or an unknown mode, applies the project's text to no one", function () {
+  var applies = runtimeEnv.projectEnvApplies;
+  assert.equal(applies({ multiUser: true, projectOwnerId: null, sessionOwnerId: null }), false);
+  assert.equal(applies({ multiUser: true, projectOwnerId: "a", sessionOwnerId: null }), false);
+  assert.equal(applies({ multiUser: true, projectOwnerId: null, sessionOwnerId: "a" }), false);
+  assert.equal(applies({ multiUser: undefined, projectOwnerId: "a", sessionOwnerId: "b" }), false, "only an explicit false is single-user");
+  assert.equal(applies({ projectOwnerId: "a", sessionOwnerId: "b" }), false, "no mode given is treated as multi-user");
+  assert.equal(applies(undefined), false);
+});
