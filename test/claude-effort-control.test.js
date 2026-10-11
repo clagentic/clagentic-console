@@ -24,21 +24,8 @@ function fakeQuery(calls, failWith) {
 
 function inbox(client) { return client.inbox; }
 
-function client() {
-  var box = [];
-  return { inbox: box, ws: { readyState: 1, _clagenticUser: null, send: function (data) { box.push(JSON.parse(data)); } } };
-}
-
-async function withServer(fn) {
-  var server = await world.createServer();
-  try {
-    await server.startQuery();
-    await fn(server);
-  } finally {
-    server.shutdown();
-    world.removeHome(server.home);
-  }
-}
+var client = world.client;
+var withServer = world.withServer;
 
 test("every effort level the SDK names is applied through applyFlagSettings", async function () {
   assert.deepEqual(effortControl.EFFORT_LEVELS, ["low", "medium", "high", "xhigh", "max"]);
@@ -98,15 +85,15 @@ async function drain(handle, worker) {
 test("a worker effort change settles on the worker's own answer", async function () {
   var worker = fakeWorker();
   var handle = claudeAdapter._test_createWorkerQueryHandle(worker, null, null, null);
-  var settled = false;
-  var change = handle.setEffort("high").then(function () { settled = true; });
+  var change = handle.setEffort("high");
+  var state = world.isSettled(change);
 
   assert.equal(worker.sent.length, 1);
   assert.equal(worker.sent[0].type, "set_effort");
   assert.equal(worker.sent[0].effort, "high");
   assert.equal(typeof worker.sent[0].requestId, "string");
   await Promise.resolve();
-  assert.equal(settled, false, "not settled until the worker answers");
+  assert.equal(state.settled, false, "not settled until the worker answers");
 
   worker.handler({ type: "effort_changed", effort: "high", requestId: worker.sent[0].requestId });
   await change;

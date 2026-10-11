@@ -192,6 +192,9 @@ function Harness(label) {
   this.clients = [];
   this.terminalEvents = {};
   this.unexpressible = 0;
+  // Whether the lib under test lacks prompt_response. Set only by a foreign
+  // lib, except in the test that proves a lost step fails a run.
+  this.predatesPromptResponse = world.overridesLib;
 }
 
 Harness.prototype.fail = function (msg) {
@@ -428,14 +431,14 @@ Harness.prototype.respond = async function (client, r, answer) {
   var clicked = false;
   if (client.view && client.connected) clicked = this.clickAnswer(client, r, answer);
   if (!clicked) {
-    var legacy = world.overridesLib || this.toolSeq % 2 === 0;
+    var legacy = this.predatesPromptResponse || this.toolSeq % 2 === 0;
     var msg = responseMessage(r.kind, r.id, answer, legacy);
     // A lib that predates prompt_response has no message that can carry an
     // answer only prompt_response expresses (an AskUserQuestion skip), so the
     // step cannot be made there. It is counted, and a run against this
     // checkout fails if any step was lost this way, instead of judging a
     // message that was never sent.
-    if (msg.type === "prompt_response" && world.overridesLib) {
+    if (msg.type === "prompt_response" && this.predatesPromptResponse) {
       this.unexpressible++;
       return;
     }
@@ -761,6 +764,29 @@ async function scenario(t, label, clientCount, body) {
     h.close();
   }
 }
+
+// The guard that keeps a run honest: a step the lib cannot be sent is counted,
+// and a run against this checkout fails on it instead of passing on a message
+// that was never delivered.
+test("a run against this checkout fails when a step it chose could not be sent", async function (t) {
+  if (world.overridesLib) { t.skip("only meaningful against this checkout"); return; }
+  if (RENDER) t.mock.timers.enable({ apis: ["setTimeout"] });
+  var h = new Harness("unexpressible-guard");
+  await h.init(1);
+  try {
+    var r = null;
+    // A skip is expressible only as prompt_response, whatever the parity.
+    await h.step(async function () { r = await h.request(BY_KIND.ask_user, null); });
+    h.predatesPromptResponse = true;
+    h.clients[0].view = null;
+    await h.step(function () { return h.respond(h.clients[0], r, "skip"); });
+    assert.equal(h.unexpressible, 1, "the lost step was counted");
+    assert.deepEqual(h.violations, [], "and is no invariant violation by itself");
+    assert.throws(function () { h.assertClean(); }, /every answer the run chose could be sent/);
+  } finally {
+    h.close();
+  }
+});
 
 test("a sub-agent's request survives its parent's turn result", async function (t) {
   await scenario(t, "subagent-vs-parent-result", 1, async function (h) {

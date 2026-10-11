@@ -43,21 +43,8 @@ test("a Claude session declares every mode the picker can offer", function () {
   assert.equal(claudeCapabilities().permissionModes.length, 5, "each call gets its own list");
 });
 
-function client() {
-  var inbox = [];
-  return { inbox: inbox, ws: { readyState: 1, _clagenticUser: null, send: function (data) { inbox.push(JSON.parse(data)); } } };
-}
-
-async function withServer(fn) {
-  var server = await world.createServer();
-  try {
-    await server.startQuery();
-    await fn(server);
-  } finally {
-    server.shutdown();
-    world.removeHome(server.home);
-  }
-}
+var client = world.client;
+var withServer = world.withServer;
 
 test("set_permission_mode: auto and dontAsk reach a session whose vendor declares them, and only that session", async function () {
   await withServer(async function (server) {

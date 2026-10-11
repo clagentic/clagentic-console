@@ -306,7 +306,38 @@ function removeHome(home) {
   fs.rmSync(home, { recursive: true, force: true });
 }
 
+/** An in-memory WS client: the socket to connect and the messages it received. */
+function client() {
+  var inbox = [];
+  return { inbox: inbox, ws: { readyState: 1, _clagenticUser: null, send: function (data) { inbox.push(JSON.parse(data)); } } };
+}
+
+/** Runs fn against a server with a live query, then tears it down. */
+async function withServer(fn) {
+  var server = await createServer();
+  try {
+    await server.startQuery();
+    await fn(server);
+  } finally {
+    server.shutdown();
+    removeHome(server.home);
+  }
+}
+
+/**
+ * Tracks whether a promise has ended. A rejection ends it too: a detector that
+ * only watched fulfilment would read a failed call as one still waiting.
+ */
+function isSettled(promise) {
+  var state = { settled: false, rejected: false };
+  promise.then(function () { state.settled = true; }, function () { state.settled = true; state.rejected = true; });
+  return state;
+}
+
 module.exports = {
+  client: client,
+  withServer: withServer,
+  isSettled: isSettled,
   LIB_ROOT: LIB_ROOT,
   overridesLib: !!process.env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB,
   createServer: createServer,

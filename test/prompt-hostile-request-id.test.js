@@ -36,10 +36,7 @@ var WS_ANSWERS = [
   { path: "elicitation_response", stale: "prompt_cancel", build: function (id) { return { type: "elicitation_response", requestId: id, action: "accept", content: { token: "t" } }; } },
 ];
 
-function client() {
-  var inbox = [];
-  return { inbox: inbox, ws: { readyState: 1, _clagenticUser: null, send: function (data) { inbox.push(JSON.parse(data)); } } };
-}
+var client = world.client;
 
 // One prompt of every kind, pending, so every store and the index hold a
 // real entry while the hostile answers arrive.
@@ -71,16 +68,7 @@ function assertPrototypesClean() {
   assert.equal(typeof Object.prototype.hasOwnProperty, "function");
 }
 
-async function withServer(fn) {
-  var server = await world.createServer();
-  try {
-    await server.startQuery();
-    await fn(server);
-  } finally {
-    server.shutdown();
-    world.removeHome(server.home);
-  }
-}
+var withServer = world.withServer;
 
 test("an inherited name is no prompt on any WS answer path: a stale reply, no throw, nothing settled", async function () {
   await withServer(async function (server) {

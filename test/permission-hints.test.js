@@ -16,21 +16,9 @@ var { promptsFor } = require("../lib/prompt-registry");
 var RULE = { source: "projectSettings", toolName: "Bash", ruleContent: "make:*" };
 var TOOL_INPUT = { command: "make" };
 
-function client() {
-  var inbox = [];
-  return { inbox: inbox, ws: { readyState: 1, _clagenticUser: null, send: function (data) { inbox.push(JSON.parse(data)); } } };
-}
-
-async function withServer(fn) {
-  var server = await world.createServer();
-  try {
-    await server.startQuery();
-    await fn(server);
-  } finally {
-    server.shutdown();
-    world.removeHome(server.home);
-  }
-}
+var client = world.client;
+var withServer = world.withServer;
+var isSettled = world.isSettled;
 
 // An in-process canUseTool call, as the SDK makes it, carrying the hints.
 function ask(server, hints, toolName, input) {
@@ -42,6 +30,18 @@ function isSettled(promise) {
   promise.then(function () { state.settled = true; });
   return state;
 }
+
+test("the settle detector sees a rejecting call as settled, and a call still waiting as pending", async function () {
+  var rejecting = isSettled(Promise.reject(new Error("handler failed")));
+  var fulfilling = isSettled(Promise.resolve("ok"));
+  var waiting = isSettled(new Promise(function () {}));
+  await world.flush();
+  assert.equal(rejecting.settled, true, "a rejection ends the call");
+  assert.equal(rejecting.rejected, true);
+  assert.equal(fulfilling.settled, true);
+  assert.equal(fulfilling.rejected, false);
+  assert.equal(waiting.settled, false);
+});
 
 // Every WS shape that carries an Allow-for-session answer: the card, the
 // notification banner (the card's message plus the project it belongs to), and
