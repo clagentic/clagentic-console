@@ -20,6 +20,11 @@ FakeClassList.prototype.remove = function () {
   this._el.className = this._set().filter(function (c) { return rm.indexOf(c) === -1; }).join(" ");
 };
 FakeClassList.prototype.contains = function (c) { return this._set().indexOf(c) !== -1; };
+FakeClassList.prototype.toggle = function (c, force) {
+  var on = force === undefined ? !this.contains(c) : !!force;
+  if (on) this.add(c); else this.remove(c);
+  return on;
+};
 
 function FakeElement(tag) {
   this.tagName = String(tag || "div").toUpperCase();
@@ -55,6 +60,41 @@ FakeElement.prototype.getAttribute = function (name) {
   return this._attrs && Object.prototype.hasOwnProperty.call(this._attrs, name) ? this._attrs[name] : null;
 };
 FakeElement.prototype.appendChild = function (c) { c._parent = this; this._children.push(c); return c; };
+FakeElement.prototype.insertBefore = function (c, ref) {
+  if (c._parent) c._parent._children = c._parent._children.filter(function (x) { return x !== c; });
+  c._parent = this;
+  var at = ref ? this._children.indexOf(ref) : -1;
+  if (at === -1) this._children.push(c);
+  else this._children.splice(at, 0, c);
+  return c;
+};
+FakeElement.prototype.replaceChild = function (next, old) {
+  var at = this._children.indexOf(old);
+  if (at === -1) throw new Error("the node to replace is not a child");
+  this._children[at] = next;
+  next._parent = this;
+  old._parent = null;
+  return old;
+};
+FakeElement.prototype.removeChild = function (c) {
+  c.remove();
+  return c;
+};
+FakeElement.prototype.contains = function (c) {
+  for (var n = c; n; n = n._parent) if (n === this) return true;
+  return false;
+};
+Object.defineProperty(FakeElement.prototype, "children", { get: function () { return this._children; } });
+Object.defineProperty(FakeElement.prototype, "firstChild", { get: function () { return this._children[0] || null; } });
+Object.defineProperty(FakeElement.prototype, "lastElementChild", {
+  get: function () { return this._children[this._children.length - 1] || null; },
+});
+Object.defineProperty(FakeElement.prototype, "nextSibling", {
+  get: function () {
+    if (!this._parent) return null;
+    return this._parent._children[this._parent._children.indexOf(this) + 1] || null;
+  },
+});
 FakeElement.prototype.remove = function () {
   if (!this._parent) return;
   var p = this._parent;

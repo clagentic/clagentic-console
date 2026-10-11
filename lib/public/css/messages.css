@@ -225,6 +225,11 @@
 
 .msg-user:hover .msg-action-btn:not(.msg-action-hidden) { opacity: 1; }
 
+/* An action the agent cannot do stays visible, dimmed, with the reason as its title */
+.msg-action-btn:disabled { cursor: not-allowed; }
+.msg-user:hover .msg-action-btn:disabled:not(.msg-action-hidden) { opacity: 0.35; }
+.msg-action-btn:disabled:hover { color: var(--text-dimmer); background: transparent; }
+
 /* Hidden actions (fork/rewind) — created but not shown */
 .msg-action-btn.msg-action-hidden { display: none; }
 

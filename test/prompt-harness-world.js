@@ -302,6 +302,52 @@ async function createServer(opts) {
   return server;
 }
 
+/**
+ * A second bridge over the server's session manager that serves one more agent
+ * besides the project default, so a session bound to that agent can start a
+ * query. The agent's init() advertises `advertised` as its live capabilities.
+ * Returns the bridge, the options each of the agent's queries was created with,
+ * and everything the bridge broadcast.
+ */
+function serveVendor(server, vendorId, advertised) {
+  var created = [];
+  var sent = [];
+  var served = {
+    vendor: vendorId,
+    init: function () { return Promise.resolve({ models: [], skills: [], capabilities: advertised }); },
+    supportedModels: function () { return Promise.resolve([]); },
+    createToolServer: function () { return {}; },
+    createQuery: function (queryOpts) {
+      created.push(queryOpts);
+      var handle = {
+        pushMessage: function () {}, endInput: function () {}, close: function () {}, abort: function () {},
+        setPermissionMode: function () { return Promise.resolve(); },
+      };
+      handle[Symbol.asyncIterator] = function () {
+        return { next: function () { return Promise.resolve({ value: undefined, done: true }); } };
+      };
+      return Promise.resolve(handle);
+    },
+  };
+  var primary = {
+    vendor: "claude",
+    init: function () { return Promise.resolve({ models: [], skills: [] }); },
+    supportedModels: function () { return Promise.resolve([]); },
+  };
+  var adapters = { claude: primary };
+  adapters[vendorId] = served;
+  var bridge = require(libPath("sdk-bridge")).createSDKBridge({
+    cwd: server.home,
+    slug: "serves-" + vendorId,
+    sessionManager: server.sm,
+    send: function (m) { sent.push(m); },
+    adapter: primary,
+    adapters: adapters,
+    onProcessingChanged: function () {},
+  });
+  return { bridge: bridge, created: created, sent: sent };
+}
+
 function removeHome(home) {
   fs.rmSync(home, { recursive: true, force: true });
 }
@@ -341,6 +387,7 @@ module.exports = {
   LIB_ROOT: LIB_ROOT,
   overridesLib: !!process.env.CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB,
   createServer: createServer,
+  serveVendor: serveVendor,
   removeHome: removeHome,
   flush: flush,
 };

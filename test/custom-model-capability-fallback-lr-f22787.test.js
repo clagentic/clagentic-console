@@ -113,10 +113,11 @@ test('lr-f22787: getModelSupportsEffort assumes true for a custom model ID absen
     'an unmatched model must not silently inherit false from an unrelated enumerated entry, nor default to hidden');
 });
 
-test('lr-f22787: getModelSupportsThinking falls back to the vendor-level default for a custom model ID (claude vendor)', function () {
+test('lr-f22787: getModelSupportsThinking falls back to the agent thinking capability for a custom model ID (agent with thinking)', function () {
   createStore({
     currentModel: UNMATCHED_MODEL,
     currentVendor: 'claude',
+    vendorCapabilities: { thinking: true },
     currentModels: [
       { value: 'haiku', displayName: 'Haiku', supportsThinking: false },
     ],
@@ -126,10 +127,11 @@ test('lr-f22787: getModelSupportsThinking falls back to the vendor-level default
     'claude vendor default is "supports thinking" — an unmatched custom ID must not fall back to false');
 });
 
-test('lr-f22787: getModelSupportsThinking falls back to the vendor-level default for a custom model ID (codex vendor)', function () {
+test('lr-f22787: getModelSupportsThinking falls back to the agent thinking capability for a custom model ID (agent without thinking)', function () {
   createStore({
     currentModel: 'gpt-5.9-unenumerated',
     currentVendor: 'codex',
+    vendorCapabilities: { thinking: false },
     currentModels: [
       { value: 'gpt-5.5', displayName: 'GPT-5.5' },
     ],
