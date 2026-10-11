@@ -16,7 +16,7 @@ var { attachMcp } = require("../lib/project-mcp");
 // shape, then run the handler. Accepted means the handler ran without an error result.
 async function accepts(inputSchema, value) {
   var prepared = prepareTool(z, inputSchema, function () { return { content: [{ type: "text", text: "ran" }] }; });
-  var parsed = z.object(prepared.shape).safeParse(value);
+  var parsed = prepared.inputSchema.safeParse(value);
   if (!parsed.success) return false;
   var result = await prepared.handler(parsed.data, {});
   return !result.isError;
@@ -30,8 +30,6 @@ function objectSchema(properties, required) {
 // They are the reason ajv decides validity.
 
 test("gate: required with empty properties rejects a missing key, at the root and nested", async function () {
-  // The SDK's own wrapper drops keys the shape does not name, so the root case
-  // is checked on the handler, which is where the validation runs.
   var rooted = prepareTool(z, { type: "object", required: ["q"] }, function () { return { content: [] }; });
   assert.equal((await rooted.handler({ q: "x" }, {})).isError, undefined);
   assert.equal((await rooted.handler({}, {})).isError, true, "root required, no properties");
@@ -160,7 +158,7 @@ test("a call that fails validation gets an error result and never reaches the to
 test("a tool declared with no input schema takes no parameters and is not wrapped", function () {
   var handler = function () {};
   var prepared = prepareTool(z, undefined, handler);
-  assert.deepEqual(prepared.shape, {});
+  assert.deepEqual(prepared.inputSchema, {});
   assert.equal(prepared.handler, handler);
 });
 
@@ -181,7 +179,7 @@ test("a schema neither library can read throws instead of registering a looser t
 test("worker rebuild: a tool whose schema cannot be read is skipped with a diagnostic, the others are registered and validate", async function () {
   var registered = [];
   var sdk = {
-    tool: function (name, description, shape, handler) { registered.push({ name: name, shape: shape, handler: handler }); return { name: name }; },
+    tool: function (name, description, inputSchema, handler) { registered.push({ name: name, inputSchema: inputSchema, handler: handler }); return { name: name }; },
     createSdkMcpServer: function (def) { return def; },
   };
   var reported = [];
@@ -211,7 +209,7 @@ test("worker rebuild: a tool whose schema cannot be read is skipped with a diagn
   assert.equal(reported[0].source, "mcp", "the source the diagnostics panel shows");
   assert.match(reported[0].message, /files\/broken/);
   var list = registered[0];
-  assert.equal(z.object(list.shape).safeParse({ ids: ["a"] }).success, false, "the described shape rejects strings in an array of numbers");
+  assert.equal(list.inputSchema.safeParse({ ids: ["a"] }).success, false, "the described shape rejects strings in an array of numbers");
   assert.equal((await list.handler({ ids: [1] }, {})).isError, undefined);
   assert.equal((await registered[1].handler({ home: { city: "B", zip: "1" } }, {})).isError, true, "exact validation after the worker rebuild");
 });
@@ -252,7 +250,7 @@ test("the registered recursive and referenced shapes still convert to JSON schem
   };
   [tree, MODEL_SCHEMA].forEach(function (schema) {
     var prepared = prepareTool(z, schema, function () {});
-    var converted = mcpToolSchema.convertToolInputSchema(z.toJSONSchema, { inputSchema: z.object(prepared.shape) });
+    var converted = mcpToolSchema.convertToolInputSchema(z.toJSONSchema, { inputSchema: prepared.inputSchema });
     assert.equal(converted.ok, true, converted.error);
     assert.ok(converted.schema.properties, "the model sees the parameters");
   });
@@ -290,4 +288,112 @@ test("the project bridge sends the diagnostic to the panel for a skipped remote 
   assert.ok(published, "the server with the readable tool is still published");
   var registered = published.instance._registeredTools;
   assert.deepEqual(Object.keys(registered), ["model"]);
+});
+
+// R18: the arguments ajv validates are the ones the model sent. The SDK parses
+// a call with the schema it registered; these tests take that registered schema
+// from the real SDK server and run the call the way the SDK does.
+
+var REQUIRES_UNDECLARED = {
+  type: "object",
+  properties: { a: { type: "string" } },
+  required: ["q"],
+};
+
+var CLOSED = {
+  type: "object",
+  properties: { a: { type: "string" } },
+  required: ["a"],
+  additionalProperties: false,
+};
+
+var OPEN = {
+  type: "object",
+  properties: { a: { type: "string" } },
+  required: ["a"],
+};
+
+async function callRegistered(entry, args) {
+  var parsed = entry.inputSchema.safeParse(args);
+  if (!parsed.success) return { parseFailed: true };
+  return entry.handler(parsed.data, {});
+}
+
+function workerTools() {
+  var sdk = require("@anthropic-ai/claude-agent-sdk");
+  var seen = [];
+  var servers = workerMcp.buildMcpServersFromDescriptors([{
+    serverName: "s",
+    tools: [
+      { name: "requires", description: "d", inputSchema: REQUIRES_UNDECLARED },
+      { name: "closed", description: "d", inputSchema: CLOSED },
+      { name: "open", description: "d", inputSchema: OPEN },
+    ],
+  }], sdk, {
+    loadZod: function () { return z; },
+    createHandler: function () { return function (args) { seen.push(args); return { content: [{ type: "text", text: "ran" }] }; }; },
+  });
+  return { tools: servers.s.instance._registeredTools, seen: seen };
+}
+
+test("R18 worker path: a required key absent from properties is accepted, an extra key is preserved or rejected as the schema says", async function () {
+  var built = workerTools();
+  var ok = await callRegistered(built.tools.requires, { q: "x", a: "y" });
+  assert.equal(ok.isError, undefined, "q is required by the schema and was sent");
+  assert.deepEqual(built.seen[0], { q: "x", a: "y" }, "the undeclared key reaches the tool");
+  var missing = await callRegistered(built.tools.requires, { a: "y" });
+  assert.equal(missing.isError, true, "q is still required");
+
+  var open = await callRegistered(built.tools.open, { a: "y", extra: 1 });
+  assert.equal(open.isError, undefined);
+  assert.deepEqual(built.seen[1], { a: "y", extra: 1 }, "additionalProperties allowed: preserved");
+  var closed = await callRegistered(built.tools.closed, { a: "y", extra: 1 });
+  assert.equal(closed.isError, true, "additionalProperties false: rejected by ajv, not silently stripped");
+  assert.match(closed.content[0].text, /additional properties/);
+  assert.equal((await callRegistered(built.tools.closed, { a: "y" })).isError, undefined);
+});
+
+test("R18 project bridge: same cases through project-mcp.js", async function () {
+  var sent = [];
+  var ext = { readyState: 1 };
+  var mcp = attachMcp({
+    send: function () {},
+    sendTo: function (ws, msg) { sent.push(msg); },
+    slug: "p",
+    getExtensionWs: function () { return ext; },
+    getEnabledMcpServers: function () { return ["srv"]; },
+    setEnabledMcpServers: function () {},
+  });
+  mcp.handleMcpMessage(ext, { type: "mcp_servers_available", hostConnected: true, servers: [{
+    name: "srv",
+    tools: [
+      { name: "requires", description: "d", inputSchema: REQUIRES_UNDECLARED },
+      { name: "closed", description: "d", inputSchema: CLOSED },
+      { name: "open", description: "d", inputSchema: OPEN },
+    ],
+  }] });
+  var tools = mcp.getMcpServers().srv.instance._registeredTools;
+
+  // The extension echoes the call back as the result, so the test sees the
+  // arguments the bridge forwarded.
+  async function forwarded(name, args) {
+    sent.length = 0;
+    var pending = callRegistered(tools[name], args);
+    await new Promise(function (resolve) { setImmediate(resolve); });
+    var call = sent.find(function (m) { return m.type === "mcp_tool_call"; });
+    if (!call) return { result: await pending, arguments: undefined };
+    mcp.handleMcpMessage(ext, { type: "mcp_tool_result", callId: call.callId, result: { content: [{ type: "text", text: "ok" }] } });
+    return { result: await pending, arguments: call.params.arguments };
+  }
+
+  var ok = await forwarded("requires", { q: "x", a: "y" });
+  assert.equal(ok.result.isError, undefined);
+  assert.deepEqual(ok.arguments, { q: "x", a: "y" });
+  assert.equal((await forwarded("requires", { a: "y" })).result.isError, true);
+
+  var open = await forwarded("open", { a: "y", extra: 1 });
+  assert.deepEqual(open.arguments, { a: "y", extra: 1 });
+  var closed = await forwarded("closed", { a: "y", extra: 1 });
+  assert.equal(closed.result.isError, true);
+  assert.equal(closed.arguments, undefined, "a rejected call never reaches the extension");
 });
