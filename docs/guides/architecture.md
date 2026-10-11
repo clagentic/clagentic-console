@@ -184,6 +184,27 @@ graph TB
 
 User provisioning lives in `daemon.js` (`provisionLinuxUser`, `grantProjectAccess`). All worker spawns route through `os-users.resolveOsUserInfo`.
 
+## Access Control and Input Trust
+
+Authorization is not opt-in per handler. One answer to "may this user use that project?" (`lib/project-access.js`) backs every check, and an answer that cannot be given is a refusal: no lookup wired, an unknown slug, a lookup that throws, or no user all deny, administrators included. A project record with no `visibility` is private; only `"public"` opens a project to everyone. A worktree has no record of its own and takes its parent's (`daemon-projects.js` `getProjectAccessRecord`).
+
+| Where | What it does |
+|---|---|
+| WebSocket upgrade, HTTP project routes, root redirect | `projectAccess.canAccess(user, slug)`; the local MCP bridge POST is the one request that carries no login |
+| `lib/project-message-gate.js`, called first by `handleMessage` | re-checks the connection's user against this project on every message; a `targetSlug` is authorized, resolved to a project that exists, and removed before any handler sees the message; a frame that is not a JSON object is dropped |
+| Project lists (`projects_updated`, `info`, hub schedules) | filtered per client: `broadcastAll` turns a `projects_updated` into one filtered message per client, so no call site filters for itself |
+| Palette, session rename, delete and search, file history | the session's own owner/visibility rule (`canReadSession`) is applied before anything is read |
+
+Global settings (the global CLAUDE.md, shared environment variables) are administrator-only. The per-project environment messages act on the project the message arrived in, never on a slug the message carries.
+
+**File policy** (`lib/project-file-scope.js`) is shared by the WebSocket `fs_*` handlers, `GET /api/file` and the watchers. The `fileBrowser` permission applies to every `fs_*` message except `fs_unwatch`. A path is resolved once, by one function that refuses non-strings, null bytes and anything outside the project after symlink resolution. In os-users mode a user with no resolved OS identity is refused; there is no fallback to a read as the daemon user. Watches (`project-file-watch.js`) belong to the connection that opened them: a change is read as that user and sent to that connection only, and a watch ends when its connection does.
+
+Git history, diff and file-at-commit (`lib/project-git.js`) take only hex revisions, so a client value can never be read as a git option, and only project-relative paths; git runs as the caller's OS identity in os-users mode.
+
+**WebSocket origin** (`lib/ws-origin.js`): a request with no `Origin` header (CLI, relay, MCP bridge) is accepted, since the login still applies. Otherwise the origin's host and port must equal the request's `Host` header (or `X-Forwarded-Host` when `trustedProxy` is set), or the origin must be in `allowedOrigins` in `daemon.json` (for example `["https://console.example.com", "chrome-extension://<id>"]`). Scheme is compared only where the daemon knows it: it terminates TLS itself, or `trustedProxy` reports `X-Forwarded-Proto`. Extension origins are refused unless listed.
+
+**Names that come from outside** (vendor names, tab ids, MCP server names and call ids, request ids, file names shown in the file tree) never index a plain object: tables keyed by them are prototype-less maps, vendor names are checked against the vendors the daemon can build, and a result for an extension or MCP call is accepted only from the socket the call was sent to.
+
 ## Operator Prompts
 
 Every tool call goes through a vendor-neutral approval gate, and every other point where an agent waits on the operator (plan approval, AskUserQuestion, an MCP elicitation) uses the same machinery.

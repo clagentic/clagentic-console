@@ -45,7 +45,12 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `project-connection.js` | WebSocket connection setup, initial state sync, session restore, presence |
 | `project-http.js` | All HTTP routes: image serving, file upload, push, skills, git status, info |
 | `project-image.js` | `hydrateImageRefs`, `saveImageFile`, image directory setup |
-| `project-file-watch.js` | File and directory fs.watch wrappers |
+| `project-file-watch.js` | File and directory fs.watch wrappers; watches belong to one connection and read as that connection's user |
+| `project-access.js` | The one answer to "may this user use that project?" (fails closed), the per-user project-list filter, and the session-read rule |
+| `project-message-gate.js` | The per-message access gate at the entry of `handleMessage`: authorizes the current project and any `targetSlug`, strips the slug before handlers run |
+| `project-file-scope.js` | File policy shared by the WS file handlers, `GET /api/file` and the watchers: fileBrowser permission, OS-identity requirement, one path resolver, reads and listings as the caller |
+| `project-git.js` | Git for a connected client: hex-only revisions, run as the caller's OS identity |
+| `ws-origin.js` | WebSocket upgrade origin check: host and port against the request host, operator allow-list |
 | `sdk-bridge.js` | SDK bridge coordinator: createSDKBridge factory, worker lifecycle, query stream, tool permissions, mention sessions |
 | `prompt-registry.js` | Sole owner of every operator-prompt lifecycle (permission, plan, AskUserQuestion, MCP elicitation, browser-extension command): open/answer/cancel/expire, sub-agent ownership, session grants, notification dismissal, replay state |
 | `prompt-kinds/` | One adapter per prompt kind: payload fields, response parsing and validation against the request (answer bounds in `answer-limits.js`), the vendor callback's value for an answer and for an unanswered end; `codecs.js` loads the answer codecs and own-key lookups from the browser's own modules (`public/modules/prompt-kinds/`) |
