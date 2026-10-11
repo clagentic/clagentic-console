@@ -20,9 +20,6 @@ var config = { sharedEnv: "", projects: [{ slug: "mine" }] };
 var envSettings = createEnvSettings({
   getConfig: function () { return config; },
   saveConfig: function () {},
-  onChanged: function () {
-    server.relay.forEachProject(function (ctx) { ctx.sdk.applyRuntimeEnvChange(); });
-  },
 });
 
 var server = null;

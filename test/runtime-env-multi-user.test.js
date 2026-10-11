@@ -1,6 +1,6 @@
 "use strict";
 // Multi-user mode: a project's environment variables reach only the sessions of
-// the project's owner, and a runtime that cannot be ended is never reused. A
+// the project's owner, and a save never touches a runtime already attached. A
 // real Clagentic: Console server, real WebSocket clients for the owner, another
 // user and an administrator, the real project contexts, SDK bridge and Claude
 // adapter, and the daemon's own settings store. Only the Claude Agent SDK is
@@ -25,9 +25,6 @@ var config = { sharedEnv: "", projects: [{ slug: "alpha" }, { slug: "orphan" }] 
 var envSettings = createEnvSettings({
   getConfig: function () { return config; },
   saveConfig: function () {},
-  onChanged: function () {
-    server.relay.forEachProject(function (ctx) { ctx.sdk.applyRuntimeEnvChange(); });
-  },
 });
 
 var server = null;
@@ -252,67 +249,28 @@ test("a worktree's Settings page reads and writes its parent's variables", async
   assert.equal(config.projects[0].envrc, "export FROM_WORKTREE_PAGE=1");
 });
 
-// --- A runtime that cannot be ended is never reused --------------------------
+// --- A save applies to runtimes started after it --------------------------------
 
-// Starts a query for the owner and makes its runtime refuse to close, the way
-// a failing child process would.
-async function ownersRuntimeThatCannotClose() {
-  var session = sessionOf(alpha, "owner");
-  await startQueryIn(alpha, session);
-  session.isProcessing = false;
-  var handle = session.queryInstance;
-  var realClose = handle.close.bind(handle);
-  handle.close = function () { throw new Error("close failed"); };
-  return { session: session, stream: session.streamPromise, endForReal: realClose };
-}
-
-test("close() throws on retirement: the runtime does not count as retired and is not reused", async function () {
+test("a save while a runtime is attached leaves that runtime alone; a session started after the save gets the new variables", async function () {
   resetSettings();
-  var stale = await ownersRuntimeThatCannotClose();
-  var logged = [];
-  var realError = console.error;
-  console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
-  var retired;
-  try {
-    config.projects[0].envrc = "LATE_ADDITION=now";
-    retired = alpha.sdk.applyRuntimeEnvChange();
-  } finally {
-    console.error = realError;
-  }
-
-  assert.equal(retired, 0, "a runtime that did not close is not counted as retired");
-  assert.equal(stale.session.queryInstance, null, "it is detached, so the next message cannot be pushed into it");
-  assert.ok(logged.some(function (line) { return line.indexOf("close failed") !== -1; }), "the failure is reported");
-
-  stale.endForReal();
-  await stale.stream;
-});
-
-test("close() throws on retirement: the next message gets a fresh runtime with the new variables", async function () {
-  resetSettings();
-  var stale = await ownersRuntimeThatCannotClose();
+  var attached = sessionOf(alpha, "owner");
+  var startedWith = await startQueryIn(alpha, attached);
+  attached.isProcessing = false;
+  var runtime = attached.queryInstance;
+  assert.equal(startedWith.LATE_ADDITION, undefined);
 
   var saved = await save(ownerWs, "set_project_env", "set_project_env_result", "export LATE_ADDITION=now");
   assert.equal(saved.ok, true, saved.error);
-  assert.equal(stale.session.queryInstance, null);
 
-  var next = await startQueryIn(alpha, stale.session);
-  assert.equal(next.LATE_ADDITION, "now", "the fresh runtime carries the new environment");
-  assert.ok(stale.session.queryInstance, "and it is the session's runtime now");
+  var outcome = await Promise.race([
+    attached.streamPromise.then(function () { return "ended"; }),
+    sleep(400).then(function () { return "still running"; }),
+  ]);
+  assert.equal(outcome, "still running", "the attached runtime was not ended by the save");
+  assert.equal(attached.queryInstance, runtime, "and it is still the session's runtime");
 
-  stale.endForReal();
-  await stale.stream;
-  assert.ok(stale.session.queryInstance, "the old stream ending does not take the new runtime away");
-  await endQuery(stale.session);
-});
+  var started = await envOf(alpha, "owner");
+  assert.equal(started.LATE_ADDITION, "now", "a session started after the save has the new variables");
 
-test("close() that works still retires an idle runtime and counts it", async function () {
-  resetSettings();
-  var session = sessionOf(alpha, "owner");
-  await startQueryIn(alpha, session);
-  session.isProcessing = false;
-  config.projects[0].envrc = "LATE_ADDITION=now";
-  assert.equal(alpha.sdk.applyRuntimeEnvChange(), 1);
-  await session.streamPromise;
-  assert.equal(session.queryInstance, null);
+  await endQuery(attached);
 });

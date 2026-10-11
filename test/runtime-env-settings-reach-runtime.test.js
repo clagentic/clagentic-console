@@ -25,12 +25,6 @@ var saves = 0;
 var envSettings = createEnvSettings({
   getConfig: function () { return config; },
   saveConfig: function () { saves++; },
-  onChanged: function (change) {
-    server.relay.forEachProject(function (ctx) {
-      if (change.slug && ctx.slug !== change.slug) return;
-      ctx.sdk.applyRuntimeEnvChange();
-    });
-  },
 });
 
 var server = null;
@@ -240,22 +234,30 @@ test("a protected variable already in a saved text is dropped when the runtime s
   mine.forEach(function (w) { assert.equal(w.indexOf("evil"), -1, "a warning never carries a value: " + w); });
 });
 
-test("a runtime that is idle when Settings change is restarted, so the next query has the change", async function () {
+test("a runtime attached when Settings change is untouched; a session started after the save has the change", async function () {
   resetSettings();
   var started = await startQueryIn(alpha);
-  var session = started.session;
+  var attached = started.session;
   assert.equal(started.env.LATE_ADDITION, undefined);
-  session.isProcessing = false;
-  assert.ok(session.queryInstance, "the runtime is up, waiting for the next message");
+  attached.isProcessing = false;
+  var runtime = attached.queryInstance;
+  assert.ok(runtime, "the runtime is up, waiting for the next message");
 
   var saved = await save("set_project_env", "set_project_env_result", "export LATE_ADDITION=now");
   assert.equal(saved.ok, true, saved.error);
-  await session.streamPromise;
-  assert.equal(session.queryInstance, null, "the idle runtime was ended");
 
-  var next = await startQueryIn(alpha, session);
-  assert.equal(next.env.LATE_ADDITION, "now");
-  await endQuery(session);
+  var outcome = await Promise.race([
+    attached.streamPromise.then(function () { return "ended"; }),
+    sleep(400).then(function () { return "still running"; }),
+  ]);
+  assert.equal(outcome, "still running", "the idle attached runtime was not ended by the save");
+  assert.equal(attached.queryInstance, runtime);
+
+  var next = await startQueryIn(alpha);
+  assert.equal(next.env.LATE_ADDITION, "now", "a session started after the save has the new variables");
+
+  await endQuery(next.session);
+  await endQuery(attached);
 });
 
 test("a runtime that is running a turn when Settings change is not killed", async function () {
