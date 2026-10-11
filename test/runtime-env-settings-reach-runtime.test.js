@@ -1,10 +1,11 @@
 "use strict";
 // Environment variables saved in Settings (shared, and per project) reach the
 // environment an agent runtime is started with. A real Clagentic: Console
-// server, real WebSocket clients, the real project context and SDK bridge and
-// the real Claude adapter; only the Claude Agent SDK is the stand-in in
-// test/fixtures/fake-agent-sdk, which reports the environment the Claude Code
-// subprocess would get (options.env REPLACES the inherited environment).
+// server, real WebSocket clients, the real project context and SDK bridge, the
+// real Claude adapter and the daemon's own settings store; only the Claude
+// Agent SDK is the stand-in in test/fixtures/fake-agent-sdk, which reports the
+// environment the Claude Code subprocess would get (options.env REPLACES the
+// inherited environment).
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -16,34 +17,26 @@ var { pathToFileURL } = require("url");
 nodeModule.register(pathToFileURL(path.join(__dirname, "fixtures", "fake-agent-sdk", "resolve-hook.mjs")).href);
 
 var harness = require("./access-harness");
+var { createEnvSettings } = require("../lib/daemon-env-settings");
 
-// The store the daemon keeps the two texts in (lib/daemon.js onGet/SetProjectEnv,
-// onGet/SetSharedEnv): the shared text on the config, the project's on its record.
-function makeConfigStore() {
-  var config = { sharedEnv: "", projects: [{ slug: "alpha", envrc: "" }] };
-  function projectRecord(slug) {
-    return config.projects.find(function (p) { return p.slug === slug; }) || null;
-  }
-  return {
-    config: config,
-    handlers: {
-      onGetProjectEnv: function (slug) { var p = projectRecord(slug); return { envrc: (p && p.envrc) || "" }; },
-      onSetProjectEnv: function (slug, envrc) {
-        var p = projectRecord(slug);
-        if (!p) return { ok: false, error: "Project not found" };
-        p.envrc = envrc;
-        return { ok: true };
-      },
-      onGetSharedEnv: function () { return { envrc: config.sharedEnv || "" }; },
-      onSetSharedEnv: function (envrc) { config.sharedEnv = envrc; return { ok: true }; },
-    },
-  };
-}
+// What lib/daemon.js keeps: the shared text on the config, a project's on its record.
+var config = { sharedEnv: "", projects: [{ slug: "alpha" }, { slug: "beta" }] };
+var saves = 0;
+var envSettings = createEnvSettings({
+  getConfig: function () { return config; },
+  saveConfig: function () { saves++; },
+  onChanged: function (change) {
+    server.relay.forEachProject(function (ctx) {
+      if (change.slug && ctx.slug !== change.slug) return;
+      ctx.sdk.applyRuntimeEnvChange();
+    });
+  },
+});
 
-var store = makeConfigStore();
 var server = null;
 var admin = null;
 var alpha = null;
+var beta = null;
 
 function fakeQueries() {
   return globalThis.__fakeAgentSdkQueries || [];
@@ -61,24 +54,44 @@ async function waitFor(predicate, label) {
   throw new Error("timed out waiting for " + label);
 }
 
-// Starts one query in the project and returns the environment the Claude Code
-// subprocess was given.
-async function envOfNextQuery() {
+// Starts one query in the project and returns the session and the environment
+// the Claude Code subprocess was given.
+async function startQueryIn(ctx, session) {
   var before = fakeQueries().length;
-  var session = alpha.sm.createSessionRaw({});
-  await alpha.sdk.startQuery(session, "go", null, null);
+  session = session || ctx.sm.createSessionRaw({});
+  await ctx.sdk.startQuery(session, "go", null, null);
   await waitFor(function () { return fakeQueries().length > before; }, "the query to start");
-  var env = fakeQueries()[fakeQueries().length - 1].env;
+  return { session: session, env: fakeQueries()[fakeQueries().length - 1].env };
+}
+
+async function endQuery(session) {
   if (session.queryInstance) session.queryInstance.close();
   if (session.streamPromise) await session.streamPromise;
-  return env;
+}
+
+async function envOfNextQuery(ctx) {
+  var started = await startQueryIn(ctx || alpha);
+  await endQuery(started.session);
+  return started.env;
+}
+
+async function save(type, resultType, envrc) {
+  admin.inbox.length = 0;
+  admin.send({ type: type, envrc: envrc });
+  return admin.waitFor(function (m) { return m.type === resultType; });
+}
+
+function resetSettings() {
+  config.sharedEnv = "";
+  delete config.projects[0].envrc;
+  delete config.projects[1].envrc;
 }
 
 test.before(async function () {
   server = await harness.start({
     users: [{ key: "admin", username: "admin", role: "admin" }],
-    projects: [{ slug: "alpha", ownerKey: "admin" }],
-    serverOpts: store.handlers,
+    projects: [{ slug: "alpha", ownerKey: "admin" }, { slug: "beta", ownerKey: "admin" }],
+    serverOpts: envSettings,
     beforeServer: function () {
       // The project context builds its adapters from the host's installed CLIs;
       // the stand-in SDK needs no CLI, so hand it the real Claude adapter.
@@ -88,7 +101,10 @@ test.before(async function () {
       };
     },
   });
-  server.relay.forEachProject(function (ctx, slug) { if (slug === "alpha") alpha = ctx; });
+  server.relay.forEachProject(function (ctx, slug) {
+    if (slug === "alpha") alpha = ctx;
+    if (slug === "beta") beta = ctx;
+  });
   admin = await server.connect("alpha", "admin");
   assert.equal(admin.ok, true);
   // The first connection warms the adapters up; let that query pass.
@@ -99,15 +115,10 @@ test.after(async function () {
   if (server) await server.stop();
 });
 
-function resetSettings() {
-  store.config.sharedEnv = "";
-  store.config.projects[0].envrc = "";
-}
-
 test("variables saved as the shared and the project text are in the environment the runtime starts with", async function () {
   resetSettings();
-  store.config.sharedEnv = "OPENAI_BASE_URL=https://shared.example.invalid/v1\nSHARED_ONLY=from-shared\nOVERRIDDEN=shared";
-  store.config.projects[0].envrc = "PROJECT_ONLY=from-project\nOVERRIDDEN=project";
+  config.sharedEnv = "OPENAI_BASE_URL=https://shared.example.invalid/v1\nSHARED_ONLY=from-shared\nOVERRIDDEN=shared";
+  config.projects[0].envrc = "PROJECT_ONLY=from-project\nOVERRIDDEN=project";
 
   var env = await envOfNextQuery();
 
@@ -119,7 +130,7 @@ test("variables saved as the shared and the project text are in the environment 
 
 test("the SDK replaces the environment, so the runtime still has the daemon's PATH and HOME next to the settings", async function () {
   resetSettings();
-  store.config.sharedEnv = "SHARED_ONLY=from-shared";
+  config.sharedEnv = "SHARED_ONLY=from-shared";
 
   var env = await envOfNextQuery();
 
@@ -128,16 +139,36 @@ test("the SDK replaces the environment, so the runtime still has the daemon's PA
   assert.equal(env.HOME, process.env.HOME);
 });
 
+test("a project's variables reach that project's runtimes and no other project's", async function () {
+  resetSettings();
+  config.projects[0].envrc = "ALPHA_ONLY=1";
+
+  var alphaEnv = await envOfNextQuery(alpha);
+  var betaEnv = await envOfNextQuery(beta);
+
+  assert.equal(alphaEnv.ALPHA_ONLY, "1");
+  assert.equal(betaEnv.ALPHA_ONLY, undefined);
+});
+
+test("a project with no variables of its own and no shared variables starts with the daemon's environment", async function () {
+  resetSettings();
+
+  var started = await startQueryIn(alpha);
+  await endQuery(started.session);
+
+  var query = fakeQueries()[fakeQueries().length - 1];
+  assert.equal(query.hasEnvOption, false, "nothing is added, so the SDK inherits as it did before");
+  assert.equal(query.env.PATH, process.env.PATH);
+});
+
 test("a user who saves variables in Settings causes them to reach the runtime", async function () {
   resetSettings();
   // The rows the Settings pages write: "export KEY=VALUE".
-  admin.inbox.length = 0;
-  admin.send({ type: "set_shared_env", envrc: "export OPENAI_BASE_URL=https://ui.example.invalid/v1\nexport SHARED_ONLY=ui-shared" });
-  var sharedSaved = await admin.waitFor(function (m) { return m.type === "set_shared_env_result"; });
+  var sharedSaved = await save("set_shared_env", "set_shared_env_result",
+    "export OPENAI_BASE_URL=https://ui.example.invalid/v1\nexport SHARED_ONLY=ui-shared");
   assert.equal(sharedSaved.ok, true, "the shared text is accepted: " + sharedSaved.error);
 
-  admin.send({ type: "set_project_env", envrc: "export PROJECT_ONLY=ui-project" });
-  var projectSaved = await admin.waitFor(function (m) { return m.type === "set_project_env_result"; });
+  var projectSaved = await save("set_project_env", "set_project_env_result", "export PROJECT_ONLY=ui-project");
   assert.equal(projectSaved.ok, true, "the project text is accepted: " + projectSaved.error);
 
   var env = await envOfNextQuery();
@@ -145,4 +176,113 @@ test("a user who saves variables in Settings causes them to reach the runtime", 
   assert.equal(env.OPENAI_BASE_URL, "https://ui.example.invalid/v1");
   assert.equal(env.SHARED_ONLY, "ui-shared");
   assert.equal(env.PROJECT_ONLY, "ui-project");
+  assert.equal(admin.inbox.some(function (m) { return JSON.stringify(m).indexOf("ui-project") !== -1; }), false,
+    "the answer to a save carries no value");
+});
+
+test("what a user saved is what the Settings pages read back", async function () {
+  resetSettings();
+  await save("set_shared_env", "set_shared_env_result", "export A=1\nexport B=two");
+  admin.inbox.length = 0;
+  admin.send({ type: "get_shared_env" });
+  var shared = await admin.waitFor(function (m) { return m.type === "shared_env_result"; });
+  assert.equal(shared.envrc, "export A=1\nexport B=two");
+});
+
+test("a protected variable is refused when saved, from the shared page and the project page alike", async function () {
+  resetSettings();
+  var savesBefore = saves;
+
+  var shared = await save("set_shared_env", "set_shared_env_result", "export OK_ONE=1\nexport PATH=/tmp/evil");
+  assert.equal(shared.ok, false);
+  assert.match(shared.error, /PATH cannot be set here/);
+  assert.match(shared.error, /line 2/i);
+
+  var project = await save("set_project_env", "set_project_env_result", "export BASH_ENV=/tmp/evil.sh");
+  assert.equal(project.ok, false);
+  assert.match(project.error, /BASH_ENV cannot be set here/);
+
+  assert.equal(saves, savesBefore, "nothing was stored");
+  assert.equal(config.sharedEnv, "");
+  assert.equal(config.projects[0].envrc, undefined);
+});
+
+test("a protected variable already in a saved text is dropped when the runtime starts, with one warning and no value", async function () {
+  resetSettings();
+  config.sharedEnv = "KEEP_SHARED=kept\nPATH=/tmp/evil-path\nNODE_OPTIONS=--require=/tmp/evil-secret.js";
+  config.projects[0].envrc = "KEEP_PROJECT=kept\nBASH_ENV=/tmp/evil-secret.sh";
+  var warnings = [];
+  var realWarn = console.warn;
+  console.warn = function () { warnings.push(Array.prototype.join.call(arguments, " ")); };
+  var first;
+  var second;
+  try {
+    first = await envOfNextQuery();
+    second = await envOfNextQuery();
+  } finally {
+    console.warn = realWarn;
+  }
+
+  assert.equal(first.KEEP_SHARED, "kept");
+  assert.equal(first.KEEP_PROJECT, "kept");
+  assert.equal(first.PATH, process.env.PATH);
+  assert.notEqual(first.NODE_OPTIONS, "--require=/tmp/evil-secret.js");
+  assert.equal(first.BASH_ENV, process.env.BASH_ENV, "the project text cannot set it");
+  assert.equal(second.PATH, process.env.PATH);
+
+  var mine = warnings.filter(function (w) { return w.indexOf("[runtime-env]") !== -1; });
+  ["PATH", "NODE_OPTIONS", "BASH_ENV"].forEach(function (name) {
+    assert.equal(mine.filter(function (w) { return w.indexOf(name) !== -1; }).length, 1, name + " is warned about once");
+  });
+  mine.forEach(function (w) { assert.equal(w.indexOf("evil"), -1, "a warning never carries a value: " + w); });
+});
+
+test("a runtime that is idle when Settings change is restarted, so the next query has the change", async function () {
+  resetSettings();
+  var started = await startQueryIn(alpha);
+  var session = started.session;
+  assert.equal(started.env.LATE_ADDITION, undefined);
+  session.isProcessing = false;
+  assert.ok(session.queryInstance, "the runtime is up, waiting for the next message");
+
+  var saved = await save("set_project_env", "set_project_env_result", "export LATE_ADDITION=now");
+  assert.equal(saved.ok, true, saved.error);
+  await session.streamPromise;
+  assert.equal(session.queryInstance, null, "the idle runtime was ended");
+
+  var next = await startQueryIn(alpha, session);
+  assert.equal(next.env.LATE_ADDITION, "now");
+  await endQuery(session);
+});
+
+test("a runtime that is running a turn when Settings change is not killed", async function () {
+  resetSettings();
+  var started = await startQueryIn(alpha);
+  var session = started.session;
+  session.isProcessing = true;
+  var runtime = session.queryInstance;
+
+  var saved = await save("set_project_env", "set_project_env_result", "export WHILE_RUNNING=1");
+  assert.equal(saved.ok, true, saved.error);
+  await sleep(100);
+
+  assert.equal(session.queryInstance, runtime, "the running turn's runtime is untouched");
+
+  session.isProcessing = false;
+  await endQuery(session);
+});
+
+test("title generation runs with the saved variables", async function () {
+  resetSettings();
+  config.sharedEnv = "TITLE_SEES_THIS=yes";
+  var session = alpha.sm.createSessionRaw({});
+  alpha.sm.recordHistoryEntry(session, { type: "user_message", text: "fix the build" }, true);
+  var before = fakeQueries().length;
+
+  await alpha.sdk._test_autoGenerateTitle(session);
+
+  var titleQueries = fakeQueries().slice(before).filter(function (q) { return q.model === "haiku"; });
+  assert.equal(titleQueries.length, 1);
+  assert.equal(titleQueries[0].env.TITLE_SEES_THIS, "yes");
+  assert.equal(titleQueries[0].env.PATH, process.env.PATH);
 });
