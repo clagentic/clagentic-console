@@ -10,8 +10,21 @@
 // carry, and report the answer it got.
 
 export function query({ prompt, options }) {
+  // The real SDK hands the Claude Code subprocess options.env when it is set
+  // and REPLACES the inherited environment with it; without it the subprocess
+  // inherits process.env. This is the environment that subprocess would get.
+  const effectiveEnv = options.env === undefined ? { ...process.env } : { ...options.env };
+  globalThis.__fakeAgentSdkQueries = globalThis.__fakeAgentSdkQueries || [];
+  globalThis.__fakeAgentSdkQueries.push({
+    env: effectiveEnv,
+    hasEnvOption: options.env !== undefined,
+    cwd: options.cwd,
+    model: options.model,
+  });
+
   const events = [];
   let wake = null;
+  let closed = false;
   function emit(event) {
     events.push(event);
     if (wake) {
@@ -25,6 +38,11 @@ export function query({ prompt, options }) {
     for await (const message of prompt) {
       const parts = message && message.message && message.message.content;
       const text = Array.isArray(parts) && parts[0] ? parts[0].text : "";
+      // A title request: answer it so the caller's loop ends.
+      if (typeof text === "string" && text.indexOf("Below is a conversation") === 0) {
+        emit({ type: "result", subtype: "success" });
+        continue;
+      }
       if (text !== "ask") continue;
       const abort = new AbortController();
       const result = await options.canUseTool("Bash", { command: "make" }, {
@@ -40,6 +58,7 @@ export function query({ prompt, options }) {
   })();
 
   emit({ type: "system", subtype: "init" });
+  emit({ type: "fake_probe", call: "env", env: effectiveEnv, optionKeys: Object.keys(options) });
 
   return {
     async applyFlagSettings(settings) {
@@ -52,10 +71,20 @@ export function query({ prompt, options }) {
     async getContextUsage() {
       return null;
     },
+    // Like the real Query, closing ends the stream.
+    close() {
+      closed = true;
+      if (wake) {
+        const w = wake;
+        wake = null;
+        w();
+      }
+    },
     [Symbol.asyncIterator]() {
       return {
         async next() {
-          while (!events.length) await new Promise((resolve) => { wake = resolve; });
+          while (!events.length && !closed) await new Promise((resolve) => { wake = resolve; });
+          if (!events.length) return { value: undefined, done: true };
           return { value: events.shift(), done: false };
         },
       };
