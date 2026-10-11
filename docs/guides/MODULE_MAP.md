@@ -46,10 +46,10 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `project-http.js` | All HTTP routes: image serving, file upload, push, skills, git status, info |
 | `project-image.js` | `hydrateImageRefs`, `saveImageFile`, image directory setup |
 | `project-file-watch.js` | File and directory fs.watch wrappers; watches belong to one connection and read as that connection's user |
-| `project-access.js` | The one answer to "may this user use that project?" (fails closed), the per-user project-list filter, and the session-read rule |
+| `project-access.js` | The mode-aware principal resolver: "no user" is the implicit owner in single-user mode and a stranger in multi-user mode; project access (fails closed), admin check, the per-user project-list filter, and the session-read rule |
 | `project-message-gate.js` | The per-message access gate at the entry of `handleMessage`: authorizes the current project and any `targetSlug`, strips the slug before handlers run |
 | `project-file-scope.js` | File policy shared by the WS file handlers, `GET /api/file` and the watchers: fileBrowser permission, OS-identity requirement, one path resolver, reads and listings as the caller |
-| `project-git.js` | Git for a connected client: hex-only revisions, run as the caller's OS identity |
+| `project-git.js` | Read-only git for a connected client: hex-only revisions, run as the repository's owner (never the viewer), repo-config programs switched off |
 | `extension-commands.js` | Commands sent to the browser extension; each remembers the socket it went to, and only that socket may answer it |
 | `ws-origin.js` | WebSocket upgrade origin check: host and port against the request host, operator allow-list |
 | `sdk-bridge.js` | SDK bridge coordinator: createSDKBridge factory, worker lifecycle, query stream, tool permissions, mention sessions |
