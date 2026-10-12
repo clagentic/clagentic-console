@@ -154,8 +154,9 @@ test("a project with no variables of its own and no shared variables starts with
   await endQuery(started.session);
 
   var query = fakeQueries()[fakeQueries().length - 1];
-  assert.equal(query.hasEnvOption, false, "nothing is added, so the SDK inherits as it did before");
   assert.equal(query.env.PATH, process.env.PATH);
+  assert.equal(query.env.ALPHA_ONLY, undefined, "no Settings variable is added");
+  assert.equal(query.env.CLAUDE_AGENT_SDK_CLIENT_APP, "clagentic-console/" + require("../package.json").version, "only the product identity is");
 });
 
 test("a user who saves variables in Settings causes them to reach the runtime", async function () {

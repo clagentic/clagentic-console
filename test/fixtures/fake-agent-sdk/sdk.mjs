@@ -15,12 +15,15 @@ export function query({ prompt, options }) {
   // inherits process.env. This is the environment that subprocess would get.
   const effectiveEnv = options.env === undefined ? { ...process.env } : { ...options.env };
   globalThis.__fakeAgentSdkQueries = globalThis.__fakeAgentSdkQueries || [];
-  globalThis.__fakeAgentSdkQueries.push({
+  const record = {
     env: effectiveEnv,
     hasEnvOption: options.env !== undefined,
     cwd: options.cwd,
     model: options.model,
-  });
+    // Every user message the query was handed, as the SDK received it.
+    messages: [],
+  };
+  globalThis.__fakeAgentSdkQueries.push(record);
 
   const events = [];
   let wake = null;
@@ -36,6 +39,8 @@ export function query({ prompt, options }) {
 
   (async function readPrompt() {
     for await (const message of prompt) {
+      record.messages.push(message);
+      emit({ type: "fake_probe", call: "message", message });
       const parts = message && message.message && message.message.content;
       const text = Array.isArray(parts) && parts[0] ? parts[0].text : "";
       // A title request: answer it so the caller's loop ends.

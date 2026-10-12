@@ -31,12 +31,12 @@ var CASES = [
   {
     name: "Claude",
     capabilities: function () { return lib("yoke/adapters/claude-capabilities").claudeCapabilities(); },
-    traits: { perProjectRuntime: false, activityTokens: false, attestsHumanSessions: false },
+    traits: { perProjectRuntime: false, activityTokens: false },
   },
   {
     name: "Codex",
     capabilities: function () { return lib("yoke/adapters/codex-capabilities").codexCapabilities(); },
-    traits: { perProjectRuntime: true, activityTokens: true, attestsHumanSessions: true },
+    traits: { perProjectRuntime: true, activityTokens: true },
   },
 ];
 
@@ -196,7 +196,7 @@ CASES.forEach(function (testCase) {
     });
   });
 
-  test("a fake agent with the " + testCase.name + " traits: activity tokens, human attestation and runtime lifecycle follow the traits", async function () {
+  test("a fake agent with the " + testCase.name + " traits: activity tokens and runtime lifecycle follow the traits", async function () {
     await withFakeAgent(testCase, async function (server) {
       var activity = lib("session-activity");
       var session = server.sm.createSessionRaw({});
@@ -205,20 +205,6 @@ CASES.forEach(function (testCase) {
       assert.equal(activity.isSessionActive(session), testCase.traits.activityTokens, "tool activity token");
       server.bridge.processSDKMessage(session, { yokeType: "result", cost: 0, duration: 1, usage: null, sessionId: "s-1" });
       assert.equal(activity.isSessionActive(session), false, "released at the turn's result");
-
-      var attested = [];
-      var attestation = lib("lore-attestation");
-      var realAttest = attestation.attestHumanSession;
-      attestation.attestHumanSession = function (id) { attested.push(id); };
-      try {
-        var human = server.sm.createSessionRaw({});
-        human.vendor = FAKE_ID;
-        human.humanOriginated = true;
-        server.bridge.processSDKMessage(human, { yokeType: "text_start", blockId: "blk_2", sessionId: "thread-9" });
-        assert.deepEqual(attested, testCase.traits.attestsHumanSessions ? ["thread-9"] : [], "human attestation");
-      } finally {
-        attestation.attestHumanSession = realAttest;
-      }
 
       // A runtime that belongs to one project is created per project; a shared
       // one is created once and handed to every project.

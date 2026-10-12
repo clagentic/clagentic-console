@@ -1,3 +1,19 @@
+# Unreleased
+
+### Features
+
+* **origin:** every turn carries who started it, per turn rather than per session. The Claude adapter stamps each pushed user message with the Claude Agent SDK's `SDKMessageOrigin` (`human` for typed text; `task-notification` with `scheduled-trigger` for a scheduled message, `fireReason` `scheduled` or `manual`; `auto-continuation` for a loop iteration; `task-notification` for an external trigger), marks every turn that was not typed `client_composed`, declares `CLAUDE_CODE_HOST_SCHEDULED_RUN=1` to a process whose first turn is a scheduled one, and identifies the product with `CLAUDE_AGENT_SDK_CLIENT_APP=clagentic-console/<version>`. A Claude session started from the console now records the same `origin` a CLI session does. The YOKE interface is 0.5.0: `QueryHandle.pushMessage` takes an optional initiator, and the `attestsHumanSessions` trait is removed.
+
+### Migration
+
+* **codex:** the app-server `initialize` handshake now reports `clientInfo.name` as `clagentic-console` (it was the bare family brand `clagentic`) and the real package version (it was a fixed `1.0.0`). Codex records this name as the originator of new rollouts, so rollouts created from this release carry a different originator value than earlier ones; tools that filter Codex rollouts by originator need to accept `clagentic-console`. Existing rollouts are not changed.
+* **claude:** a Claude process now always receives an explicit environment (the daemon's own, then the Settings variables, then `CLAUDE_AGENT_SDK_CLIENT_APP`), including when no Settings variable is saved. The content is what the process inherited before, plus the product identifier.
+* **claude:** turns that were not typed (scheduled, loop and trigger turns) are delivered with `client_composed`, so their text is no longer expanded for `@path` mentions or dispatched as a slash command.
+
+### Corrections to the v1.10.0-beta.1 notes
+
+* The notes below listed two entries, and a test fix, for attesting human presence to an external tool, and credited one of them with closing an issue of another project. That work was withdrawn and its code removed. The origin each turn carries, described above, replaces it. The entries and the issue reference have been deleted from the notes.
+
 # [1.10.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.9.0...v1.10.0-beta.1) (2026-10-11)
 
 
@@ -16,7 +32,6 @@
 * **codex:** key app-server instances by their environment so a query never runs on another environment's server (lr-3c8732) ([cd527d4](https://github.com/clagentic/clagentic-console/commit/cd527d4f35194081a8f5c44001deff19f8fdcb88))
 * **config:** scope console env vars, pipe, recent-projects file, projects dir and SW cache to the product (lr-8f678c) ([e18cc84](https://github.com/clagentic/clagentic-console/commit/e18cc84e993b3fbde468a2616f05a315229a78bb))
 * **console:** scope host identifiers to clagentic-console and run the service via 'daemon' (lr-8f678c) ([c6f0019](https://github.com/clagentic/clagentic-console/commit/c6f0019f7342d58b7bdb419553f330598c12c74a))
-* **daemon:** await the real execFile settle in lore-attestation tests (lr-f7c100) ([6764e37](https://github.com/clagentic/clagentic-console/commit/6764e377f5614e2fff4996519f92c891d06c830b)), closes [#421](https://github.com/clagentic/clagentic-console/issues/421)
 * **daemon:** extract shared memory-setting range validators (lr-553d27) ([927dec9](https://github.com/clagentic/clagentic-console/commit/927dec9f6f0fab5f1553e941c29b0867848c7974))
 * **daemon:** fail closed when the link-trap probe cannot inspect a path (lr-8f678c) ([8ba194f](https://github.com/clagentic/clagentic-console/commit/8ba194fad39d93bb93e1c08136749b82576fbd8c))
 * **daemon:** measure cgroup usage only, fail new-work gate closed, test query refusal (lr-8b02fc) ([ccb7e52](https://github.com/clagentic/clagentic-console/commit/ccb7e52052dedf9ebaac35bce48f24b1144283b0))
@@ -83,8 +98,6 @@
 
 ### Features
 
-* **daemon:** attest human presence to LORE for the Codex path (lr-f7c100) ([349dbc2](https://github.com/clagentic/clagentic-console/commit/349dbc27114a5f733ac140ac3ccac0b14805b555))
-* **daemon:** attest human presence to LORE for the Codex path (lr-f7c100) ([73b3286](https://github.com/clagentic/clagentic-console/commit/73b32863a85479fafe7dc2dda067a960ca52dc96)), closes [#1897](https://github.com/clagentic/clagentic-console/issues/1897)
 * **daemon:** detect an installed-but-unloaded build (lr-e85fec) ([f7484d9](https://github.com/clagentic/clagentic-console/commit/f7484d9047f52d0e1e0a12a16bdef86d879c0fac))
 * **daemon:** offer operator-initiated restart to adopt an installed build (lr-e85fec) ([8302c71](https://github.com/clagentic/clagentic-console/commit/8302c71e2e96dce7c200631de350d714be71ebe7))
 * **daemon:** offer operator-initiated restart when a build is stale (lr-e85fec) ([3b17989](https://github.com/clagentic/clagentic-console/commit/3b17989882a246ad222efb7553498e1e543734ad))

@@ -63,7 +63,7 @@ other candidates considered for this task:
   comment costs the same one line as a fabricated stash claim already does
   today — the rule would add a decorative artifact without adding
   verification. It also conflicts with this codebase's standing convention
-  against decorative/provenance comments in source (lore-ID discipline):
+  against decorative/provenance comments in source (task-ID discipline):
   once the claim is unverifiable by the lint itself, the comment is exactly
   that — decoration, not enforcement.
 - **Mutation testing on changed files.** Rejected as disproportionate for
