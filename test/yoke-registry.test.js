@@ -181,10 +181,9 @@ test("adapter traits are descriptor booleans outside the ledger: never resolved,
     assert.equal(Object.prototype.hasOwnProperty.call(registry.declaredCapabilities("codex"), key), false);
     assert.equal(Object.prototype.hasOwnProperty.call(yoke.resolveCapabilities(registry.get("codex"), null, null), key), false);
   });
-  assert.deepEqual(iface.TRAIT_KEYS.slice().sort(), ["activityTokens", "attestsHumanSessions", "perProjectRuntime"]);
+  assert.deepEqual(iface.TRAIT_KEYS.slice().sort(), ["activityTokens", "perProjectRuntime"]);
   assert.equal(registry.traitOf("codex", "perProjectRuntime"), true);
   assert.equal(registry.traitOf("codex", "activityTokens"), true);
-  assert.equal(registry.traitOf("codex", "attestsHumanSessions"), true);
   assert.equal(registry.traitOf("claude", "perProjectRuntime"), false);
   assert.equal(registry.traitOf("claude", "activityTokens"), false);
   assert.equal(registry.traitOf("ghost", "activityTokens"), false, "an unregistered name has no traits");
@@ -198,7 +197,6 @@ test("a registered fake agent's traits are read from its descriptor, and default
   await withFake(async function () {
     assert.equal(registry.traitOf("fake", "activityTokens"), true);
     assert.equal(registry.traitOf("fake", "perProjectRuntime"), false);
-    assert.equal(registry.traitOf("fake", "attestsHumanSessions"), false);
   }, { activityTokens: true });
 });
 
@@ -298,7 +296,7 @@ test("the vendor-keyed instruction table is gone: a fake vendor's native files c
 });
 
 test("the interface lists what the console really consumes: endInput is required, the rest is declared optional", function () {
-  assert.equal(iface.INTERFACE_VERSION, "0.4.0");
+  assert.equal(iface.INTERFACE_VERSION, "0.5.0");
   assert.ok(iface.QUERY_HANDLE_METHODS.indexOf("endInput") !== -1);
   assert.deepEqual(iface.QUERY_HANDLE_OPTIONAL_METHODS.slice().sort(), ["rewindFiles", "setPermissionMode"]);
   ["rollbackThread", "shutdown", "forkSession", "generateTitle"].forEach(function (m) {
