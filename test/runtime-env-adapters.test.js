@@ -99,13 +99,18 @@ test("a Claude query handed a protected variable in the overlay does not get it"
   handle.close();
 });
 
-test("a Claude query with no Settings variables is left to inherit the daemon's environment as before", async function () {
+test("a Claude query with no Settings variables gets the daemon's environment plus the product identity only", async function () {
   var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
   var handleNone = await adapter.createQuery({ cwd: os.tmpdir() });
-  assert.equal(lastFakeQuery().hasEnvOption, false);
+  var none = lastFakeQuery();
+  assert.equal(none.hasEnvOption, true);
+  assert.equal(none.env.PATH, process.env.PATH);
+  assert.equal(none.env.CLAUDE_AGENT_SDK_CLIENT_APP, "clagentic-console/" + require("../package.json").version);
+  assert.equal(none.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
+  assert.equal(none.env.FROM_SETTINGS, undefined);
   handleNone.close();
   var handleEmpty = await adapter.createQuery({ cwd: os.tmpdir(), runtimeEnv: {} });
-  assert.equal(lastFakeQuery().hasEnvOption, false);
+  assert.deepEqual(lastFakeQuery().env, none.env);
   handleEmpty.close();
 });
 
@@ -256,15 +261,39 @@ test("the worker lays the Settings variables over the OS user's own environment 
   assert.equal(seen.optionKeys.indexOf("runtimeEnv"), -1, "the overlay does not go on to the SDK as an option");
 });
 
-test("a worker query with no Settings variables leaves the SDK to inherit the worker's environment", async function () {
+test("a worker query with no Settings variables gets the worker's environment plus the product identity only", async function () {
   var worker = await startWorker();
   try {
     worker.send({ type: "query_start", prompt: null, options: { cwd: os.tmpdir() }, singleTurn: false });
     var probe = await worker.next(function (m) {
       return m.type === "sdk_event" && m.event.type === "fake_probe" && m.event.call === "env";
     }, "the environment probe");
-    assert.equal(probe.event.optionKeys.indexOf("env"), -1);
     assert.equal(probe.event.env.HOME, worker.dir);
+    assert.equal(probe.event.env.CLAUDE_AGENT_SDK_CLIENT_APP, "clagentic-console/" + require("../package.json").version);
+    assert.equal(probe.event.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
+  } finally {
+    await worker.stop();
+  }
+});
+
+test("the worker declares a scheduled run for a scheduled first turn, keeps the initiator off the SDK options, and passes stamped messages through", async function () {
+  var worker = await startWorker();
+  try {
+    worker.send({ type: "query_start", prompt: null, options: { cwd: os.tmpdir(), initiator: "scheduled" }, singleTurn: false });
+    var probe = await worker.next(function (m) {
+      return m.type === "sdk_event" && m.event.type === "fake_probe" && m.event.call === "env";
+    }, "the environment probe");
+    assert.equal(probe.event.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
+    assert.equal(probe.event.env.CLAUDE_AGENT_SDK_CLIENT_APP, "clagentic-console/" + require("../package.json").version);
+    assert.equal(probe.event.optionKeys.indexOf("initiator"), -1, "the initiator does not go on to the SDK as an option");
+
+    var stamped = { type: "user", message: { role: "user", content: [{ type: "text", text: "hi" }] }, origin: { kind: "auto-continuation" }, client_composed: true };
+    worker.send({ type: "push_message", content: stamped });
+    var seen = await worker.next(function (m) {
+      return m.type === "sdk_event" && m.event.type === "fake_probe" && m.event.call === "message";
+    }, "the pushed message");
+    assert.deepEqual(seen.event.message.origin, { kind: "auto-continuation" });
+    assert.equal(seen.event.message.client_composed, true);
   } finally {
     await worker.stop();
   }
