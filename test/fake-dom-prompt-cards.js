@@ -219,9 +219,10 @@ async function createClient(instanceKey, transmit) {
 }
 
 // Timers are mocked so unconfirmed-card ack timeouts never hold the test
-// process open; node:test restores them per test.
-async function setupToolsEnv(t) {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+// process open; node:test restores them per test. `timerApis` widens the set
+// (for example to add setInterval) for a test that drives the clock.
+async function setupToolsEnv(t, timerApis) {
+  t.mock.timers.enable({ apis: timerApis || ["setTimeout"] });
   setupGlobals();
   var storeMod = await import(moduleUrl("store.js"));
   storeMod.createStore({ connected: true });
