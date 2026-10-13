@@ -1,10 +1,9 @@
 "use strict";
 // Resolving the Codex the user installed: override, then PATH, then common
 // locations, each validated by its version. The binaries here are stand-in
-// scripts that print a version line (no Codex is run), and the lookups for an
-// OS user are injected, so every caller shape is exercised without a real
-// account: absent, below the floor, at the floor, newer, an invalid override
-// path, and an OS user whose lookups are its own.
+// scripts that print a version line (no Codex is run), so every caller shape
+// is exercised: absent, below the floor, at the floor, newer, an invalid
+// override path, win32 PATH, and the cache keyed by everything the lookup reads.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -38,6 +37,16 @@ function standIn(dir, name, versionLine, exitCode) {
 
 function envFor(extra) {
   return Object.assign({ PATH: "", HOME: tmpDir() }, extra);
+}
+
+// Lookups that find nothing and run nothing, with the home to search.
+function stubDeps(overrides) {
+  return Object.assign({
+    isExecutable: function () { return false; },
+    pathLookup: function () { return { path: null }; },
+    home: function () { return overrides && overrides.home ? overrides.home : "/nonexistent-home"; },
+    runVersion: function () { throw new Error("no binary should be run"); },
+  });
 }
 
 test("no Codex anywhere: absent, with the install reason", function () {
@@ -188,53 +197,31 @@ test("what the picker is told: usable shows path and version, otherwise the reas
   assert.match(absent.detail.reason, /not installed/);
 });
 
-// --- An OS user's lookups are the user's own ---
+// --- The cache is keyed by everything the lookup reads ---
 
-function stubDeps(overrides) {
-  return Object.assign({
-    isExecutable: function () { return false; },
-    pathLookup: function () { return { state: "found", path: null }; },
-    home: function () { return "/nonexistent-home"; },
-    runVersion: function () { throw new Error("no binary should be run"); },
-  }, overrides, overrides && overrides.home ? { home: function () { return overrides.home; } } : {});
-}
+test("a resolution is remembered per environment: PATH, Path, PATHEXT, the override and HOME each make their own", function () {
+  var dirA = tmpDir();
+  var dirB = tmpDir();
+  standIn(dirA, "codex", "codex-cli 0.150.0");
+  standIn(dirB, "codex", "codex-cli 0.162.1");
+  codexBinary.invalidate();
+  var base = { HOME: tmpDir() };
 
-test("for an OS user the user's PATH and the user's home are searched, never the daemon's", function () {
-  var seen = { home: 0, executableChecks: [] };
-  var deps = stubDeps({
-    pathLookup: function () { return { state: "found", path: null }; },
-    isExecutable: function (candidate) {
-      seen.executableChecks.push(candidate);
-      return candidate === "/home/clay-alice/.local/bin/codex";
-    },
-    runVersion: function (binary) {
-      assert.equal(binary, "/home/clay-alice/.local/bin/codex");
-      return "codex-cli 0.162.1";
-    },
+  assert.equal(codexBinary.resolveCached({ env: Object.assign({}, base, { PATH: dirA }) }).version, "0.150.0");
+  assert.equal(codexBinary.resolveCached({ env: Object.assign({}, base, { PATH: dirB }) }).version, "0.162.1", "another PATH is not served from the first lookup");
+
+  // win32 spells the variable Path; the lookup reads it when PATH is absent.
+  assert.equal(codexBinary.resolveCached({ env: Object.assign({}, base, { Path: dirA }) }).version, "0.150.0");
+  assert.equal(codexBinary.resolveCached({ env: Object.assign({}, base, { Path: dirB }) }).version, "0.162.1", "another Path is not served from the first lookup");
+
+  var keyed = ["PATH", "Path", "PATHEXT", ENV_NAME, "HOME"];
+  var keys = keyed.map(function (name) {
+    var env = Object.assign({}, base);
+    env[name] = "x" + name;
+    return codexBinary._test_cacheKey({ env: env });
   });
-  deps.home = function () { seen.home++; return "/home/clay-alice"; };
-  var result = codexBinary.resolveCodexBinary({ linuxUser: "clay-alice", env: envFor(), deps: deps });
-  assert.equal(result.state, "ready");
-  assert.equal(result.path, "/home/clay-alice/.local/bin/codex");
-  assert.equal(seen.home, 1);
-  assert.ok(seen.executableChecks.every(function (c) { return c.indexOf(os.homedir() + "/") !== 0 || os.homedir() === "/home/clay-alice"; }),
-    "the daemon account's home was not searched for the user");
-});
-
-test("an OS user with no account is reported as not checkable, never resolved as the daemon's user", function () {
-  var deps = stubDeps({
-    pathLookup: function () { var e = new Error("no account"); e.code = "OS_USER_UNMAPPED"; throw e; },
-  });
-  var result = codexBinary.resolveCodexBinary({ linuxUser: "clay-ghost", env: envFor(), deps: deps });
-  assert.equal(result.state, "failed");
-  assert.equal(result.probeClass, "os-user-unmapped");
-});
-
-test("a lookup that failed is passed on as a failure, not as an absent Codex", function () {
-  var deps = stubDeps({ pathLookup: function () { return { state: "failed", probeClass: "timeout" }; } });
-  var result = codexBinary.resolveCodexBinary({ linuxUser: "clay-alice", env: envFor(), deps: deps });
-  assert.equal(result.state, "failed");
-  assert.equal(result.probeClass, "timeout");
+  assert.equal(new Set(keys).size, keyed.length, "each variable the lookup reads changes the key");
+  codexBinary.invalidate();
 });
 
 // --- The registry's install probe ---
@@ -249,47 +236,19 @@ test("the install probe reports the resolution and says Could not check for a lo
   delete process.env[ENV_NAME];
   codexBinary.invalidate();
   try {
-    var outcome = probe({ linuxUser: null, lookupBinary: function () { throw new Error("not used"); }, failed: function () { throw new Error("not used"); } });
+    var outcome = probe({ linuxUser: null, lookupBinary: function () { throw new Error("not used"); } });
     assert.equal(outcome.installed, true);
     assert.equal(outcome.detail.path, file);
     assert.equal(outcome.detail.version, "0.162.1");
 
     process.env[ENV_NAME] = "/nonexistent/codex";
     codexBinary.invalidate();
-    var invalid = probe({ linuxUser: null, failed: function () { throw new Error("not used"); } });
+    var invalid = probe({ linuxUser: null });
     assert.equal(invalid.installed, false);
     assert.match(invalid.detail.reason, /CLAGENTIC_CONSOLE_CODEX_PATH is set to \/nonexistent\/codex/);
   } finally {
     process.env.PATH = realPath;
     if (realOverride === undefined) delete process.env[ENV_NAME]; else process.env[ENV_NAME] = realOverride;
-    codexBinary.invalidate();
-  }
-});
-
-test("a lookup that failed is reported by the install probe as Could not check, not as not installed", function () {
-  var installProbe = require("../lib/yoke/install-probe");
-  var probe = yoke.registry.get("codex").probeInstalled;
-  var realProbeBinary = installProbe.probeBinary;
-  var reported = [];
-  codexBinary.invalidate();
-  installProbe.probeBinary = function (name, linuxUser) {
-    assert.equal(name, "codex");
-    assert.equal(linuxUser, "clay-alice");
-    return { state: "failed", probeClass: "timeout" };
-  };
-  try {
-    var thrown = null;
-    try {
-      probe({ linuxUser: "clay-alice", failed: function (probeClass) { reported.push(probeClass); throw new Error("probe failed"); } });
-    } catch (e) { thrown = e; }
-    assert.deepEqual(reported, ["timeout"], "the failure class is handed to the registry as a failed check");
-    assert.ok(thrown, "the probe does not answer installed or not installed");
-
-    var described = yoke.registry.describeForClient({ installed: [], probeFailures: { codex: "timeout" }, details: {} });
-    var entry = described.filter(function (v) { return v.id === "codex"; })[0];
-    assert.equal(entry.probeFailure, "timeout", "the picker is told the check failed");
-  } finally {
-    installProbe.probeBinary = realProbeBinary;
     codexBinary.invalidate();
   }
 });

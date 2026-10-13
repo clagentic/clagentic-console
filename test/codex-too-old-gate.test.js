@@ -1,7 +1,7 @@
 "use strict";
 // The version gate on every way the adapter acquires an app-server: starting
-// the adapter, listing models, a new query, a resumed query, a title, a fork and
-// a rewind. The real app-server class is used for resolution (the stand-in
+// the adapter, listing models, a new query, a resumed query, a title and a fork
+// (a rewind acquires none: it is refused before any server is looked up). The real app-server class is used for resolution (the stand-in
 // `codex` scripts print a version line), with only its process start and its
 // requests replaced by recorders, so the assertion is on what would have been
 // sent: nothing when the binary is too old or the override is invalid, and only
@@ -86,7 +86,6 @@ var PATHS = {
   resume: function (a, cwd) { return a.createQuery({ cwd: cwd, model: "gpt-test", runtimeEnv: null, resumeSessionId: "thread-9" }); },
   title: function (a, cwd) { return a.generateTitle(["hello"], { cwd: cwd, runtimeEnv: null }); },
   fork: function (a) { return a.forkSession("thread-9", ENV_OPTS); },
-  rewind: function (a) { return a.rollbackThread("thread-9", 1, ENV_OPTS); },
 };
 
 Object.keys(PATHS).forEach(function (name) {

@@ -3,10 +3,8 @@
 // the real Codex adapter over a recording stand-in for the app-server process:
 //   - the model list the project shows everyone is read in the environment no
 //     session adds to, never in a session's own;
-//   - a rewind rolls the Codex thread back on a server for the session's
-//     environment even after the idle reclaim ended the one that held it, and
-//     when the thread cannot be rolled back the rewind fails and the session's
-//     history is left as it was.
+//   - a rewind of a Codex session is refused with its reason, no thread is
+//     touched and the session's history is left as it was.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -22,7 +20,6 @@ function FakeAppServer(executablePath, opts) {
   this.calls = [];
   appServers.push(this);
 }
-FakeAppServer.rollbackFailure = null;
 FakeAppServer.prototype.start = function () { this.started = true; return Promise.resolve(); };
 FakeAppServer.prototype.stop = function () { this.started = false; };
 FakeAppServer.prototype.notify = function () {};
@@ -34,10 +31,6 @@ FakeAppServer.prototype.send = function (method, params) {
     return Promise.resolve({ data: [{ model: model, displayName: model, isDefault: true }] });
   }
   if (method === "skills/list") return Promise.resolve({ data: [] });
-  // A rewind reads the thread's turns, then reverts to the one it names: the
-  // thread has the two turns the session's local history has.
-  if (method === "thread/read") return Promise.resolve({ thread: { id: params.threadId, turns: [{ id: "turn-1" }, { id: "turn-2" }] } });
-  if (method === "thread/revert" && FakeAppServer.rollbackFailure) return Promise.reject(new Error(FakeAppServer.rollbackFailure));
   return Promise.resolve({});
 };
 FakeAppServer.prototype.addEventHandler = function () { return {}; };
@@ -155,35 +148,20 @@ test("a session's own environment does not decide the model list the project sho
   if (session.streamPromise) await session.streamPromise;
 });
 
-test("a rewind after the idle reclaim ended the thread's server rolls the thread back on a server for the session's environment", async function () {
-  assert.equal(await codexAdapter.shutdownIfIdle(0), true, "the idle servers are reclaimed");
-  var session = sessionWithTwoTurns("thread-rewind");
+test("a rewind of a Codex session fails with the reason, touches no thread and leaves the session's history as it was", async function () {
+  var session = sessionWithTwoTurns("thread-refused");
+  var before = appServers.map(function (s) { return s.calls.length; });
   var count = appServers.length;
 
   var outcome = await rewind(session, "u2");
 
-  assert.equal(outcome.type, "rewind_complete", outcome.text);
-  assert.equal(appServers.length, count + 1, "the owner's server was started again");
-  var restarted = appServers[appServers.length - 1];
-  assert.equal(restarted.opts.env.MODEL_TAG, "owner");
-  assert.deepEqual(callsOf(restarted, "thread/revert").map(function (c) { return c.params; }), [{ threadId: "thread-rewind", beforeTurnId: "turn-2" }]);
-  var texts = session.history.map(function (entry) { return entry.text; });
-  assert.ok(texts.indexOf("first") !== -1, "the turn before the rewound one is kept");
-  assert.equal(texts.indexOf("second"), -1, "and the local history was trimmed to before the rewound turn");
-});
-
-test("a rewind whose Codex thread cannot be rolled back fails and leaves the session's history as it was", async function () {
-  var session = sessionWithTwoTurns("thread-refused");
-  FakeAppServer.rollbackFailure = "thread not found";
-  var outcome;
-  try {
-    outcome = await rewind(session, "u2");
-  } finally {
-    FakeAppServer.rollbackFailure = null;
-  }
-
   assert.equal(outcome.type, "rewind_error");
-  assert.match(outcome.text, /thread not found/);
+  assert.match(outcome.text, /Rewind is not available for Codex sessions yet/);
   assert.equal(session.history.length, 5, "no entry was dropped");
   assert.equal(session.messageUUIDs.length, 2);
+  assert.equal(appServers.length, count, "no server was started for it");
+  appServers.forEach(function (s, i) {
+    var sent = s.calls.slice(before[i]).map(function (c) { return c.method; });
+    assert.deepEqual(sent.filter(function (m) { return /^thread\/(rollback|revert)$/.test(m); }), [], "neither thread/rollback nor thread/revert is sent");
+  });
 });

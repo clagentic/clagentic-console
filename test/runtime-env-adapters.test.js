@@ -48,29 +48,13 @@ FakeAppServer.prototype.send = function (method, params) {
   }
   if (method === "skills/list") return Promise.resolve({ data: [] });
   if (method === "thread/resume") return Promise.resolve({ thread: { id: params.threadId } });
-  // A turn ends at once: a rewind is refused while one is in flight, and these
-  // specs are about which server a thread operation runs on.
-  if (method === "turn/start") {
-    var handlers = this.handlers || [];
-    setImmediate(function () {
-      handlers.forEach(function (h) { h.fn({ method: "turn/completed", params: { threadId: params.threadId, turn: { status: "completed" } } }); });
-    });
-    return Promise.resolve({});
-  }
   if (method === "thread/fork") return Promise.resolve({ thread: { id: "fork-of-" + params.threadId } });
-  // A rewind reads the thread's turns, then reverts to the one it names.
-  if (method === "thread/read") return Promise.resolve({ thread: { id: params.threadId, turns: [{ id: "turn-1" }, { id: "turn-2" }, { id: "turn-3" }] } });
-  if (method === "thread/revert" && FakeAppServer.rollbackFailure) return Promise.reject(new Error(FakeAppServer.rollbackFailure));
+  if (method === "thread/rollback" && FakeAppServer.rollbackFailure) return Promise.reject(new Error(FakeAppServer.rollbackFailure));
   return Promise.resolve({});
 };
 FakeAppServer.rollbackFailure = null;
 // A query handle registers its event handler on the server it was given.
-FakeAppServer.prototype.addEventHandler = function (fn) {
-  this.queriesServed++;
-  var entry = { fn: fn };
-  this.handlers = (this.handlers || []).concat([entry]);
-  return entry;
-};
+FakeAppServer.prototype.addEventHandler = function () { this.queriesServed++; return {}; };
 FakeAppServer.prototype.removeEventHandler = function () {};
 FakeAppServer.prototype.updateHandlerThreadId = function () {};
 codexAppServerModule.CodexAppServer = FakeAppServer;
@@ -534,13 +518,11 @@ test("a Codex call that states no environment is refused, never served by anothe
   await assert.rejects(adapter.createQuery({ cwd: os.tmpdir() }), refusal);
   await assert.rejects(adapter.generateTitle(["x"], { cwd: os.tmpdir() }), refusal);
   await assert.rejects(adapter.forkSession("thread-a", { upToMessageId: "m" }), refusal);
-  await assert.rejects(adapter.rollbackThread("thread-a", 1), refusal);
-  await assert.rejects(adapter.rollbackThread("thread-a", 1, {}), refusal);
   assert.equal(appServers.length, count, "no server was started for any of them");
   await adapter.shutdown();
 });
 
-test("a thread of environment A is forked and rolled back on A's server after B ran", async function () {
+test("a thread of environment A is forked on A's server after B ran", async function () {
   var adapter = codexAdapter();
   var a = await openOnThread(adapter, ENV_A, "thread-a");
   var b = await openOnThread(adapter, ENV_B, "thread-b");
@@ -548,54 +530,43 @@ test("a thread of environment A is forked and rolled back on A's server after B 
 
   var forked = await adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_A });
   assert.equal(forked.sessionId, "fork-of-thread-a");
-  await adapter.rollbackThread("thread-a", 2, { runtimeEnv: ENV_A });
 
   assert.equal(callsOf(a.server, "thread/fork").length, 1);
-  assert.equal(callsOf(a.server, "thread/revert").length, 1);
-  assert.deepEqual(callsOf(a.server, "thread/revert")[0].params, { threadId: "thread-a", beforeTurnId: "turn-2" }, "two turns dropped: the revert names the second from last");
   assert.equal(callsOf(b.server, "thread/fork").length, 0, "B's server never saw A's thread");
-  assert.equal(callsOf(b.server, "thread/revert").length, 0);
-
-  // The fork lives where it was made: rewinding it goes there as well.
-  await adapter.rollbackThread("fork-of-thread-a", 1, { runtimeEnv: ENV_A });
-  assert.equal(callsOf(a.server, "thread/revert").length, 2);
 
   a.handle.close();
   b.handle.close();
   await adapter.shutdown();
 });
 
-test("fork and rollback run on the caller's environment's server, never on the one that holds the thread", async function () {
+test("a fork runs on the caller's environment's server, never on the one that holds the thread", async function () {
   var adapter = codexAdapter();
   var a = await openOnThread(adapter, ENV_A, "thread-a");
   var b = await openOnThread(adapter, ENV_B, "thread-b");
 
   var forked = await adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_B });
   assert.equal(forked.sessionId, "fork-of-thread-a");
-  await adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_B });
 
   assert.equal(callsOf(b.server, "thread/fork").length, 1);
-  assert.equal(callsOf(b.server, "thread/revert").length, 1);
   assert.equal(callsOf(a.server, "thread/fork").length, 0, "A's server never saw the operation");
-  assert.equal(callsOf(a.server, "thread/revert").length, 0);
 
   a.handle.close();
   b.handle.close();
   await adapter.shutdown();
 });
 
-test("a rollback the caller's server cannot do fails even when another server holds the thread", async function () {
+test("a fork the caller's server cannot do fails even when another server holds the thread", async function () {
   var adapter = codexAdapter();
   var a = await openOnThread(adapter, ENV_A, "thread-a");
   var b = await openOnThread(adapter, ENV_B, "thread-b");
   var realSend = b.server.send;
   b.server.send = function (method) {
-    if (method === "thread/read") return Promise.reject(new Error("thread not found"));
+    if (method === "thread/fork") return Promise.reject(new Error("thread not found"));
     return realSend.apply(this, arguments);
   };
 
-  await assert.rejects(adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_B }), /thread not found/);
-  assert.equal(callsOf(a.server, "thread/revert").length, 0, "the thread's holder was not asked instead");
+  await assert.rejects(adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_B }), /thread not found/);
+  assert.equal(callsOf(a.server, "thread/fork").length, 0, "the thread's holder was not asked instead");
 
   a.handle.close();
   b.handle.close();
@@ -607,9 +578,9 @@ test("a thread operation for a session with no environment settings runs on the 
   var plain = await openOnThread(adapter, null, "thread-plain");
   var other = await openOnThread(adapter, ENV_B, "thread-b");
 
-  await adapter.rollbackThread("thread-plain", 1, { runtimeEnv: null });
-  assert.equal(callsOf(plain.server, "thread/revert").length, 1);
-  assert.equal(callsOf(other.server, "thread/revert").length, 0);
+  await adapter.forkSession("thread-plain", { upToMessageId: "m", runtimeEnv: null });
+  assert.equal(callsOf(plain.server, "thread/fork").length, 1);
+  assert.equal(callsOf(other.server, "thread/fork").length, 0);
 
   plain.handle.close();
   other.handle.close();
@@ -628,28 +599,25 @@ test("a thread operation after A's server was reclaimed restarts the server for 
   assert.equal(b.server.stopped, true);
 
   var count = appServers.length;
-  await adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_A });
+  var forked = await adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_A });
+  assert.equal(forked.sessionId, "fork-of-thread-a");
   assert.equal(appServers.length, count + 1, "A's server was started again");
   var restarted = appServers[appServers.length - 1];
   assert.equal(restarted.opts.env.MODEL_TAG, "a", "with the environment the caller stated");
-  assert.equal(callsOf(restarted, "thread/revert").length, 1);
-
-  var forked = await adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_A });
-  assert.equal(forked.sessionId, "fork-of-thread-a");
-  assert.equal(appServers.length, count + 1, "the restarted server serves the fork too");
   assert.equal(callsOf(restarted, "thread/fork").length, 1);
   await adapter.shutdown();
 });
 
-test("a rollback the server refuses rejects, so the caller can leave its history alone", async function () {
+test("a rewind is refused whatever the environment, and no server is asked or started for it", async function () {
   var adapter = codexAdapter();
   var a = await openOnThread(adapter, ENV_A, "thread-a");
-  FakeAppServer.rollbackFailure = "thread not found";
-  try {
-    await assert.rejects(adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_A }), /thread not found/);
-  } finally {
-    FakeAppServer.rollbackFailure = null;
-  }
+  var count = appServers.length;
+  var calls = a.server.calls.length;
+  await assert.rejects(adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_A }), { code: "CODEX_REWIND_UNAVAILABLE", message: /Rewind is not available for Codex sessions yet/ });
+  await assert.rejects(adapter.rollbackThread("thread-b", 2, { runtimeEnv: ENV_B }), { code: "CODEX_REWIND_UNAVAILABLE" });
+  await assert.rejects(adapter.rollbackThread("thread-a", 1), { code: "CODEX_REWIND_UNAVAILABLE" });
+  assert.equal(appServers.length, count, "no server was started for it");
+  assert.equal(a.server.calls.length, calls, "and the one that holds the thread was sent nothing, neither thread/rollback nor thread/revert");
   a.handle.close();
   await adapter.shutdown();
 });
@@ -663,12 +631,12 @@ test("a server asked to do a thread operation is not reclaimed while the operati
   var release = null;
   var realSend = a.server.send;
   a.server.send = function (method) {
-    if (method === "thread/revert") return new Promise(function (resolve) { release = resolve; });
+    if (method === "thread/fork") return new Promise(function (resolve) { release = function () { resolve({ thread: { id: "fork-of-thread-a" } }); }; });
     return realSend.apply(this, arguments);
   };
-  var rolling = adapter.rollbackThread("thread-a", 1, { runtimeEnv: ENV_A });
-  await until(function () { return !!release; }, "the rollback to be sent");
-  assert.equal(await adapter.shutdownIfIdle(0), false, "the server doing the rollback is in use");
+  var rolling = adapter.forkSession("thread-a", { upToMessageId: "m", runtimeEnv: ENV_A });
+  await until(function () { return !!release; }, "the fork to be sent");
+  assert.equal(await adapter.shutdownIfIdle(0), false, "the server doing the fork is in use");
   release({});
   await rolling;
   assert.equal(await adapter.shutdownIfIdle(0), true, "and idle again once it is done");
