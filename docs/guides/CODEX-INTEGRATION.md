@@ -16,7 +16,7 @@ YOKE Codex Adapter  (lib/yoke/adapters/codex.js)
 CodexAppServer      (lib/yoke/codex-app-server.js)
     |  spawn codex app-server
     v  stdin/stdout JSON-RPC (bidirectional)
-codex CLI binary    (@openai/codex)
+codex CLI binary    (the user's installed Codex, >= 0.148.0; lib/yoke/codex-binary.js)
     |
     +--> local MCP servers (from ~/.clay/mcp.json)
     +--> clay-tools MCP bridge  (lib/yoke/mcp-bridge-server.js)
@@ -56,6 +56,9 @@ Do not go back to the SDK exec mode. It is a one-shot pipe wrapper, not a real S
 |------|---------|
 | `lib/yoke/adapters/codex.js` | YOKE adapter. Init, createQuery, event flattening, approval routing, skill injection. |
 | `lib/yoke/codex-app-server.js` | Child process manager. Spawn, stdin/stdout JSON-RPC, request ID tracking, pending callbacks. |
+| `lib/yoke/codex-binary.js` | Finds the Codex the user installed (override, `PATH`, common locations) and validates its version. The console bundles none. |
+| `lib/yoke/codex-version.js` | Reads and compares Codex versions; the supported floor. |
+| `lib/yoke/codex-protocol.js` | What the running version accepts: the feature table, the turn trigger, the approval policy, the session config. |
 | `lib/yoke/mcp-bridge-server.js` | Stdio MCP server spawned by Codex. Proxies tool list/call to Clagentic: Console via HTTP. |
 | `lib/server.js` (`/api/mcp-bridge`) | Global HTTP endpoint. Aggregates MCP servers from all project contexts. |
 | `lib/project.js` (`getMcpBridgeHandler`) | Builds per-project MCP tool list + call handler. |
@@ -95,7 +98,11 @@ args.push("--config", 'mcp_servers.clay-tools.command="/path/to/node"');
 args.push("--config", 'mcp_servers.clay-tools.args=["script.js", "--flag"]');
 ```
 
-See `serializeConfig()` in `codex-app-server.js`. Values must be valid TOML literals (strings quoted, arrays in brackets, etc).
+See `serializeConfig()` in `codex-app-server.js`. Values must be valid TOML literals (strings quoted, arrays in brackets, etc). A key segment with anything but letters, digits, `_` and `-` (a project path under `projects.`) is quoted by `serializeConfig`; do not build such a flag by hand.
+
+Which keys exist depends on the Codex version that is running; `codex-protocol.js` `sessionConfig()` is the one place that decides (`tools.update_plan.enabled`). A key sent to a Codex that predates it is a defect.
+
+The console never sets project trust (`projects."<path>".trust_level`). An untrusted project supplies no project `AGENTS.md` on Codex 0.150.0 and later; the user trusts a project through Codex itself, as with the Codex CLI.
 
 ### 3. Global MCP bridge endpoint
 
@@ -161,7 +168,7 @@ App-server is singleton but sessions can switch mid-turn. Filter events by `para
 
 ### 10. Skills
 
-Codex skills live at `~/.codex/skills/<name>/SKILL.md`. Clagentic: Console also reads Claude skills at `~/.claude/skills/<name>/SKILL.md`.
+Codex skills live in `.agents/skills` (the user's home and the project). Clagentic: Console also reads Claude skills from `.claude/skills` at both levels, and `sdk-skill-discovery.js` (`collectSkillDirs`) is the one place that knows all four locations.
 
 At init, the adapter calls `skills/list` with `perCwdExtraUserRoots` pointing to the Claude skills directory. At turn start, if the user text contains `$<skill-name>`, the adapter injects an extra input item:
 
@@ -186,6 +193,20 @@ Do not go back to a single shared `sm.slashCommands`.
 Stored in `lib/codex-defaults.js`. Do not scatter defaults across multiple files. Server is the single source of truth, clients receive them via `codex_config` message.
 
 `danger-full-access` + `approval_policy: "never"` is a combination the user chose explicitly. Do not auto-upgrade to it from code. It completely disables the sandbox.
+
+The approval default is `on-request`. `on-failure` is only an alias of it in current Codex releases, so it is never sent as a policy of its own (`normalizeApprovalPolicy`).
+
+### 13. Rewind is not offered
+
+`thread/rollback` (`threadId`, `numTurns`) is gone from current Codex releases (removed in 0.156.0), and `thread/revert`, which replaces it, takes no expected-state argument: a turn appended while it runs would be deleted with the rest. So the console offers no in-place rewind for a Codex session. The capabilities `rewind` and `rollback` are false and the controls are disabled with "Rewind is not available for Codex sessions yet"; `rollbackThread` rejects (`CODEX_REWIND_UNAVAILABLE`) without sending the server anything, so a caller that gets that far leaves the console's history as it was. Do not call `thread/revert` or `thread/rollback` from the adapter. Fork (`thread/fork`) is unaffected.
+
+### 14. Turn provenance
+
+`turn/start` takes `turnTrigger` (Codex 0.151.0 and later). Codex counts a turn as automated only for the exact value `automation_heartbeat_scheduled`. Typed turns omit the field. Do not invent other values: they are treated as a user turn.
+
+### 15. Not run under OS user isolation
+
+In os-users mode the Codex agent is disabled ("Codex is not yet isolated per OS user"): no adapter is created and no app-server is started, because one started by the daemon would run as the daemon's user. Never start one in that mode.
 
 ---
 
@@ -220,9 +241,13 @@ When changing Codex adapter code:
 
 - [ ] Text response streams in real time (`item/agentMessage/delta`)
 - [ ] Thinking indicator shows and clears
-- [ ] Bash command with `approval: on-failure` shows approval UI, responds correctly to Sure/Always/No
+- [ ] Bash command with `approval: on-request` shows approval UI, responds correctly to Sure/Always/No
 - [ ] File change outside workspace shows approval UI
-- [ ] MCP tool (filesystem) with `approval: on-failure` shows approval UI, executes after approval
+- [ ] MCP tool (filesystem) with `approval: on-request` shows approval UI, executes after approval
+- [ ] The rewind control is disabled with "Rewind is not available for Codex sessions yet"; fork still works
+- [ ] A scheduled or loop turn is recorded by Codex with the automation trigger; a typed one is not
+- [ ] The model picker lists the installed Codex's models
+- [ ] With Codex absent, or below 0.148.0, the picker shows it disabled with the reason
 - [ ] Multi-turn conversation works (2nd message sends to same thread)
 - [ ] Session resume works after server restart
 - [ ] Switching between Codex and Claude sessions shows correct slash commands for each

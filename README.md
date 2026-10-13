@@ -34,7 +34,7 @@ Or try without installing:
 npx @clagentic/console
 ```
 
-**Requirements:** Node.js 20+. Authenticated Claude Code CLI, Codex CLI, or both.
+**Requirements:** Node.js 20+. Authenticated Claude Code CLI, Codex CLI, or both. Codex is not bundled: install it yourself (`npm install -g @openai/codex`, version 0.148.0 or newer). The console runs the one it finds from `CLAGENTIC_CONSOLE_CODEX_PATH` (an absolute path), then `codex` on `PATH`, then the usual install locations, and shows the path and version in the agent picker.
 
 ### Postinstall / systemd
 
