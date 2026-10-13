@@ -194,6 +194,53 @@ test("a second confirmation while one restart is waiting does not schedule anoth
   assert.equal(w.idle, first, "no second wait was started");
 });
 
+test("no offer is issued for a build that was adopted while its change list was read", async function () {
+  var w = world();
+  var release;
+  var controller = createBuildUpdateRestart({
+    assess: function () {
+      var stale = w.installed.sha !== "old";
+      return {
+        state: stale ? "stale" : "adopted", reason: "sha", detail: "d",
+        loadedBuildSha: "old", installedBuildSha: w.installed.sha, loadedContentHash: "h-old", installedContentHash: w.installed.hash,
+      };
+    },
+    getProjects: function () { return w.projects; },
+    listChanges: function () { return new Promise(function (resolve) { release = resolve; }); },
+    restart: function () { w.restarts += 1; },
+    waitForIdleThenAct: function (opts) { w.idle = opts; },
+    announce: function () {},
+  });
+  var pending = controller.request(null);
+  w.installed = { sha: "old", hash: "h-old" }; // the daemon is restarted by someone else meanwhile
+  release({ available: true, commits: [], truncated: false, reason: null });
+  var r = await pending;
+  assert.equal(r.status, "not_stale");
+  assert.equal(r.offer, undefined);
+});
+
+test("the offer lists a session that started while its change list was read", async function () {
+  var w = world();
+  w.controller = createBuildUpdateRestart({
+    assess: function () {
+      return {
+        state: "stale", reason: "sha", detail: "d", loadedBuildSha: "old", installedBuildSha: "new",
+        loadedContentHash: "h-old", installedContentHash: "h-new",
+      };
+    },
+    getProjects: function () { return w.projects; },
+    listChanges: async function () {
+      w.add("lore", session("late", "started during the read"));
+      return { available: true, commits: [], truncated: false, reason: null };
+    },
+    restart: function () {},
+    waitForIdleThenAct: function () {},
+    announce: function () {},
+  });
+  var r = await w.controller.request(null);
+  assert.equal(r.offer.interruptions.sessionCount, 1);
+});
+
 test("describeInterruptions says plainly when nothing is live", function () {
   assert.match(describeInterruptions(collectInterruptions([]), 60), /No session is live/);
 });
