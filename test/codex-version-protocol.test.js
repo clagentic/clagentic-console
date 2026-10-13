@@ -118,21 +118,16 @@ test("the console's approval default and the saved setting go through the same n
   assert.equal(getCodexConfig({ codexApproval: "never" }).approval, "never");
 });
 
-test("session config carries the plan tool and the project trust only where the version has them", function () {
-  var opts = { projectDir: "/work/proj.one", trustProject: true };
-  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.148.0"), opts), {});
-  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.150.0"), opts), { projects: { "/work/proj.one": { trust_level: "trusted" } } });
-  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.151.0"), opts), { projects: { "/work/proj.one": { trust_level: "trusted" } } });
-  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.152.0"), opts), {
+test("session config carries the plan tool only where the version has it, and never a project trust", function () {
+  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.148.0")), {});
+  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.150.0")), {});
+  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.151.0")), {});
+  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.152.0")), { tools: { update_plan: { enabled: true } } });
+  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.162.1")), { tools: { update_plan: { enabled: true } } });
+  // An option left over from the removed trust setting changes nothing.
+  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.162.1"), { projectDir: "/p", trustProject: true }), {
     tools: { update_plan: { enabled: true } },
-    projects: { "/work/proj.one": { trust_level: "trusted" } },
   });
-  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.162.1"), { projectDir: "/p", trustProject: false }), {
-    tools: { update_plan: { enabled: true } },
-  }, "trusting the project can be turned off");
-  assert.deepEqual(protocol.sessionConfig(protocol.protocolFeatures("0.162.1"), { projectDir: null, trustProject: true }), {
-    tools: { update_plan: { enabled: true } },
-  }, "no project, nothing to trust");
 });
 
 test("a project path in the config is one quoted key, not a dotted path", function () {

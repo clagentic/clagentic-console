@@ -100,7 +100,9 @@ args.push("--config", 'mcp_servers.clay-tools.args=["script.js", "--flag"]');
 
 See `serializeConfig()` in `codex-app-server.js`. Values must be valid TOML literals (strings quoted, arrays in brackets, etc). A key segment with anything but letters, digits, `_` and `-` (a project path under `projects.`) is quoted by `serializeConfig`; do not build such a flag by hand.
 
-Which keys exist depends on the Codex version that is running; `codex-protocol.js` `sessionConfig()` is the one place that decides (`tools.update_plan.enabled`, `projects."<path>".trust_level`). A key sent to a Codex that predates it is a defect.
+Which keys exist depends on the Codex version that is running; `codex-protocol.js` `sessionConfig()` is the one place that decides (`tools.update_plan.enabled`). A key sent to a Codex that predates it is a defect.
+
+The console never sets project trust (`projects."<path>".trust_level`). An untrusted project supplies no project `AGENTS.md` on Codex 0.150.0 and later; the user trusts a project through Codex itself, as with the Codex CLI.
 
 ### 3. Global MCP bridge endpoint
 

@@ -102,10 +102,10 @@ async function startAdapter(version, adapterOptions, extra) {
 
 // --- The config the app-server is started with ---
 
-test("0.162.1: the plan tool is enabled and the project the user opened is trusted", async function () {
+test("0.162.1: the plan tool is enabled and no project trust is set", async function () {
   var run = await startAdapter("0.162.1");
   assert.deepEqual(run.server.opts.config.tools, { update_plan: { enabled: true } });
-  assert.deepEqual(run.server.opts.config.projects[run.dir], { trust_level: "trusted" });
+  assert.equal(run.server.opts.config.projects, undefined);
   await run.adapter.shutdown();
 });
 
@@ -118,13 +118,13 @@ test("0.152.0: the plan tool key is sent; 0.151.x and below do not get it", asyn
   await below.adapter.shutdown();
 });
 
-test("0.150.0 is when untrusted projects lose AGENTS.md, so that is when the project is marked trusted", async function () {
-  var at = await startAdapter("0.150.0");
-  assert.deepEqual(at.server.opts.config.projects[at.dir], { trust_level: "trusted" });
-  await at.adapter.shutdown();
-  var below = await startAdapter("0.149.9");
-  assert.equal(below.server.opts.config.projects, undefined);
-  await below.adapter.shutdown();
+test("no version gets a project trust key in its start config", async function () {
+  var versions = ["0.148.0", "0.149.9", "0.150.0", "0.150.2", "0.151.0", "0.152.0", "0.162.1"];
+  for (var i = 0; i < versions.length; i++) {
+    var run = await startAdapter(versions[i]);
+    assert.equal(run.server.opts.config.projects, undefined, versions[i]);
+    await run.adapter.shutdown();
+  }
 });
 
 test("0.148.0, the floor: no console config keys at all", async function () {
@@ -134,8 +134,8 @@ test("0.148.0, the floor: no console config keys at all", async function () {
   await run.adapter.shutdown();
 });
 
-test("trusting the project can be turned off, and a config the caller supplies wins over the console's", async function () {
-  var off = await startAdapter("0.162.1", { CODEX: { trustProject: false, config: { tools: { update_plan: { enabled: false } } } } });
+test("a config the caller supplies wins over the console's, and the removed trustProject option sets nothing", async function () {
+  var off = await startAdapter("0.162.1", { CODEX: { trustProject: true, config: { tools: { update_plan: { enabled: false } } } } });
   assert.equal(off.server.opts.config.projects, undefined);
   assert.deepEqual(off.server.opts.config.tools, { update_plan: { enabled: false } });
   await off.adapter.shutdown();
