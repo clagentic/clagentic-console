@@ -55,6 +55,17 @@ test("versions compare as semver, a prerelease below its release", function () {
   assert.equal(versions.MIN_CODEX_VERSION, "0.148.0");
 });
 
+test("a parsed release equals itself whether its prerelease is null or left undefined", function () {
+  var withNull = { major: 0, minor: 148, patch: 0, pre: null };
+  var withUndefined = { major: 0, minor: 148, patch: 0 };
+  assert.equal(versions.compareVersions(withUndefined, withUndefined), 0);
+  assert.equal(versions.compareVersions(withUndefined, withNull), 0);
+  assert.equal(versions.compareVersions(withNull, withUndefined), 0);
+  assert.equal(versions.compareVersions(withUndefined, "0.148.0"), 0);
+  assert.equal(versions.compareVersions("0.148.0-alpha.1", withUndefined), -1);
+  assert.equal(versions.atLeast(withUndefined, "0.148.0"), true);
+});
+
 test("numeric prerelease identifiers compare as digit strings, however long", function () {
   var big = "9007199254740993";
   var bigger = "9007199254740994";

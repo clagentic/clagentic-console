@@ -35,6 +35,14 @@ function standIn(dir, name, versionLine, exitCode) {
   return file;
 }
 
+// The stand-ins are /bin/sh scripts, which a Windows run cannot execute. The
+// cases that run one are skipped there; win32 resolution (PATHEXT order, exe and
+// shim) is covered without executing anything by test/codex-command-win32.test.js
+// and the findOnPath case below.
+var RUNS_STAND_IN = process.platform === "win32"
+  ? { skip: "stand-in binaries are POSIX shell scripts; win32 resolution is covered by codex-command-win32.test.js" }
+  : {};
+
 function envFor(extra) {
   return Object.assign({ PATH: "", HOME: tmpDir() }, extra);
 }
@@ -57,7 +65,7 @@ test("no Codex anywhere: absent, with the install reason", function () {
   assert.match(result.reason, /npm install -g @openai\/codex/);
 });
 
-test("the override is used first, and its version is read from the binary", function () {
+test("the override is used first, and its version is read from the binary", RUNS_STAND_IN, function () {
   var dir = tmpDir();
   var onPath = standIn(dir, "codex", "codex-cli 0.150.0");
   var override = standIn(dir, "mine", "codex-cli 0.162.1");
@@ -79,7 +87,7 @@ test("an override that is not an absolute path is a named error and does not fal
   assert.match(result.reason, /not an absolute path/);
 });
 
-test("an override that points at nothing, at a directory, or at a binary that cannot report a version is a named error", function () {
+test("an override that points at nothing, at a directory, or at a binary that cannot report a version is a named error", RUNS_STAND_IN, function () {
   var dir = tmpDir();
   var cases = [
     path.join(dir, "missing"),
@@ -98,7 +106,7 @@ test("an override that points at nothing, at a directory, or at a binary that ca
   });
 });
 
-test("a blank override is no override", function () {
+test("a blank override is no override", RUNS_STAND_IN, function () {
   var dir = tmpDir();
   var onPath = standIn(dir, "codex", "codex-cli 0.162.1");
   var result = codexBinary.resolveCodexBinary({ env: envFor({ PATH: dir, [ENV_NAME]: "   " }) });
@@ -107,7 +115,7 @@ test("a blank override is no override", function () {
   assert.equal(result.source, "path");
 });
 
-test("codex on PATH is used when there is no override, first match wins", function () {
+test("codex on PATH is used when there is no override, first match wins", RUNS_STAND_IN, function () {
   var first = tmpDir();
   var second = tmpDir();
   var wanted = standIn(first, "codex", "codex-cli 0.155.0");
@@ -148,7 +156,7 @@ test("on win32 the PATHEXT extensions are tried, codex.cmd and codex.exe as the 
   assert.equal(codexBinary.findOnPath("relative\\bin", function () { return true; }, { platform: "win32" }), null, "a relative entry is never searched");
 });
 
-test("with nothing on PATH the common locations under the user's home are searched", function () {
+test("with nothing on PATH the common locations under the user's home are searched", RUNS_STAND_IN, function () {
   var home = tmpDir();
   fs.mkdirSync(path.join(home, ".local", "bin"), { recursive: true });
   var installed = standIn(path.join(home, ".local", "bin"), "codex", "codex-cli 0.160.0");
@@ -158,7 +166,7 @@ test("with nothing on PATH the common locations under the user's home are search
   assert.equal(result.source, "location");
 });
 
-test("the floor: 0.147.9 is too old with the stated message, 0.148.0 and newer are usable", function () {
+test("the floor: 0.147.9 is too old with the stated message, 0.148.0 and newer are usable", RUNS_STAND_IN, function () {
   var old = tmpDir();
   standIn(old, "codex", "codex-cli 0.147.9");
   var tooOld = codexBinary.resolveCodexBinary({ env: envFor({ PATH: old }) });
@@ -178,7 +186,7 @@ test("the floor: 0.147.9 is too old with the stated message, 0.148.0 and newer a
   });
 });
 
-test("a binary on PATH that cannot report a version is unusable, with the reason", function () {
+test("a binary on PATH that cannot report a version is unusable, with the reason", RUNS_STAND_IN, function () {
   var dir = tmpDir();
   standIn(dir, "codex", null, 2);
   var result = codexBinary.resolveCodexBinary({ env: envFor({ PATH: dir }) });
@@ -187,7 +195,7 @@ test("a binary on PATH that cannot report a version is unusable, with the reason
   assert.match(result.reason, /could not report its version/);
 });
 
-test("what the picker is told: usable shows path and version, otherwise the reason", function () {
+test("what the picker is told: usable shows path and version, otherwise the reason", RUNS_STAND_IN, function () {
   var dir = tmpDir();
   var file = standIn(dir, "codex", "codex-cli 0.162.1");
   var ready = codexBinary.describe(codexBinary.resolveCodexBinary({ env: envFor({ PATH: dir }) }));
@@ -199,7 +207,7 @@ test("what the picker is told: usable shows path and version, otherwise the reas
 
 // --- The cache is keyed by everything the lookup reads ---
 
-test("a resolution is remembered per environment: PATH, Path, PATHEXT, the override and HOME each make their own", function () {
+test("a resolution is remembered per environment: PATH, Path, PATHEXT, the override and HOME each make their own", RUNS_STAND_IN, function () {
   var dirA = tmpDir();
   var dirB = tmpDir();
   standIn(dirA, "codex", "codex-cli 0.150.0");
@@ -215,18 +223,21 @@ test("a resolution is remembered per environment: PATH, Path, PATHEXT, the overr
   assert.equal(codexBinary.resolveCached({ env: Object.assign({}, base, { Path: dirB }) }).version, "0.162.1", "another Path is not served from the first lookup");
 
   var keyed = ["PATH", "Path", "PATHEXT", ENV_NAME, "HOME"];
+  // The baseline is part of the set: a variable that left the key unchanged would
+  // collide with it, which a comparison among the changed keys alone cannot show.
+  var baselineKey = codexBinary._test_cacheKey({ env: Object.assign({}, base) });
   var keys = keyed.map(function (name) {
     var env = Object.assign({}, base);
     env[name] = "x" + name;
     return codexBinary._test_cacheKey({ env: env });
   });
-  assert.equal(new Set(keys).size, keyed.length, "each variable the lookup reads changes the key");
+  assert.equal(new Set(keys.concat(baselineKey)).size, keyed.length + 1, "each variable the lookup reads changes the key");
   codexBinary.invalidate();
 });
 
 // --- The registry's install probe ---
 
-test("the install probe reports the resolution and says Could not check for a lookup that failed", function () {
+test("the install probe reports the resolution and says Could not check for a lookup that failed", RUNS_STAND_IN, function () {
   var probe = yoke.registry.get("codex").probeInstalled;
   var dir = tmpDir();
   var file = standIn(dir, "codex", "codex-cli 0.162.1");
@@ -277,7 +288,7 @@ test("the install state carries what the probe found, and the registry message h
   }
 });
 
-test("a re-check forgets what was found, so a Codex installed or updated since is seen", function () {
+test("a re-check forgets what was found, so a Codex installed or updated since is seen", RUNS_STAND_IN, function () {
   var dir = tmpDir();
   var file = standIn(dir, "codex", "codex-cli 0.147.0");
   var env = envFor({ PATH: dir });

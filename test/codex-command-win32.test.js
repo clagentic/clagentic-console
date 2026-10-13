@@ -94,6 +94,13 @@ test("arguments are never left for the interpreter to read: metacharacters are e
         at = afterCommand.indexOf(meta, at + 1);
       }
     });
+    // The caret is the escape itself, so "preceded by a caret" cannot prove it is
+    // escaped. Undo the two escape passes instead: a caret that was escaped twice
+    // comes back as exactly the carets the argument held, while an unescaped one
+    // would be consumed as an escape and the count would fall short.
+    var undone = afterCommand.replace(/\^([\s\S])/g, "$1").replace(/\^([\s\S])/g, "$1");
+    var carets = function (text) { return text.split("^").length - 1; };
+    assert.equal(carets(undone), carets(arg), JSON.stringify(arg) + ": ^ is escaped");
   });
   assert.throws(function () {
     codexCommand.invocationFor("C:\\a\\codex.cmd", ["a\nb"], { platform: "win32", comSpec: COMSPEC });
