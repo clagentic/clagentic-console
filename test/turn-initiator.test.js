@@ -221,7 +221,7 @@ test("forcing a scheduled message to send now makes a scheduled-now turn, and a 
 test("an external trigger names the trigger as the initiator for a spawned session and for an injected message", async function () {
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-initiator-"));
   var calls = [];
-  var live = { localId: "live", cliSessionId: "cli-1", history: [], isProcessing: false, sentToolResults: {} };
+  var live = { localId: "live", cliSessionId: "cli-1", history: [], isProcessing: false, queryInstance: {}, sentToolResults: {} };
   var sessions = new Map([["live", live]]);
   var noop = function () {};
   var project = {

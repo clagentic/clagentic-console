@@ -74,6 +74,9 @@ function makeFakeProjectWithSession(spawnLog, cliSessionId) {
     title: "live session",
     cwd: null,
     isProcessing: false,
+    // A live session holds a running query; without one input starts a turn
+    // instead of joining it (see test/session-input.test.js).
+    queryInstance: {},
     sentToolResults: {},
     acceptEditsAfterStart: true,
   };
@@ -369,7 +372,7 @@ test("v2 trigger with sessionId calls pushMessage on matching session", function
   });
 });
 
-test("v2 trigger with sessionId not found: not archived, dispatched entry cleared", function () {
+test("v2 trigger with sessionId not found: archived once with a not-found result, never retried", function () {
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-test-"));
   var spawnLog = [];
   var et = attachExternalTrigger({
@@ -395,9 +398,10 @@ test("v2 trigger with sessionId not found: not archived, dispatched entry cleare
     setTimeout(function () {
       et.stopWatcher();
       assert.strictEqual(spawnLog.length, 0, "No push should occur if session not found");
-      // File should remain — not archived
-      assert.ok(fs.existsSync(filePath), "Trigger should not be archived when session is not found");
-      assert.ok(!fs.existsSync(path.join(processedDir, trigger.id + ".json")), "Should not appear in processed/");
+      // A session that exists nowhere is a final answer, not something to wait for
+      assert.ok(!fs.existsSync(filePath), "Trigger should leave the triggers dir");
+      var record = JSON.parse(fs.readFileSync(path.join(processedDir, trigger.id + ".json"), "utf8"));
+      assert.strictEqual(record.result.result, "not-found");
       fs.rmSync(tmpDir, { recursive: true, force: true });
       resolve();
     }, 600);

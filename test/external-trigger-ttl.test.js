@@ -16,7 +16,7 @@ function mkdir() {
 function makeProject(log, cliSessionId) {
   var sessions = new Map();
   if (cliSessionId) {
-    sessions.set("live", { localId: "live", cliSessionId: cliSessionId, history: [] });
+    sessions.set("live", { localId: "live", cliSessionId: cliSessionId, history: [], queryInstance: {} });
   }
   return {
     sm: {
@@ -70,7 +70,7 @@ test("not_found push trigger past TTL moves to expired/", function () {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("not_found push trigger within TTL stays and retries", function () {
+test("not_found push trigger within TTL is answered once and not retried", function () {
   var dir = mkdir();
   var f = path.join(dir, "ttl-push-1.json");
   fs.writeFileSync(f, JSON.stringify(pushTrigger()));
@@ -82,16 +82,18 @@ test("not_found push trigger within TTL stays and retries", function () {
     getProject: function () { return project; },
   });
   et.startWatcher();
-  assert.ok(fs.existsSync(f));
-  // Session appears later: the next scan delivers it.
-  project.sm.sessions.set("late", { localId: "late", cliSessionId: "missing-session", history: [] });
-  // The 30 s poll is too slow for a test; a dir event triggers the rescan.
-  fs.writeFileSync(path.join(dir, "poke.json"), "x");
+  var processed = path.join(dir, "processed", "ttl-push-1.json");
   return new Promise(function (resolve) {
     setTimeout(function () {
+      assert.ok(!fs.existsSync(f));
+      assert.strictEqual(JSON.parse(fs.readFileSync(processed, "utf8")).result.result, "not-found");
+      // A session that appears later does not revive the answered trigger.
+      project.sm.sessions.set("late", { localId: "late", cliSessionId: "missing-session", history: [], queryInstance: {} });
+      fs.writeFileSync(path.join(dir, "poke.json"), "x");
+    }, 100);
+    setTimeout(function () {
       et.stopWatcher();
-      assert.strictEqual(log.pushes.length, 1);
-      assert.ok(fs.existsSync(path.join(dir, "processed", "ttl-push-1.json")));
+      assert.strictEqual(log.pushes.length, 0);
       assert.ok(!fs.existsSync(path.join(dir, "expired", "ttl-push-1.json")));
       fs.rmSync(dir, { recursive: true, force: true });
       resolve();
