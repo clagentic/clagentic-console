@@ -257,13 +257,22 @@ test("an app-server whose userAgent cannot be read falls back to the binary's ve
   await run.adapter.shutdown();
 });
 
-test("settleRunningVersion: reported wins, binary is the fallback, neither is null", function () {
-  var settle = codexModule._test_settleRunningVersion;
-  assert.equal(settle("0.150.0", { userAgent: "x/0.162.1 (y)" }).text, "0.162.1");
-  assert.equal(settle("0.150.0", { userAgent: "nonsense" }).text, "0.150.0");
-  assert.equal(settle("0.150.0", {}).text, "0.150.0");
-  assert.equal(settle(undefined, { userAgent: "x/0.162.1 (y)" }).text, "0.162.1");
-  assert.equal(settle(undefined, {}), null);
+test("a server that reports a version when the binary did not is trusted; neither reporting one gets the oldest protocol", async function () {
+  var reportedOnly = await startAdapter(undefined, null, { reportedUserAgent: "clagentic-console/0.162.1 (Linux) test" });
+  var handle = await reportedOnly.adapter.createQuery({ cwd: reportedOnly.dir, model: "gpt-test", runtimeEnv: null });
+  handle.pushMessage("go", undefined, INITIATORS.SCHEDULED);
+  await until(function () { return callsOf(reportedOnly.server, "turn/start").length > 0; }, "the turn");
+  assert.equal(callsOf(reportedOnly.server, "turn/start")[0].params.turnTrigger, "automation_heartbeat_scheduled");
+  handle.close();
+  await reportedOnly.adapter.shutdown();
+
+  var neither = await startAdapter(undefined, null, { reportedUserAgent: "nonsense" });
+  var quiet = await neither.adapter.createQuery({ cwd: neither.dir, model: "gpt-test", runtimeEnv: null });
+  quiet.pushMessage("go", undefined, INITIATORS.SCHEDULED);
+  await until(function () { return callsOf(neither.server, "turn/start").length > 0; }, "the turn");
+  assert.equal("turnTrigger" in callsOf(neither.server, "turn/start")[0].params, false);
+  quiet.close();
+  await neither.adapter.shutdown();
 });
 
 // --- Model switch, capabilities, plan display, abort ---
@@ -309,10 +318,12 @@ test("a plan the app-server streams is shown, with statuses normalized", async f
 });
 
 test("an abort interrupts the running turn on the thread", async function () {
-  var run = await startAdapter("0.162.1");
+  // The turn is held in flight (no turn/completed), so the abort lands on a turn that is running.
+  var run = await startAdapter("0.162.1", null, { holdTurn: true });
   var handle = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
   handle.pushMessage("go");
   await until(function () { return callsOf(run.server, "turn/start").length > 0; }, "the turn");
+  assert.equal(callsOf(run.server, "turn/interrupt").length, 0, "nothing is interrupted before the abort");
   handle.abort();
   await until(function () { return callsOf(run.server, "turn/interrupt").length > 0; }, "the interrupt");
   assert.deepEqual(callsOf(run.server, "turn/interrupt")[0].params, { threadId: "thread-1" });
