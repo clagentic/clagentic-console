@@ -36,9 +36,10 @@ test("each initiator maps to the Claude SDK origin its contract names", function
     { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "scheduled" });
   assert.deepEqual(turnInitiator.claudeOrigin(INITIATORS.SCHEDULED_NOW),
     { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "manual" });
-  assert.deepEqual(turnInitiator.claudeOrigin(INITIATORS.LOOP), { kind: "auto-continuation" });
-  assert.deepEqual(turnInitiator.claudeOrigin(INITIATORS.TRIGGER), { kind: "task-notification" });
-  assert.equal("subkind" in turnInitiator.claudeOrigin(INITIATORS.TRIGGER), false, "the SDK leaves subkind absent on trigger deliveries");
+  assert.deepEqual(turnInitiator.claudeOrigin(INITIATORS.LOOP),
+    { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "loop" });
+  assert.deepEqual(turnInitiator.claudeOrigin(INITIATORS.TRIGGER),
+    { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "trigger" });
 });
 
 test("a turn that names no initiator, or one nobody defined, is not stamped", function () {
@@ -67,10 +68,10 @@ test("the Claude process environment keeps the base, then the overlay, then the 
   assert.equal(env.FROM_SETTINGS, "yes");
   assert.equal(env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID, "the product identity is not settable from Settings");
   assert.equal(env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
-  [INITIATORS.SCHEDULED, INITIATORS.SCHEDULED_NOW].forEach(function (i) {
+  [INITIATORS.SCHEDULED, INITIATORS.SCHEDULED_NOW, INITIATORS.LOOP, INITIATORS.TRIGGER].forEach(function (i) {
     assert.equal(turnInitiator.claudeProcessEnv({}, null, i).CLAUDE_CODE_HOST_SCHEDULED_RUN, "1", i);
   });
-  [INITIATORS.HUMAN, INITIATORS.LOOP, INITIATORS.TRIGGER, undefined].forEach(function (i) {
+  [INITIATORS.HUMAN, undefined].forEach(function (i) {
     assert.equal(turnInitiator.claudeProcessEnv({}, null, i).CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined, String(i));
   });
 });
@@ -103,6 +104,12 @@ test("a process started for a scheduled turn declares itself a host-scheduled ru
   assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
   assert.equal(lastFakeQuery().env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID);
   scheduled.close();
+  var loop = await adapter.createQuery({ cwd: os.tmpdir(), initiator: INITIATORS.LOOP });
+  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
+  loop.close();
+  var trigger = await adapter.createQuery({ cwd: os.tmpdir(), initiator: INITIATORS.TRIGGER });
+  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
+  trigger.close();
   var typed = await adapter.createQuery({ cwd: os.tmpdir(), initiator: INITIATORS.HUMAN });
   assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
   assert.equal(lastFakeQuery().env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID);
@@ -140,7 +147,7 @@ test("a worker query is told the first turn's initiator and every pushed message
   handle.pushMessage("loop turn", undefined, INITIATORS.LOOP);
   handle.pushMessage("typed", undefined, INITIATORS.HUMAN);
   var pushed = worker.sent.filter(function (m) { return m.type === "push_message"; }).map(function (m) { return m.content; });
-  assert.deepEqual(pushed[0].origin, { kind: "auto-continuation" });
+  assert.deepEqual(pushed[0].origin, { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "loop" });
   assert.equal(pushed[0].client_composed, true);
   assert.deepEqual(pushed[1].origin, { kind: "human" });
   assert.equal("client_composed" in pushed[1], false);
