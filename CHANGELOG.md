@@ -6,7 +6,8 @@
 
 * **codex:** the console runs the Codex you installed instead of a bundled one, so the model picker offers the installed version's models. The binary is found from `CLAGENTIC_CONSOLE_CODEX_PATH` (an absolute path), then `codex` on `PATH`, then the usual install locations, and is validated by its version; the picker shows the path and version it will run, or why Codex is disabled (not installed, below 0.148.0, an override that points nowhere). What the console sends follows the running version: rewind is `thread/revert`; scheduled, loop and trigger turns carry Codex's automation trigger (0.151.0 and later); the plan tool is enabled (0.152.0 and later); and from 0.150.0 the project you opened in the console is marked trusted so Codex keeps reading its `AGENTS.md`.
 * **codex:** with OS-level user isolation each user's Codex runs as that user, with the user's groups and the user's own environment, never as the daemon's user. The Claude worker, the skill removal route and the file helper start their processes the same way, so supplementary groups are no longer dropped.
-* **skills:** one skill list for both agents, from `.claude/skills` and `.agents/skills` in the home directory and the project.
+* **codex:** a rewind is refused while a turn is in flight on the thread, and when the thread's turns changed between reading them and reverting, so it never deletes a turn it was not asked to. Titles, rewinds and forks all find the OS user the same way a query does. A version text with junk around the numbers is not a version, and an unreadable Codex version is never taken as compatible. On Windows `codex.cmd` and `codex.exe` are found through `PATHEXT`.
+* **skills:** one skill list for both agents, from `.claude/skills` and `.agents/skills` in the home directory and the project. In a Codex session a same-named skill in `.agents/skills` wins; in a Claude session `.claude/skills` does.
 
 ### Migration
 

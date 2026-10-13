@@ -3,13 +3,19 @@
 // (Node's own uid/gid options drop every supplementary group), the daemon's
 // environment is not inherited, and a call with no identity, or root, is refused
 // instead of running as the daemon's user. One spec per caller shape: setpriv
-// present, setpriv absent, no mapping, and the sites that start a process as
-// a user (the Claude worker, the HTTP skill removal, the file helper).
+// present, setpriv absent, no mapping, and then every caller of the helper
+// (the Claude worker, the HTTP skill removal, the file helper, the Codex
+// app-server, the Codex version probe) observed at the child_process boundary,
+// each with an identity and with a refused one.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
 var fs = require("fs");
+var os = require("os");
 var path = require("path");
+var childProcess = require("child_process");
+var EventEmitter = require("events");
+var PassThrough = require("stream").PassThrough;
 
 var spawnAsUser = require("../lib/os-user-spawn");
 
@@ -85,56 +91,218 @@ test("spawnAsUser and execFileSyncAsUser hand the spec to child_process", functi
   assert.equal(calls[1].options.timeout, 10);
 });
 
-// --- Every site that starts a process as a user goes through the helper ---
+// --- Every caller of the helper, observed where the process would start ---
 
-function libFiles(dir) {
-  var out = [];
-  fs.readdirSync(dir, { withFileTypes: true }).forEach(function (entry) {
-    var full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name !== "public") out = out.concat(libFiles(full));
-    } else if (entry.name.endsWith(".js")) {
-      out.push(full);
-    }
-  });
-  return out;
+// The account lookup is stubbed before any caller module takes its own copy.
+var osUsers = require("../lib/os-users");
+osUsers.resolveOsUserInfo = function (name) {
+  if (name === "clay-alice") return ALICE;
+  throw new Error("Unexpected getent output for user " + name);
+};
+
+var claudeAdapter = require("../lib/yoke/adapters/claude");
+var codexAppServerModule = require("../lib/yoke/codex-app-server");
+var codexBinary = require("../lib/yoke/codex-binary");
+var projectHttp = require("../lib/project-http");
+
+function fakeProcess() {
+  var proc = new EventEmitter();
+  proc.stdout = new PassThrough();
+  proc.stderr = new PassThrough();
+  proc.stdin = new PassThrough();
+  proc.pid = 4242;
+  proc.kill = function () {};
+  return proc;
 }
 
-// An object that names a uid and a gid and also carries something only a spawn
-// call takes. An identity object (uid, gid, home, user, shell) does not.
-function passesUidGidToSpawn(source) {
-  var spawnKeys = "(?:env|cwd|stdio|timeout|detached|maxBuffer)";
-  var after = new RegExp("\\buid:\\s*[\\w.]*uid,\\s*gid:\\s*[\\w.]*gid,([^}]*)\\}", "g");
-  var before = new RegExp("\\b" + spawnKeys + "\\s*:[^{}]*\\buid:\\s*[\\w.]*uid,\\s*gid:", "");
-  var carries = new RegExp("\\b" + spawnKeys + "\\s*:");
-  var match;
-  while ((match = after.exec(source)) !== null) {
-    if (carries.test(match[1])) return true;
+// Records every process the code under test would start, and starts none.
+function interceptProcesses(execResult) {
+  var real = { spawn: childProcess.spawn, execFileSync: childProcess.execFileSync };
+  var started = [];
+  childProcess.spawn = function (command, args, options) {
+    started.push({ fn: "spawn", command: command, args: args, options: options });
+    return fakeProcess();
+  };
+  childProcess.execFileSync = function (command, args, options) {
+    started.push({ fn: "execFileSync", command: command, args: args, options: options });
+    return typeof execResult === "function" ? execResult(command, args, options) : (execResult || "");
+  };
+  return {
+    started: started,
+    restore: function () {
+      childProcess.spawn = real.spawn;
+      childProcess.execFileSync = real.execFileSync;
+    },
+  };
+}
+
+// The process runs as the identity: through setpriv with its ids, or with the
+// uid/gid options when setpriv is not installed. Either way, never inherited env.
+function assertStartedAs(call, identity, label) {
+  var viaSetpriv = /setpriv$/.test(call.command);
+  if (viaSetpriv) {
+    assert.deepEqual(call.args.slice(0, 5), ["--reuid", String(identity.uid), "--regid", String(identity.gid), "--init-groups"], label);
+    assert.equal("uid" in call.options, false, label);
+  } else {
+    assert.equal(call.options.uid, identity.uid, label);
+    assert.equal(call.options.gid, identity.gid, label);
   }
-  return before.test(source);
+  assert.ok(call.options.env, label + ": an environment is given");
+  assert.equal(call.options.env.DAEMON_ONLY_SECRET, undefined, label + ": the daemon's environment is not inherited");
+  assert.equal(call.options.env.HOME, identity.home, label);
 }
 
-test("the detector finds the shapes the sites used to have, and not an identity object", function () {
-  // As the Claude worker, the skill removal and the file helper once did.
-  assert.equal(passesUidGidToSpawn("spawn(node, args, {\n  uid: userInfo.uid,\n  gid: userInfo.gid,\n  env: workerEnv,\n  cwd: cwd,\n});"), true);
-  assert.equal(passesUidGidToSpawn("execFileSync(node, args, {\n  uid: info.uid,\n  gid: info.gid,\n  timeout: 10000,\n});"), true);
-  assert.equal(passesUidGidToSpawn("execFileSync(node, args, {\n  encoding: 'utf8',\n  timeout: 10000,\n  uid: osUserInfo.uid,\n  gid: osUserInfo.gid,\n});"), true);
-  assert.equal(passesUidGidToSpawn("buildUserEnv({\n  uid: userInfo.uid,\n  gid: userInfo.gid,\n  home: userInfo.home,\n  user: linuxUser,\n});\nspawnAsUser(x, y, info, { env: e });"), false);
+var REFUSED_IDENTITIES = [
+  { name: "root", identity: { uid: 0, gid: 0, home: "/root", user: "root", shell: "/bin/bash" }, code: "OS_USER_INVALID" },
+  { name: "no identity", identity: null, code: "OS_USER_UNMAPPED" },
+];
+
+var savedSecret;
+test.before(function () { savedSecret = process.env.DAEMON_ONLY_SECRET; process.env.DAEMON_ONLY_SECRET = "daemon-secret"; });
+test.after(function () {
+  if (savedSecret === undefined) delete process.env.DAEMON_ONLY_SECRET; else process.env.DAEMON_ONLY_SECRET = savedSecret;
 });
 
-test("no site passes uid/gid spawn options directly, except the ones with a stated reason", function () {
-  var lib = path.join(__dirname, "..", "lib");
-  var allowed = {
-    // The helper's own fallback when setpriv is not installed.
-    "os-user-spawn.js": true,
-    // Read-only git run as the uid that owns the repository (project-git.js),
-    // and the git init of a project directory that was just created for the
-    // user: neither needs the user's groups.
-    "project-git.js": true,
-    "daemon.js": true,
-  };
-  var offenders = libFiles(lib).filter(function (file) {
-    return !allowed[path.relative(lib, file)] && passesUidGidToSpawn(fs.readFileSync(file, "utf8"));
-  }).map(function (file) { return path.relative(lib, file); });
-  assert.deepEqual(offenders, [], "start the process through lib/os-user-spawn.js");
+test("file helper (fsAsUser): every operation starts as the user; an identity that is refused starts nothing", function () {
+  var spy = interceptProcesses(function (command, args) {
+    return /toString\('base64'\)/.test(args.join(" ")) ? Buffer.from("png").toString("base64") : "{\"ok\":true}";
+  });
+  try {
+    osUsers.fsAsUser("write", { file: "/p/f.txt", content: "x" }, ALICE);
+    var bin = osUsers.fsAsUser("read_binary", { file: "/p/i.png" }, ALICE);
+    assert.equal(bin.buffer.toString(), "png");
+    assert.equal(spy.started.length, 2);
+    spy.started.forEach(function (call, i) { assertStartedAs(call, ALICE, "fsAsUser #" + i); });
+
+    REFUSED_IDENTITIES.forEach(function (shape) {
+      assert.throws(function () { osUsers.fsAsUser("write", { file: "/p/f.txt", content: "x" }, shape.identity); }, { code: shape.code }, shape.name);
+      assert.throws(function () { osUsers.fsAsUser("read_binary", { file: "/p/i.png" }, shape.identity); }, { code: shape.code }, shape.name);
+    });
+    assert.equal(spy.started.length, 2, "a refused identity starts no process");
+  } finally {
+    spy.restore();
+  }
+});
+
+function httpRequest(handler, body) {
+  var req = new EventEmitter();
+  req.method = "POST";
+  var res = { status: null, body: "", ended: false, writeHead: function (s) { this.status = s; }, end: function (b) { this.body = b || ""; this.ended = true; } };
+  assert.equal(handler(req, res, "/api/uninstall-skill"), true);
+  setImmediate(function () { req.emit("data", JSON.stringify(body)); req.emit("end"); });
+  return new Promise(function (resolve, reject) {
+    var deadline = Date.now() + 3000;
+    (function poll() {
+      if (res.ended) return resolve(res);
+      if (Date.now() > deadline) return reject(new Error("the request was never answered"));
+      setTimeout(poll, 5);
+    })();
+  });
+}
+
+function skillRemovalHandler(getOsUserInfoForReq, cwd) {
+  return projectHttp.attachHTTP({
+    cwd: cwd, slug: "p", send: function () {}, getOsUserInfoForReq: getOsUserInfoForReq,
+  }).handleHTTP;
+}
+
+test("HTTP skill removal: an OS user's skill is removed by a process started as that user; a refused identity removes nothing", async function () {
+  var spy = interceptProcesses("");
+  try {
+    var handler = skillRemovalHandler(function () { return ALICE; }, os.tmpdir());
+    var res = await httpRequest(handler, { skill: "my-skill", scope: "global" });
+    assert.equal(res.status, 200);
+    assert.equal(spy.started.length, 1);
+    assertStartedAs(spy.started[0], ALICE, "skill removal");
+    assert.ok(spy.started[0].args.join(" ").indexOf("/home/clay-alice/.claude/skills/my-skill") !== -1, "it removes the user's own skill directory");
+
+    for (var i = 0; i < REFUSED_IDENTITIES.length; i++) {
+      var shape = REFUSED_IDENTITIES[i];
+      if (shape.identity === null) continue; // no identity means the daemon's own account, which has its own path
+      var refusedHandler = skillRemovalHandler(function () { return shape.identity; }, os.tmpdir());
+      var refused = await httpRequest(refusedHandler, { skill: "my-skill", scope: "global" });
+      assert.equal(refused.status, 500, shape.name);
+      assert.match(refused.body, /refusing to start a process as uid 0/);
+    }
+    assert.equal(spy.started.length, 1, "a refused identity starts no process");
+  } finally {
+    spy.restore();
+  }
+});
+
+test("Claude worker: the worker starts as the user with an isolated environment", async function () {
+  var spy = interceptProcesses();
+  var worker = null;
+  try {
+    worker = claudeAdapter._test_spawnWorker("clay-alice", "/opt/app/sdk-worker.js", os.tmpdir());
+    var deadline = Date.now() + 3000;
+    while (spy.started.length === 0 && Date.now() < deadline) {
+      await new Promise(function (resolve) { setTimeout(resolve, 5); });
+    }
+    assert.equal(spy.started.length, 1, "the worker was started");
+    var call = spy.started[0];
+    assertStartedAs(call, ALICE, "claude worker");
+    assert.ok(call.args.indexOf("/opt/app/sdk-worker.js") !== -1);
+    assert.equal(call.options.detached, true);
+  } finally {
+    if (worker && worker.server) worker.server.close();
+    spy.restore();
+  }
+});
+
+test("Claude worker: a user with no account starts no process", function () {
+  var spy = interceptProcesses();
+  try {
+    assert.throws(function () { claudeAdapter._test_spawnWorker("clay-ghost", "/opt/app/sdk-worker.js", os.tmpdir()); }, /Unexpected getent output/);
+    assert.equal(spy.started.length, 0);
+  } finally {
+    spy.restore();
+  }
+});
+
+test("Codex app-server: started as the user from the environment it was given; a refused identity starts nothing", async function () {
+  var spy = interceptProcesses();
+  try {
+    var env = { HOME: ALICE.home, PATH: "/usr/bin", USER: ALICE.user };
+    var server = new codexAppServerModule.CodexAppServer("/opt/codex/bin/codex", { osUser: ALICE, env: env, cwd: os.tmpdir() });
+    await server.start();
+    server.stop();
+    assert.equal(spy.started.length, 1);
+    assertStartedAs(spy.started[0], ALICE, "codex app-server");
+    assert.ok(spy.started[0].args.indexOf("app-server") !== -1);
+
+    for (var i = 0; i < REFUSED_IDENTITIES.length; i++) {
+      var shape = REFUSED_IDENTITIES[i];
+      var refused = new codexAppServerModule.CodexAppServer("/opt/codex/bin/codex", { osUser: shape.identity || {}, env: env, cwd: os.tmpdir() });
+      await assert.rejects(refused.start(), function (e) { return e.code === "OS_USER_INVALID" || e.code === "OS_USER_UNMAPPED"; }, shape.name);
+    }
+    assert.equal(spy.started.length, 1, "a refused identity starts no process");
+  } finally {
+    spy.restore();
+  }
+});
+
+test("Codex version probe: an OS user's binary is asked for its version as that user", function () {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "os-user-spawn-"));
+  var spy = null;
+  try {
+    var binary = path.join(dir, "codex");
+    fs.writeFileSync(binary, "#!/bin/sh\n");
+    fs.chmodSync(binary, 0o755);
+    spy = interceptProcesses("codex-cli 0.162.1\n");
+    var result = codexBinary.resolveCodexBinary({ linuxUser: "clay-alice", env: { CLAGENTIC_CONSOLE_CODEX_PATH: binary, PATH: "" } });
+    assert.equal(result.state, "ready");
+    assert.equal(result.version, "0.162.1");
+    assert.equal(spy.started.length, 1);
+    assertStartedAs(spy.started[0], ALICE, "version probe");
+    assert.ok(spy.started[0].args.indexOf("--version") !== -1);
+
+    var unmapped = codexBinary.resolveCodexBinary({ linuxUser: "clay-ghost", env: { CLAGENTIC_CONSOLE_CODEX_PATH: binary, PATH: "" } });
+    assert.equal(unmapped.state, "failed");
+    assert.equal(unmapped.probeClass, "os-user-unmapped");
+    assert.equal(spy.started.length, 1, "an unmapped user starts no process");
+  } finally {
+    if (spy) spy.restore();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
