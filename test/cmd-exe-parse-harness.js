@@ -7,22 +7,25 @@
 // program receives equals the input) on a host without Windows. Shared helper,
 // not a test file: the runner only collects test/*.test.js.
 //
-// SOURCES. The rules below are the ones Microsoft documents:
-//   - cmd (Microsoft Learn, windows-server/administration/windows-commands/cmd):
-//     with /s, the first and the last quote of the string after /c are removed
-//     and the rest runs as typed; a caret (^) escapes the character after it;
-//     a quoted region keeps its special characters literal; the special
-//     characters are & ( ) [ ] { } ^ = ; ! ' + , ` ~ and white space, plus the
-//     redirection and pipe characters < > |.
-//   - Batch parameters (the same site, "call" and batch-file reference): %*
-//     stands for all the arguments of the batch file, as typed.
-//   - Parsing C command-line arguments (Microsoft Learn, cpp/c-language): the
-//     rules that turn the final command line into argv.
-// What those pages do not spell out, and this file therefore ASSUMES (the
-// Windows real run is the check on it): the batch file's arguments are the
-// text left after the /c line's own parse, and the line inside the batch file
-// that expands %* parses that text a second time; text substituted for %* is
-// not scanned for %name% again. Delayed expansion (!name!) is off, its default.
+// SOURCES (Microsoft Learn):
+//   - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmd
+//     with /s and /c, the first and last quotes are stripped; special
+//     characters are escaped with ^ or quotation marks. The page does not
+//     give a list of every character this code escapes.
+//   - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/call
+//     %* "refers to all the arguments".
+//   - https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments
+//     2n backslashes before a quote give n backslashes and the quote
+//     delimits; 2n+1 give n backslashes and a literal quote; the caret is not
+//     an escape for argv.
+// ASSUMPTION, not documented by Microsoft: the second parse of %* inside a
+// .cmd file. The batch file's arguments are taken as the text left after the
+// /c line's own parse, and the line that expands %* parses that text again.
+// This rests on the general multi-pass model in Raymond Chen,
+// https://devblogs.microsoft.com/oldnewthing/20091029-00/?p=16213. Text
+// substituted for %* is also assumed not to be scanned for %name% again, and
+// delayed expansion (!name!) is off, its default. This harness models the
+// assumption; a real Windows run is owed.
 //
 // This is a model, not cmd.exe. It reports an unescaped & | < > ( ) as an
 // operator (that is command injection or redirection) instead of running it.
