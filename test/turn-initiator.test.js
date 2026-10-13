@@ -252,8 +252,8 @@ test("an external trigger names the trigger as the initiator for a spawned sessi
   await sleep(700);
   et.stopWatcher();
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  // spawn opens a query; an idle in-memory session now starts one too; the
-  // session with a running query takes the message into it.
+  // An idle session has no query to take the message, so one must start or the
+  // input is silently dropped.
   assert.deepEqual(calls.slice().sort(), ["pushMessage:trigger", "startQuery:trigger", "startQuery:trigger"]);
 });
 

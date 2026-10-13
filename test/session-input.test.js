@@ -137,7 +137,7 @@ test("send: bad requests are refused", function () {
   assert.match(unknownProject.reason, /zzz/);
 });
 
-test("send: an id that exists nowhere is not-found, including ids that could escape the store", async function () {
+test("send: an id that exists nowhere is not-found, and an id that could escape the store is refused", async function () {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-si-"));
   try {
     var project = makeProject({ sessionsDir: dir });
@@ -146,7 +146,8 @@ test("send: an id that exists nowhere is not-found, including ids that could esc
     assert.equal(r.result, "not-found");
     assert.match(r.reason, /missing/);
     var traversal = await input.sendInput({ projectSlug: "p", sessionId: "../../etc/passwd", prompt: "hi" });
-    assert.equal(traversal.result, "not-found");
+    assert.equal(traversal.result, "refused");
+    assert.match(traversal.reason, /unsafe session id/);
     assert.equal(project.calls.resumed.length, 0);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

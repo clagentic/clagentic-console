@@ -264,11 +264,127 @@ test("resume: a vendor session resumes with the history that loaded", async func
   assert.equal(project.calls.resumed[0].opts.title, "vendor title");
 });
 
-test("cli-sessions: strict history read rejects on a missing file, the default resolves empty", async function () {
+test("cli-sessions: the vendor history read resolves empty for a missing file and for an unsafe id", async function () {
   var cliSessions = require("../lib/cli-sessions");
   var id = "no-such-session-" + process.pid;
-  await assert.rejects(cliSessions.readCliSessionHistory(os.tmpdir(), id, { strict: true }));
   assert.deepEqual(await cliSessions.readCliSessionHistory(os.tmpdir(), id), []);
+  assert.deepEqual(await cliSessions.readCliSessionHistory(os.tmpdir(), "../../etc/passwd"), []);
+  assert.deepEqual(await cliSessions.readCliSessionHistory(os.tmpdir(), "/etc/passwd"), []);
+});
+
+// ---- session ids reach the filesystem only after validation ----
+
+var UNSAFE_IDS = ["../x", "../../etc/passwd", "/etc/passwd", "a/b", "a\\b", ".hidden", "", "a\u0000b"];
+
+test("resume: an unsafe id is refused on the browser path before the adapter or any history is touched", async function () {
+  var dir = tempDir();
+  try {
+    for (var i = 0; i < UNSAFE_IDS.length; i++) {
+      var project = makeProject({ sessionsDir: dir });
+      var touched = [];
+      var deps = {
+        sm: project.sm, cwd: "/unused",
+        adapter: { getSessionInfo: function () { touched.push("adapter"); return Promise.resolve(null); } },
+        readHistory: function () { touched.push("history"); return Promise.resolve([]); },
+      };
+      await assert.rejects(sessionResume.resumeStoredSession(deps, UNSAFE_IDS[i], {}), function (err) {
+        return /unsafe session id/.test(err.message) && err.retryable === false;
+      });
+      assert.deepEqual(touched, []);
+      assert.equal(project.calls.resumed.length, 0);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("send: an unsafe id is refused on the injection path, never looked up, resumed or delivered", async function () {
+  var dir = tempDir();
+  try {
+    var project = makeProject({ sessionsDir: dir });
+    var input = makeInput(project);
+    for (var i = 1; i < UNSAFE_IDS.length; i++) {
+      var r = await input.sendInput({ projectSlug: "p", sessionId: UNSAFE_IDS[i], prompt: "hi" });
+      assert.equal(r.result, "refused");
+    }
+    assert.equal(project.calls.resumed.length, 0);
+    assert.equal(project.calls.start.length, 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("store: a record outside the sessions directory is not read through a traversal id", function () {
+  var dir = tempDir();
+  try {
+    var inner = path.join(dir, "store");
+    fs.mkdirSync(inner);
+    fs.writeFileSync(path.join(dir, "outside.jsonl"), metaLine("outside") + "\n");
+    assert.throws(function () { sessionResume.readStoredSession(inner, "../outside"); }, /unsafe session id/);
+    assert.throws(function () { sessionResume.readStoredSession(inner, path.join(dir, "outside")); }, /unsafe session id/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("session-id: a path built from an id stays inside its directory", function () {
+  var guard = require("../lib/session-id");
+  var dir = tempDir();
+  try {
+    assert.equal(guard.sessionPathWithin(dir, "abc-1", ".jsonl"), path.join(dir, "abc-1.jsonl"));
+    UNSAFE_IDS.forEach(function (id) {
+      assert.throws(function () { guard.sessionPathWithin(dir, id, ".jsonl"); }, /unsafe session id/);
+    });
+    assert.throws(function () { guard.sessionPathWithin(dir, 42, ".jsonl"); }, /unsafe session id/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("session manager: resumeSession declines an unsafe id and never writes outside its directory", function () {
+  var home = tempDir();
+  var cwd = tempDir();
+  var origHome = process.env.CLAGENTIC_CONSOLE_HOME;
+  var origLegacyHome = process.env.CLAGENTIC_HOME;
+  delete process.env.CLAGENTIC_HOME;
+  process.env.CLAGENTIC_CONSOLE_HOME = home;
+  ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
+  try {
+    var sm = require("../lib/sessions").createSessionManager({ cwd: cwd, send: function () {}, sendTo: function () {}, sendEach: function () {} });
+    assert.equal(sm.resumeSession("../escape", {}), null);
+    assert.equal(sm.resumeSession("/abs/escape", {}), null);
+    assert.equal(fs.existsSync(path.join(home, "escape.jsonl")), false);
+  } finally {
+    if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME; else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
+    if (origLegacyHome !== undefined) process.env.CLAGENTIC_HOME = origLegacyHome;
+    ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("resume: a history line that parses to null, a scalar, a string or an array refuses the resume naming session and line", async function () {
+  var dir = tempDir();
+  try {
+    var bad = ["null", "42", '"text"', "[1]", "true"];
+    for (var i = 0; i < bad.length; i++) {
+      var id = "cli-nonobj" + i;
+      fs.writeFileSync(path.join(dir, id + ".jsonl"), [
+        metaLine(id), JSON.stringify({ type: "user_message", text: "one" }), bad[i],
+      ].join("\n") + "\n");
+      assert.throws(function () { sessionResume.readStoredSession(dir, id); }, new RegExp(id + ".*line 3.*not a JSON object"));
+      var project = makeProject({ sessionsDir: dir });
+      var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: id, prompt: "hi" });
+      assert.equal(r.result, "error");
+      assert.equal(r.retryable, false);
+      assert.match(r.reason, new RegExp(id + ".*line 3"));
+      assert.equal(project.calls.resumed.length, 0);
+    }
+    fs.writeFileSync(path.join(dir, "cli-nullmeta.jsonl"), "null\n");
+    assert.throws(function () { sessionResume.readStoredSession(dir, "cli-nullmeta"); }, /cli-nullmeta/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ---- 5: any blank or malformed history line refuses the resume ----
