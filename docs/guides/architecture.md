@@ -67,7 +67,7 @@ graph TB
     P2 --- Sessions2
 ```
 
-The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`, `get_activity_diagnostics`.
+The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`, `get_activity_diagnostics`, `open_session`, `send_session_input`.
 
 ### Supervised start: `clagentic-console daemon`
 
@@ -123,6 +123,30 @@ Samples carry no session-identifying field (`ts`, `rawIsProcessing`,
 path. See `lib/sdk-bridge.js`'s `buildActivityDiagnosticsResponse()` (the
 shared, unit-tested function both retrieval paths can call) and
 `lib/daemon.js`'s `get_activity_diagnostics` IPC case.
+
+### Opening sessions and sending input from outside the browser
+
+Any caller (an operator script, an agent, a person at a shell) can open a session or direct input into one, whatever its kind: a vanilla Claude or Codex session or one running a named agent. This is injection into a human-to-LLM console session, not agent-to-agent messaging. There is one implementation, `lib/session-input.js`, behind two transports:
+
+- **The CLI**, over the daemon IPC socket (`open_session` and `send_session_input` cases in `lib/daemon.js`):
+
+  ```
+  clagentic-console open-session --project <slug> --prompt <text|-> [--vendor <id>] [--agent <name>] [--visibility shared|private] [--initiator <kind>] [--context-note <text>]
+  clagentic-console send-input   --project <slug> --session <id> --prompt <text|-> [--initiator <kind>] [--context-note <text>]
+  ```
+
+  `--prompt -` reads the prompt from stdin. Both print the result as JSON and exit 0 when the request was acted on, 1 otherwise.
+- **The file drop** (`lib/project-external-trigger.js`, `external-triggers/` in the console config directory) for writers without the CLI. v1 and v2 files keep their shape; v2 with `sessionId` is send-input, anything else is open-session, and `vendor`, `agentName`, `sessionVisibility` and `initiator` are optional fields. The outcome is written into the file's record in `processed/` under `result`.
+
+**Send.** The input becomes the session's next turn. A session with a running query takes it into that query (`delivered`). A session whose runtime has ended (the idle reaper, a daemon restart) is resumed on its own vendor and agent, from the stored meta record, by the same resume the browser's `resume_session` uses (`lib/session-resume.js`), and the input starts its next turn (`resumed-and-delivered`). A resume for injected input does not move any connected client off the session it is viewing. `--session` takes the console session id (`consoleSessionId` in an open result) or the vendor-assigned id. Only the console's own session store is asked about a session that is not in memory: an id it does not hold is `not-found`, and the file moves to `processed/` with that result and is never retried. Sessions started outside the console (a vendor CLI run by hand) are not addressable. A store record that cannot be read, or whose history has any blank, malformed or non-object line (the error names the session and the line; each line must parse to a JSON object, and the single newline ending the file is the only blank allowed) is an `error` instead, and the session is not resumed. A session id is checked against the safe-id allowlist (`lib/session-id.js`: letters, digits, `_` and `-`) before it reaches any file path, on the browser's `resume_session` and on injected input alike, and every path built from an id is checked to stay inside its directory. An unsafe id (`../x`, an absolute path) is `refused` on injected input and an error on the browser path; it is never read as absent.
+
+**Open.** `vendor` (any registered vendor), `agentName` (a named agent as the picker offers it) and `sessionVisibility` go to `createSession` as the browser's `new_session` passes them; absent means the default vendor, no agent, shared. The call returns as soon as the first turn has started. The result carries `consoleSessionId` (the console's own id, always present), `sessionId` (the vendor-assigned id, `null` until the vendor has assigned one), `localId`, `vendor` and `agent`; either id is what `send-input --session` takes. If the first turn fails to start, the session the call created is removed and the result is an `error` with `retryable: false`; the caller opens again if it wants to.
+
+**Initiator.** Injected input is never a human turn. Accepted values are `trigger`, `scheduled`, `scheduled-now` and `loop`; absent is `trigger`. `human` and any unknown value are refused by name. Human turns come only from the authenticated browser path.
+
+**Results** (`result` in the JSON): `delivered`, `resumed-and-delivered`, `opened`, `not-found`, `refused` (with `reason` naming the vendor, agent, visibility, initiator or project) and `error` (delivery was attempted and failed). `delivered`, `resumed-and-delivered` and `opened` are reported only after the session's query has actually started; a send whose start rejects or throws is an `error` with `retryable: true`, and the session's processing flag is cleared. A file-drop trigger with a retryable `error` stays in the triggers directory (retried after a restart, expiring by TTL); one with `retryable: false` (a failed open, a damaged history) is archived with that result. A handled trigger is archived with one rename into `processed/` after the request is handled, and its result is then written into the processed record. File-drop delivery is therefore at-least-once across a daemon crash: a crash between delivery and the rename leaves the trigger pending, and it is dispatched again on restart. A crash (or write failure) between the rename and the result write leaves a processed record without a `result`; nothing retries it. The prompt of an opened session is recorded in its history once, only after the query has started; a rejected start leaves no entry. A `refused` result with `retryable: true` means the daemon is shedding new work under memory pressure; a file-drop trigger stays in place and is retried until it expires.
+
+**Security is unchanged.** Callers must be the daemon's own OS user: the file drop needs write access to the config directory and `daemon.sock` is reachable only through it (`chmod 0700`). Per-user routing in multi-user mode remains future work.
 
 ## YOKE Adapter Layer
 

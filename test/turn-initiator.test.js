@@ -222,7 +222,9 @@ test("an external trigger names the trigger as the initiator for a spawned sessi
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-initiator-"));
   var calls = [];
   var live = { localId: "live", cliSessionId: "cli-1", history: [], isProcessing: false, sentToolResults: {} };
-  var sessions = new Map([["live", live]]);
+  // A session whose query is running takes the input into that query.
+  var running = { localId: "running", cliSessionId: "cli-2", history: [], isProcessing: true, queryInstance: {}, sentToolResults: {} };
+  var sessions = new Map([["live", live], ["running", running]]);
   var noop = function () {};
   var project = {
     sm: {
@@ -246,10 +248,13 @@ test("an external trigger names the trigger as the initiator for a spawned sessi
   et.startWatcher();
   write("spawn", {});
   write("inject", { version: 2, sessionId: "cli-1" });
+  write("inject-running", { version: 2, sessionId: "cli-2" });
   await sleep(700);
   et.stopWatcher();
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  assert.deepEqual(calls.slice().sort(), ["pushMessage:trigger", "startQuery:trigger"]);
+  // An idle session has no query to take the message, so one must start or the
+  // input is silently dropped.
+  assert.deepEqual(calls.slice().sort(), ["pushMessage:trigger", "startQuery:trigger", "startQuery:trigger"]);
 });
 
 test("a loop iteration names the loop as the initiator", function () {
