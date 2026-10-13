@@ -45,6 +45,8 @@ FakeAppServer.prototype.send = function (method, params) {
   if (method === "thread/resume") return Promise.resolve({ thread: { id: params.threadId } });
   if (method === "thread/read") return Promise.resolve({ thread: { id: params.threadId, turns: [{ id: "turn-a" }, { id: "turn-b" }, { id: "turn-c" }] } });
   if (method === "turn/start") {
+    // A held turn stays in flight until the test releases it.
+    if (scenario.holdTurn) return Promise.resolve({ turn: { id: "turn-x" } });
     setImmediate(function () {
       self.emit({ method: "turn/started", params: { threadId: "thread-1" } });
       if (scenario.plan) self.emit({ method: "turn/plan/updated", params: Object.assign({ threadId: "thread-1", turnId: "turn-x" }, scenario.plan) });
@@ -243,6 +245,54 @@ test("a thread whose turns cannot be read is not rewound", async function () {
   };
   await assert.rejects(run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null }), { code: "CODEX_REWIND_TURN_UNKNOWN" });
   assert.equal(callsOf(run.server, "thread/revert").length, 0);
+  await run.adapter.shutdown();
+});
+
+test("a rewind is refused while a turn is in flight on the thread, with nothing changed, and allowed once it ends", async function () {
+  var run = await startAdapter("0.162.1", null, { holdTurn: true });
+  var handle = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  handle.pushMessage("go");
+  await until(function () { return callsOf(run.server, "turn/start").length > 0; }, "the turn");
+
+  var readsBefore = callsOf(run.server, "thread/read").length;
+  await assert.rejects(run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null }), { code: "CODEX_REWIND_BUSY" });
+  assert.equal(callsOf(run.server, "thread/revert").length, 0);
+  assert.equal(callsOf(run.server, "thread/read").length, readsBefore, "nothing was even read");
+
+  run.server.emit({ method: "turn/started", params: { threadId: "thread-1" } });
+  run.server.emit({ method: "turn/completed", params: { threadId: "thread-1", turn: { status: "completed" } } });
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  await run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null });
+  assert.equal(callsOf(run.server, "thread/revert").length, 1);
+  handle.close();
+  await run.adapter.shutdown();
+});
+
+test("a turn appended between the read the target came from and the revert stops the rewind; nothing is reverted", async function () {
+  var run = await startAdapter("0.162.1");
+  var realSend = run.server.send;
+  var reads = 0;
+  run.server.send = function (method, params) {
+    if (method === "thread/read") {
+      reads++;
+      var turns = [{ id: "turn-a" }, { id: "turn-b" }, { id: "turn-c" }];
+      if (reads >= 2) turns.push({ id: "turn-d" });
+      run.server.calls.push({ method: method, params: params });
+      return Promise.resolve({ thread: { id: params.threadId, turns: turns } });
+    }
+    return realSend.apply(this, arguments);
+  };
+  await assert.rejects(run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null }), { code: "CODEX_REWIND_CONFLICT" });
+  assert.equal(reads, 2);
+  assert.equal(callsOf(run.server, "thread/revert").length, 0, "the appended turn was not deleted");
+  await run.adapter.shutdown();
+});
+
+test("a turn list that is the same on the second read is reverted as computed", async function () {
+  var run = await startAdapter("0.162.1");
+  await run.adapter.rollbackThread("thread-1", 2, { runtimeEnv: null });
+  assert.equal(callsOf(run.server, "thread/read").length, 2);
+  assert.deepEqual(callsOf(run.server, "thread/revert")[0].params, { threadId: "thread-1", beforeTurnId: "turn-b" });
   await run.adapter.shutdown();
 });
 

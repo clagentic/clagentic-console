@@ -196,7 +196,7 @@ The approval default is `on-request`. `on-failure` is only an alias of it in cur
 
 ### 13. Rewind is `thread/revert`
 
-`thread/rollback` (`threadId`, `numTurns`) is gone from current Codex releases. A rewind reads the thread's turns (`thread/read` with `includeTurns`), names the first turn to drop and sends `thread/revert {threadId, beforeTurnId}`. If the turns cannot be read, or are fewer than asked for, nothing is reverted and the caller leaves its own history alone.
+`thread/rollback` (`threadId`, `numTurns`) is gone from current Codex releases. A rewind reads the thread's turns (`thread/read` with `includeTurns`), names the first turn to drop and sends `thread/revert {threadId, beforeTurnId}`. If the turns cannot be read, or are fewer than asked for, nothing is reverted and the caller leaves its own history alone. A rewind never deletes a turn it was not asked to delete: it is refused (`CODEX_REWIND_BUSY`) while a turn is in flight on the thread, and the turn list is read again immediately before `thread/revert` and refused (`CODEX_REWIND_CONFLICT`) if it differs from the list the target was computed from. `thread/revert` has no expected-state argument, so the instant between that last read and the revert cannot be closed from the client.
 
 ### 14. Turn provenance
 

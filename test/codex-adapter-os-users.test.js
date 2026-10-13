@@ -129,6 +129,46 @@ test("isolation on: a call that names no user is refused and no app-server is st
   await a.shutdown();
 });
 
+// A title runs a query that never completes against this stand-in, so the title
+// is left pending, the server it chose is read, and the adapter is shut down.
+async function titleServerFor(callerOpts) {
+  var a = adapter({ osUsers: true });
+  var before = servers.length;
+  var pending = a.generateTitle(["hello"], Object.assign({ cwd: os.tmpdir(), runtimeEnv: null }, callerOpts));
+  var outcome = { rejected: null };
+  pending.catch(function (e) { outcome.rejected = e; });
+  var deadline = Date.now() + 3000;
+  while (servers.length === before && !outcome.rejected && Date.now() < deadline) {
+    await new Promise(function (resolve) { setTimeout(resolve, 5); });
+  }
+  await new Promise(function (resolve) { setTimeout(resolve, 20); });
+  var made = servers.slice(before);
+  var rejected = outcome.rejected;
+  await a.shutdown();
+  await pending.catch(function () {});
+  return { made: made, rejected: rejected };
+}
+
+test("isolation on: a title names its user as linuxUser, as osUser, or under the adapter options, and runs on that user's server", async function () {
+  var shapes = [
+    { name: "linuxUser", opts: { linuxUser: "clay-alice" } },
+    { name: "osUser", opts: { osUser: "clay-alice" } },
+    { name: "adapterOptions", opts: { adapterOptions: { CODEX: { linuxUser: "clay-alice" } } } },
+  ];
+  for (var i = 0; i < shapes.length; i++) {
+    var run = await titleServerFor(shapes[i].opts);
+    assert.equal(run.rejected, null, shapes[i].name + " is not refused as naming no user");
+    assert.equal(run.made.length, 1, shapes[i].name + ": the title and its query share one server");
+    assert.deepEqual(run.made[0].opts.osUser, ACCOUNTS["clay-alice"], shapes[i].name);
+  }
+});
+
+test("isolation on: a title that names no user is refused and starts nothing", async function () {
+  var run = await titleServerFor({});
+  assert.equal(run.rejected && run.rejected.code, "CODEX_OS_USER_REQUIRED");
+  assert.equal(run.made.length, 0);
+});
+
 test("isolation on: a user with no account is refused, never run as the daemon's user", async function () {
   var a = adapter({ osUsers: true });
   var before = servers.length;

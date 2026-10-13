@@ -48,6 +48,15 @@ FakeAppServer.prototype.send = function (method, params) {
   }
   if (method === "skills/list") return Promise.resolve({ data: [] });
   if (method === "thread/resume") return Promise.resolve({ thread: { id: params.threadId } });
+  // A turn ends at once: a rewind is refused while one is in flight, and these
+  // specs are about which server a thread operation runs on.
+  if (method === "turn/start") {
+    var handlers = this.handlers || [];
+    setImmediate(function () {
+      handlers.forEach(function (h) { h.fn({ method: "turn/completed", params: { threadId: params.threadId, turn: { status: "completed" } } }); });
+    });
+    return Promise.resolve({});
+  }
   if (method === "thread/fork") return Promise.resolve({ thread: { id: "fork-of-" + params.threadId } });
   // A rewind reads the thread's turns, then reverts to the one it names.
   if (method === "thread/read") return Promise.resolve({ thread: { id: params.threadId, turns: [{ id: "turn-1" }, { id: "turn-2" }, { id: "turn-3" }] } });
@@ -56,7 +65,12 @@ FakeAppServer.prototype.send = function (method, params) {
 };
 FakeAppServer.rollbackFailure = null;
 // A query handle registers its event handler on the server it was given.
-FakeAppServer.prototype.addEventHandler = function () { this.queriesServed++; return {}; };
+FakeAppServer.prototype.addEventHandler = function (fn) {
+  this.queriesServed++;
+  var entry = { fn: fn };
+  this.handlers = (this.handlers || []).concat([entry]);
+  return entry;
+};
 FakeAppServer.prototype.removeEventHandler = function () {};
 FakeAppServer.prototype.updateHandlerThreadId = function () {};
 codexAppServerModule.CodexAppServer = FakeAppServer;
