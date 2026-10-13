@@ -180,7 +180,7 @@ test("send: a stored session not in memory is resumed on its own vendor and agen
 
 test("send: a session only the vendor's store knows is resumed too", async function () {
   var project = makeProject({ vendorStore: { "cli-vendor": true } });
-  var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-vendor", prompt: "hi" });
+  var r = await makeInput(project, { readHistory: function () { return Promise.resolve([]); } }).sendInput({ projectSlug: "p", sessionId: "cli-vendor", prompt: "hi" });
   assert.equal(r.result, "resumed-and-delivered");
   assert.equal(project.calls.resumed[0].id, "cli-vendor");
 });
