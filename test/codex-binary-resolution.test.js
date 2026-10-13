@@ -115,6 +115,30 @@ test("a relative entry on PATH is never searched", function () {
   assert.equal(found, null);
 });
 
+test("on win32 the PATHEXT extensions are tried, codex.cmd and codex.exe as the removed bundle path did", function () {
+  var present = {};
+  function isExecutable(candidate) { return !!present[candidate]; }
+  var dirA = "C:\\Users\\me\\AppData\\Roaming\\npm";
+  var dirB = "C:\\Tools";
+  var pathVar = dirA + ";" + dirB;
+
+  present[dirA + "\\codex.cmd"] = true;
+  assert.equal(codexBinary.findOnPath(pathVar, isExecutable, { platform: "win32", pathext: ".COM;.EXE;.BAT;.CMD" }), dirA + "\\codex.cmd");
+
+  present = {};
+  present[dirB + "\\codex.exe"] = true;
+  assert.equal(codexBinary.findOnPath(pathVar, isExecutable, { platform: "win32" }), dirB + "\\codex.exe", "the default PATHEXT applies when the variable is unset");
+
+  present = {};
+  present[dirA + "\\codex.cmd"] = true;
+  present[dirA + "\\codex.exe"] = true;
+  assert.equal(codexBinary.findOnPath(pathVar, isExecutable, { platform: "win32", pathext: ".EXE;.CMD" }), dirA + "\\codex.exe", "PATHEXT order decides within a directory");
+
+  present = {};
+  assert.equal(codexBinary.findOnPath(pathVar, isExecutable, { platform: "win32" }), null);
+  assert.equal(codexBinary.findOnPath("relative\\bin", function () { return true; }, { platform: "win32" }), null, "a relative entry is never searched");
+});
+
 test("with nothing on PATH the common locations under the user's home are searched", function () {
   var home = tmpDir();
   fs.mkdirSync(path.join(home, ".local", "bin"), { recursive: true });
@@ -238,6 +262,34 @@ test("the install probe reports the resolution and says Could not check for a lo
   } finally {
     process.env.PATH = realPath;
     if (realOverride === undefined) delete process.env[ENV_NAME]; else process.env[ENV_NAME] = realOverride;
+    codexBinary.invalidate();
+  }
+});
+
+test("a lookup that failed is reported by the install probe as Could not check, not as not installed", function () {
+  var installProbe = require("../lib/yoke/install-probe");
+  var probe = yoke.registry.get("codex").probeInstalled;
+  var realProbeBinary = installProbe.probeBinary;
+  var reported = [];
+  codexBinary.invalidate();
+  installProbe.probeBinary = function (name, linuxUser) {
+    assert.equal(name, "codex");
+    assert.equal(linuxUser, "clay-alice");
+    return { state: "failed", probeClass: "timeout" };
+  };
+  try {
+    var thrown = null;
+    try {
+      probe({ linuxUser: "clay-alice", failed: function (probeClass) { reported.push(probeClass); throw new Error("probe failed"); } });
+    } catch (e) { thrown = e; }
+    assert.deepEqual(reported, ["timeout"], "the failure class is handed to the registry as a failed check");
+    assert.ok(thrown, "the probe does not answer installed or not installed");
+
+    var described = yoke.registry.describeForClient({ installed: [], probeFailures: { codex: "timeout" }, details: {} });
+    var entry = described.filter(function (v) { return v.id === "codex"; })[0];
+    assert.equal(entry.probeFailure, "timeout", "the picker is told the check failed");
+  } finally {
+    installProbe.probeBinary = realProbeBinary;
     codexBinary.invalidate();
   }
 });
