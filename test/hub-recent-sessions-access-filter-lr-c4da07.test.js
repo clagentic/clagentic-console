@@ -51,6 +51,7 @@ var path = require("path");
 var os = require("os");
 
 var { computeAllProjectSessions } = require("../lib/server-hub-sessions");
+var { createProjectAccess } = require("../lib/project-access");
 
 function readMod(rel) {
   return fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
@@ -373,5 +374,64 @@ test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clage
   } finally {
     cleanup();
     try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Login-proof threading, end to end. In single-user mode a connection has no
+// user record, so the ONLY thing that makes it the implicit owner is the proof
+// of login carried by the socket. The real project-loop handler reads that
+// proof off the socket (authOf) and hands it to getAllProjectSessions; the
+// stand-in below does the same composition as lib/server.js's
+// getAllProjectSessions (real createProjectAccess + real
+// computeAllProjectSessions), so a dropped proof argument or a handler that
+// stops reading it changes the reply.
+// ---------------------------------------------------------------------------
+
+function singleUserHubReply(f, ws) {
+  var projectAccess = createProjectAccess({
+    users: f.users,
+    onGetProjectAccess: f.onGetProjectAccess,
+    isMultiUser: function () { return false; },
+  });
+  var cwd = makeTempHomeLoop();
+  var stub = function (includeSelf, userId, proof) {
+    return computeAllProjectSessions({
+      projects: f.projects, users: f.users, onGetProjectAccess: f.onGetProjectAccess,
+      callerSlug: "current-project", includeSelf: includeSelf, userId: userId,
+      implicitOwner: !userId && !!projectAccess.principalFor(null, proof),
+    });
+  };
+  var { engine, ctx, cleanup } = makeEngine(cwd, stub);
+  try {
+    assert.strictEqual(engine.handleLoopMessage(ws, { type: "hub_recent_sessions_list" }), true);
+    var reply = ctx._sentTo.find(function (c) { return c[1].type === "hub_recent_sessions"; });
+    assert.ok(reply, "expected a hub_recent_sessions reply");
+    return reply[1].sessions;
+  } finally {
+    cleanup();
+    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
+test("single-user mode: a socket without proof of login gets no cross-project sessions", function () {
+  var f = makeFixture();
+  try {
+    assert.deepStrictEqual(singleUserHubReply(f, {}), []);
+    assert.deepStrictEqual(singleUserHubReply(f, { _clagenticAuthenticated: "true" }), [], "only boolean true counts as proof");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("single-user mode: a socket that proved its login gets every project's sessions (control for the unproven case)", function () {
+  var f = makeFixture();
+  try {
+    var sessions = singleUserHubReply(f, { _clagenticAuthenticated: true });
+    var slugs = sessions.map(function (s) { return s.projectSlug; });
+    assert.ok(slugs.indexOf("project-shared") !== -1);
+    assert.ok(slugs.indexOf("project-private-x") !== -1, "the implicit owner sees the private project too");
+  } finally {
+    f.cleanup();
   }
 });
