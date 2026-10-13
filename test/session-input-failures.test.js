@@ -10,10 +10,11 @@ var os = require("os");
 
 var { createSessionInput } = require("../lib/session-input");
 var sessionResume = require("../lib/session-resume");
+var { attachExternalTrigger } = require("../lib/project-external-trigger");
 
 function makeProject(opts) {
   opts = opts || {};
-  var calls = { start: [], push: [], resumed: [], recorded: [], processing: [] };
+  var calls = { start: [], push: [], resumed: [], recorded: [], processing: [], deleted: [] };
   var nextId = 1;
   var sm = {
     sessions: new Map(),
@@ -28,6 +29,7 @@ function makeProject(opts) {
     broadcastSessionList: function () {},
     recordHistoryEntry: function (s, e) { s.history.push(e); calls.recorded.push(e); },
     appendToSessionFile: function () {},
+    deleteSession: function (id) { calls.deleted.push(id); sm.sessions.delete(id); },
     resumeSession: function (id, o) {
       calls.resumed.push({ id: id, opts: o });
       if (opts.managerDeclines) return null;
@@ -41,7 +43,6 @@ function makeProject(opts) {
     calls: calls,
     cwd: "/unused",
     sm: sm,
-    adapter: { getSessionInfo: opts.getSessionInfo || function () { return Promise.resolve(null); } },
     sdk: {
       startQuery: function (s, text, images, user, initiator) {
         calls.start.push({ localId: s.localId, text: text, initiator: initiator });
@@ -115,13 +116,15 @@ test("send: success is reported only once the query start has resolved", async f
   assert.equal(project.calls.recorded.length, 1);
 });
 
-test("open: a rejected query start is an error and clears isProcessing", async function () {
+test("open: a rejected query start removes the session it created and is not retryable", async function () {
   var project = makeProject({ startQuery: function () { return Promise.reject(new Error("no worker")); } });
   var r = await makeInput(project).openSession({ projectSlug: "p", prompt: "go" });
   assert.equal(r.result, "error");
-  assert.equal(r.retryable, true);
+  assert.equal(r.ok, false);
+  assert.equal(r.retryable, false);
   assert.match(r.reason, /no worker/);
-  project.sm.sessions.forEach(function (s) { assert.equal(s.isProcessing, false); });
+  assert.equal(project.calls.deleted.length, 1);
+  assert.equal(project.sm.sessions.size, 0, "no session is left behind");
 });
 
 test("open: a rejected query start leaves no history entry", async function () {
@@ -152,12 +155,33 @@ test("open: the prompt is recorded once, through recordInjected, after the start
   assert.equal(entry.contextNote, "nightly");
 });
 
-test("open: a throwing query start is the same error", function () {
+test("open: a throwing query start is the same error and leaves no session", function () {
   var project = makeProject({ startQuery: function () { throw new Error("sync boom"); } });
   var r = makeInput(project).openSession({ projectSlug: "p", prompt: "go" });
   assert.equal(r.result, "error");
-  assert.equal(r.retryable, true);
-  project.sm.sessions.forEach(function (s) { assert.equal(s.isProcessing, false); });
+  assert.equal(r.retryable, false);
+  assert.equal(project.sm.sessions.size, 0);
+});
+
+test("file drop: a failed open is archived with its error result and is not retried", async function () {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-si-drop-"));
+  try {
+    var project = makeProject({ startQuery: function () { return Promise.reject(new Error("no worker")); } });
+    var et = attachExternalTrigger({ triggersDir: dir, sessionInput: makeInput(project), getProject: function () { return project; } });
+    fs.writeFileSync(path.join(dir, "fail-1.json"), JSON.stringify({
+      version: 1, id: "fail-1", projectSlug: "p", initialPrompt: "go", createdAt: new Date().toISOString(),
+    }));
+    et.startWatcher();
+    await new Promise(function (r) { setTimeout(r, 500); });
+    et.stopWatcher();
+    var record = JSON.parse(fs.readFileSync(path.join(dir, "processed", "fail-1.json"), "utf8"));
+    assert.equal(record.result.result, "error");
+    assert.equal(record.result.retryable, false);
+    assert.equal(fs.existsSync(path.join(dir, "fail-1.json")), false);
+    assert.equal(project.calls.start.length, 1, "started once, never retried");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("open: opened is reported only after the query start has resolved", async function () {
@@ -173,22 +197,17 @@ test("open: opened is reported only after the query start has resolved", async f
   assert.equal((await pending).result, "opened");
 });
 
-// ---- 3: an adapter lookup failure is not "not found" ----
+// ---- 3: an unreadable store is not "not found" ----
 
-test("send: an adapter lookup failure is a retryable error, not not-found", async function () {
-  var project = makeProject({ getSessionInfo: function () { return Promise.reject(new Error("sdk unavailable")); } });
-  var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-gone", prompt: "hi" });
-  assert.equal(r.result, "error");
-  assert.equal(r.retryable, true);
-  assert.match(r.reason, /sdk unavailable/);
-  assert.equal(project.calls.resumed.length, 0);
-  assert.equal(project.calls.start.length, 0);
-});
-
-test("send: not-found needs the adapter to report absence positively", async function () {
-  var project = makeProject({ getSessionInfo: function () { return Promise.resolve(null); } });
-  var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-gone", prompt: "hi" });
-  assert.equal(r.result, "not-found");
+test("send: not-found is the store's positive absence", async function () {
+  var dir = tempDir();
+  try {
+    var project = makeProject({ sessionsDir: dir });
+    var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-gone", prompt: "hi" });
+    assert.equal(r.result, "not-found");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("send: a store file that cannot be read is an error, not not-found", async function () {
@@ -220,25 +239,25 @@ test("send: a session manager that declines to resume a stored session is an err
   }
 });
 
-// ---- 4: a history-load failure refuses the resume ----
+// ---- 4: a history-load failure refuses the resume (browser resume path) ----
 
-test("send: a failed history load refuses the resume with a retryable error", async function () {
-  var project = makeProject({ getSessionInfo: function () { return Promise.resolve({ summary: "from vendor" }); } });
-  var input = makeInput(project, { readHistory: function () { return Promise.reject(new Error("disk gone")); } });
-  var r = await input.sendInput({ projectSlug: "p", sessionId: "cli-vendor", prompt: "hi" });
-  assert.equal(r.result, "error");
-  assert.equal(r.retryable, true);
-  assert.match(r.reason, /cli-vendor/);
-  assert.match(r.reason, /disk gone/);
+test("resume: a failed vendor history load refuses the resume with a retryable error", async function () {
+  var project = makeProject({});
+  var adapter = { getSessionInfo: function () { return Promise.resolve({ summary: "from vendor" }); } };
+  await assert.rejects(
+    sessionResume.resumeStoredSession(
+      { sm: project.sm, adapter: adapter, cwd: "/unused", readHistory: function () { return Promise.reject(new Error("disk gone")); } },
+      "cli-vendor", { activate: false }),
+    function (err) { return err.retryable === true && /cli-vendor/.test(err.message) && /disk gone/.test(err.message); });
   assert.equal(project.calls.resumed.length, 0, "no session is resumed on an empty history");
-  assert.equal(project.calls.start.length, 0);
 });
 
 test("resume: a vendor session resumes with the history that loaded", async function () {
-  var project = makeProject({ getSessionInfo: function () { return Promise.resolve({ summary: "vendor title" }); } });
+  var project = makeProject({});
+  var adapter = { getSessionInfo: function () { return Promise.resolve({ summary: "vendor title" }); } };
   var history = [{ type: "user_message", text: "earlier" }];
   var session = await sessionResume.resumeStoredSession(
-    { sm: project.sm, adapter: project.adapter, cwd: "/unused", readHistory: function () { return Promise.resolve(history); } },
+    { sm: project.sm, adapter: adapter, cwd: "/unused", readHistory: function () { return Promise.resolve(history); } },
     "cli-vendor", { activate: false });
   assert.ok(session);
   assert.deepEqual(project.calls.resumed[0].opts.history, history);
@@ -252,7 +271,41 @@ test("cli-sessions: strict history read rejects on a missing file, the default r
   assert.deepEqual(await cliSessions.readCliSessionHistory(os.tmpdir(), id), []);
 });
 
-// ---- 5: any malformed history line refuses the resume ----
+// ---- 5: any blank or malformed history line refuses the resume ----
+
+test("resume: exactly one trailing newline is the only tolerated blank", function () {
+  var dir = tempDir();
+  try {
+    var body = [metaLine("cli-ok"), JSON.stringify({ type: "user_message", text: "one" })].join("\n");
+    fs.writeFileSync(path.join(dir, "cli-ok.jsonl"), body + "\n");
+    assert.equal(sessionResume.readStoredSession(dir, "cli-ok").history.length, 1);
+    fs.writeFileSync(path.join(dir, "cli-nonl.jsonl"), body.replace("cli-ok", "cli-nonl"));
+    assert.equal(sessionResume.readStoredSession(dir, "cli-nonl").history.length, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resume: a blank line, inside the file or a second trailing newline, refuses the resume naming the line", async function () {
+  var dir = tempDir();
+  try {
+    var one = JSON.stringify({ type: "user_message", text: "one" });
+    var two = JSON.stringify({ type: "user_message", text: "two" });
+    fs.writeFileSync(path.join(dir, "cli-blank.jsonl"), [metaLine("cli-blank"), one, "", two].join("\n") + "\n");
+    fs.writeFileSync(path.join(dir, "cli-twonl.jsonl"), [metaLine("cli-twonl"), one].join("\n") + "\n\n");
+    assert.throws(function () { sessionResume.readStoredSession(dir, "cli-blank"); }, /cli-blank.*line 3/);
+    assert.throws(function () { sessionResume.readStoredSession(dir, "cli-twonl"); }, /cli-twonl.*line 3/);
+    var project = makeProject({ sessionsDir: dir });
+    var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-blank", prompt: "hi" });
+    assert.equal(r.result, "error");
+    assert.equal(r.retryable, false);
+    assert.match(r.reason, /cli-blank.*line 3/);
+    assert.equal(project.calls.resumed.length, 0);
+    assert.equal(project.calls.start.length, 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("resume: a malformed final line refuses the resume naming the session and line", async function () {
   var dir = tempDir();

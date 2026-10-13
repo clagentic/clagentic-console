@@ -31,6 +31,7 @@ test("requestDaemon: no daemon is an error result", async function () {
     sendIPC: function () { throw new Error("must not be called"); },
   });
   assert.equal(res.ok, false);
+  assert.equal(res.result, "error");
   assert.equal(res.reason, "no running daemon");
 });
 

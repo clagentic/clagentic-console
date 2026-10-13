@@ -6,7 +6,8 @@ var os = require("os");
 
 var { createSessionInput, resolveInitiator, ACCEPTED_INITIATORS } = require("../lib/session-input");
 var { attachExternalTrigger } = require("../lib/project-external-trigger");
-var { parseSessionArgs } = require("../lib/cli/session-subcommands");
+var { parseSessionArgs, requestDaemon } = require("../lib/cli/session-subcommands");
+var { handleSessionCommand } = require("../lib/session-input-ipc");
 
 function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
@@ -31,6 +32,7 @@ function makeProject(opts) {
     broadcastSessionList: function () {},
     recordHistoryEntry: function (s, e) { s.history.push(e); calls.recorded.push(e); },
     appendToSessionFile: function () {},
+    deleteSession: function (id) { sm.sessions.delete(id); },
     resumeSession: function (id, o) {
       calls.resumed.push({ id: id, opts: o });
       var s = { localId: nextId++, cliSessionId: id, history: [], vendor: o.vendor || null, agentName: o.agentName || null };
@@ -43,9 +45,6 @@ function makeProject(opts) {
     calls: calls,
     cwd: "/unused",
     sm: sm,
-    adapter: {
-      getSessionInfo: function (id) { return Promise.resolve(opts.vendorStore && opts.vendorStore[id] ? { summary: "from vendor" } : undefined); },
-    },
     sdk: {
       startQuery: function (s, text, images, user, initiator) { calls.start.push({ localId: s.localId, text: text, initiator: initiator }); },
       pushMessage: function (s, text, images, initiator) { calls.push.push({ localId: s.localId, text: text, initiator: initiator }); },
@@ -178,11 +177,27 @@ test("send: a stored session not in memory is resumed on its own vendor and agen
   }
 });
 
-test("send: a session only the vendor's store knows is resumed too", async function () {
-  var project = makeProject({ vendorStore: { "cli-vendor": true } });
-  var r = await makeInput(project, { readHistory: function () { return Promise.resolve([]); } }).sendInput({ projectSlug: "p", sessionId: "cli-vendor", prompt: "hi" });
-  assert.equal(r.result, "resumed-and-delivered");
-  assert.equal(project.calls.resumed[0].id, "cli-vendor");
+test("send: a session the console's store does not hold is not-found, whatever the vendor knows", async function () {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-si-"));
+  try {
+    var project = makeProject({ sessionsDir: dir });
+    // The vendor having such a session is irrelevant: no adapter is reachable
+    // from the project context, so it cannot be asked.
+    var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-vendor-only", prompt: "hi" });
+    assert.equal(r.result, "not-found");
+    assert.equal(project.calls.resumed.length, 0);
+    assert.equal(project.calls.start.length, 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("send: a live session is also addressed by the console session id", function () {
+  var project = makeProject({ existing: [liveSession()] });
+  var r = makeInput(project).sendInput({ projectSlug: "p", sessionId: "100", prompt: "hi" });
+  assert.equal(r.result, "delivered");
+  assert.equal(r.consoleSessionId, "100");
+  assert.equal(project.calls.push[0].localId, 100);
 });
 
 // ---- open-session ----
@@ -222,23 +237,24 @@ test("open: unknown vendor, agent, visibility and initiator are refused by name,
   assert.equal(project.calls.start.length, 0);
 });
 
-test("open: waits for the vendor-assigned session id when asked to", async function () {
+test("open: returns at once with the console session id, without waiting for the vendor id", function () {
   var project = makeProject({});
-  var input = makeInput(project, { sessionIdWaitMs: 1000 });
-  var pending = input.openSession({ projectSlug: "p", prompt: "go" });
-  assert.ok(pending && typeof pending.then === "function");
-  await sleep(120);
-  project.sm.sessions.forEach(function (s) { s.cliSessionId = "cli-assigned"; });
-  var r = await pending;
-  assert.equal(r.sessionId, "cli-assigned");
-});
-
-test("open: reports a null id when the vendor has not assigned one in time", async function () {
-  var project = makeProject({});
-  var r = await makeInput(project, { sessionIdWaitMs: 100 }).openSession({ projectSlug: "p", prompt: "go" });
+  var r = makeInput(project).openSession({ projectSlug: "p", prompt: "go" });
+  // Synchronous: nothing is awaited for the vendor-assigned id.
   assert.equal(r.result, "opened");
   assert.equal(r.sessionId, null);
-  assert.ok(r.localId);
+  assert.ok(r.consoleSessionId);
+});
+
+test("open: the returned console session id is what send-input takes", async function () {
+  var project = makeProject({});
+  var input = makeInput(project);
+  var opened = input.openSession({ projectSlug: "p", prompt: "go" });
+  project.sm.sessions.forEach(function (s) { s.queryInstance = {}; s.isProcessing = false; });
+  var r = await input.sendInput({ projectSlug: "p", sessionId: opened.consoleSessionId, prompt: "more" });
+  assert.equal(r.result, "delivered");
+  assert.equal(r.consoleSessionId, opened.consoleSessionId);
+  assert.deepEqual(project.calls.push.map(function (c) { return c.text; }), ["more"]);
 });
 
 // ---- one code path for the file drop and the IPC verbs ----
@@ -261,18 +277,30 @@ function pick(r) { return { result: r.result, vendor: r.vendor, agent: r.agent, 
 
 test("file drop and IPC verb give matching results for open, send, not-found and refused", async function () {
   var base = { projectSlug: "p", initialPrompt: "go", createdAt: new Date().toISOString() };
+  // The IPC side is the CLI's requestDaemon into the daemon's session handler
+  // (lib/session-input-ipc.js), over a JSON round trip like the socket's.
+  function viaCli(input, request) {
+    return requestDaemon(request, {
+      isDaemonAlive: function () { return Promise.resolve(true); },
+      sendIPC: function (req) {
+        return Promise.resolve(handleSessionCommand(input, JSON.parse(JSON.stringify(req)))).then(function (res) {
+          return JSON.parse(JSON.stringify(res));
+        });
+      },
+    });
+  }
   var cases = [
-    { drop: { version: 1, id: "open-1", vendor: "codex", agentName: "holden" }, call: function (i) { return i.openSession({ projectSlug: "p", prompt: "go", vendor: "codex", agentName: "holden" }); } },
-    { drop: { version: 2, id: "send-1", sessionId: "cli-live", initiator: "loop" }, call: function (i) { return i.sendInput({ projectSlug: "p", sessionId: "cli-live", prompt: "go", initiator: "loop" }); } },
-    { drop: { version: 2, id: "gone-1", sessionId: "cli-gone" }, call: function (i) { return i.sendInput({ projectSlug: "p", sessionId: "cli-gone", prompt: "go" }); } },
-    { drop: { version: 1, id: "refuse-1", initiator: "human" }, call: function (i) { return i.openSession({ projectSlug: "p", prompt: "go", initiator: "human" }); } },
-    { drop: { version: 1, id: "refuse-2", vendor: "gemini-x" }, call: function (i) { return i.openSession({ projectSlug: "p", prompt: "go", vendor: "gemini-x" }); } },
+    { drop: { version: 1, id: "open-1", vendor: "codex", agentName: "holden" }, ipc: { cmd: "open_session", projectSlug: "p", prompt: "go", vendor: "codex", agentName: "holden" } },
+    { drop: { version: 2, id: "send-1", sessionId: "cli-live", initiator: "loop" }, ipc: { cmd: "send_session_input", projectSlug: "p", sessionId: "cli-live", prompt: "go", initiator: "loop" } },
+    { drop: { version: 2, id: "gone-1", sessionId: "cli-gone" }, ipc: { cmd: "send_session_input", projectSlug: "p", sessionId: "cli-gone", prompt: "go" } },
+    { drop: { version: 1, id: "refuse-1", initiator: "human" }, ipc: { cmd: "open_session", projectSlug: "p", prompt: "go", initiator: "human" } },
+    { drop: { version: 1, id: "refuse-2", vendor: "gemini-x" }, ipc: { cmd: "open_session", projectSlug: "p", prompt: "go", vendor: "gemini-x" } },
   ];
   for (var c of cases) {
     var dropProject = makeProject({ existing: [liveSession()] });
     var viaDrop = await dropAndRead(dropProject, makeInput(dropProject), Object.assign({}, base, c.drop));
     var ipcProject = makeProject({ existing: [liveSession()] });
-    var viaIpc = await c.call(makeInput(ipcProject));
+    var viaIpc = await viaCli(makeInput(ipcProject), c.ipc);
     assert.deepEqual(pick(viaDrop), pick(viaIpc), c.drop.id);
     assert.deepEqual(dropProject.calls.start, ipcProject.calls.start, c.drop.id);
     assert.deepEqual(dropProject.calls.push, ipcProject.calls.push, c.drop.id);
@@ -335,7 +363,7 @@ test("resume through a real session manager restores vendor and agent and does n
     assert.ok(activeBefore);
     var started = [];
     var project = {
-      cwd: home, sm: sm, adapter: null,
+      cwd: home, sm: sm,
       sdk: { startQuery: function (s, t, i, u, initiator) { started.push({ session: s, initiator: initiator }); }, pushMessage: function () { throw new Error("no runtime to push into"); } },
       onProcessingChanged: function () {}, getLinuxUserForSession: function () { return null; },
     };
