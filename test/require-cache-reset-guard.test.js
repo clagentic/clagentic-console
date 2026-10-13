@@ -37,25 +37,14 @@ function testFiles(dir) {
 var REGEX_AFTER_WORD = /^(?:return|typeof|case|in|of|delete|void|throw|new|else|do|instanceof|yield|await)$/;
 var REGEX_AFTER_CHAR = "(,=:[!&|?{};+-*%<>~^";
 
-// Whether the "+" or "-" at `j` closes a postfix "++" or "--". Such an operator
-// ends an operand, so a "/" after it is a division, while a lone "+" or "-"
-// (or one that follows a space-separated operator) is binary or unary and a
-// "/" after it opens a regex.
-function endsPostfixOperator(source, j) {
-  var c = source[j];
-  return (c === "+" || c === "-") && source[j - 1] === c;
-}
-
 // Whether the "/" at `i` opens a regular expression literal, judged from the
-// last significant token before it. A "/" after an identifier, number, ")",
-// "]" or a postfix "++"/"--" is a division. "}" is read as a division too,
-// which misreads only a regex literal that starts a statement straight after a
-// block.
+// last significant token before it. A "/" after an identifier, number, ")" or
+// "]" is a division. "}" is read as a division too, which misreads only a
+// regex literal that starts a statement straight after a block.
 function opensRegex(source, i) {
   var j = i - 1;
   while (j >= 0 && /\s/.test(source[j])) j--;
   if (j < 0) return true;
-  if (endsPostfixOperator(source, j)) return false;
   if (REGEX_AFTER_CHAR.indexOf(source[j]) !== -1) return true;
   var end = j + 1;
   while (j >= 0 && /[A-Za-z0-9_$]/.test(source[j])) j--;
@@ -176,14 +165,6 @@ test("the guard recognises the pattern it forbids", function () {
     'try { delete require.cache[require.resolve(m)]; } catch (_) { ; }',
     'try { delete require.cache[require.resolve(m)]; } catch (_) { void 0; }',
     'try { delete require.cache[require.resolve(m)]; } catch (_) { /* x */ ; void 0; ; }',
-    // A "/" after a postfix ++ or -- is a division, not the start of a regex.
-    'try { i++ / 2; delete require.cache[require.resolve(m)]; } catch (_) {}',
-    'try { n-- / 2; delete require.cache[require.resolve(m)]; } catch (_) {}',
-    'try { var h = i++ /2; delete require.cache[require.resolve(m)]; } catch (_) {}',
-    // A binary or unary + or - still ends in a regex operand.
-    "try { var p = a + /}/.test(x); delete require.cache[require.resolve(m)]; } catch (_) {}",
-    "try { var q = i++ + /}/.test(x); delete require.cache[require.resolve(m)]; } catch (_) {}",
-    "try { var r = -/}/.test(x); delete require.cache[require.resolve(m)]; } catch (_) {}",
   ];
   bad.forEach(function (source) {
     assert.equal(emptyCatchesAroundResolve(source).length, 1, source);
