@@ -79,6 +79,23 @@ test("inconclusive neither announces nor withdraws, and is logged once per reaso
   assert.equal(h.monitor.isConfirmedStale(), true);
 });
 
+test("stale, inconclusive, stale is not two consecutive sightings: no announcement", function () {
+  var h = harness([assessment("stale"), assessment("inconclusive", { reason: "hash-unavailable" }), assessment("stale")]);
+  for (var i = 0; i < 3; i++) h.monitor.check();
+  assert.deepEqual(h.events.filter(function (e) { return e.indexOf("stale:") === 0; }), []);
+  assert.equal(h.monitor.isConfirmedStale(), false);
+  // Two stale sightings in a row after the gap do announce.
+  var again = harness([assessment("stale"), assessment("inconclusive", { reason: "hash-unavailable" }), assessment("stale"), assessment("stale")]);
+  for (var j = 0; j < 4; j++) again.monitor.check();
+  assert.deepEqual(again.events.filter(function (e) { return e.indexOf("stale:") === 0; }), ["stale:new"]);
+});
+
+test("stale, adopted, stale is not two consecutive sightings either", function () {
+  var h = harness([assessment("stale"), assessment("adopted"), assessment("stale")]);
+  for (var i = 0; i < 3; i++) h.monitor.check();
+  assert.deepEqual(h.events, []);
+});
+
 test("a confirmed stale build is repeated in the journal at the reminder interval, not every check", function () {
   var seq = [];
   for (var i = 0; i < 8; i++) seq.push(assessment("stale"));

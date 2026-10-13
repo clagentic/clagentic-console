@@ -117,6 +117,23 @@ test("the hash is null while the tree cannot be read (an install in progress)", 
   assert.equal(hasher.hash(), null);
 });
 
+test("a same-size in-place rewrite with the mtime restored is re-hashed, not served from the cache", function () {
+  var root = makePackage({ "a.js": "one", "b.js": "two" });
+  var file = path.join(root, "lib", "b.js");
+  var pinned = new Date("2024-01-02T03:04:05.000Z"); // whole seconds survive utimes exactly
+  fs.utimesSync(file, pinned, pinned);
+  var hasher = createTreeHasher(root);
+  var first = hasher.hash();
+  var before = fs.statSync(file);
+  // File timestamps tick coarsely; let one pass so the rewrite gets its own ctime.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  fs.writeFileSync(file, "TWO"); // same size, same inode
+  fs.utimesSync(file, pinned, pinned); // the mtime a tool would restore
+  assert.equal(fs.statSync(file).mtimeMs, before.mtimeMs, "this case needs the restored mtime to match");
+  assert.equal(fs.statSync(file).ino, before.ino, "and the inode to be unchanged");
+  assert.notEqual(hasher.hash(), first);
+});
+
 test("the hasher re-reads only files whose stat changed", function () {
   var root = makePackage({ "a.js": "one", "b.js": "two" });
   var hasher = createTreeHasher(root);
