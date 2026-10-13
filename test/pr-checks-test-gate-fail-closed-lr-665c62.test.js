@@ -18,26 +18,16 @@
 // by the step's shell), so this test exercises the identical script the
 // runner would execute for each value, not an approximation of it.
 //
-// WHAT THIS FILE DOES NOT PROVE, and this is the gap that matters (MILLER
-// fnd-3973e2, lr-665c62 comment thread): it never models GitHub's job
-// SCHEDULING layer, only the shell script's behavior once invoked. In
-// production, under pull_request_target, `test` is skipped by its own
-// job-level `if:` — and that skip PROPAGATES to `test-gate` through
-// `needs: test` even though `test-gate` has `if: always()`. always() only
-// rescues a dependent whose dependency FAILED or was CANCELLED; it does not
-// resurrect a dependent whose dependency was skipped by the dependency's
-// own `if:`. So on the exact event this job exists to guard, `test-gate` is
-// never scheduled at all — it produces no check-run, not a skipped one, not
-// a failed one. The case at :~116-120 below, "fails closed when the test
-// job result is skipped", is the exact production scenario, and it passes —
-// while production never reaches the script this test is exercising. This
-// file therefore closes PEACHES's "unreached script" concern for the
-// failed/cancelled cases only; it does NOT close lr-665c62 or demonstrate
-// that the guard fires in the pull_request_target skip case, because it
-// cannot: that gap is a job-dispatch property, not a script property, and
-// is not something a shell-level test can exercise. Closing it requires
-// branch protection requiring the `test` check by name (operator action,
-// tracked on lr-665c62), not another test in this file.
+// WHAT THIS FILE DOES NOT PROVE: it never models GitHub's job SCHEDULING
+// layer, only the shell script's behavior once invoked, plus a textual
+// assertion on the job's `if:`. Observed in production, under
+// pull_request_target `test` is skipped by its own `if:` and GitHub still
+// schedules `test-gate` with needs.test.result == 'skipped', so the gate
+// failed on every such run. The `if:` therefore excludes
+// pull_request_target; the "skipped" case below remains valid for any
+// other event where `test` is dispatched but skipped. A head that only has
+// a pull_request_target run is still untested; closing that requires branch
+// protection requiring the `test` check by name (operator action).
 
 var test = require("node:test");
 var assert = require("node:assert");
@@ -74,6 +64,14 @@ test("test-gate job needs the test job and runs on always()", function () {
   var gate = jobBody("test-gate");
   assert.match(gate, /needs:\s*test/);
   assert.match(gate, /if:\s*always\(\)/);
+});
+
+test("test-gate is excluded on pull_request_target, where test is skipped and the gate would fail", function () {
+  var gate = jobBody("test-gate");
+  assert.match(
+    gate,
+    /\n\s+if:\s*always\(\)\s*&&\s*github\.event_name != 'pull_request_target'\s*\n/
+  );
 });
 
 test("test job stays excluded from pull_request_target (safety property, must not regress)", function () {
