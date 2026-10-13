@@ -58,6 +58,13 @@ test("a fresh daemon on the installed build is adopted and logs no stale warning
     assert.equal(s.loadedBuildSha, SHA_A);
     assert.equal(s.installedBuildSha, SHA_A);
     assert.doesNotMatch(d.journal(), /serving STALE/);
+    // A client that connects while no offer stands is told so explicitly.
+    var late = await d.openAdminSocket();
+    await waitUntil(function () {
+      return late.messages.find(function (m) { return m.type === "diagnostic_retract" && m.source === "build-update"; });
+    }, 10000, "the explicit no-offer on connect");
+    assert.equal(buildUpdateDiagnostics(late).length, 0);
+    late.ws.terminate();
   } finally {
     await d.cleanup();
     inst.cleanup();
@@ -116,8 +123,11 @@ test("a different installed build is stale, offered, and restarts nothing until 
     assert.equal(listed.refresh, true, "the change list refreshes the offer rather than adding a second one");
     assert.equal(listed.actionable.action, "restart_for_build_update");
     assert.ok(listed.buildUpdate.changes.commits.length >= 1, "the commits between the builds are listed");
+    // The explicit no-offer sent when this socket connected precedes the offer.
     assert.equal(
-      sock.messages.filter(function (m) { return m.type === "diagnostic_retract" && m.source === "build-update"; }).length, 0,
+      sock.messages.slice(sock.messages.indexOf(announced)).filter(function (m) {
+        return m.type === "diagnostic_retract" && m.source === "build-update";
+      }).length, 0,
       "the offer is not retracted while it is refreshed"
     );
 

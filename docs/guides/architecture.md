@@ -680,19 +680,33 @@ detector:**
    warning fire once a minute for as long as the process lived, after an
    install that changed nothing the process runs. `get_build_status` still
    reports `staleInodes` for diagnosis.
-2. **Announce once, on a stable stale verdict** (`lib/build-monitor.js`). A
-   check runs every 60 seconds (`CLAGENTIC_CONSOLE_BUILD_CHECK_MS`). A stale
-   verdict is announced only after the same installed build is seen on two
-   consecutive checks, so a check that lands in the middle of an install
-   never offers a half-written build. An adopted verdict withdraws the offer.
-3. **The offer** (`lib/build-update-offer.js`, `lib/build-changes.js`). The
-   announcement is a `diagnostic` with `source: "build-update"`, the two shas,
-   and the commits between them (`git log loaded..installed`) where history is
-   readable: the package directory if it is a checkout, or the repository named
-   by `buildSourceRepo` in `daemon.json`. An npm install carries no history,
-   and the offer then says the list is unavailable. The announcement is
-   replayed to a client that connects later (`onGetBuildUpdateDiagnostic`).
-   It carries no session content, because it goes to every client.
+2. **Confirm a stale verdict** (`lib/build-monitor.js`). A check runs every 60
+   seconds (`CLAGENTIC_CONSOLE_BUILD_CHECK_MS`). A stale verdict is confirmed
+   only after the same installed build is seen on two consecutive checks, so a
+   check that lands in the middle of an install never offers a half-written
+   build. An inconclusive check breaks an unconfirmed streak but leaves a
+   confirmed verdict alone. An adopted verdict clears it. The monitor owns the
+   journal: a warning when a verdict is first confirmed, then a reminder every
+   30 stale checks, from its own counter. It knows nothing about the UI.
+3. **The offer** (`lib/build-update-standing.js`, `lib/build-update-offer.js`,
+   `lib/build-changes.js`). After every check the daemon calls
+   `reconcile(confirmedStale)`, which derives the desired offer from the
+   current confirmed verdict and changes only the difference from what clients
+   were last shown: show, refresh in place, or retract. It is idempotent, and
+   "nothing changed" compares a small summary (offer key and change-list
+   status), recorded only after the broadcast succeeded. The offer is a
+   `diagnostic` with `source: "build-update"`, the two shas, and the commits
+   between them (`git log loaded..installed`) where history is readable: the
+   package directory if it is a checkout, or the repository named by
+   `buildSourceRepo` in `daemon.json`. The offer is shown at once with the list
+   marked unavailable; the read is cached per loaded:installed pair, one in
+   flight at a time, and fills the offer in place when it finishes. A failed
+   read caches its reason and is retried at most once per reminder interval. A
+   finished read reconciles against the latest verdict, so a result for a
+   build that is no longer stale cannot restore an offer. A client that
+   connects is sent the held offer, or an explicit `diagnostic_retract` when
+   none stands (`onGetBuildUpdateDiagnostic`). The offer carries no session
+   content, because it goes to every client.
 4. **A restart takes two operator clicks** (`lib/build-update-restart.js`,
    `restart_for_build_update` in `lib/project-sessions.js`, admin only). The
    first click sends `restart_for_build_update` with no token and gets back an

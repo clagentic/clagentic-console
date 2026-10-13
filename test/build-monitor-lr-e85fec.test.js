@@ -1,5 +1,8 @@
 "use strict";
 
+// The monitor confirms a stale verdict and writes the journal. It knows nothing
+// about the UI: the offer is derived from confirmedStale() elsewhere.
+
 var test = require("node:test");
 var assert = require("node:assert/strict");
 
@@ -12,158 +15,107 @@ function assessment(state, extra) {
   }, extra || {});
 }
 
+function inconclusive() { return assessment("inconclusive", { reason: "hash-unavailable" }); }
+
 function harness(sequence, options) {
   var i = 0;
-  var events = [];
+  var lines = [];
   var monitor = createBuildMonitor(Object.assign({
     assess: function () { return sequence[Math.min(i++, sequence.length - 1)]; },
-    onStale: function (a) { events.push("stale:" + a.installedBuildSha); },
-    onAdopted: function () { events.push("adopted"); },
-    log: function (line) { events.push("log:" + line.split(" ")[0]); },
+    log: function (line) { lines.push(line); },
   }, options || {}));
-  return { monitor: monitor, events: events };
+  function run(n) { for (var k = 0; k < n; k++) monitor.check(); }
+  function warnings() { return lines.filter(function (l) { return l.indexOf("WARNING: this process is serving STALE") === 0; }); }
+  function reminders() { return lines.filter(function (l) { return l.indexOf("Still serving build") === 0; }); }
+  return { monitor: monitor, lines: lines, run: run, warnings: warnings, reminders: reminders };
 }
 
-test("a stale verdict is announced only after the same build is seen twice", function () {
-  var h = harness([assessment("stale"), assessment("stale"), assessment("stale")]);
-  h.monitor.check();
-  assert.deepEqual(h.events, [], "one sighting could be an install in progress");
-  assert.equal(h.monitor.isConfirmedStale(), false);
-  h.monitor.check();
-  assert.deepEqual(h.events, ["stale:new"]);
-  h.monitor.check();
-  assert.deepEqual(h.events, ["stale:new"], "announced once per installed build");
-  assert.equal(h.monitor.isConfirmedStale(), true);
+// Each row: the polls, then what is confirmed after them (an installed sha or null).
+var CONFIRMATION_TABLE = [
+  { name: "one stale sighting could be an install in progress", polls: [assessment("stale")], confirmed: null },
+  { name: "the same build seen twice is confirmed", polls: [assessment("stale"), assessment("stale")], confirmed: "new" },
+  { name: "a build that changes between sightings restarts the count",
+    polls: [assessment("stale", { installedBuildSha: "n1" }), assessment("stale", { installedBuildSha: "n2" })], confirmed: null },
+  { name: "stale, inconclusive, stale is not consecutive evidence",
+    polls: [assessment("stale"), inconclusive(), assessment("stale")], confirmed: null },
+  { name: "stale, inconclusive, stale, stale confirms",
+    polls: [assessment("stale"), inconclusive(), assessment("stale"), assessment("stale")], confirmed: "new" },
+  { name: "stale, adopted, stale is not consecutive evidence",
+    polls: [assessment("stale"), assessment("adopted"), assessment("stale")], confirmed: null },
+  { name: "a confirmed verdict survives an inconclusive poll",
+    polls: [assessment("stale"), assessment("stale"), inconclusive()], confirmed: "new" },
+  { name: "a confirmed verdict survives several inconclusive polls and the stale poll after",
+    polls: [assessment("stale"), assessment("stale"), inconclusive(), inconclusive(), assessment("stale")], confirmed: "new" },
+  { name: "adopted clears a confirmed verdict",
+    polls: [assessment("stale"), assessment("stale"), assessment("adopted")], confirmed: null },
+  { name: "adopted before anything stale confirms nothing", polls: [assessment("adopted"), assessment("adopted")], confirmed: null },
+  { name: "a confirmed build is replaced only by another confirmed build",
+    polls: [assessment("stale", { installedBuildSha: "n1" }), assessment("stale", { installedBuildSha: "n1" }),
+      assessment("stale", { installedBuildSha: "n2" })], confirmed: "n1" },
+  { name: "another build seen twice replaces the confirmed one",
+    polls: [assessment("stale", { installedBuildSha: "n1" }), assessment("stale", { installedBuildSha: "n1" }),
+      assessment("stale", { installedBuildSha: "n2" }), assessment("stale", { installedBuildSha: "n2" })], confirmed: "n2" },
+  { name: "the confirmed build seen again after a single sighting of another stays confirmed",
+    polls: [assessment("stale", { installedBuildSha: "n1" }), assessment("stale", { installedBuildSha: "n1" }),
+      assessment("stale", { installedBuildSha: "n2" }), assessment("stale", { installedBuildSha: "n1" })], confirmed: "n1" },
+];
+
+CONFIRMATION_TABLE.forEach(function (row) {
+  test("confirmation: " + row.name, function () {
+    var h = harness(row.polls);
+    h.run(row.polls.length);
+    var c = h.monitor.confirmedStale();
+    assert.equal(c === null ? null : c.installedBuildSha, row.confirmed);
+  });
 });
 
-test("a build that changes between sightings restarts the count", function () {
-  var h = harness([assessment("stale", { installedBuildSha: "n1" }), assessment("stale", { installedBuildSha: "n2" }), assessment("stale", { installedBuildSha: "n2" })]);
-  h.monitor.check();
-  h.monitor.check();
-  assert.deepEqual(h.events, []);
-  h.monitor.check();
-  assert.deepEqual(h.events, ["stale:n2"]);
-});
-
-test("a newer build after an announcement is announced again", function () {
-  var h = harness([
-    assessment("stale", { installedBuildSha: "n1" }), assessment("stale", { installedBuildSha: "n1" }),
-    assessment("stale", { installedBuildSha: "n2" }), assessment("stale", { installedBuildSha: "n2" }),
-  ]);
-  for (var i = 0; i < 4; i++) h.monitor.check();
-  assert.deepEqual(h.events, ["stale:n1", "stale:n2"]);
-});
-
-test("adopted withdraws the announcement and re-arms it", function () {
+test("a re-confirmation after adoption warns again", function () {
   var h = harness([
     assessment("stale"), assessment("stale"), assessment("adopted"),
     assessment("stale"), assessment("stale"),
   ]);
-  for (var i = 0; i < 5; i++) h.monitor.check();
-  assert.deepEqual(h.events, ["stale:new", "adopted", "stale:new"]);
+  h.run(5);
+  assert.equal(h.warnings().length, 2);
+  assert.ok(h.monitor.confirmedStale());
 });
 
-test("adopted before any announcement says nothing", function () {
-  var h = harness([assessment("adopted"), assessment("adopted")]);
-  h.monitor.check();
-  h.monitor.check();
-  assert.deepEqual(h.events, []);
-  assert.equal(h.monitor.isConfirmedStale(), false);
+test("the warning is journaled once when a streak is first confirmed, not on every check", function () {
+  var h = harness([assessment("stale"), assessment("stale"), assessment("stale"), assessment("stale")]);
+  h.run(1);
+  assert.equal(h.warnings().length, 0, "one sighting is not confirmed");
+  h.run(3);
+  assert.equal(h.warnings().length, 1);
 });
 
-test("inconclusive neither announces nor withdraws, and is logged once per reason", function () {
-  var inconclusive = assessment("inconclusive", { reason: "hash-unavailable" });
-  var h = harness([assessment("stale"), assessment("stale"), inconclusive, inconclusive, assessment("stale")]);
-  for (var i = 0; i < 5; i++) h.monitor.check();
-  assert.deepEqual(h.events, ["stale:new", "log:Build"], "one log line for the reason, no second announcement for the same build");
-  assert.equal(h.monitor.isConfirmedStale(), true);
+test("an inconclusive reason is logged once, not once per poll", function () {
+  var h = harness([assessment("stale"), assessment("stale"), inconclusive(), inconclusive(), assessment("stale")]);
+  h.run(5);
+  var inconclusiveLines = h.lines.filter(function (l) { return l.indexOf("Build check inconclusive") === 0; });
+  assert.equal(inconclusiveLines.length, 1);
+  assert.ok(h.monitor.confirmedStale());
 });
 
-test("stale, inconclusive, stale is not two consecutive sightings: no announcement", function () {
-  var h = harness([assessment("stale"), assessment("inconclusive", { reason: "hash-unavailable" }), assessment("stale")]);
-  for (var i = 0; i < 3; i++) h.monitor.check();
-  assert.deepEqual(h.events.filter(function (e) { return e.indexOf("stale:") === 0; }), []);
-  assert.equal(h.monitor.isConfirmedStale(), false);
-  // Two stale sightings in a row after the gap do announce.
-  var again = harness([assessment("stale"), assessment("inconclusive", { reason: "hash-unavailable" }), assessment("stale"), assessment("stale")]);
-  for (var j = 0; j < 4; j++) again.monitor.check();
-  assert.deepEqual(again.events.filter(function (e) { return e.indexOf("stale:") === 0; }), ["stale:new"]);
-});
+// Reminders come from the monitor's own counter. Row: polls after a confirmation at poll 2,
+// the reminderEvery, and the poll numbers (1-based) that remind.
+var REMINDER_TABLE = [
+  { name: "every Nth stale poll after the confirmation", every: 3, tail: ["s", "s", "s", "s", "s", "s"], remindAt: [5, 8] },
+  { name: "an inconclusive poll does not count toward a reminder", every: 3, tail: ["s", "i", "s", "s", "s"], remindAt: [6] },
+  { name: "an inconclusive poll does not reset the count", every: 3, tail: ["s", "s", "i", "s"], remindAt: [6] },
+  { name: "reminders are silent before the interval", every: 30, tail: ["s", "s", "s"], remindAt: [] },
+];
 
-test("stale, adopted, stale is not two consecutive sightings either", function () {
-  var h = harness([assessment("stale"), assessment("adopted"), assessment("stale")]);
-  for (var i = 0; i < 3; i++) h.monitor.check();
-  assert.deepEqual(h.events, []);
-});
-
-test("stale, change list in flight, inconclusive, stale again: an offer is visible", async function () {
-  var { createStandingOffer } = require("../lib/build-update-standing");
-  var sequence = [
-    assessment("stale"), assessment("stale"), // confirmed: announced, change list read starts
-    assessment("inconclusive", { reason: "hash-unavailable" }),
-    assessment("stale"), assessment("stale"), // confirmed again
-  ];
-  var i = 0;
-  var latest = null;
-  var sent = [];
-  var reads = [];
-  var offer = createStandingOffer({
-    listChanges: function () { return new Promise(function (resolve) { reads.push(resolve); }); },
-    currentAssessment: function () { return latest; },
-    broadcast: function (m) { sent.push(m); },
-    compose: function (a, changes) { return { type: "diagnostic", changes: changes, actionable: { action: "restart_for_build_update" } }; },
+REMINDER_TABLE.forEach(function (row) {
+  test("journal reminders: " + row.name, function () {
+    var polls = [assessment("stale"), assessment("stale")].concat(row.tail.map(function (t) {
+      return t === "s" ? assessment("stale") : inconclusive();
+    }));
+    var h = harness(polls, { reminderEvery: row.every });
+    var at = [];
+    for (var n = 1; n <= polls.length; n++) {
+      var before = h.reminders().length;
+      h.run(1);
+      if (h.reminders().length > before) at.push(n);
+    }
+    assert.deepEqual(at, row.remindAt);
   });
-  var announces = [];
-  var monitor = createBuildMonitor({
-    assess: function () { latest = sequence[Math.min(i++, sequence.length - 1)]; return latest; },
-    onStale: function (a) { announces.push(offer.announce(a)); },
-    isOfferShown: function (a) { return offer.isShownFor(a); },
-    onReoffer: function (a) { announces.push(offer.announce(a)); },
-  });
-  monitor.check();
-  monitor.check();
-  assert.ok(offer.current(), "visible while the first read is in flight");
-  monitor.check(); // inconclusive
-  reads[0]({ available: true, commits: ["late"] }); // resolves under an inconclusive verdict: discarded
-  await announces[0];
-  assert.equal(offer.isShownFor(sequence[0]), false, "the discarded read leaves the offer needing a refresh");
-  assert.ok(offer.current(), "the offer is still visible");
-  monitor.check();
-  monitor.check(); // second consecutive stale sighting: re-announced
-  assert.equal(announces.length, 2, "the next stale confirmation announced it again");
-  reads[1]({ available: true, commits: ["fresh"] });
-  await announces[1];
-  assert.deepEqual(offer.current().changes.commits, ["fresh"]);
-  assert.equal(sent.filter(function (m) { return m.type === "diagnostic_retract"; }).length, 0, "never retracted");
-});
-
-test("a confirmed stale build whose offer is shown is not re-announced on later checks", function () {
-  var reoffers = 0;
-  var h = harness([assessment("stale"), assessment("stale"), assessment("stale"), assessment("stale")], {
-    isOfferShown: function () { return true; },
-    onReoffer: function () { reoffers += 1; },
-  });
-  for (var i = 0; i < 4; i++) h.monitor.check();
-  assert.equal(reoffers, 0);
-});
-
-test("a confirmed stale build whose offer is not shown is re-announced, without a second journal warning", function () {
-  var reoffers = 0;
-  var h = harness([assessment("stale"), assessment("stale"), assessment("stale"), assessment("stale")], {
-    isOfferShown: function () { return false; },
-    onReoffer: function () { reoffers += 1; },
-  });
-  for (var i = 0; i < 4; i++) h.monitor.check();
-  assert.equal(reoffers, 2, "checks 3 and 4");
-  assert.equal(h.events.filter(function (e) { return e.indexOf("stale:") === 0; }).length, 1, "onStale (the warning) fired once");
-});
-
-test("a confirmed stale build is repeated in the journal at the reminder interval, not every check", function () {
-  var seq = [];
-  for (var i = 0; i < 8; i++) seq.push(assessment("stale"));
-  var h = harness(seq, { reminderEvery: 3 });
-  for (var j = 0; j < 8; j++) h.monitor.check();
-  var reminders = h.events.filter(function (e) { return e === "log:Still"; });
-  assert.equal(reminders.length, 2, "checks 5 and 8 remind; the other confirmed checks are silent");
-  assert.equal(h.events.filter(function (e) { return e.indexOf("stale:") === 0; }).length, 1);
 });
