@@ -129,7 +129,8 @@ function freshProject(slug) {
   return { dir: dir, sm: ctxOf(slug).getSessionManager() };
 }
 
-// Records console output for the length of one call.
+// The announcer reports failures through console.error only (shutdown must not
+// throw), so the tests need those lines to assert on.
 async function capturingConsole(fn) {
   var lines = { log: [], error: [] };
   var realLog = console.log;

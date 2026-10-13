@@ -112,7 +112,9 @@ async function bootDaemon(config) {
 
   var log = [];
   var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
-    env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home }),
+    // HOME too: legacy-path reads (~/.clagentic, ~/.clagentic-rc, ~/clagentic-projects)
+    // must not reach the operator's real home.
+    env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.on("data", function (d) { log.push(d.toString()); });
@@ -181,6 +183,11 @@ function entryCase(name, expected, config, drive) {
       var code = await waitForExit(d.proc, 15000);
       var elapsed = Date.now() - started;
       assert.equal(code, expected, "exit code; journal:\n" + d.journal().slice(-1500));
+      // Debug mode leaves the respawn to the dev watcher; every other handoff
+      // spawns a detached successor that cleanup() can only reap if its pid is known.
+      if (expected === EXIT_HANDOFF && !(config && config.debug)) {
+        assert.ok(d.successorPid(), "a restart must record its successor pid; journal:\n" + d.journal().slice(-1500));
+      }
       assert.match(d.journal(), SUMMARY, "the shutdown reached the announcer; journal:\n" + d.journal().slice(-1500));
       assert.doesNotMatch(d.journal(), /Forced exit/, "the announcer must not push the shutdown to the backstop");
       assert.ok(elapsed < SHUTDOWN_BUDGET_MS, "shutdown took " + elapsed + " ms");
