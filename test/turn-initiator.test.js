@@ -221,8 +221,10 @@ test("forcing a scheduled message to send now makes a scheduled-now turn, and a 
 test("an external trigger names the trigger as the initiator for a spawned session and for an injected message", async function () {
   var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-trigger-initiator-"));
   var calls = [];
-  var live = { localId: "live", cliSessionId: "cli-1", history: [], isProcessing: false, queryInstance: {}, sentToolResults: {} };
-  var sessions = new Map([["live", live]]);
+  var live = { localId: "live", cliSessionId: "cli-1", history: [], isProcessing: false, sentToolResults: {} };
+  // A session whose query is running takes the input into that query.
+  var running = { localId: "running", cliSessionId: "cli-2", history: [], isProcessing: true, queryInstance: {}, sentToolResults: {} };
+  var sessions = new Map([["live", live], ["running", running]]);
   var noop = function () {};
   var project = {
     sm: {
@@ -246,10 +248,13 @@ test("an external trigger names the trigger as the initiator for a spawned sessi
   et.startWatcher();
   write("spawn", {});
   write("inject", { version: 2, sessionId: "cli-1" });
+  write("inject-running", { version: 2, sessionId: "cli-2" });
   await sleep(700);
   et.stopWatcher();
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  assert.deepEqual(calls.slice().sort(), ["pushMessage:trigger", "startQuery:trigger"]);
+  // spawn opens a query; an idle in-memory session now starts one too; the
+  // session with a running query takes the message into it.
+  assert.deepEqual(calls.slice().sort(), ["pushMessage:trigger", "startQuery:trigger", "startQuery:trigger"]);
 });
 
 test("a loop iteration names the loop as the initiator", function () {
