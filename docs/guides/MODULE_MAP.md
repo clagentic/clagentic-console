@@ -88,7 +88,11 @@ YOKE is the vendor-agnostic interface layer. Each adapter implements the same co
 | `yoke/adapters/effort-control.js` | Changing a running Claude session's effort through `applyFlagSettings({effortLevel})`; shared by the in-process handle and the worker |
 | `yoke/adapters/claude-capabilities.js` | What a Claude session can do, sent to the client (including the `permissionModes` the mode picker offers) |
 | `yoke/adapters/codex.js` | Codex adapter using `codex app-server` JSON-RPC protocol. Handles approval events, skill injection, MCP bridge config |
-| `yoke/codex-app-server.js` | Codex `app-server` child process manager. JSON-RPC 2.0 over stdin/stdout, request ID tracking, event routing |
+| `yoke/codex-app-server.js` | Codex `app-server` child process manager. JSON-RPC 2.0 over stdin/stdout, request ID tracking, event routing; started as the OS user in os-users mode |
+| `yoke/codex-binary.js` | Resolves the user's installed Codex (override, PATH, common locations) and validates its version |
+| `yoke/codex-version.js` | Parses and compares Codex versions; the supported floor |
+| `yoke/codex-protocol.js` | Version-gated protocol: feature table, turn trigger, approval policy, session config |
+| `os-user-spawn.js` | The one way to start a process as another OS user (groups initialized, no inherited environment) |
 | `yoke/mcp-bridge-server.js` | Stdio MCP server spawned by Codex. Proxies tool list/call to the daemon via HTTP at `/api/mcp-bridge` |
 
 **When adding a new vendor**: implement the YOKE interface, register in `yoke/index.js` createAdapter switch. Do not add vendor-specific logic outside the adapter.
