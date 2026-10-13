@@ -24,6 +24,16 @@ test("a version is read from a binary's version line, defensively", function () 
   assert.equal(versions.parseVersion("9".repeat(5000) + " 0.1.2"), null, "an absurd line is not read");
 });
 
+test("a token with junk before or after the numbers is not a version, and an unreadable version is not compatible", function () {
+  assert.equal(versions.parseVersion("abc0.150.0"), null);
+  assert.equal(versions.parseVersion("0.150.0abc"), null);
+  assert.equal(versions.parseVersion("x1.2.3.4y"), null);
+  assert.equal(versions.parseVersion("junk0.162.1 and more"), null);
+  assert.equal(versions.parseVersion("codex-cli v0.162.1").text, "0.162.1");
+  assert.equal(versions.atLeast(versions.parseVersion("abc0.162.1"), versions.MIN_CODEX_VERSION), false, "fails closed");
+  assert.equal(versions.atLeast("0.162.1abc", versions.MIN_CODEX_VERSION), false);
+});
+
 test("a version is read from the app-server userAgent without taking a digit of the originator for it", function () {
   assert.equal(versions.versionFromUserAgent("clagentic-console/0.162.1 (Ubuntu 24.4.0; x86_64) xterm").text, "0.162.1");
   assert.equal(versions.versionFromUserAgent("tool-2.3.4/0.150.0 (Linux)").text, "0.150.0");
