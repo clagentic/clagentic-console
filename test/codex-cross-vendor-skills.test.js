@@ -163,5 +163,51 @@ test("discoverSkillFiles gives each skill's SKILL.md and, with no home given, fa
   var file = skill(home, ".agents", "mine", "m");
   var found = codexAdapter._test_discoverClaudeSkills(tmp("project"), home);
   assert.equal(found.mine, fs.realpathSync(file));
-  assert.equal(typeof codexAdapter._test_discoverClaudeSkills(tmp("project")), "object");
+
+  var daemonHome = tmp("daemon-home");
+  var daemonFile = skill(daemonHome, ".agents", "daemon-skill", "d");
+  var config = require("../lib/config");
+  var realHome = config.REAL_HOME;
+  config.REAL_HOME = daemonHome;
+  try {
+    var fallback = codexAdapter._test_discoverClaudeSkills(tmp("project"));
+    assert.equal(fallback["daemon-skill"], fs.realpathSync(daemonFile), "the daemon's home was searched, and its skill found");
+    assert.equal(fallback.mine, undefined, "and only it");
+  } finally {
+    config.REAL_HOME = realHome;
+  }
+});
+
+// --- An unreadable skills directory is named, an absent one is quiet ---
+
+function warningsDuring(fn) {
+  var warnings = [];
+  var realWarn = console.warn;
+  console.warn = function () { warnings.push(Array.prototype.join.call(arguments, " ")); };
+  try { fn(); } finally { console.warn = realWarn; }
+  return warnings;
+}
+
+test("a skills directory that is absent is not reported; one that cannot be read is, by name", function () {
+  var home = tmp("home");
+  var project = tmp("project");
+  skill(home, ".claude", "fine", "f");
+  // .agents/skills does not exist anywhere: the ordinary case.
+  var quiet = warningsDuring(function () { skillDiscovery.collectSkillDirs(project, home); });
+  assert.deepEqual(quiet, []);
+
+  // A path under a file is ENOTDIR, which is also absence.
+  fs.writeFileSync(path.join(project, ".agents"), "not a directory");
+  var stillQuiet = warningsDuring(function () { skillDiscovery.collectSkillDirs(project, home); });
+  assert.deepEqual(stillQuiet, []);
+
+  // A link that loops is neither: the directory exists and cannot be read.
+  var looping = path.join(home, ".agents");
+  fs.mkdirSync(looping);
+  fs.symlinkSync(path.join(looping, "skills"), path.join(looping, "skills"));
+  var found = {};
+  var seen = warningsDuring(function () { found = skillDiscovery.collectSkillDirs(project, home); });
+  assert.equal(seen.length, 1);
+  assert.match(seen[0], /\[skills\] could not read skills directory .*\.agents[\\/]skills: ELOOP/);
+  assert.deepEqual(Object.keys(found), ["fine"], "the skills that could be read are still found");
 });

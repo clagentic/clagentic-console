@@ -55,7 +55,7 @@ Do not go back to the SDK exec mode. It is a one-shot pipe wrapper, not a real S
 | File | Purpose |
 |------|---------|
 | `lib/yoke/adapters/codex.js` | YOKE adapter. Init, createQuery, event flattening, approval routing, skill injection. |
-| `lib/yoke/codex-app-server.js` | Child process manager. Spawn (as the OS user in os-users mode), stdin/stdout JSON-RPC, request ID tracking, pending callbacks. |
+| `lib/yoke/codex-app-server.js` | Child process manager. Spawn, stdin/stdout JSON-RPC, request ID tracking, pending callbacks. |
 | `lib/yoke/codex-binary.js` | Finds the Codex the user installed (override, `PATH`, common locations) and validates its version. The console bundles none. |
 | `lib/yoke/codex-version.js` | Reads and compares Codex versions; the supported floor. |
 | `lib/yoke/codex-protocol.js` | What the running version accepts: the feature table, the turn trigger, the approval policy, the session config. |
@@ -194,17 +194,17 @@ Stored in `lib/codex-defaults.js`. Do not scatter defaults across multiple files
 
 The approval default is `on-request`. `on-failure` is only an alias of it in current Codex releases, so it is never sent as a policy of its own (`normalizeApprovalPolicy`).
 
-### 13. Rewind is `thread/revert`
+### 13. Rewind is not offered
 
-`thread/rollback` (`threadId`, `numTurns`) is gone from current Codex releases. A rewind reads the thread's turns (`thread/read` with `includeTurns`), names the first turn to drop and sends `thread/revert {threadId, beforeTurnId}`. If the turns cannot be read, or are fewer than asked for, nothing is reverted and the caller leaves its own history alone. A rewind never deletes a turn it was not asked to delete: it is refused (`CODEX_REWIND_BUSY`) while a turn is in flight on the thread, and the turn list is read again immediately before `thread/revert` and refused (`CODEX_REWIND_CONFLICT`) if it differs from the list the target was computed from. `thread/revert` has no expected-state argument, so the instant between that last read and the revert cannot be closed from the client.
+`thread/rollback` (`threadId`, `numTurns`) is gone from current Codex releases (removed in 0.156.0), and `thread/revert`, which replaces it, takes no expected-state argument: a turn appended while it runs would be deleted with the rest. So the console offers no in-place rewind for a Codex session. The capabilities `rewind` and `rollback` are false and the controls are disabled with "Rewind is not available for Codex sessions yet"; `rollbackThread` rejects (`CODEX_REWIND_UNAVAILABLE`) without sending the server anything, so a caller that gets that far leaves the console's history as it was. Do not call `thread/revert` or `thread/rollback` from the adapter. Fork (`thread/fork`) is unaffected.
 
 ### 14. Turn provenance
 
 `turn/start` takes `turnTrigger` (Codex 0.151.0 and later). Codex counts a turn as automated only for the exact value `automation_heartbeat_scheduled`. Typed turns omit the field. Do not invent other values: they are treated as a user turn.
 
-### 15. Running as a user
+### 15. Not run under OS user isolation
 
-In os-users mode there is one app-server per OS user, started as that user (`lib/os-user-spawn.js`, `setpriv --init-groups`) from that user's environment. Never start one as the daemon's user for a call that names none.
+In os-users mode the Codex agent is disabled ("Codex is not yet isolated per OS user"): no adapter is created and no app-server is started, because one started by the daemon would run as the daemon's user. Never start one in that mode.
 
 ---
 
@@ -242,7 +242,7 @@ When changing Codex adapter code:
 - [ ] Bash command with `approval: on-request` shows approval UI, responds correctly to Sure/Always/No
 - [ ] File change outside workspace shows approval UI
 - [ ] MCP tool (filesystem) with `approval: on-request` shows approval UI, executes after approval
-- [ ] Rewinding a turn reverts the thread (`thread/revert`) and the console history matches
+- [ ] The rewind control is disabled with "Rewind is not available for Codex sessions yet"; fork still works
 - [ ] A scheduled or loop turn is recorded by Codex with the automation trigger; a typed one is not
 - [ ] The model picker lists the installed Codex's models
 - [ ] With Codex absent, or below 0.148.0, the picker shows it disabled with the reason
