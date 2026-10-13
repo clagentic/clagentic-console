@@ -67,7 +67,7 @@ graph TB
     P2 --- Sessions2
 ```
 
-The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`, `get_activity_diagnostics`.
+The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`, `get_activity_diagnostics`, `open_session`, `send_session_input`.
 
 ### Supervised start: `clagentic-console daemon`
 
@@ -123,6 +123,30 @@ Samples carry no session-identifying field (`ts`, `rawIsProcessing`,
 path. See `lib/sdk-bridge.js`'s `buildActivityDiagnosticsResponse()` (the
 shared, unit-tested function both retrieval paths can call) and
 `lib/daemon.js`'s `get_activity_diagnostics` IPC case.
+
+### Opening sessions and sending input from outside the browser
+
+Any caller (an operator script, an agent, a person at a shell) can open a session or direct input into one, whatever its kind: a vanilla Claude or Codex session or one running a named agent. This is injection into a human-to-LLM console session, not agent-to-agent messaging. There is one implementation, `lib/session-input.js`, behind two transports:
+
+- **The CLI**, over the daemon IPC socket (`open_session` and `send_session_input` cases in `lib/daemon.js`):
+
+  ```
+  clagentic-console open-session --project <slug> --prompt <text|-> [--vendor <id>] [--agent <name>] [--visibility shared|private] [--initiator <kind>] [--context-note <text>]
+  clagentic-console send-input   --project <slug> --session <id> --prompt <text|-> [--initiator <kind>] [--context-note <text>]
+  ```
+
+  `--prompt -` reads the prompt from stdin. Both print the result as JSON and exit 0 when the request was acted on, 1 otherwise.
+- **The file drop** (`lib/project-external-trigger.js`, `external-triggers/` in the console config directory) for writers without the CLI. v1 and v2 files keep their shape; v2 with `sessionId` is send-input, anything else is open-session, and `vendor`, `agentName`, `sessionVisibility` and `initiator` are optional fields. The outcome is written into the file's record in `processed/` under `result`.
+
+**Send.** The input becomes the session's next turn. A session with a running query takes it into that query (`delivered`). A session whose runtime has ended (the idle reaper, a daemon restart) is resumed on its own vendor and agent, from the stored meta record, by the same resume the browser's `resume_session` uses (`lib/session-resume.js`), and the input starts its next turn (`resumed-and-delivered`). A resume for injected input does not move any connected client off the session it is viewing. A session id that exists in neither the console's store nor the vendor's is `not-found`: the file moves to `processed/` with that result and is never retried.
+
+**Open.** `vendor` (any registered vendor), `agentName` (a named agent as the picker offers it) and `sessionVisibility` go to `createSession` as the browser's `new_session` passes them; absent means the default vendor, no agent, shared. The result carries `sessionId` (the vendor-assigned id, `null` if the vendor has not assigned one within 10 seconds), `localId`, `vendor` and `agent`; the id is what `send-input --session` takes.
+
+**Initiator.** Injected input is never a human turn. Accepted values are `trigger`, `scheduled`, `scheduled-now` and `loop`; absent is `trigger`. `human` and any unknown value are refused by name. Human turns come only from the authenticated browser path.
+
+**Results** (`result` in the JSON): `delivered`, `resumed-and-delivered`, `opened`, `not-found`, `refused` (with `reason` naming the vendor, agent, visibility, initiator or project) and `error` (delivery was attempted and failed). A `refused` result with `retryable: true` means the daemon is shedding new work under memory pressure; a file-drop trigger stays in place and is retried until it expires.
+
+**Security is unchanged.** Callers must be the daemon's own OS user: the file drop needs write access to the config directory and `daemon.sock` is reachable only through it (`chmod 0700`). Per-user routing in multi-user mode remains future work.
 
 ## YOKE Adapter Layer
 
