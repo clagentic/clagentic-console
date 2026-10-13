@@ -9,7 +9,7 @@
  *   (5) ceiling: new query at MAX_CONCURRENT gets error+done, not a silent spawn
  *   (6) multi-turn pushMessage continuation is NOT double-counted
  *
- * Strategy: require sdk-bridge.js once with CLAGENTIC_MAX_CONCURRENT_SESSIONS=3
+ * Strategy: require sdk-bridge.js once with CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS=3
  * (small ceiling for fast tests). Between tests that need a clean counter, we
  * drain all live slots by completing mock streams. Observable effects (messages
  * emitted to `send`) are used instead of inspecting private counter state.
@@ -147,17 +147,33 @@ function makeAdapter(createQueryFn) {
 
 /**
  * Load a fresh copy of sdk-bridge (reset module-level _activeLiveCount to 0).
- * Sets CLAGENTIC_MAX_CONCURRENT_SESSIONS before load so MAX_CONCURRENT_SESSIONS
- * is evaluated to the desired value.
+ * Sets CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS before load so
+ * MAX_CONCURRENT_SESSIONS is evaluated to the desired value. The scoped name
+ * wins over the legacy one in lib/env-compat.js, so a host that already exports
+ * it (the systemd unit does) would otherwise override the value set here; both
+ * names are cleared before and after the load.
  */
+var MAX_SESSIONS_ENV_NAMES = ["CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS", "CLAGENTIC_MAX_CONCURRENT_SESSIONS"];
+
+function clearMaxSessionsEnv() {
+  MAX_SESSIONS_ENV_NAMES.forEach(function (name) { delete process.env[name]; });
+}
+
+test.after(clearMaxSessionsEnv);
+
 function freshSdkBridge(maxConcurrent) {
-  process.env.CLAGENTIC_MAX_CONCURRENT_SESSIONS = String(maxConcurrent != null ? maxConcurrent : 3);
+  clearMaxSessionsEnv();
+  process.env.CLAGENTIC_CONSOLE_MAX_CONCURRENT_SESSIONS = String(maxConcurrent != null ? maxConcurrent : 3);
   var modPath = require.resolve("../lib/sdk-bridge");
   delete require.cache[modPath];
-  var mod = require("../lib/sdk-bridge");
-  // Don't leave the env var set — tests that don't call freshSdkBridge use
-  // the default (50) from the already-cached module.
-  delete process.env.CLAGENTIC_MAX_CONCURRENT_SESSIONS;
+  var mod;
+  try {
+    mod = require("../lib/sdk-bridge");
+  } finally {
+    // Tests that don't call freshSdkBridge use the default from the
+    // already-cached module.
+    clearMaxSessionsEnv();
+  }
   return mod;
 }
 
