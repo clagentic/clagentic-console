@@ -110,6 +110,7 @@ async function bootDaemon(config) {
     multiUser: true, setupCode: SETUP_CODE, users: [], invites: [], smtp: null,
   }, null, 2), { mode: 0o600 });
 
+  var configPath = path.join(consoleDir, "daemon.json");
   var log = [];
   var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
     // HOME too: legacy-path reads (~/.clagentic, ~/.clagentic-rc, ~/clagentic-projects)
@@ -128,10 +129,7 @@ async function bootDaemon(config) {
     sock: path.join(consoleDir, "daemon.sock"),
     journal: function () { return log.join(""); },
     // The pid a restart records for its successor, written before the parent exits.
-    successorPid: function () {
-      var cfg = JSON.parse(fs.readFileSync(path.join(consoleDir, "daemon.json"), "utf8"));
-      return cfg.pid && cfg.pid !== proc.pid ? cfg.pid : null;
-    },
+    successorPid: function () { return readSuccessorPid(configPath, proc.pid); },
     // Admin session cookie, as the web UI holds it.
     adminCookie: async function () {
       var body = JSON.stringify({ setupCode: SETUP_CODE, username: "entryadmin", pin: "123456" });
@@ -144,19 +142,42 @@ async function bootDaemon(config) {
       await new Promise(function (r) { setTimeout(r, 200); });
       return res.headers["set-cookie"][0].split(";")[0];
     },
-    cleanup: async function () {
-      var successor = null;
-      try { successor = d.successorPid(); } catch (e) { successor = null; }
-      if (proc.exitCode === null) signalPid(proc.pid, "SIGKILL");
-      if (successor) {
-        signalPid(successor, "SIGTERM");
-        await new Promise(function (r) { setTimeout(r, 1500); });
-        signalPid(successor, "SIGKILL");
-      }
-      fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    },
+    cleanup: function () { return reapDaemon(proc, home, configPath); },
   };
   return d;
+}
+
+// The pid a restart records for its successor, or null when the file names the
+// daemon itself. Throws when the file cannot be read or parsed: a successor
+// cannot be ruled out from a file that cannot be read.
+function readSuccessorPid(configPath, ownPid) {
+  var cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  return cfg.pid && cfg.pid !== ownPid ? cfg.pid : null;
+}
+
+// Kills the spawned daemon and its detached successor and removes the temp
+// home. When the successor cannot be established the daemon and the home are
+// still cleaned up, then this rejects naming the daemon.json path, so a
+// possibly-live successor fails the test instead of leaking silently.
+async function reapDaemon(proc, home, configPath) {
+  var successor = null;
+  var unreadable = null;
+  try {
+    successor = readSuccessorPid(configPath, proc.pid);
+  } catch (e) {
+    unreadable = e;
+  }
+  if (proc.exitCode === null) signalPid(proc.pid, "SIGKILL");
+  if (successor) {
+    signalPid(successor, "SIGTERM");
+    await new Promise(function (r) { setTimeout(r, 1500); });
+    signalPid(successor, "SIGKILL");
+  }
+  fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  if (unreadable) {
+    throw new Error("could not establish the restart successor from " + configPath
+      + " (a detached daemon may still be running): " + unreadable.message);
+  }
 }
 
 function sendWs(d, cookie, message) {
@@ -233,4 +254,37 @@ entryCase("web-UI restart_server reaches the announcer", EXIT_HANDOFF, null, asy
 entryCase("web-UI restart-to-apply-update reaches the announcer", EXIT_HANDOFF, null, async function (d) {
   var ws = await sendWs(d, await d.adminCookie(), { type: "restart_for_build_update" });
   d.proc.once("exit", function () { ws.terminate(); });
+});
+
+// Cleanup must fail, not skip, when the successor pid cannot be established.
+// The stand-in process plays the spawned daemon; the config shapes are the
+// two ways daemon.json can be unusable mid-restart.
+function cleanupCase(name, writeConfig) {
+  test(name, async function () {
+    var home = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-cleanup-"));
+    var configPath = path.join(home, "console", "daemon.json");
+    fs.mkdirSync(path.join(home, "console"), { recursive: true });
+    writeConfig(configPath);
+    var proc = spawn(process.execPath, ["-e", "setInterval(function () {}, 1000)"], { stdio: "ignore" });
+    try {
+      await assert.rejects(reapDaemon(proc, home, configPath), function (err) {
+        assert.ok(err.message.indexOf(configPath) !== -1, "names the daemon.json path: " + err.message);
+        return true;
+      });
+      await waitForExit(proc, 5000);
+      assert.equal(fs.existsSync(home), false, "the temp home is still removed");
+    } finally {
+      if (proc.exitCode === null) signalPid(proc.pid, "SIGKILL");
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+}
+
+cleanupCase("cleanup fails naming the path when daemon.json is unreadable", function (configPath) {
+  // A directory at the path makes the read fail for any uid, root included.
+  fs.mkdirSync(configPath);
+});
+
+cleanupCase("cleanup fails naming the path when daemon.json is partial", function (configPath) {
+  fs.writeFileSync(configPath, '{"port": 1234, "pid": 99');
 });

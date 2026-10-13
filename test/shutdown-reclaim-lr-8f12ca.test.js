@@ -110,7 +110,9 @@ test("the next startup tells the operator which agents were interrupted, once", 
   assert.match(notice.text, /Clagentic: Console shut down or restarted/);
   assert.match(notice.text, /background agent "Review the diff"/);
 
-  var diag = sessionReclaim.restartDiagnostics(sm, "p-restarted");
+  assert.deepEqual(sessionReclaim.restartDiagnostics(sm, "p-restarted"), [], "no canSee: fail closed");
+  assert.deepEqual(sessionReclaim.restartDiagnostics(sm, "p-restarted", null), [], "null canSee: fail closed");
+  var diag = sessionReclaim.restartDiagnostics(sm, "p-restarted", function () { return true; });
   assert.equal(diag.length, 1);
   assert.equal(diag[0].type, "diagnostic");
   assert.match(diag[0].message, /Review the diff/);
