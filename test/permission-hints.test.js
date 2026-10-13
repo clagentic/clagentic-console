@@ -25,12 +25,6 @@ function ask(server, hints, toolName, input) {
   return server.ask(toolName || "Bash", input || TOOL_INPUT, hints);
 }
 
-function isSettled(promise) {
-  var state = { settled: false };
-  promise.then(function () { state.settled = true; });
-  return state;
-}
-
 test("the settle detector sees a rejecting call as settled, and a call still waiting as pending", async function () {
   var rejecting = isSettled(Promise.reject(new Error("handler failed")));
   var fulfilling = isSettled(Promise.resolve("ok"));
