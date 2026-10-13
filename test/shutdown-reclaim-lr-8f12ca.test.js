@@ -12,7 +12,10 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var fs = require("fs");
+var path = require("path");
 var harness = require("./access-harness");
+var settle = harness.settle;
 
 var H = null;
 var sessions = null;
@@ -117,4 +120,87 @@ test("the next startup tells the operator which agents were interrupted, once", 
   var again = byCli(managerOver(H.dirs.p), "cli-shutdown-agent");
   assert.equal(again.pendingAutoResume, true);
   assert.equal(again.pendingAutoResumeAgents, null);
+});
+
+function freshProject(slug) {
+  var dir = path.join(H.home, "extra", slug);
+  fs.mkdirSync(dir, { recursive: true });
+  H.relay.addProject(dir, slug, slug, null, null, null);
+  return { dir: dir, sm: ctxOf(slug).getSessionManager() };
+}
+
+// Records console output for the length of one call.
+async function capturingConsole(fn) {
+  var lines = { log: [], error: [] };
+  var realLog = console.log;
+  var realError = console.error;
+  console.log = function () { lines.log.push(Array.prototype.join.call(arguments, " ")); };
+  console.error = function () { lines.error.push(Array.prototype.join.call(arguments, " ")); };
+  try {
+    await fn();
+  } finally {
+    console.log = realLog;
+    console.error = realError;
+  }
+  return lines;
+}
+
+test("removing a project is not a shutdown: nothing is recorded as resumable", async function () {
+  var p = freshProject("p-removed");
+  var s = running(p.sm.createSessionRaw({}));
+  s.cliSessionId = "cli-removed-agent";
+  s.activeTaskToolIds = { toolu_9: true };
+  s.taskLabels = { toolu_9: "Doomed by operator" };
+  p.sm.saveSessionFile(s);
+
+  var lines = await capturingConsole(async function () {
+    assert.equal(H.relay.removeProject("p-removed"), true);
+    await settle();
+  });
+
+  assert.equal(s.pendingAutoResume, undefined);
+  assert.equal(s.pendingAutoResumeReason, undefined);
+  assert.equal(s.pendingAutoResumeAgents, undefined);
+  var reloaded = byCli(managerOver(p.dir), "cli-removed-agent");
+  assert.ok(!reloaded.pendingAutoResume, "the persisted session is not marked");
+  assert.ok(!reloaded.pendingAutoResumeAgents);
+  assert.ok(!lines.log.concat(lines.error).some(function (l) { return /session-reclaim\] Shutdown/.test(l); }),
+    "removal logs no shutdown summary");
+});
+
+test("a session file that cannot be written is logged, counted, and does not stop the shutdown", async function () {
+  var p = freshProject("p-fail");
+  var bad = running(p.sm.createSessionRaw({}));
+  bad.cliSessionId = "cli-fail-bad";
+  bad.activeTaskToolIds = { toolu_a: true };
+  bad.taskLabels = { toolu_a: "Agent that loses its marker" };
+  p.sm.saveSessionFile(bad);
+  var good = running(p.sm.createSessionRaw({}));
+  good.cliSessionId = "cli-fail-good";
+  good.activeTaskToolIds = { toolu_b: true };
+  good.taskLabels = { toolu_b: "Agent that is recorded" };
+  p.sm.saveSessionFile(good);
+
+  var realSave = p.sm.saveSessionFile;
+  p.sm.saveSessionFile = function (s) {
+    if (s === bad) throw new Error("disk full");
+    return realSave(s);
+  };
+
+  var lines = await capturingConsole(function () { return H.relay.destroyAll(); });
+
+  var failure = lines.error.filter(function (l) { return /Could not persist the resume marker/.test(l); });
+  assert.equal(failure.length, 1, "one error line for the one failure");
+  assert.ok(failure[0].indexOf("session " + bad.localId) !== -1, "names the session id");
+  assert.ok(failure[0].indexOf("Agent that loses its marker") !== -1, "names the agent");
+  assert.ok(failure[0].indexOf("disk full") !== -1, "names the error");
+
+  var summary = lines.error.filter(function (l) { return /session-reclaim\] Shutdown/.test(l); });
+  assert.equal(summary.length, 1, "one summary line per shutdown");
+  assert.match(summary[0], /2 session\(s\) with background agents recorded as resumable, 1 could not be persisted/);
+
+  var reloaded = byCli(managerOver(p.dir), "cli-fail-good");
+  assert.equal(reloaded.pendingAutoResume, true, "the other session is still persisted");
+  assert.deepEqual(reloaded.pendingAutoResumeAgents, ["Agent that is recorded"]);
+  assert.ok(!byCli(managerOver(p.dir), "cli-fail-bad").pendingAutoResume);
 });
