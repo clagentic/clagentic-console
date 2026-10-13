@@ -1,5 +1,5 @@
-// A failure is reported as a failure: never as success, never as not-found,
-// and the same input is never delivered twice. Covers lib/session-input.js and
+// A failure is reported as a failure: never as success, never as not-found.
+// Covers lib/session-input.js and
 // lib/session-resume.js.
 
 var test = require("node:test");
@@ -124,6 +124,34 @@ test("open: a rejected query start is an error and clears isProcessing", async f
   project.sm.sessions.forEach(function (s) { assert.equal(s.isProcessing, false); });
 });
 
+test("open: a rejected query start leaves no history entry", async function () {
+  var project = makeProject({ startQuery: function () { return Promise.reject(new Error("no worker")); } });
+  var r = await makeInput(project).openSession({ projectSlug: "p", prompt: "go" });
+  assert.equal(r.result, "error");
+  assert.equal(project.calls.recorded.length, 0);
+});
+
+test("open: a throwing query start leaves no history entry", function () {
+  var project = makeProject({ startQuery: function () { throw new Error("sync boom"); } });
+  makeInput(project).openSession({ projectSlug: "p", prompt: "go" });
+  assert.equal(project.calls.recorded.length, 0);
+});
+
+test("open: the prompt is recorded once, through recordInjected, after the start succeeds", async function () {
+  var project = makeProject({ startQuery: function () { return Promise.resolve(); } });
+  var r = await makeInput(project).openSession({
+    projectSlug: "p", prompt: "go", initiator: "scheduled", triggerId: "trg-1", contextNote: "nightly",
+  });
+  assert.equal(r.result, "opened");
+  assert.equal(project.calls.recorded.length, 1);
+  var entry = project.calls.recorded[0];
+  assert.equal(entry.text, "go");
+  assert.equal(entry.source, "external-trigger");
+  assert.equal(entry.initiator, "scheduled");
+  assert.equal(entry.triggerId, "trg-1");
+  assert.equal(entry.contextNote, "nightly");
+});
+
 test("open: a throwing query start is the same error", function () {
   var project = makeProject({ startQuery: function () { throw new Error("sync boom"); } });
   var r = makeInput(project).openSession({ projectSlug: "p", prompt: "go" });
@@ -224,26 +252,24 @@ test("cli-sessions: strict history read rejects on a missing file, the default r
   assert.deepEqual(await cliSessions.readCliSessionHistory(os.tmpdir(), id), []);
 });
 
-// ---- 5: only a torn final history line may be skipped ----
+// ---- 5: any malformed history line refuses the resume ----
 
-test("resume: a torn final line is skipped and the rest resumes", function () {
+test("resume: a malformed final line refuses the resume naming the session and line", async function () {
   var dir = tempDir();
   try {
     fs.writeFileSync(path.join(dir, "cli-torn.jsonl"), [
       metaLine("cli-torn"),
       JSON.stringify({ type: "user_message", text: "one" }),
-      JSON.stringify({ type: "delta", text: "two" }),
-      '{"type":"delta","te',
-    ].join("\n"));
-    var stored = sessionResume.readStoredSession(dir, "cli-torn");
-    assert.deepEqual(stored.history.map(function (h) { return h.text; }), ["one", "two"]);
-    // The same with the newline a writer appends after each record.
-    fs.writeFileSync(path.join(dir, "cli-torn2.jsonl"), [
-      metaLine("cli-torn2"),
-      JSON.stringify({ type: "user_message", text: "one" }),
       '{"type":"delta","te',
     ].join("\n") + "\n");
-    assert.equal(sessionResume.readStoredSession(dir, "cli-torn2").history.length, 1);
+    assert.throws(function () { sessionResume.readStoredSession(dir, "cli-torn"); }, /cli-torn.*line 3/);
+    var project = makeProject({ sessionsDir: dir });
+    var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-torn", prompt: "hi" });
+    assert.equal(r.result, "error");
+    assert.match(r.reason, /cli-torn/);
+    assert.match(r.reason, /line 3/);
+    assert.equal(project.calls.resumed.length, 0);
+    assert.equal(project.calls.start.length, 0);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -258,7 +284,7 @@ test("resume: a malformed record before the last line refuses the resume and nam
       "not json at all",
       JSON.stringify({ type: "delta", text: "three" }),
     ].join("\n") + "\n");
-    assert.throws(function () { sessionResume.readStoredSession(dir, "cli-hole"); }, /cli-hole/);
+    assert.throws(function () { sessionResume.readStoredSession(dir, "cli-hole"); }, /cli-hole.*line 3/);
     var project = makeProject({ sessionsDir: dir });
     var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-hole", prompt: "hi" });
     assert.equal(r.result, "error");
