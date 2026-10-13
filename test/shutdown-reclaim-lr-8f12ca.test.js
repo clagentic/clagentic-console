@@ -205,3 +205,29 @@ test("a session file that cannot be written is logged, counted, and does not sto
   assert.deepEqual(reloaded.pendingAutoResumeAgents, ["Agent that is recorded"]);
   assert.ok(!byCli(managerOver(p.dir), "cli-fail-bad").pendingAutoResume);
 });
+
+test("a session marked resumable at shutdown is resumed by injected input with its marker intact", async function () {
+  var sessionResume = require("../lib/session-resume");
+  var p = freshProject("p-inject");
+  var marked = p.sm.createSessionRaw({});
+  marked.cliSessionId = "cli-inject-marked";
+  marked.pendingAutoResume = true;
+  marked.pendingAutoResumeReason = "daemon_restart";
+  marked.pendingAutoResumeAgents = ["Review the diff"];
+  p.sm.saveSessionFile(marked);
+
+  var sm = managerOver(p.dir);
+  var loaded = byCli(sm, "cli-inject-marked");
+  var resumed = await sessionResume.resumeStoredSession({ sm: sm, cwd: p.dir }, "cli-inject-marked", { activate: false });
+
+  assert.equal(resumed, loaded, "the stored session is the one resumed, not a copy without its marker");
+  assert.equal(resumed.pendingAutoResume, true);
+  assert.equal(resumed.pendingAutoResumeReason, "daemon_restart");
+  assert.deepEqual(resumed.pendingAutoResumeAgents, ["Review the diff"]);
+
+  sm.saveSessionFile(resumed);
+  var reloaded = byCli(managerOver(p.dir), "cli-inject-marked");
+  assert.equal(reloaded.pendingAutoResume, true);
+  assert.equal(reloaded.pendingAutoResumeReason, "daemon_restart");
+  assert.deepEqual(reloaded.pendingAutoResumeAgents, ["Review the diff"]);
+});
