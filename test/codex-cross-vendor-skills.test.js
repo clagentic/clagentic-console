@@ -68,6 +68,29 @@ test("a skill present in both agents' directories appears once; the project beat
   assert.equal(userOnly.filter(function (s) { return s.name === "same"; })[0].description, "user claude");
 });
 
+test("for a Codex session a same-named skill in .agents beats .claude at each level; a Claude session keeps .claude first", function () {
+  var home = tmp("home");
+  var project = tmp("project");
+  var homeAgents = skill(home, ".agents", "same", "user codex");
+  skill(home, ".claude", "same", "user claude");
+  var projectAgents = skill(project, ".agents", "same", "project codex");
+  skill(project, ".claude", "same", "project claude");
+  skill(home, ".agents", "user-only", "user codex");
+  skill(home, ".claude", "user-only", "user claude");
+
+  var forCodex = codexAdapter._test_discoverClaudeSkills(project, home);
+  assert.equal(forCodex.same, fs.realpathSync(projectAgents), "the project's .agents skill is the one a Codex turn carries");
+  var userLevel = codexAdapter._test_discoverClaudeSkills(tmp("empty"), home);
+  assert.equal(userLevel.same, fs.realpathSync(homeAgents));
+  assert.equal(userLevel["user-only"], fs.realpathSync(path.join(home, ".agents", "skills", "user-only", "SKILL.md")));
+
+  var codexMeta = skillDiscovery.discoverSkillsWithMeta(project, home, true);
+  assert.equal(codexMeta.filter(function (s) { return s.name === "same"; })[0].description, "project codex");
+  var claudeMeta = skillDiscovery.discoverSkillsWithMeta(project, home);
+  assert.equal(claudeMeta.filter(function (s) { return s.name === "same"; })[0].description, "project claude");
+  assert.equal(skillDiscovery.collectSkillDirs(project, home).same, fs.realpathSync(path.dirname(path.join(project, ".claude", "skills", "same", "SKILL.md"))));
+});
+
 test("a link in either agent's directory that leaves it is not followed", function () {
   var home = tmp("home");
   var outside = tmp("outside");
