@@ -57,11 +57,11 @@ test("versions compare as semver, a prerelease below its release", function () {
 
 test("protocol features follow the running version, one threshold each", function () {
   var f = protocol.protocolFeatures;
-  assert.deepEqual(f("0.148.0"), { threadRevert: true, projectTrustGate: false, turnTrigger: false, updatePlanTool: false });
-  assert.deepEqual(f("0.150.2"), { threadRevert: true, projectTrustGate: true, turnTrigger: false, updatePlanTool: false });
-  assert.deepEqual(f("0.151.0"), { threadRevert: true, projectTrustGate: true, turnTrigger: true, updatePlanTool: false });
-  assert.deepEqual(f("0.152.0"), { threadRevert: true, projectTrustGate: true, turnTrigger: true, updatePlanTool: true });
-  assert.deepEqual(f("0.162.1"), { threadRevert: true, projectTrustGate: true, turnTrigger: true, updatePlanTool: true });
+  assert.deepEqual(f("0.148.0"), { projectTrustGate: false, turnTrigger: false, updatePlanTool: false });
+  assert.deepEqual(f("0.150.2"), { projectTrustGate: true, turnTrigger: false, updatePlanTool: false });
+  assert.deepEqual(f("0.151.0"), { projectTrustGate: true, turnTrigger: true, updatePlanTool: false });
+  assert.deepEqual(f("0.152.0"), { projectTrustGate: true, turnTrigger: true, updatePlanTool: true });
+  assert.deepEqual(f("0.162.1"), { projectTrustGate: true, turnTrigger: true, updatePlanTool: true });
   assert.equal(f("0.151.0-alpha.1").turnTrigger, false, "a prerelease of 0.151.0 is not yet 0.151.0");
   assert.deepEqual(f(null), f("0.148.0"), "an unknown version is taken to be the oldest supported one");
   assert.deepEqual(f("not a version"), f("0.148.0"));

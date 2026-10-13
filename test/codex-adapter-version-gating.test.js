@@ -1,11 +1,11 @@
 "use strict";
 // The Codex adapter against recorded app-server answers, per running version:
 // which config keys the app-server is started with, which turn field a turn
-// carries, how a rewind is made, and what happens to a Codex that is too old.
-// The app-server is a stand-in that reports the version it is told to and
+// carries, that a rewind is refused, and what happens to a Codex that is too
+// old. The app-server is a stand-in that reports the version it is told to and
 // records every call; no Codex is run. Caller shapes: 0.148.x-0.150.x (no turn
 // trigger), 0.151.x (turn trigger), 0.152.x and 0.162.x (plan tool), plus
-// session create, resume, rewind, model switch, plan display and abort.
+// session create, resume, rewind (refused), model switch, plan display and abort.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -207,93 +207,22 @@ test("a session starts and resumes with an approval policy the running Codex acc
 
 // --- Rewind ---
 
-test("a rewind reverts the thread to the first turn it drops (thread/revert, never thread/rollback)", async function () {
-  var run = await startAdapter("0.162.1");
-  await run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null });
-  await run.adapter.rollbackThread("thread-1", 3, { runtimeEnv: null });
-  var reverts = callsOf(run.server, "thread/revert").map(function (c) { return c.params; });
-  assert.deepEqual(reverts, [
-    { threadId: "thread-1", beforeTurnId: "turn-c" },
-    { threadId: "thread-1", beforeTurnId: "turn-a" },
-  ]);
-  assert.equal(callsOf(run.server, "thread/rollback").length, 0);
-  await run.adapter.shutdown();
-});
-
-test("a rewind works the same on the oldest supported Codex", async function () {
-  var run = await startAdapter("0.148.0");
-  await run.adapter.rollbackThread("thread-1", 2, { runtimeEnv: null });
-  assert.deepEqual(callsOf(run.server, "thread/revert")[0].params, { threadId: "thread-1", beforeTurnId: "turn-b" });
-  assert.equal(callsOf(run.server, "thread/rollback").length, 0, "under the floor's protocol thread/rollback is never used");
-  await run.adapter.shutdown();
-});
-
-test("a rewind of more turns than the thread has, or of none, is refused and nothing is reverted", async function () {
-  var run = await startAdapter("0.162.1");
-  await assert.rejects(run.adapter.rollbackThread("thread-1", 4, { runtimeEnv: null }), { code: "CODEX_REWIND_TURN_UNKNOWN" });
-  await assert.rejects(run.adapter.rollbackThread("thread-1", 0, { runtimeEnv: null }), { code: "CODEX_REWIND_INVALID" });
-  assert.equal(callsOf(run.server, "thread/revert").length, 0);
-  await run.adapter.shutdown();
-});
-
-test("a thread whose turns cannot be read is not rewound", async function () {
-  var run = await startAdapter("0.162.1");
-  var realSend = run.server.send;
-  run.server.send = function (method, params) {
-    if (method === "thread/read") return Promise.resolve({ thread: { id: params.threadId } });
-    return realSend.apply(this, arguments);
-  };
-  await assert.rejects(run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null }), { code: "CODEX_REWIND_TURN_UNKNOWN" });
-  assert.equal(callsOf(run.server, "thread/revert").length, 0);
-  await run.adapter.shutdown();
-});
-
-test("a rewind is refused while a turn is in flight on the thread, with nothing changed, and allowed once it ends", async function () {
-  var run = await startAdapter("0.162.1", null, { holdTurn: true });
-  var handle = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
-  handle.pushMessage("go");
-  await until(function () { return callsOf(run.server, "turn/start").length > 0; }, "the turn");
-
-  var readsBefore = callsOf(run.server, "thread/read").length;
-  await assert.rejects(run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null }), { code: "CODEX_REWIND_BUSY" });
-  assert.equal(callsOf(run.server, "thread/revert").length, 0);
-  assert.equal(callsOf(run.server, "thread/read").length, readsBefore, "nothing was even read");
-
-  run.server.emit({ method: "turn/started", params: { threadId: "thread-1" } });
-  run.server.emit({ method: "turn/completed", params: { threadId: "thread-1", turn: { status: "completed" } } });
-  await new Promise(function (resolve) { setImmediate(resolve); });
-  await run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null });
-  assert.equal(callsOf(run.server, "thread/revert").length, 1);
-  handle.close();
-  await run.adapter.shutdown();
-});
-
-test("a turn appended between the read the target came from and the revert stops the rewind; nothing is reverted", async function () {
-  var run = await startAdapter("0.162.1");
-  var realSend = run.server.send;
-  var reads = 0;
-  run.server.send = function (method, params) {
-    if (method === "thread/read") {
-      reads++;
-      var turns = [{ id: "turn-a" }, { id: "turn-b" }, { id: "turn-c" }];
-      if (reads >= 2) turns.push({ id: "turn-d" });
-      run.server.calls.push({ method: method, params: params });
-      return Promise.resolve({ thread: { id: params.threadId, turns: turns } });
-    }
-    return realSend.apply(this, arguments);
-  };
-  await assert.rejects(run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null }), { code: "CODEX_REWIND_CONFLICT" });
-  assert.equal(reads, 2);
-  assert.equal(callsOf(run.server, "thread/revert").length, 0, "the appended turn was not deleted");
-  await run.adapter.shutdown();
-});
-
-test("a turn list that is the same on the second read is reverted as computed", async function () {
-  var run = await startAdapter("0.162.1");
-  await run.adapter.rollbackThread("thread-1", 2, { runtimeEnv: null });
-  assert.equal(callsOf(run.server, "thread/read").length, 2);
-  assert.deepEqual(callsOf(run.server, "thread/revert")[0].params, { threadId: "thread-1", beforeTurnId: "turn-b" });
-  await run.adapter.shutdown();
+test("a rewind is refused on every supported version, with its reason, and the app-server is sent nothing", async function () {
+  var versions = ["0.148.0", "0.151.0", "0.152.0", "0.162.1"];
+  for (var i = 0; i < versions.length; i++) {
+    var run = await startAdapter(versions[i]);
+    var callsBefore = run.server.calls.length;
+    await assert.rejects(run.adapter.rollbackThread("thread-1", 1, { runtimeEnv: null }), {
+      code: "CODEX_REWIND_UNAVAILABLE",
+      message: /Rewind is not available for Codex sessions yet/,
+    }, versions[i]);
+    await assert.rejects(run.adapter.rollbackThread("thread-1", 3, { runtimeEnv: null }), { code: "CODEX_REWIND_UNAVAILABLE" });
+    assert.equal(run.server.calls.length, callsBefore, versions[i] + ": not even a thread/read");
+    ["thread/revert", "thread/rollback"].forEach(function (method) {
+      assert.equal(callsOf(run.server, method).length, 0, versions[i] + ": " + method + " is never sent");
+    });
+    await run.adapter.shutdown();
+  }
 });
 
 // --- The running version ---
@@ -353,11 +282,15 @@ test("each running version lists its own models, and a switch is sent on the nex
   await run.adapter.shutdown();
 });
 
-test("the session advertises rewinding as available on a supported version", async function () {
-  var run = await startAdapter("0.148.0");
-  assert.equal(run.init.capabilities.rollback, true);
-  assert.equal(run.init.capabilities.fork, true);
-  await run.adapter.shutdown();
+test("the session advertises rewinding as unavailable and forking as available, on every supported version", async function () {
+  var versions = ["0.148.0", "0.162.1"];
+  for (var i = 0; i < versions.length; i++) {
+    var run = await startAdapter(versions[i]);
+    assert.equal(run.init.capabilities.rewind, false);
+    assert.equal(run.init.capabilities.rollback, false);
+    assert.equal(run.init.capabilities.fork, true);
+    await run.adapter.shutdown();
+  }
 });
 
 test("a plan the app-server streams is shown, with statuses normalized", async function () {

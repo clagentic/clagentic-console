@@ -57,6 +57,28 @@ test("an override that points nowhere is named in the title; a missing Codex get
   assert.match(rows[1].title, /Codex is not installed\. Install it with: npm install -g @openai\/codex/);
 });
 
+test("a disabled control shows the agent's own reason when it has one, else the ledger's", async function () {
+  var { VR } = await load();
+  var { store } = await import(pathToFileURL(path.join(PUBLIC, "modules", "store.js")).href);
+  var rewindOff = { rewind: false, fork: true };
+  VR.applyVendorRegistry({
+    vendors: [
+      { id: "codex", displayName: "Codex", installed: true, capabilities: rewindOff, capabilityReasons: { rewind: "Rewind is not available for Codex sessions yet" } },
+      { id: "other", displayName: "Other", installed: true, capabilities: rewindOff, capabilityReasons: {} },
+    ],
+    reasons: { rewind: "This agent cannot rewind file changes to an earlier message." },
+  });
+  store.set({ currentVendor: "codex" });
+  var own = VR.capabilityGate("rewind");
+  assert.equal(own.enabled, false);
+  assert.equal(own.reason, "Rewind is not available for Codex sessions yet");
+  assert.match(VR.gatedButtonAttrs("rewind", "Rewind"), /Rewind is not available for Codex sessions yet/);
+  assert.equal(VR.capabilityGate("fork").enabled, true);
+
+  store.set({ currentVendor: "other" });
+  assert.equal(VR.capabilityGate("rewind").reason, "This agent cannot rewind file changes to an earlier message.");
+});
+
 test("an agent with no install detail is shown exactly as before", async function () {
   var { VR } = await load();
   var rows = VR.pickerRows([
