@@ -55,6 +55,31 @@ test("versions compare as semver, a prerelease below its release", function () {
   assert.equal(versions.MIN_CODEX_VERSION, "0.148.0");
 });
 
+test("numeric prerelease identifiers compare as digit strings, however long", function () {
+  var big = "9007199254740993";
+  var bigger = "9007199254740994";
+  assert.equal(versions.compareVersions("0.148.0-alpha." + big, "0.148.0-alpha." + bigger), -1, "beyond double precision");
+  assert.equal(versions.compareVersions("0.148.0-alpha." + bigger, "0.148.0-alpha." + big), 1);
+  assert.equal(versions.compareVersions("0.148.0-alpha." + big, "0.148.0-alpha." + big), 0);
+  assert.equal(versions.compareVersions("0.148.0-rc.99", "0.148.0-rc.100"), -1, "shorter digit string is smaller");
+  assert.equal(versions.compareVersions("0.148.0-rc.007", "0.148.0-rc.7"), 0, "leading zeros do not count");
+  assert.equal(versions.compareVersions("0.148.0-1", "0.148.0-alpha"), -1, "a numeric identifier is below a text one");
+});
+
+test("a parsed version whose parts are not finite non-negative integers is not a version", function () {
+  var good = { major: 0, minor: 148, patch: 0, pre: null, text: "0.148.0" };
+  assert.equal(versions.atLeast(good, "0.148.0"), true);
+  [NaN, Infinity, -1, 1.5].forEach(function (bad) {
+    ["major", "minor", "patch"].forEach(function (key) {
+      var broken = Object.assign({}, good);
+      broken[key] = bad;
+      assert.equal(versions.atLeast(broken, "0.148.0"), false, key + "=" + bad + " fails closed");
+      assert.throws(function () { versions.compareVersions(broken, "0.148.0"); }, /unreadable/);
+    });
+  });
+  assert.equal(versions.parseVersion("99999999999999999999.0.0"), null, "a component beyond safe integers is not read");
+});
+
 test("protocol features follow the running version, one threshold each", function () {
   var f = protocol.protocolFeatures;
   assert.deepEqual(f("0.148.0"), { projectTrustGate: false, turnTrigger: false, updatePlanTool: false });
