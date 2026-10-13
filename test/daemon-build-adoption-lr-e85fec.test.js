@@ -109,8 +109,17 @@ test("a different installed build is stale, offered, and restarts nothing until 
     assert.equal(announced.buildUpdate.installedBuildSha, shaNew);
     assert.equal(announced.buildUpdate.interruptions, undefined, "the broadcast carries no session content");
     assert.equal(announced.buildUpdate.token, undefined, "the broadcast carries no confirmation token");
-    assert.equal(announced.buildUpdate.changes.available, true, JSON.stringify(announced.buildUpdate.changes));
-    assert.ok(announced.buildUpdate.changes.commits.length >= 1, "the commits between the builds are listed");
+    // The offer is shown at once; the change list refreshes it in place when git answers.
+    var listed = await waitUntil(function () {
+      return buildUpdateDiagnostics(sock).find(function (m) { return m.buildUpdate && m.buildUpdate.changes.available; });
+    }, 15000, "the offer refreshed with its change list");
+    assert.equal(listed.refresh, true, "the change list refreshes the offer rather than adding a second one");
+    assert.equal(listed.actionable.action, "restart_for_build_update");
+    assert.ok(listed.buildUpdate.changes.commits.length >= 1, "the commits between the builds are listed");
+    assert.equal(
+      sock.messages.filter(function (m) { return m.type === "diagnostic_retract" && m.source === "build-update"; }).length, 0,
+      "the offer is not retracted while it is refreshed"
+    );
 
     var s = await status(d);
     assert.equal(s.state, "stale");

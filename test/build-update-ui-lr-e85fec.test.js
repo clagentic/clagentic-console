@@ -128,6 +128,39 @@ test("a retraction removes the build-update offer and its action, and leaves oth
   assert.deepEqual(c.sent, []);
 });
 
+test("a refreshed offer replaces the entry in place: one action button, and the confirmation survives", async function (t) {
+  var c = await client(t);
+  c.diagnostics.addDiagnostic(standingOffer());
+  c.diagnostics.addDiagnostic(confirmOffer("tok-5"));
+  var refreshed = Object.assign(standingOffer(), { refresh: true, message: "A newer build is installed (changes read)." });
+  c.diagnostics.refreshDiagnostic(refreshed);
+  c.settle();
+  assert.equal(c.toastsOf("build-update").length, 2, "still one standing offer and one confirmation");
+  assert.equal(c.container.querySelectorAll("button").filter(function (b) { return b.textContent === "Restart to apply update"; }).length, 1);
+  assert.ok(c.container.textContent.indexOf("changes read") !== -1, "the new text is the one shown");
+  assert.ok(c.button("Restart now"), "the confirmation the operator is reading was not replaced");
+  assert.deepEqual(c.sent, []);
+});
+
+test("a refresh does not bring back an offer the operator declined", async function (t) {
+  var c = await client(t);
+  c.diagnostics.addDiagnostic(confirmOffer("tok-6"));
+  c.button("Not now").click();
+  c.settle();
+  c.diagnostics.refreshDiagnostic(Object.assign(confirmOffer("tok-6"), { refresh: true }));
+  c.settle();
+  assert.equal(c.toastsOf("build-update").length, 0);
+  assert.equal(c.button("Restart now"), null);
+});
+
+test("a refresh arriving before any offer is held is ignored; a plain diagnostic still shows", async function (t) {
+  var c = await client(t);
+  c.diagnostics.refreshDiagnostic(Object.assign(standingOffer(), { refresh: true }));
+  assert.equal(c.button("Restart to apply update"), null);
+  c.diagnostics.addDiagnostic(standingOffer());
+  assert.ok(c.button("Restart to apply update"));
+});
+
 test("the same offer shown again after a retraction is not swallowed as a duplicate", async function (t) {
   var c = await client(t);
   c.diagnostics.addDiagnostic(standingOffer());
