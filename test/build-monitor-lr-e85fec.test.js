@@ -96,6 +96,68 @@ test("stale, adopted, stale is not two consecutive sightings either", function (
   assert.deepEqual(h.events, []);
 });
 
+test("stale, change list in flight, inconclusive, stale again: an offer is visible", async function () {
+  var { createStandingOffer } = require("../lib/build-update-standing");
+  var sequence = [
+    assessment("stale"), assessment("stale"), // confirmed: announced, change list read starts
+    assessment("inconclusive", { reason: "hash-unavailable" }),
+    assessment("stale"), assessment("stale"), // confirmed again
+  ];
+  var i = 0;
+  var latest = null;
+  var sent = [];
+  var reads = [];
+  var offer = createStandingOffer({
+    listChanges: function () { return new Promise(function (resolve) { reads.push(resolve); }); },
+    currentAssessment: function () { return latest; },
+    broadcast: function (m) { sent.push(m); },
+    compose: function (a, changes) { return { type: "diagnostic", changes: changes, actionable: { action: "restart_for_build_update" } }; },
+  });
+  var announces = [];
+  var monitor = createBuildMonitor({
+    assess: function () { latest = sequence[Math.min(i++, sequence.length - 1)]; return latest; },
+    onStale: function (a) { announces.push(offer.announce(a)); },
+    isOfferShown: function (a) { return offer.isShownFor(a); },
+    onReoffer: function (a) { announces.push(offer.announce(a)); },
+  });
+  monitor.check();
+  monitor.check();
+  assert.ok(offer.current(), "visible while the first read is in flight");
+  monitor.check(); // inconclusive
+  reads[0]({ available: true, commits: ["late"] }); // resolves under an inconclusive verdict: discarded
+  await announces[0];
+  assert.equal(offer.isShownFor(sequence[0]), false, "the discarded read leaves the offer needing a refresh");
+  assert.ok(offer.current(), "the offer is still visible");
+  monitor.check();
+  monitor.check(); // second consecutive stale sighting: re-announced
+  assert.equal(announces.length, 2, "the next stale confirmation announced it again");
+  reads[1]({ available: true, commits: ["fresh"] });
+  await announces[1];
+  assert.deepEqual(offer.current().changes.commits, ["fresh"]);
+  assert.equal(sent.filter(function (m) { return m.type === "diagnostic_retract"; }).length, 0, "never retracted");
+});
+
+test("a confirmed stale build whose offer is shown is not re-announced on later checks", function () {
+  var reoffers = 0;
+  var h = harness([assessment("stale"), assessment("stale"), assessment("stale"), assessment("stale")], {
+    isOfferShown: function () { return true; },
+    onReoffer: function () { reoffers += 1; },
+  });
+  for (var i = 0; i < 4; i++) h.monitor.check();
+  assert.equal(reoffers, 0);
+});
+
+test("a confirmed stale build whose offer is not shown is re-announced, without a second journal warning", function () {
+  var reoffers = 0;
+  var h = harness([assessment("stale"), assessment("stale"), assessment("stale"), assessment("stale")], {
+    isOfferShown: function () { return false; },
+    onReoffer: function () { reoffers += 1; },
+  });
+  for (var i = 0; i < 4; i++) h.monitor.check();
+  assert.equal(reoffers, 2, "checks 3 and 4");
+  assert.equal(h.events.filter(function (e) { return e.indexOf("stale:") === 0; }).length, 1, "onStale (the warning) fired once");
+});
+
 test("a confirmed stale build is repeated in the journal at the reminder interval, not every check", function () {
   var seq = [];
   for (var i = 0; i < 8; i++) seq.push(assessment("stale"));
