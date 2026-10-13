@@ -660,36 +660,79 @@ description and not built.
 **What ships instead — detector with an attached actuator, not a bigger
 detector:**
 
-1. **Detection** (`lib/build-update-check.js`'s `checkForNewerInstalledBuild`)
-   compares `loadedBuildSha` — the SHA this process read from
-   `lib/build-sha.json` once at startup (lr-dc9a3b) — against a fresh read of
-   the same file, polled every 5 minutes from `lib/daemon.js` (plus once
-   10s after startup, so an install landing moments after boot is not missed
-   for a full interval).
-2. **Offer, not action.** On a detected mismatch, the daemon broadcasts a
-   `{type: "diagnostic", severity: "warning", source: "build-update",
-   actionable: {label: "Restart to apply update", action:
-   "restart_for_build_update"}}` message — the same diagnostic
-   channel/toast/panel `lib/memory-shed.js` already uses for the memory-
-   pressure notice, now with a real button
-   (`lib/public/modules/diagnostics.js`'s `_buildActionableEl`) instead of
-   just a hint icon. Client-side, `actionable.action` is matched against an
-   explicit allowlist (`ACTIONABLE_HANDLERS`) before anything is sent back
-   over the socket — the backend can offer an action, never dictate an
-   arbitrary WS command through the diagnostic payload.
-3. **Actuation only on that click.** The button sends `{type:
-   "restart_for_build_update"}`, gated by the same admin-only check as
-   `restart_server`/`shutdown_server` (`lib/project-sessions.js`). The
-   handler (`onRestartForBuildUpdate`, `lib/daemon.js`) waits for in-flight
-   sessions to finish — `lib/build-update-check.js`'s `waitForIdleThenAct`,
-   polling the same `getActiveLiveCount()` signal `lib/drain.js` uses for the
-   memory-pressure drain path — bounded at 60s, then calls the existing
-   `spawnAndRestart()`. No restart fires without this explicit click; nothing
-   times it, schedules it, or fires it as a side effect of install or merge.
+1. **Adopted, stale or inconclusive** (`lib/build-identity.js`). The process
+   records two things at startup, before it requires anything else from
+   `lib/`: the sha in `lib/build-sha.json` and a content hash of every file
+   under `lib/` plus `package.json`. "Adopted" means the installed build has
+   the same sha *and* the same content hash. A different sha, or the same sha
+   over different files, is stale (both shas are reported). A missing piece on
+   either side (no embedded sha in a checkout that never ran `npm pack`, an
+   unreadable installed tree) is inconclusive, with the reason; it is never
+   guessed into stale or adopted. The hash re-reads only files whose inode,
+   size or mtime changed, so a check costs a directory walk.
 
-The floor (lr-22e8's journald WARN + `health.stale`) is unchanged and still
-fires independently — this adds the offered affordance on top of it, it does
-not replace it.
+   The kernel's `(deleted)` mapping marker (`checkStaleInodes()`) is **not**
+   part of that verdict. The daemon keeps its native module
+   (`@lydell/node-pty`'s `pty.node`) mapped from the install directory, so any
+   reinstall, including an identical one (`install:local-test`, a post-merge
+   reinstall), unlinks the inode the process maps and the marker appears and
+   never clears. Before this, that made the periodic "serving STALE code"
+   warning fire once a minute for as long as the process lived, after an
+   install that changed nothing the process runs. `get_build_status` still
+   reports `staleInodes` for diagnosis.
+2. **Announce once, on a stable stale verdict** (`lib/build-monitor.js`). A
+   check runs every 60 seconds (`CLAGENTIC_CONSOLE_BUILD_CHECK_MS`). A stale
+   verdict is announced only after the same installed build is seen on two
+   consecutive checks, so a check that lands in the middle of an install
+   never offers a half-written build. An adopted verdict withdraws the offer.
+3. **The offer** (`lib/build-update-offer.js`, `lib/build-changes.js`). The
+   announcement is a `diagnostic` with `source: "build-update"`, the two shas,
+   and the commits between them (`git log loaded..installed`) where history is
+   readable: the package directory if it is a checkout, or the repository named
+   by `buildSourceRepo` in `daemon.json`. An npm install carries no history,
+   and the offer then says the list is unavailable. The announcement is
+   replayed to a client that connects later (`onGetBuildUpdateDiagnostic`).
+   It carries no session content, because it goes to every client.
+4. **A restart takes two operator clicks** (`lib/build-update-restart.js`,
+   `restart_for_build_update` in `lib/project-sessions.js`, admin only). The
+   first click sends `restart_for_build_update` with no token and gets back an
+   offer that adds what a restart now would end: every live session (one with
+   a running agent process) and each background agent it still tracks, read
+   from `session.activeTaskToolIds` through one helper in
+   `lib/build-update-offer.js`. The offer carries a one-use token. "Restart
+   now" sends the token back; "Not now" closes the offer. The restart is
+   scheduled only if the token is current, the installed build is still the
+   one offered, and nothing is live that the offer did not list. Otherwise a
+   fresh offer replaces it and the operator confirms again. Running turns and
+   agents then get up to 60 seconds to finish, and when the wait ends the same
+   check runs once more: a session that started after the confirmation
+   cancels the restart (announced to every client) instead of being ended
+   unseen. Nothing times a restart, schedules one, or fires one as a side
+   effect of install or merge, and no crew agent restarts the service.
+5. **`verify:installed-build`** asks the daemon for its verdict
+   (`clagentic-console --process-build-status`) and reports exactly one of
+   adopted, stale (with both shas, exit 1) or inconclusive (with the reason,
+   exit 0, never read as verified). An identical reinstall over a running
+   daemon is adopted.
+
+### Restart under a supervisor
+
+When systemd (or another supervisor that sets `INVOCATION_ID` or
+`NOTIFY_SOCKET`) owns the daemon, a restart is an exit with code 120
+(`RESTART_EXIT_CODE`, `lib/supervisor.js`) and nothing else: no replacement is
+spawned. The unit restarts the daemon (`Restart=always`), and with
+`KillMode=mixed` it kills every other process in the cgroup when the main
+process exits, so a self-spawned replacement was always killed and the restart
+worked only because the unit started another one. An unsupervised daemon (the
+CLI's detached start, dev mode) still spawns its replacement and exits 120.
+Every daemon the CLI or a restart starts itself gets an environment without
+those two variables, so a CLI run from inside a service does not make its
+daemon believe it is supervised.
+
+Shutdown (`shutdownProjects` in `lib/daemon.js`) clears every worktree rescan
+timer before it destroys a project (`stopWorktreeRescans`,
+`lib/daemon-projects.js`), and a rescan or worktree registration that still
+arrives after that does nothing.
 
 ## See Also
 

@@ -73,10 +73,22 @@
 // upstream (NAOMI's post-merge report, HOLDEN's operator relay) as if it
 // meant the running service was fixed.
 //
+// The process leg reports exactly one of three verdicts:
+//   adopted      — the daemon loaded merged HEAD AND says the installed files
+//                  are the ones it loaded (sha plus content hash). An identical
+//                  reinstall over a running daemon (install:local-test, a
+//                  post-merge reinstall) is adopted: its "(deleted)" mappings
+//                  (staleInodes) are reported but do not decide it.
+//   stale        — the daemon loaded a different build than the installed one;
+//                  both shas are printed. Exit 1.
+//   inconclusive — the check cannot say (no daemon, a daemon that predates
+//                  the status query or the content comparison); the reason is
+//                  printed. Exit 0, and never read as adopted.
+//
 // Exit codes:
-//   0  — ARTIFACT_AND_PROCESS_VERIFIED: installed build-sha.json matches
-//        merged HEAD AND the running daemon (if any) loaded that same SHA
-//        with no detected stale inodes.
+//   0  — ARTIFACT_AND_PROCESS_VERIFIED (adopted): installed build-sha.json
+//        matches merged HEAD AND the running daemon loaded that same SHA and
+//        reports the installed files are the ones it loaded.
 //      — ARTIFACT_VERIFIED_NO_PROCESS: installed build-sha.json matches
 //        merged HEAD and no daemon is currently running, so the PROCESS
 //        CHECK DID NOT RUN. The service's build status is UNKNOWN, not
@@ -85,9 +97,9 @@
 //        never be read as "the service is fine".
 //   1  — ARTIFACT_MISMATCH: installed build-sha.json does not match merged
 //        HEAD (PART 1's original failure mode, unchanged).
-//      — PROCESS_MISMATCH: the artifact matches, but the running daemon's
-//        loaded SHA differs from merged HEAD, or the daemon itself reports
-//        stale inodes (on-disk JS was replaced out from under it). THIS is
+//      — PROCESS_MISMATCH (stale): the artifact matches, but the running
+//        daemon's loaded SHA differs from merged HEAD, or the daemon itself
+//        reports the installed build differs from the one it loaded. THIS is
 //        the failure mode that would have caught 2026-08-25 at 01:48 — see
 //        test/verify-installed-build-lr-dc9a3b.test.js for the
 //        demonstrated-failure-before-fix simulation.
@@ -115,6 +127,11 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+
+// Never done by this check (see the NON-GOAL in the header comment).
+const APPLY_IS_THE_OPERATORS =
+  'The artifact on disk is correct; the SERVICE is still serving the old build. Applying it is the ' +
+  'operator\'s decision: the "Restart to apply update" action in the Clagentic: Console UI offers it.';
 
 function resolveHeadSha() {
   return execFileSync('git', ['rev-parse', 'HEAD'], {
@@ -208,6 +225,13 @@ function resolveProcessBuildStatus(cliBin) {
   return {
     running: true,
     loadedBuildSha: parsed.loadedBuildSha,
+    // The daemon's own verdict (adopted | stale | inconclusive) on whether
+    // the installed build is the one it loaded: sha plus a content hash of
+    // the installed files. Absent from a daemon that predates it.
+    installedBuildSha: parsed.installedBuildSha,
+    state: parsed.state,
+    reason: parsed.reason,
+    detail: parsed.detail,
     staleInodes: !!parsed.staleInodes,
     pid: parsed.pid,
   };
@@ -254,7 +278,7 @@ function main() {
 
   if (!processStatus.running) {
     console.log(
-      '[verify-installed-build] ARTIFACT_VERIFIED_NO_PROCESS: artifact matches merged HEAD ' +
+      '[verify-installed-build] ARTIFACT_VERIFIED_NO_PROCESS: inconclusive. Artifact matches merged HEAD ' +
       `(${headSha}); no daemon is running, so the PROCESS CHECK DID NOT RUN and the process ` +
       'build status is UNKNOWN -- do not read this as the process/service being verified. ' +
       'Not a failure: there is no running process to compare against yet.'
@@ -270,7 +294,7 @@ function main() {
     // transport error). This is NOT read as "verified": the build status of
     // the running process is explicitly UNKNOWN pending a restart.
     console.log(
-      '[verify-installed-build] STALE_PROCESS: artifact matches merged HEAD ' +
+      '[verify-installed-build] STALE_PROCESS: inconclusive. Artifact matches merged HEAD ' +
       `(${headSha}); the running daemon does not recognize the get_build_status query, ` +
       'meaning it predates that handler and has not picked up any build since. The PROCESS build ' +
       'status is UNKNOWN, NOT VERIFIED (PROCESS check inconclusive) -- restart the daemon to ' +
@@ -281,22 +305,40 @@ function main() {
     return;
   }
 
+  // stale: the process loaded a different build than the one installed, or the
+  // daemon itself says the installed files differ from what it loaded.
+  // staleInodes does not decide this: an identical reinstall (install:local-test,
+  // a post-merge reinstall) unlinks files the daemon keeps mapped without
+  // changing anything it runs.
   const processMismatch = processStatus.loadedBuildSha !== headSha;
-  if (processMismatch || processStatus.staleInodes) {
+  if (processMismatch || processStatus.state === 'stale') {
+    const daemonStale = processStatus.state === 'stale';
+    const installedSha = (daemonStale && processStatus.installedBuildSha) || headSha;
+    const why = daemonStale && processStatus.detail ? ` (${processStatus.detail})` : '';
     console.error(
-      `[verify-installed-build] PROCESS_MISMATCH: the on-disk artifact matches merged HEAD ` +
-      `(${headSha}), but the RUNNING daemon (PID ${processStatus.pid}) has NOT loaded it. ` +
-      `loadedBuildSha=${processStatus.loadedBuildSha || '(none)'} staleInodes=${processStatus.staleInodes}. ` +
-      `The artifact on disk is correct; the SERVICE is still serving the old build. ` +
-      `Restart the daemon to load the new build: systemctl restart clagentic-console ` +
-      `(NOT done automatically by this check -- see this script's header comment for why).`
+      `[verify-installed-build] PROCESS_MISMATCH: stale. The RUNNING daemon (PID ${processStatus.pid}) has NOT ` +
+      `loaded the installed build. loadedBuildSha=${processStatus.loadedBuildSha || '(none)'} ` +
+      `installedBuildSha=${installedSha}${why}. ${APPLY_IS_THE_OPERATORS}`
     );
     process.exit(1);
   }
 
+  if (processStatus.state !== 'adopted') {
+    // The shas agree but the daemon did not say the installed files are the
+    // ones it loaded (it predates that comparison, or could not read them).
+    console.log(
+      `[verify-installed-build] PROCESS_INCONCLUSIVE: inconclusive. The running daemon (PID ${processStatus.pid}) ` +
+      `loaded merged HEAD (${headSha}), but the PROCESS check cannot confirm it adopted the installed files: ` +
+      `${processStatus.detail || 'the daemon predates the content comparison'}. ` +
+      `Process build status is UNKNOWN, NOT VERIFIED. Not a failure.`
+    );
+    return;
+  }
+
   console.log(
-    `[verify-installed-build] ARTIFACT_AND_PROCESS_VERIFIED: installed build-sha.json AND the ` +
-    `running daemon (PID ${processStatus.pid}) both match merged HEAD (${headSha}), no stale inodes detected.`
+    `[verify-installed-build] ARTIFACT_AND_PROCESS_VERIFIED: adopted. The installed build-sha.json AND the ` +
+    `running daemon (PID ${processStatus.pid}) both match merged HEAD (${headSha}), and the installed files ` +
+    `are the ones the daemon loaded (staleInodes=${processStatus.staleInodes} is informational).`
   );
 }
 
