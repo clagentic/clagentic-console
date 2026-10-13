@@ -34,7 +34,10 @@ FakeAppServer.prototype.send = function (method, params) {
     return Promise.resolve({ data: [{ model: model, displayName: model, isDefault: true }] });
   }
   if (method === "skills/list") return Promise.resolve({ data: [] });
-  if (method === "thread/rollback" && FakeAppServer.rollbackFailure) return Promise.reject(new Error(FakeAppServer.rollbackFailure));
+  // A rewind reads the thread's turns, then reverts to the one it names: the
+  // thread has the two turns the session's local history has.
+  if (method === "thread/read") return Promise.resolve({ thread: { id: params.threadId, turns: [{ id: "turn-1" }, { id: "turn-2" }] } });
+  if (method === "thread/revert" && FakeAppServer.rollbackFailure) return Promise.reject(new Error(FakeAppServer.rollbackFailure));
   return Promise.resolve({});
 };
 FakeAppServer.prototype.addEventHandler = function () { return {}; };
@@ -163,7 +166,7 @@ test("a rewind after the idle reclaim ended the thread's server rolls the thread
   assert.equal(appServers.length, count + 1, "the owner's server was started again");
   var restarted = appServers[appServers.length - 1];
   assert.equal(restarted.opts.env.MODEL_TAG, "owner");
-  assert.deepEqual(callsOf(restarted, "thread/rollback").map(function (c) { return c.params; }), [{ threadId: "thread-rewind", numTurns: 1 }]);
+  assert.deepEqual(callsOf(restarted, "thread/revert").map(function (c) { return c.params; }), [{ threadId: "thread-rewind", beforeTurnId: "turn-2" }]);
   var texts = session.history.map(function (entry) { return entry.text; });
   assert.ok(texts.indexOf("first") !== -1, "the turn before the rewound one is kept");
   assert.equal(texts.indexOf("second"), -1, "and the local history was trimmed to before the rewound turn");
