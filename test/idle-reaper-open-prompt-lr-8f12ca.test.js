@@ -274,3 +274,117 @@ test("a top-level permission prompt is unchanged by agent naming", function () {
   promptsFor(sm).respond(req.requestId, { decision: "deny" });
   return pending;
 });
+
+function makeProcessor(sm) {
+  var { attachMessageProcessor } = require("../lib/sdk-message-processor");
+  return attachMessageProcessor({
+    sm: sm,
+    send: function () {},
+    slug: "proj",
+    cwd: "/tmp",
+    pushModule: null,
+    getNotificationsModule: function () { return null; },
+    adapter: { vendor: "claude" },
+    onProcessingChanged: function () {},
+    onTurnDone: null,
+    onAutoTitle: null,
+    opts: {},
+    discoverSkillDirs: function () { return []; },
+    mergeSkills: function () { return []; },
+    discoverWorkflows: function () { return []; },
+    discoverSkillsWithMeta: function () { return []; },
+    mergeSkillsWithMeta: function () { return []; },
+    getSDK: null,
+  });
+}
+
+function dispatchNamedTask(proc, taskId, description) {
+  proc.processSDKMessage(proc.session, { yokeType: "tool_start", blockId: 0, toolId: taskId, toolName: "Task" });
+  proc.processSDKMessage(proc.session, {
+    yokeType: "tool_input_delta", blockId: 0, partialJson: JSON.stringify({ description: description }),
+  });
+  proc.processSDKMessage(proc.session, { yokeType: "block_stop", blockId: 0 });
+}
+
+test("a Task that completed with its prompt still open keeps its name for memory reclaim and idle reap, and loses it when the prompt settles", function (t) {
+  var { shedMemory, _resetRateLimitForTest } = require("../lib/memory-shed");
+  _resetRateLimitForTest();
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    var sm = makeSm();
+    var h = makeBridge(sm);
+    var proc = makeProcessor(sm);
+    var prompts = promptsFor(sm);
+    var session = makeSession(8, {
+      blocks: {}, sentToolResults: {}, messageUUIDs: [], activeTaskToolIds: {},
+      pendingPermissions: {}, pendingElicitations: {}, pendingAskUser: {}, responsePreview: "",
+    });
+    sm.sessions.set(8, session);
+    proc.session = session;
+
+    dispatchNamedTask(proc, "task-open", "Create the lore tasks");
+    prompts.noteSubagentTool(session, "toolu_sub_open", "task-open");
+    var opened = prompts.open(session, "permission", {
+      toolName: "Bash", toolInput: { command: "lore task create x" }, vendor: "claude",
+    }, { toolUseId: "toolu_sub_open" });
+
+    // The Task completes by both end paths while its prompt is open.
+    proc.processSDKMessage(session, { yokeType: "task_notification", parentToolId: "task-open", taskId: "t1", status: "completed" });
+    assert.deepEqual(sessionReclaim.liveAgentLabels(session), ["Create the lore tasks"]);
+
+    // Idle reap: the open prompt means the operator owes an answer, so the
+    // session is not reaped and the Task is still named.
+    h.bridge.startIdleReaper();
+    t.mock.timers.tick(TICK_MS * 90);
+    assert.equal(session._closed.value, false);
+    h.bridge.stopIdleReaper();
+
+    // Memory-pressure reclaim names the Task, not the fallback.
+    var shedSent = [];
+    sm.forceEvictToLimit = function () { return { evicted: 1, reclaimedLiveChild: [session] }; };
+    sm.LRU_HISTORY_LIMIT = 10;
+    sm.retrimHistory = function () {};
+    shedMemory({
+      projects: [{ slug: "proj", sm: sm, send: function (o) { shedSent.push(o); } }],
+      log: function () {},
+      nowMs: Date.now() + 3600 * 1000,
+      rssBefore: 2000, readRssBytes: function () { return 1000; },
+    });
+    var reclaim = shedSent.filter(function (o) { return o.source === "memory-reclaim"; });
+    assert.equal(reclaim.length, 1);
+    assert.match(reclaim[0].message, /Create the lore tasks/);
+    assert.doesNotMatch(reclaim[0].message, /"background agent"|background agent \(/);
+
+    // Once the prompt settles the Task leaves tracking and the name goes with it.
+    prompts.respond(opened.requestId, { decision: "deny" });
+    assert.deepEqual(sessionReclaim.liveAgentLabels(session), []);
+    sessionReclaim.pruneTaskLabels(session);
+    assert.deepEqual(Object.keys(session.taskLabels), []);
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
+test("a Task whose tool_result arrives with its prompt open keeps its name", function () {
+  var sm = makeSm();
+  var proc = makeProcessor(sm);
+  var prompts = promptsFor(sm);
+  var session = makeSession(9, {
+    blocks: {}, sentToolResults: {}, messageUUIDs: [], activeTaskToolIds: {},
+    pendingPermissions: {}, pendingElicitations: {}, pendingAskUser: {}, responsePreview: "",
+  });
+  sm.sessions.set(9, session);
+  proc.session = session;
+
+  dispatchNamedTask(proc, "task-r", "Audit the logs");
+  prompts.noteSubagentTool(session, "toolu_sub_r", "task-r");
+  prompts.open(session, "permission", {
+    toolName: "Bash", toolInput: { command: "ls" }, vendor: "claude",
+  }, { toolUseId: "toolu_sub_r" });
+
+  proc.processSDKMessage(session, {
+    yokeType: "message", messageRole: "user",
+    content: [{ type: "tool_result", tool_use_id: "task-r", content: "done" }],
+  });
+  assert.deepEqual(sessionReclaim.liveAgentLabels(session), ["Audit the logs"]);
+});
