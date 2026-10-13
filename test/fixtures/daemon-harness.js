@@ -107,6 +107,7 @@ async function bootDaemon(o) {
   });
 
   var log = [];
+  var selfSpawnExpected = false;
   function start() {
     var child = spawn(process.execPath, [opts.script || DAEMON_SCRIPT], { env: env, stdio: ["ignore", "pipe", "pipe"] });
     child.stdout.on("data", function (c) { log.push(c.toString()); });
@@ -133,11 +134,22 @@ async function bootDaemon(o) {
       await waitForServer(port, 20000);
       return d.proc;
     },
-    // The pid a self-spawning restart records for its successor.
+    // The pid a self-spawning restart records for its successor. An unreadable
+    // or partial daemon.json throws, naming the path: guessing "no successor"
+    // there would leave a self-spawned daemon running after the test.
     successorPid: function () {
-      var cfg = JSON.parse(fs.readFileSync(path.join(consoleDir, "daemon.json"), "utf8"));
+      var file = path.join(consoleDir, "daemon.json");
+      var cfg;
+      try {
+        cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch (e) {
+        throw new Error("cannot read the successor pid from " + file + ": " + e.message);
+      }
       return cfg.pid && cfg.pid !== proc.pid ? cfg.pid : null;
     },
+    // A test that drives an unsupervised restart calls this first; cleanup then
+    // fails unless a successor pid was recorded that it can stop.
+    expectSelfSpawn: function () { selfSpawnExpected = true; },
     adminCookie: async function () {
       var body = JSON.stringify({ setupCode: SETUP_CODE, username: "harnessadmin", pin: "123456" });
       var res = await httpRequest({
@@ -161,8 +173,17 @@ async function bootDaemon(o) {
       });
     },
     cleanup: async function () {
+      var problems = [];
       var successor = null;
-      try { successor = d.successorPid(); } catch (e) { successor = null; }
+      try {
+        successor = d.successorPid();
+      } catch (e) {
+        problems.push(e.message);
+      }
+      if (selfSpawnExpected && !successor && problems.length === 0) {
+        problems.push("the restart recorded no successor pid in " + path.join(consoleDir, "daemon.json") +
+          ", so a self-spawned daemon could not be stopped");
+      }
       if (proc.exitCode === null) signalPid(proc.pid, "SIGKILL");
       if (successor) {
         signalPid(successor, "SIGTERM");
@@ -170,6 +191,7 @@ async function bootDaemon(o) {
         signalPid(successor, "SIGKILL");
       }
       fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      if (problems.length > 0) throw new Error(problems.join("; "));
     },
   };
   return d;

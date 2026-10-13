@@ -80,6 +80,7 @@ supervisedCase("IPC restart under NOTIFY_SOCKET exits 120 and spawns nothing",
 
 test("an unsupervised web-UI restart still brings the daemon back by itself", { timeout: 90000 }, async function () {
   var d = await bootDaemon();
+  d.expectSelfSpawn();
   try {
     var sock = await restartViaWeb(d);
     var code = await waitForExit(d.proc, 20000);
