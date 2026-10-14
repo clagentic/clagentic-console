@@ -1,6 +1,6 @@
 "use strict";
 // The agent-runtime starts that take the Settings environment, one per caller
-// shape: a Claude query in process, its warmup and title generation; a Claude
+// shape: a Claude query in process and its warmup; a Claude
 // query in the OS user's worker (the daemon's message and the worker process
 // itself); and the Codex app-server. The Claude Agent SDK and the Codex
 // app-server are stand-ins that report the environment they were given.
@@ -119,15 +119,6 @@ test("a Claude warmup starts the CLI with the Settings variables too", async fun
   await adapter.init({ cwd: os.tmpdir(), runtimeEnv: SETTINGS });
   var query = lastFakeQuery();
   assert.equal(query.hasEnvOption, true);
-  assert.equal(query.env.FROM_SETTINGS, "yes");
-  assert.equal(query.env.PATH, process.env.PATH);
-});
-
-test("Claude title generation starts its query with the Settings variables", async function () {
-  var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
-  await adapter.generateTitle(["fix the build"], { cwd: os.tmpdir(), runtimeEnv: SETTINGS });
-  var query = lastFakeQuery();
-  assert.equal(query.model, "haiku", "this is the title query");
   assert.equal(query.env.FROM_SETTINGS, "yes");
   assert.equal(query.env.PATH, process.env.PATH);
 });
@@ -492,20 +483,6 @@ test("a Codex query that names no model runs on its own environment's default mo
   await adapter.shutdown();
 });
 
-test("Codex title generation uses the default model of the caller's environment", async function () {
-  var adapter = codexAdapter();
-  await adapter.init({ runtimeEnv: ENV_A });
-  var pending = adapter.generateTitle(["fix the build"], { cwd: os.tmpdir(), runtimeEnv: ENV_B });
-  await until(function () {
-    var last = appServers[appServers.length - 1];
-    return last.opts.env && last.opts.env.MODEL_TAG === "b" && callsOf(last, "thread/start").length > 0;
-  }, "the title thread to start");
-  var serverB = appServers[appServers.length - 1];
-  assert.equal(callsOf(serverB, "thread/start")[0].params.model, "gpt-b");
-  await adapter.shutdown();
-  await pending.then(null, function () {});
-});
-
 test("a Codex call that states no environment is refused, never served by another one", async function () {
   var adapter = codexAdapter();
   await adapter.init({ runtimeEnv: ENV_A });
@@ -516,7 +493,6 @@ test("a Codex call that states no environment is refused, never served by anothe
   await assert.rejects(adapter.supportedModels(), refusal);
   await assert.rejects(adapter.supportedModels({}), refusal);
   await assert.rejects(adapter.createQuery({ cwd: os.tmpdir() }), refusal);
-  await assert.rejects(adapter.generateTitle(["x"], { cwd: os.tmpdir() }), refusal);
   await assert.rejects(adapter.forkSession("thread-a", { upToMessageId: "m" }), refusal);
   assert.equal(appServers.length, count, "no server was started for any of them");
   await adapter.shutdown();
