@@ -81,9 +81,10 @@ test("lr-daca: listener count stays bounded across N project open/destroy cycles
     managers.push(makeSessionManager(tmpHome));
   }
 
-  // After opening N projects, count is baseline + N.
+  // The session managers share one process listener (lib/exit-flush.js), so
+  // the count does not grow with the number of open projects.
   var peakCount = process.listenerCount("exit");
-  assert.equal(peakCount, baseline + N, "N open projects must add N listeners");
+  assert.equal(peakCount, baseline + 1, "N open projects must share one listener");
 
   // Destroy all.
   managers.forEach(function (sm) { sm.destroy(); });
