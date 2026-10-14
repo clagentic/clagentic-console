@@ -80,6 +80,14 @@ if (args[0] === "release") {
   }
 }
 
+// --- `open-session` / `send-input`: drive a session through the running daemon ---
+// Positional verbs, handled before flag parsing: `clagentic-console send-input --project <slug> ...`.
+var { SESSION_VERBS, runSessionVerb } = require("../lib/cli/session-subcommands");
+if (SESSION_VERBS.indexOf(args[0]) !== -1) {
+  runSessionVerb(args[0], args.slice(1));
+  return;
+}
+
 var port = _isDev ? 2635 : 2633;
 var useHttps = true;
 var forceMkcert = false;
@@ -164,6 +172,8 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --list            List registered projects");
   console.log("       clagentic-console --activity-diagnostics  Print activity-divergence probe totals as JSON (agent-readable)");
   console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
+  console.log("       clagentic-console open-session --project <slug> --prompt <text|-> [--vendor <id>] [--agent <name>]  Open a session and run a first prompt (prints JSON)");
+  console.log("       clagentic-console send-input --project <slug> --session <id> --prompt <text|->  Send input to a session, resuming it if needed (prints JSON)");
   console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");
   console.log("       clagentic-console daemon            Run the daemon in the foreground (used by the systemd unit)");
     console.log("");

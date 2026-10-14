@@ -5,17 +5,13 @@
 // the other; a turn ending leaves it on for a sub-agent prompt that outlives
 // the turn.
 //
-// app-messages.js is not importable outside a browser (see the other
-// app-messages CI-invariant tests), so its wiring is pinned by source checks
-// over the derivation it calls, which is exercised for real below.
+// The derivation is exercised on its own first; then the app's message router
+// (app-messages.js and its module graph) runs under the DOM stub, with the
+// timers mocked, and the alert is read off the page title it flips.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
-var fs = require("fs");
-var path = require("path");
-var { setupToolsEnv } = require("./fake-dom-prompt-cards");
-
-var APP_MESSAGES = path.join(__dirname, "..", "lib", "public", "modules", "app-messages.js");
+var { setupToolsEnv, moduleUrl } = require("./fake-dom-prompt-cards");
 
 function permission(id) {
   return { type: "prompt_request", requestId: id, kind: "permission", toolName: "Bash", toolInput: { command: "make" }, decisionReason: "" };
@@ -47,30 +43,48 @@ test("the pending-prompt derivation stays on while any prompt of any kind is una
   assert.equal(env.tools.hasPendingPrompts(), false, "a rebuilt transcript starts from the server's word again");
 });
 
-function stripLineComments(src) {
-  return src.split("\n").map(function (line) { return line.replace(/^\s*\/\/.*$/, ""); }).join("\n");
+// Whether the urgent alert is running, read the way a user sees it: while it
+// runs the page title flips to "Input needed" every 500 ms. Two ticks cover
+// both halves of the flip.
+var ALERT_TITLE = "⚠ Input needed";
+function alertIsOn(t) {
+  var seen = [];
+  t.mock.timers.tick(500);
+  seen.push(global.document.title);
+  t.mock.timers.tick(500);
+  seen.push(global.document.title);
+  return seen.indexOf(ALERT_TITLE) !== -1;
 }
 
-// The text of a top-level function or handler entry, from its header to the
-// first line that closes it at the given indent.
-function block(src, header, closer) {
-  var start = src.indexOf(header);
-  assert.ok(start !== -1, "expected " + JSON.stringify(header) + " in app-messages.js");
-  var end = src.indexOf(closer, start + header.length);
-  assert.ok(end !== -1, "expected the end of " + JSON.stringify(header));
-  return src.slice(start, end);
+// Runs app-messages.js and its whole module graph under the DOM stub and feeds
+// it the server's messages through processMessage, the browser's one entry
+// point, so the wiring between message handlers and the alert is the shipped
+// wiring and not a reading of its source.
+async function setupAppMessages(t) {
+  var env = await setupToolsEnv(t, ["setTimeout", "setInterval"]);
+  global.document.title = "Console";
+  var messages = await import(moduleUrl("app-messages.js"));
+  return { env: env, processMessage: messages.processMessage };
 }
 
-test("CI invariant: app-messages.js decides the alert from every prompt, at each place it used to stop it", function () {
-  var src = stripLineComments(fs.readFileSync(APP_MESSAGES, "utf8"));
-  var sync = block(src, "function syncUrgentBlink()", "\n}\n");
-  assert.match(sync, /hasPendingPrompts\(\)/, "syncUrgentBlink derives the alert from hasPendingPrompts()");
+test("the alert follows every open prompt through the app's message router", async function (t) {
+  var app = await setupAppMessages(t);
+  assert.equal(alertIsOn(t), false, "no prompt, no alert");
 
-  var onPrompt = block(src, "function handlePromptMessage(msg)", "\n}\n");
-  assert.match(onPrompt, /syncUrgentBlink\(\)/);
-  assert.doesNotMatch(onPrompt, /stopUrgentBlink\(|startUrgentBlink\(/, "a prompt message never sets the alert from its own state alone");
+  app.processMessage(permission("p-1"));
+  assert.equal(alertIsOn(t), true, "a permission prompt raises the alert");
+  app.processMessage(ask("a-1"));
 
-  var done = block(src, "  done: function (msg) {", "\n  },\n");
-  assert.match(done, /syncUrgentBlink\(\)/);
-  assert.doesNotMatch(done, /stopUrgentBlink\(/, "a finished turn does not hide a prompt that outlives it");
+  app.processMessage({ type: "prompt_resolved", requestId: "p-1", kind: "permission", decision: "allow" });
+  assert.equal(alertIsOn(t), true, "settling one of two prompts leaves the alert on for the other");
+
+  app.processMessage({ type: "done" });
+  assert.equal(alertIsOn(t), true, "a finished turn does not hide a prompt that outlives it");
+
+  app.processMessage({ type: "prompt_cancel", requestId: "a-1", kind: "ask_user", reason: "stale" });
+  assert.equal(alertIsOn(t), false, "the last prompt settling clears the alert");
+  assert.equal(global.document.title, "Console", "the page title is restored");
+
+  app.processMessage({ type: "done" });
+  assert.equal(alertIsOn(t), false, "a turn ending with no prompt open leaves no alert");
 });
