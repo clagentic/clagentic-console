@@ -27,6 +27,8 @@ test("the parent-ref guard recognises every way a test can ask for one", functio
     ['execSync("git log HEAD^..")', true],
     ["execSync(`git diff ${base} HEAD~2`)", true],
     ["var ref = `HEAD^`;", true],
+    ["// compare against HEAD~1", true],
+    ["/* compare against HEAD^ */", true],
     ['execSync("git rev-parse HEAD")', false],
     ['var s = "AHEAD~1";', false],
   ];
