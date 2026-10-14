@@ -8,7 +8,9 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 
-var { bootDaemon } = require("./fixtures/daemon-harness");
+var { spawn } = require("child_process");
+
+var { bootDaemon, waitForExit, pidAlive } = require("./fixtures/daemon-harness");
 
 test("a partial daemon.json fails cleanup, naming the path", { timeout: 60000 }, async function () {
   var d = await bootDaemon();
@@ -18,7 +20,30 @@ test("a partial daemon.json fails cleanup, naming the path", { timeout: 60000 },
     assert.ok(e.message.indexOf(file) !== -1, e.message);
     return true;
   });
-  assert.equal(fs.existsSync(d.home), false, "the daemon is still stopped and its home removed");
+  assert.equal(fs.existsSync(d.home), false, "its home is removed");
+  await waitForExit(d.proc, 5000);
+  assert.equal(pidAlive(d.proc.pid), false, "the daemon process is gone");
+});
+
+test("a pid in daemon.json that is not the test daemon is reported and never signalled", { timeout: 60000 }, async function () {
+  var d = await bootDaemon();
+  var bystander = spawn(process.execPath, ["-e", "setTimeout(function () {}, 60000)"], { stdio: "ignore" });
+  try {
+    var file = path.join(d.consoleDir, "daemon.json");
+    var cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+    cfg.pid = bystander.pid;
+    fs.writeFileSync(file, JSON.stringify(cfg));
+    await assert.rejects(d.cleanup(), function (e) {
+      assert.ok(e.message.indexOf("pid " + bystander.pid) !== -1, e.message);
+      assert.match(e.message, /not signalled/);
+      return true;
+    });
+    await new Promise(function (r) { setTimeout(r, 300); });
+    assert.equal(bystander.exitCode, null, "the unrelated process was left running");
+    assert.equal(pidAlive(bystander.pid), true);
+  } finally {
+    bystander.kill("SIGKILL");
+  }
 });
 
 test("a restart case that recorded no successor pid fails cleanup", { timeout: 60000 }, async function () {

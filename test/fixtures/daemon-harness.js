@@ -79,6 +79,30 @@ function pidAlive(pid) {
 }
 
 /**
+ * Decides whether `pid` is the test daemon's self-spawned successor. A pid read
+ * from daemon.json is data the test does not control, so it is signalled only
+ * when its own /proc entry says it runs the daemon script over this test's home.
+ * @returns {{ok: boolean, reason?: string}}
+ */
+function verifySuccessor(pid, home, script) {
+  if (!Number.isInteger(pid) || pid <= 1) return { ok: false, reason: "not a usable pid" };
+  var cmdline;
+  var environ;
+  try {
+    cmdline = fs.readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\0");
+    environ = fs.readFileSync("/proc/" + pid + "/environ", "utf8").split("\0");
+  } catch (e) {
+    return { ok: false, reason: "its /proc entry cannot be read (" + e.code + ")" };
+  }
+  if (cmdline.indexOf(script) === -1) return { ok: false, reason: "its command line is not the test daemon" };
+  var ownsHome = environ.concat(cmdline).some(function (entry) {
+    var m = /^(?:CLAGENTIC_CONSOLE_HOME|CLAGENTIC_CONSOLE_CONFIG)=(.*)$/.exec(entry);
+    return !!m && m[1].indexOf(home) === 0;
+  });
+  return ownsHome ? { ok: true } : { ok: false, reason: "its environment does not carry this test's home" };
+}
+
+/**
  * @param {object} [o]
  * @param {object} [o.config] merged over the daemon.json the daemon starts with
  * @param {object} [o.env] extra environment for the daemon; a null value removes the variable
@@ -185,6 +209,15 @@ async function bootDaemon(o) {
           ", so a self-spawned daemon could not be stopped");
       }
       if (proc.exitCode === null) signalPid(proc.pid, "SIGKILL");
+      if (successor && !pidAlive(successor)) {
+        successor = null; // already gone; nothing to stop
+      } else if (successor) {
+        var verdict = verifySuccessor(successor, home, opts.script || DAEMON_SCRIPT);
+        if (!verdict.ok) {
+          problems.push("pid " + successor + " recorded in daemon.json was not signalled: " + verdict.reason);
+          successor = null;
+        }
+      }
       if (successor) {
         signalPid(successor, "SIGTERM");
         await new Promise(function (r) { setTimeout(r, 1500); });
@@ -197,4 +230,4 @@ async function bootDaemon(o) {
   return d;
 }
 
-module.exports = { bootDaemon, waitForExit, signalPid, pidAlive, httpRequest, findFreePort, SETUP_CODE, SUPERVISOR_ENV, DAEMON_SCRIPT };
+module.exports = { bootDaemon, verifySuccessor, waitForExit, signalPid, pidAlive, httpRequest, findFreePort, SETUP_CODE, SUPERVISOR_ENV, DAEMON_SCRIPT };
