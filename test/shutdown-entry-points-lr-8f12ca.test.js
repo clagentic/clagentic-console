@@ -31,6 +31,7 @@ var http = require("http");
 var { spawn } = require("child_process");
 var WebSocket = require("ws");
 var { sendIPCCommand } = require("../lib/ipc");
+var { unsupervisedEnv } = require("../lib/supervisor");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var SETUP_CODE = "SHUTDOWNENTRY";
@@ -95,7 +96,7 @@ function signalPid(pid, signal) {
 
 // Starts a daemon over a private home. Returns what a case needs to drive it
 // and to clean up after it, including the detached successor a restart spawns.
-async function bootDaemon(config) {
+async function bootDaemon(config, extraEnv) {
   var home = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-shutdown-"));
   var consoleDir = path.join(home, "console");
   var projectDir = path.join(home, "project");
@@ -115,7 +116,9 @@ async function bootDaemon(config) {
   var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
     // HOME too: legacy-path reads (~/.clagentic, ~/.clagentic-rc, ~/clagentic-projects)
     // must not reach the operator's real home.
-    env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }),
+    // The test runner may itself run under a service unit; an inherited
+    // supervisor variable would turn every restart case into a supervised one.
+    env: Object.assign(unsupervisedEnv(), { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }, extraEnv || {}),
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.on("data", function (d) { log.push(d.toString()); });
@@ -251,9 +254,44 @@ entryCase("web-UI restart_server reaches the announcer", EXIT_HANDOFF, null, asy
   d.proc.once("exit", function () { ws.terminate(); });
 });
 
-entryCase("web-UI restart-to-apply-update reaches the announcer", EXIT_HANDOFF, null, async function (d) {
-  var ws = await sendWs(d, await d.adminCookie(), { type: "restart_for_build_update" });
-  d.proc.once("exit", function () { ws.terminate(); });
+// "Restart to apply update" is a two-step, confirm-gated offer: a request
+// without a token never restarts, and with no newer build installed there is
+// nothing to offer. The confirmed step ends in the same spawnAndRestart() the
+// restart_server case above drives, so it is not driven separately here.
+test("web-UI restart-to-apply-update with nothing to apply restarts nothing", { timeout: 60000 }, async function () {
+  var d = await bootDaemon(null);
+  try {
+    var ws = await sendWs(d, await d.adminCookie(), { type: "restart_for_build_update" });
+    var result = await new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error("no restart_for_build_update_result")); }, 10000);
+      ws.on("message", function (raw) {
+        var m = JSON.parse(raw.toString());
+        if (m.type === "restart_for_build_update_result") { clearTimeout(timer); resolve(m); }
+      });
+    });
+    ws.terminate();
+    assert.equal(result.ok, false);
+    assert.equal(d.proc.exitCode, null, "an unconfirmed request must not restart the daemon");
+  } finally {
+    await d.cleanup();
+  }
+});
+
+// Under a supervisor a restart is an exit with the restart code and no
+// self-spawned successor, and it still passes through the announcer first.
+test("supervised IPC restart reaches the announcer and spawns no successor", { timeout: 60000 }, async function () {
+  var d = await bootDaemon(null, { INVOCATION_ID: "test-unit-invocation" });
+  try {
+    var resp = await sendIPCCommand(d.sock, { cmd: "restart" });
+    assert.equal(resp.ok, true);
+    var code = await waitForExit(d.proc, 15000);
+    assert.equal(code, EXIT_HANDOFF, "exit code; journal:\n" + d.journal().slice(-1500));
+    assert.equal(d.successorPid(), null, "no self-spawned successor");
+    assert.match(d.journal(), SUMMARY, "the shutdown reached the announcer; journal:\n" + d.journal().slice(-1500));
+    assert.doesNotMatch(d.journal(), /Forced exit/);
+  } finally {
+    await d.cleanup();
+  }
 });
 
 // Cleanup must fail, not skip, when the successor pid cannot be established.
