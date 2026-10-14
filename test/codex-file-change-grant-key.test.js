@@ -1,7 +1,6 @@
 "use strict";
-// The Codex file change approval is keyed by the file it names, and only when
-// the change set is exactly that one file: a session grant must not cover a
-// later change set that touches other files.
+// The Codex file change approval never produces a session grant: file tools are
+// answered per call.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -54,12 +53,13 @@ function approvalInput(params) {
   });
 }
 
-test("a single-file change set is keyed by that file", async function () {
+test("a single-file change set gets no key: file changes are answered per call", async function () {
   var seen = await approvalInput({ changes: [{ kind: "modify", path: "/work/a.txt" }], path: "/work/a.txt" });
-  assert.equal(grantKeys.permissionGrantKey(seen.toolName, seen.input), "Edit:/work/a.txt");
+  assert.equal(grantKeys.permissionGrantKey(seen.toolName, seen.input), null);
+  assert.equal(grantKeys.grantScopeText(seen.toolName, seen.input), null, "the card offers no Allow for Session");
 });
 
-test("a multi-file change set gets no key, so it is allowed once only", async function () {
+test("a multi-file change set gets no key", async function () {
   var seen = await approvalInput({
     changes: [{ kind: "modify", path: "/work/a.txt" }, { kind: "modify", path: "/work/secret" }],
     path: "/work/a.txt",
@@ -67,7 +67,7 @@ test("a multi-file change set gets no key, so it is allowed once only", async fu
   assert.equal(grantKeys.permissionGrantKey(seen.toolName, seen.input), null);
 });
 
-test("a single change whose path differs from the request path gets no key", async function () {
-  var seen = await approvalInput({ changes: [{ kind: "modify", path: "/work/other" }], path: "/work/a.txt" });
-  assert.equal(grantKeys.permissionGrantKey(seen.toolName, seen.input), null);
+test("the approval carries the change summary and no path to key on", async function () {
+  var seen = await approvalInput({ changes: [{ kind: "modify", path: "/work/a.txt" }], path: "/work/a.txt" });
+  assert.deepEqual(seen.input, { changes: "modify /work/a.txt" });
 });

@@ -115,11 +115,8 @@ test("survives the idle reaper and allow_always still resolves and persists the 
     session.pendingPermissions = {};
     h.sm.sessions.set(session.localId, session);
 
-    // A file grant binds to the realpath, so the file must exist.
-    var target = path.join(h.tmpHome, "x");
-    fs.writeFileSync(target, "x");
-    var grantKey = "Write:" + target;
-    var decision = h.bridge.handleCanUseTool(session, "Write", { file_path: target }, { toolUseID: "tu-1", signal: null });
+    var grantKey = "Bash:find";
+    var decision = h.bridge.handleCanUseTool(session, "Bash", { command: "find . -name x" }, { toolUseID: "tu-1", signal: null });
     var requestId = Object.keys(session.pendingPermissions)[0];
     assert.ok(requestId, "a pending permission must be registered");
 
@@ -134,8 +131,8 @@ test("survives the idle reaper and allow_always still resolves and persists the 
 
     var result = await decision;
     assert.equal(result.behavior, "allow");
-    assert.ok(session.allowedTools[grantKey], "the grant is the requested file, not the directory or the whole tool");
-    assert.equal(session.allowedTools["Write:" + h.tmpHome], undefined);
+    assert.ok(session.allowedTools[grantKey], "the grant is the command prefix, not the whole tool");
+    assert.equal(session.allowedTools.Bash, undefined);
     var sm2 = makeSessionManager(h.tmpHome);
     var rebuilt = null;
     sm2.sessions.forEach(function (s) { if (s.cliSessionId === "sess-perm-resolve-idle") rebuilt = s; });

@@ -61,75 +61,66 @@ test("a grant from a Bash find prompt covers find and not rm", async function ()
   });
 });
 
-// A scratch tree of real files under the stamped temp dir; a file grant binds
-// to the realpath, so the file must exist when the grant is made.
-function scratchTree(t, files) {
-  var fs = require("fs");
-  var os = require("os");
-  var path = require("path");
-  var root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "session-grants-")));
-  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
-  files.forEach(function (f) {
-    fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
-    fs.writeFileSync(path.join(root, f), "x");
-  });
-  return { root: root, at: function (f) { return path.join(root, f); } };
-}
+var FILE_TOOL_CALLS = [
+  ["Write", { file_path: "/work/a/one.txt", content: "x" }],
+  ["Edit", { file_path: "/work/a/one.txt" }],
+  ["MultiEdit", { file_path: "/work/a/one.txt" }],
+  ["NotebookEdit", { notebook_path: "/work/n/x.ipynb" }],
+  ["Write", { file_path: "work/a.txt" }],
+];
 
-test("a grant on Write to a path covers that file and no other", async function (t) {
-  var tree = scratchTree(t, ["a/one.txt", "a/two.txt", "b/one.txt"]);
-  await withServer(async function (server) {
-    var c = client();
-    server.connect(c.ws);
-    var first = server.ask("Write", { file_path: tree.at("a/one.txt"), content: "x" });
-    var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
-    assert.equal(prompt.grantScope, "Allow Write on this file only (" + tree.at("a/one.txt") + ") in this session");
-    answer(server, c, first.id, "allow_always");
-    await first.promise;
-    assert.deepEqual(grantKeys(server), ["Write:" + tree.at("a/one.txt")]);
+FILE_TOOL_CALLS.forEach(function (call) {
+  test("a " + call[0] + " prompt offers no session grant, and Allow for Session from an old client allows this call only", async function () {
+    await withServer(async function (server) {
+      var c = client();
+      server.connect(c.ws);
+      var first = server.ask(call[0], call[1]);
+      var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
+      assert.equal(prompt.grantScope, null, "the card offers Allow and Deny only");
 
-    assert.equal(server.ask("Write", { file_path: tree.at("a/one.txt") }).opened.length, 0, "the same file");
-    assert.equal(server.ask("Write", { file_path: tree.at("a/two.txt") }).opened.length, 1, "a sibling file in the same directory prompts");
-    assert.equal(server.ask("Write", { file_path: tree.at("b/one.txt") }).opened.length, 1, "a Write to another directory prompts");
-    assert.equal(server.ask("Write", { file_path: tree.root + "/a/link/../one.txt" }).opened.length, 1, "another spelling prompts");
-    assert.equal(server.ask("Edit", { file_path: tree.at("a/one.txt") }).opened.length, 1, "an Edit is another tool");
+      c.inbox.length = 0;
+      answer(server, c, first.id, "allow_always");
+      assert.equal((await first.promise).behavior, "allow", "this call is allowed");
+      assert.equal(c.inbox.filter(function (m) { return m.type === "prompt_pending"; }).length, 0, "it settled, it is not re-offered");
+      assert.deepEqual(grantKeys(server), [], "nothing is stored");
+      assert.deepEqual(persistedGrants(server), {}, "nor persisted");
+      assert.equal(server.ask(call[0], call[1]).opened.length, 1, "the next call prompts");
+    });
   });
 });
 
-test("Allow for Session on a file that does not exist yet allows this call and stores nothing", async function (t) {
-  var tree = scratchTree(t, []);
-  await withServer(async function (server) {
-    var c = client();
-    server.connect(c.ws);
-    var first = server.ask("Write", { file_path: tree.at("new.txt"), content: "x" });
-    var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
-    assert.equal(prompt.grantScope, "This file does not exist yet, so this approval covers this call only", "the card says so before the click");
-    answer(server, c, first.id, "allow_always");
-    assert.equal((await first.promise).behavior, "allow", "this call is allowed");
-    assert.deepEqual(grantKeys(server), [], "nothing is stored");
-    assert.deepEqual(persistedGrants(server), {}, "nor persisted");
-    assert.equal(server.ask("Write", { file_path: tree.at("new.txt") }).opened.length, 1, "the next Write prompts");
-  });
+test("a persisted file-scoped key is dropped on load and a legacy whole-tool Write grant stays, and is revocable", async function () {
+  var first = await world.createServer();
+  var home = first.home;
+  var cliSessionId = first.session.cliSessionId;
+  try {
+    await first.startQuery();
+    first.session.allowedTools = Object.assign(Object.create(null), { "Write:/work/a": true, "Edit:/work/a": "/work/a", Write: true });
+    first.sm.saveSessionFile(first.session);
+    first.shutdown();
+
+    var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
+    try {
+      await second.startQuery();
+      assert.deepEqual(grantKeys(second), ["Write"], "only the whole-tool grant survives");
+      assert.equal(second.ask("Write", { file_path: "/work/a" }).opened.length, 0, "the legacy grant is honoured");
+      var c = client();
+      second.connect(c.ws);
+      second.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: second.session.localId, key: "Write" });
+      assert.equal(second.ask("Write", { file_path: "/work/a" }).opened.length, 1, "revoked, the next Write prompts");
+    } finally {
+      second.shutdown();
+    }
+  } finally {
+    world.removeHome(home);
+  }
 });
 
-test("a relative path is allowed once only", async function () {
+test("a Bash call that cannot be granted narrowly offers no session grant and the answer settles nothing", async function () {
   await withServer(async function (server) {
     var c = client();
     server.connect(c.ws);
-    var rel = server.ask("Write", { file_path: "work/a.txt" });
-    var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === rel.id; })[0];
-    assert.equal(prompt.grantScope, null);
-    answer(server, c, rel.id, "allow_always");
-    await world.flush();
-    assert.deepEqual(grantKeys(server), []);
-  });
-});
-
-test("a call that cannot be granted narrowly offers no session grant and the answer settles nothing", async function () {
-  await withServer(async function (server) {
-    var c = client();
-    server.connect(c.ws);
-    var bare = server.ask("Write", { content: "no path" });
+    var bare = server.ask("Bash", { command: "ls; " + "x".repeat(400) });
     var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === bare.id; })[0];
     assert.equal(prompt.grantScope, null, "the card is told there is nothing to grant");
 
@@ -205,8 +196,7 @@ OBSERVED_SHAPES.forEach(function (shape) {
   });
 });
 
-test("a revoked scoped grant survives a daemon restart as revoked, and a held one as held", async function (t) {
-  var tree = scratchTree(t, ["a/x", "a/y"]);
+test("a revoked scoped grant survives a daemon restart as revoked, and a held one as held", async function () {
   var first = await world.createServer();
   var home = first.home;
   var cliSessionId = first.session.cliSessionId;
@@ -217,20 +207,20 @@ test("a revoked scoped grant survives a daemon restart as revoked, and a held on
     var a = first.ask("Bash", { command: "find ." });
     answer(first, c, a.id, "allow_always");
     await a.promise;
-    var b = first.ask("Write", { file_path: tree.at("a/x") });
+    var b = first.ask("Bash", { command: "git push origin" });
     answer(first, c, b.id, "allow_always");
     await b.promise;
-    assert.deepEqual(grantKeys(first), ["Bash:find", "Write:" + tree.at("a/x")]);
+    assert.deepEqual(grantKeys(first), ["Bash:find", "Bash:git push"]);
     first.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: first.session.localId, key: "Bash:find" });
     first.shutdown();
 
     var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
     try {
       await second.startQuery();
-      assert.deepEqual(grantKeys(second), ["Write:" + tree.at("a/x")]);
+      assert.deepEqual(grantKeys(second), ["Bash:git push"]);
       assert.equal(second.ask("Bash", { command: "find ." }).opened.length, 1, "the revoked grant stays revoked");
-      assert.equal(second.ask("Write", { file_path: tree.at("a/x") }).opened.length, 0, "the held grant is still held");
-      assert.equal(second.ask("Write", { file_path: tree.at("a/y") }).opened.length, 1, "a sibling still prompts");
+      assert.equal(second.ask("Bash", { command: "git push origin" }).opened.length, 0, "the held grant is still held");
+      assert.equal(second.ask("Bash", { command: "git commit" }).opened.length, 1, "another subcommand still prompts");
     } finally {
       second.shutdown();
     }
@@ -257,7 +247,7 @@ test("a client that may not see the session can neither list nor revoke its gran
   await withServer(async function (server) {
     server.session.ownerId = "u-owner";
     server.session.sessionVisibility = "private";
-    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true, "Write:/work/a": "/work/a" });
+    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true, "Bash:find": true });
     var stranger = client();
     stranger.ws._clagenticUser = { id: "u-other" };
     var owner = client();
@@ -275,11 +265,11 @@ test("a client that may not see the session can neither list nor revoke its gran
     assert.equal(refusal.length, 1);
     assert.equal(typeof refusal[0].error, "string");
     assert.equal(refusal[0].grants, undefined, "a refusal carries no grants");
-    assert.deepEqual(grantKeys(server), ["Bash", "Write:/work/a"], "nothing was revoked");
+    assert.deepEqual(grantKeys(server), ["Bash", "Bash:find"], "nothing was revoked");
     assert.equal(owner.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0);
 
     server.handlers.handleSessionsMessage(owner.ws, { type: "revoke_session_grant", sessionId: id, key: "Bash" });
-    assert.deepEqual(grantKeys(server), ["Write:/work/a"], "the owner's revoke applies");
+    assert.deepEqual(grantKeys(server), ["Bash:find"], "the owner's revoke applies");
   });
 });
 

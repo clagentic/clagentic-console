@@ -77,7 +77,7 @@ var HINT_KEYS = ["suppressAlwaysAllowRule", "defaultToNo", "matchedAskRule"];
 // What the permission card shows for an ask with these hints.
 function assertHintsShown(card, req) {
   var session = card.querySelector(".permission-allow-session, .perm-always");
-  assert.equal(!!session, !req.suppressAlwaysAllowRule, "Allow for session is offered exactly when the ask may offer it");
+  assert.equal(!!session, !req.suppressAlwaysAllowRule && req.toolName !== "Write", "Allow for session is offered exactly when the ask may offer it and the tool can be granted");
   var buttons = card.querySelectorAll(".permission-actions button");
   var approvals = buttons.filter(function (b) { return /permission-allow|perm-allow|perm-always/.test(b.className); });
   approvals.forEach(function (b) { assert.equal(b.dataset.defaultChoice, undefined, "no approve choice is the default"); });
@@ -223,7 +223,6 @@ var SPECS = {
       // A call shaped as its tool's real input is, so Allow for session has
       // something narrow to grant.
       var toolName = p.one(["Bash", "Write"]);
-      // The Write target exists: a file grant binds to its realpath.
       var toolInput = toolName === "Write" ? { file_path: __filename } : { command: "make " + p.int(0, 9) };
       return {
         req: { toolName: toolName, toolInput: toolInput, decisionReason: "", vendor: "claude" },
@@ -239,7 +238,9 @@ var SPECS = {
         { selector: ".permission-deny, .perm-deny", label: "Denied", allows: false },
       ];
       assertHintsShown(card, req);
-      if (req.suppressAlwaysAllowRule) choices.splice(1, 1);
+      // A suppressed ask and a file tool (never granted for the session) offer
+      // no Allow for session.
+      if (req.suppressAlwaysAllowRule || req.toolName === "Write") choices.splice(1, 1);
       var choice = p.one(choices);
       click(card, choice.selector);
       return choice;
@@ -660,7 +661,8 @@ test("permission answers that bypass the card are held to the ask's hints", asyn
       assert.equal(Object.keys(server.session.allowedTools || {}).length, 0, where + ": Allow once grants nothing");
     } else {
       assert.equal(outcome.status, "resolved", where);
-      assert.equal(grants, decision === "allow_always" ? 1 : 0, where + ": a grant is written exactly for an accepted Allow for session");
+      // A file tool (Write) is never granted: its Allow for session is allow-once.
+      assert.equal(grants, decision === "allow_always" && req.toolName !== "Write" ? 1 : 0, where + ": a grant is written exactly for an accepted Allow for session");
       var expected = decision === "allow" || decision === "allow_always" ? "allow" : "deny";
       assert.equal((await prompt.answer).behavior, expected, where + ": an unknown answer fails closed");
     }

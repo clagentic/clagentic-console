@@ -51,8 +51,7 @@ var ASK_INPUT = { questions: [{ question: "Which target?", options: [{ label: "s
 
 var PROMPTS = [
   { key: "Bash", kind: "permission", toolName: "Bash", input: { command: "deploy --prod" } },
-  // An existing file: a file grant binds to the realpath, and a file that does
-  // not exist yet is allowed once and never granted.
+  // A file tool never produces a session grant (FILE_TOOLS below).
   { key: "Write", kind: "permission", toolName: "Write", input: { file_path: __filename } },
   { key: "Skill:alpha", kind: "permission", toolName: "Skill", input: { skill: "alpha" } },
   { key: "Skill:beta", kind: "permission", toolName: "Skill", input: { skill: "beta" } },
@@ -70,6 +69,8 @@ var PROMPTS = [
     hints: { defaultToNo: true, matchedAskRule: { source: "projectSettings", toolName: "mcp__db__drop", ruleContent: "*" } },
   },
 ];
+
+var FILE_TOOLS = /^(Write|Edit|MultiEdit|NotebookEdit)$/;
 
 // An ask the SDK marked as not offering a persistent choice.
 function suppressesAlways(prompt) {
@@ -507,7 +508,9 @@ Harness.prototype.checkAnswer = function (r, wasPending, answer) {
       JSON.stringify(r.outcome.updatedInput) !== JSON.stringify(r.prompt.input)) {
     this.fail(r.id + " was allowed with a different input than requested (I4)");
   }
-  if (r.kind === "permission" && answer === "allow_always") this.granted[r.prompt.key] = true;
+  // A file tool never produces a session grant: Allow for session from an old
+  // client is answered as this call only, and the next call prompts again.
+  if (r.kind === "permission" && answer === "allow_always" && !FILE_TOOLS.test(r.prompt.toolName)) this.granted[r.prompt.key] = true;
 };
 
 Harness.prototype.abortPrompt = async function (r) {
