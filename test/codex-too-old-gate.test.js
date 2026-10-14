@@ -1,6 +1,6 @@
 "use strict";
 // The version gate on every way the adapter acquires an app-server: starting
-// the adapter, listing models, a new query, a resumed query, a title and a fork
+// the adapter, listing models, a new query, a resumed query and a fork
 // (a rewind acquires none: it is refused before any server is looked up). The real app-server class is used for resolution (the stand-in
 // `codex` scripts print a version line), with only its process start and its
 // requests replaced by recorders, so the assertion is on what would have been
@@ -84,7 +84,6 @@ var PATHS = {
   "model list": function (a) { return a.supportedModels(ENV_OPTS); },
   query: function (a, cwd) { return a.createQuery({ cwd: cwd, model: "gpt-test", runtimeEnv: null }); },
   resume: function (a, cwd) { return a.createQuery({ cwd: cwd, model: "gpt-test", runtimeEnv: null, resumeSessionId: "thread-9" }); },
-  title: function (a, cwd) { return a.generateTitle(["hello"], { cwd: cwd, runtimeEnv: null }); },
   fork: function (a) { return a.forkSession("thread-9", ENV_OPTS); },
 };
 

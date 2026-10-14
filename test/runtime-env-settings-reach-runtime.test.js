@@ -277,18 +277,3 @@ test("a runtime that is running a turn when Settings change is not killed", asyn
   session.isProcessing = false;
   await endQuery(session);
 });
-
-test("title generation runs with the saved variables", async function () {
-  resetSettings();
-  config.sharedEnv = "TITLE_SEES_THIS=yes";
-  var session = alpha.sm.createSessionRaw({});
-  alpha.sm.recordHistoryEntry(session, { type: "user_message", text: "fix the build" }, true);
-  var before = fakeQueries().length;
-
-  await alpha.sdk._test_autoGenerateTitle(session);
-
-  var titleQueries = fakeQueries().slice(before).filter(function (q) { return q.model === "haiku"; });
-  assert.equal(titleQueries.length, 1);
-  assert.equal(titleQueries[0].env.TITLE_SEES_THIS, "yes");
-  assert.equal(titleQueries[0].env.PATH, process.env.PATH);
-});

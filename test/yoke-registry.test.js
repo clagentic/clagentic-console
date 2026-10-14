@@ -299,7 +299,7 @@ test("the interface lists what the console really consumes: endInput is required
   assert.equal(iface.INTERFACE_VERSION, "0.5.0");
   assert.ok(iface.QUERY_HANDLE_METHODS.indexOf("endInput") !== -1);
   assert.deepEqual(iface.QUERY_HANDLE_OPTIONAL_METHODS.slice().sort(), ["rewindFiles", "setPermissionMode"]);
-  ["rollbackThread", "shutdown", "forkSession", "generateTitle"].forEach(function (m) {
+  ["rollbackThread", "shutdown", "forkSession"].forEach(function (m) {
     assert.ok(iface.ADAPTER_OPTIONAL_METHODS.indexOf(m) !== -1, m);
   });
   var handle = { pushMessage() {}, setModel() {}, setEffort() {}, setToolPolicy() {}, stopTask() {}, getContextUsage() {}, abort() {}, close() {} };
