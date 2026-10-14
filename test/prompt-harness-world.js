@@ -124,6 +124,7 @@ async function createServer(opts) {
     getNotificationsModule: getNotificationsModule,
     onProcessingChanged: function () {},
     getProjectName: function () { return opts.projectName || ""; },
+    getProjectSlug: function () { return "harness"; },
   });
 
   var handles = [];
