@@ -21,6 +21,16 @@ test("unsupervisedEnv drops the supervisor's variables and keeps the rest", func
   assert.equal(source.INVOCATION_ID, "x", "the source environment is not modified");
 });
 
-test("the restart exit code is the one the dev watcher respawns on", function () {
+test("the restart exit code constant is 120", function () {
   assert.equal(RESTART_EXIT_CODE, 120);
+});
+
+// The watcher is not driven here (it needs a live dev launch); this only ties
+// its literal to the constant, so changing one without the other fails.
+test("the dev watcher's source tests for the same exit code as the constant", function () {
+  var fs = require("node:fs");
+  var path = require("node:path");
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "cli", "daemon-launch.js"), "utf8");
+  assert.ok(src.indexOf("if (code === " + RESTART_EXIT_CODE + ")") !== -1,
+    "daemon-launch.js must respawn on exit code " + RESTART_EXIT_CODE);
 });
