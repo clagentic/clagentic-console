@@ -115,7 +115,7 @@ test("survives the idle reaper and allow_always still resolves and persists the 
     session.pendingPermissions = {};
     h.sm.sessions.set(session.localId, session);
 
-    var grantKey = "Bash:find";
+    var grantKey = "Bash=find . -name x";
     var decision = h.bridge.handleCanUseTool(session, "Bash", { command: "find . -name x" }, { toolUseID: "tu-1", signal: null });
     var requestId = Object.keys(session.pendingPermissions)[0];
     assert.ok(requestId, "a pending permission must be registered");
@@ -131,7 +131,7 @@ test("survives the idle reaper and allow_always still resolves and persists the 
 
     var result = await decision;
     assert.equal(result.behavior, "allow");
-    assert.ok(session.allowedTools[grantKey], "the grant is the command prefix, not the whole tool");
+    assert.ok(session.allowedTools[grantKey], "the grant is the exact command line, not the whole tool");
     assert.equal(session.allowedTools.Bash, undefined);
     var sm2 = makeSessionManager(h.tmpHome);
     var rebuilt = null;

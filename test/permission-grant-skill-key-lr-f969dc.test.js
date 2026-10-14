@@ -107,9 +107,9 @@ test("lr-f969dc: permissionGrantKey builds a composite key for Skill + a valid d
 });
 
 test("lr-f969dc: permissionGrantKey uses the bare tool name for tools with nothing narrower", function () {
-  // Bash is scoped to the command prefix and the file-writing tools have no
-  // session grant at all (test/grant-keys.test.js).
-  assert.equal(utils.permissionGrantKey("Bash", { command: "ls" }), "Bash:ls");
+  // Bash is scoped to the exact command line and the file-writing tools have
+  // no session grant at all (test/grant-keys.test.js).
+  assert.equal(utils.permissionGrantKey("Bash", { command: "ls" }), "Bash=ls");
   assert.equal(utils.permissionGrantKey("Edit", { file_path: "/tmp/x" }), null);
   // MCP tools already fold server+tool identity into the name — no
   // discriminator needed, bare name is correct.

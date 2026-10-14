@@ -9,7 +9,13 @@ var assert = require("node:assert/strict");
 var dom = require("./fake-dom-prompt-cards");
 
 var LABEL = { project: "Project Alpha", session: "DO NOT ANSWER probe", agent: "scan the repository" };
-var SCOPE = "Allow Bash commands starting with find in this session";
+var SCOPE = "Allow only this exact command in this session";
+var FILE_TOOL_INPUTS = [
+  ["Write", { file_path: "/work/a.txt", content: "x" }],
+  ["Edit", { file_path: "/work/a.txt" }],
+  ["MultiEdit", { file_path: "/work/a.txt" }],
+  ["NotebookEdit", { notebook_path: "/work/n.ipynb" }],
+];
 
 function request(id, extra) {
   return Object.assign({
@@ -36,12 +42,15 @@ function request(id, extra) {
   test("the " + layout + " card omits the scope sentence and Allow for session when there is nothing narrow to grant", async function (t) {
     var env = await dom.setupToolsEnv(t);
     global.localStorage.setItem("clagentic-wide-view", layout);
-    env.tools.applyPromptMessage(request("l2", { grantScope: null, toolName: "Write", toolInput: { content: "x" } }));
-    var card = dom.cardFor(env, "l2");
-    assert.equal(card.querySelector(".permission-scope"), null);
-    assert.equal(card.querySelector(".permission-allow-session, .perm-always"), null);
-    assert.ok(card.querySelector(".permission-allow, .perm-allow"), "Allow once stays");
-    assert.ok(card.querySelector(".prompt-label"), "the label stays");
+    FILE_TOOL_INPUTS.forEach(function (call, i) {
+      var id = "l2-" + i;
+      env.tools.applyPromptMessage(request(id, { grantScope: null, toolName: call[0], toolInput: call[1] }));
+      var card = dom.cardFor(env, id);
+      assert.equal(card.querySelector(".permission-scope"), null, call[0]);
+      assert.equal(card.querySelector(".permission-allow-session, .perm-always"), null, call[0]);
+      assert.ok(card.querySelector(".permission-allow, .perm-allow"), call[0] + ": Allow once stays");
+      assert.ok(card.querySelector(".prompt-label"), call[0] + ": the label stays");
+    });
   });
 
   test("the " + layout + " card for an older recorded request with no label or scope is drawn as before", async function (t) {
@@ -98,7 +107,7 @@ test("the grants list draws one row per grant with a Revoke, marks whole-tool gr
   var list = new dom.FakeElement("div");
   var sent = [];
   var grants = [
-    { key: "Bash:find", tool: "Bash", wholeTool: false, text: "Bash commands starting with find" },
+    { key: "Bash=find .", tool: "Bash", wholeTool: false, text: "Bash: exactly this command: find ." },
     { key: "Write", tool: "Write", wholeTool: true, text: "Every Write call, whatever it does (whole-tool grant)" },
   ];
   mod.renderGrantList(list, grants, 7, function (m) { sent.push(m); return true; });
@@ -107,7 +116,7 @@ test("the grants list draws one row per grant with a Revoke, marks whole-tool gr
   assert.ok(rows[1].classList.contains("session-grants-whole"), "a whole-tool grant is marked");
   assert.match(rows[1].textContent, /whole-tool/);
   rows[0].querySelector(".session-grants-revoke").click();
-  assert.deepEqual(sent, [{ type: "revoke_session_grant", sessionId: 7, key: "Bash:find" }]);
+  assert.deepEqual(sent, [{ type: "revoke_session_grant", sessionId: 7, key: "Bash=find ." }]);
   assert.equal(rows[0].querySelector(".session-grants-revoke").disabled, true, "disabled while the request is in flight");
   assert.equal(list.querySelectorAll(".session-grants-row").length, 2, "the row stays until the server confirms");
 
@@ -122,7 +131,7 @@ test("a revoke whose send fails re-enables the button and says so, so it can be 
   var mod = await import(dom.moduleUrl("session-grants.js"));
   var list = new dom.FakeElement("div");
   var attempts = 0;
-  var grants = [{ key: "Bash:find", tool: "Bash", wholeTool: false, text: "Bash commands starting with find" }];
+  var grants = [{ key: "Bash=find .", tool: "Bash", wholeTool: false, text: "Bash: exactly this command: find ." }];
   mod.renderGrantList(list, grants, 7, function () { attempts++; return attempts > 1; });
   var button = list.querySelector(".session-grants-revoke");
   button.click();
@@ -141,7 +150,7 @@ test("a server refusal re-enables every Revoke and shows why; the server's list 
   var mod = await import(dom.moduleUrl("session-grants.js"));
   var list = new dom.FakeElement("div");
   var grants = [
-    { key: "Bash:find", tool: "Bash", wholeTool: false, text: "Bash commands starting with find" },
+    { key: "Bash=find .", tool: "Bash", wholeTool: false, text: "Bash: exactly this command: find ." },
     { key: "Write", tool: "Write", wholeTool: true, text: "Every Write call (whole-tool grant)" },
   ];
   mod.renderGrantList(list, grants, 7, function () { return true; });
