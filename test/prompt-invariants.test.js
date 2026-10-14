@@ -51,7 +51,9 @@ var ASK_INPUT = { questions: [{ question: "Which target?", options: [{ label: "s
 
 var PROMPTS = [
   { key: "Bash", kind: "permission", toolName: "Bash", input: { command: "deploy --prod" } },
-  { key: "Write", kind: "permission", toolName: "Write", input: { file_path: "/srv/app/config.yml" } },
+  // An existing file: a file grant binds to the realpath, and a file that does
+  // not exist yet is allowed once and never granted.
+  { key: "Write", kind: "permission", toolName: "Write", input: { file_path: __filename } },
   { key: "Skill:alpha", kind: "permission", toolName: "Skill", input: { skill: "alpha" } },
   { key: "Skill:beta", kind: "permission", toolName: "Skill", input: { skill: "beta" } },
   { key: "Plan", kind: "plan", toolName: "ExitPlanMode", input: { plan: "ship it" } },

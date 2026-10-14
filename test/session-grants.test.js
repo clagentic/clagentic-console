@@ -61,22 +61,54 @@ test("a grant from a Bash find prompt covers find and not rm", async function ()
   });
 });
 
-test("a grant on Write to a path covers that file and no other", async function () {
+// A scratch tree of real files under the stamped temp dir; a file grant binds
+// to the realpath, so the file must exist when the grant is made.
+function scratchTree(t, files) {
+  var fs = require("fs");
+  var os = require("os");
+  var path = require("path");
+  var root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "session-grants-")));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  files.forEach(function (f) {
+    fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+    fs.writeFileSync(path.join(root, f), "x");
+  });
+  return { root: root, at: function (f) { return path.join(root, f); } };
+}
+
+test("a grant on Write to a path covers that file and no other", async function (t) {
+  var tree = scratchTree(t, ["a/one.txt", "a/two.txt", "b/one.txt"]);
   await withServer(async function (server) {
     var c = client();
     server.connect(c.ws);
-    var first = server.ask("Write", { file_path: "/work/a/one.txt", content: "x" });
+    var first = server.ask("Write", { file_path: tree.at("a/one.txt"), content: "x" });
     var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
-    assert.equal(prompt.grantScope, "Allow Write on this file only (/work/a/one.txt) in this session");
+    assert.equal(prompt.grantScope, "Allow Write on this file only (" + tree.at("a/one.txt") + ") in this session");
     answer(server, c, first.id, "allow_always");
     await first.promise;
-    assert.deepEqual(grantKeys(server), ["Write:/work/a/one.txt"]);
+    assert.deepEqual(grantKeys(server), ["Write:" + tree.at("a/one.txt")]);
 
-    assert.equal(server.ask("Write", { file_path: "/work/a/one.txt" }).opened.length, 0, "the same file");
-    assert.equal(server.ask("Write", { file_path: "/work/a/two.txt" }).opened.length, 1, "a sibling file in the same directory prompts");
-    assert.equal(server.ask("Write", { file_path: "/work/b/one.txt" }).opened.length, 1, "a Write to another directory prompts");
-    assert.equal(server.ask("Write", { file_path: "/work/a/link/../one.txt" }).opened.length, 1, "another spelling prompts");
-    assert.equal(server.ask("Edit", { file_path: "/work/a/one.txt" }).opened.length, 1, "an Edit is another tool");
+    assert.equal(server.ask("Write", { file_path: tree.at("a/one.txt") }).opened.length, 0, "the same file");
+    assert.equal(server.ask("Write", { file_path: tree.at("a/two.txt") }).opened.length, 1, "a sibling file in the same directory prompts");
+    assert.equal(server.ask("Write", { file_path: tree.at("b/one.txt") }).opened.length, 1, "a Write to another directory prompts");
+    assert.equal(server.ask("Write", { file_path: tree.root + "/a/link/../one.txt" }).opened.length, 1, "another spelling prompts");
+    assert.equal(server.ask("Edit", { file_path: tree.at("a/one.txt") }).opened.length, 1, "an Edit is another tool");
+  });
+});
+
+test("Allow for Session on a file that does not exist yet allows this call and stores nothing", async function (t) {
+  var tree = scratchTree(t, []);
+  await withServer(async function (server) {
+    var c = client();
+    server.connect(c.ws);
+    var first = server.ask("Write", { file_path: tree.at("new.txt"), content: "x" });
+    var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
+    assert.equal(prompt.grantScope, "This file does not exist yet, so this approval covers this call only", "the card says so before the click");
+    answer(server, c, first.id, "allow_always");
+    assert.equal((await first.promise).behavior, "allow", "this call is allowed");
+    assert.deepEqual(grantKeys(server), [], "nothing is stored");
+    assert.deepEqual(persistedGrants(server), {}, "nor persisted");
+    assert.equal(server.ask("Write", { file_path: tree.at("new.txt") }).opened.length, 1, "the next Write prompts");
   });
 });
 
@@ -173,7 +205,8 @@ OBSERVED_SHAPES.forEach(function (shape) {
   });
 });
 
-test("a revoked scoped grant survives a daemon restart as revoked, and a held one as held", async function () {
+test("a revoked scoped grant survives a daemon restart as revoked, and a held one as held", async function (t) {
+  var tree = scratchTree(t, ["a/x", "a/y"]);
   var first = await world.createServer();
   var home = first.home;
   var cliSessionId = first.session.cliSessionId;
@@ -184,20 +217,20 @@ test("a revoked scoped grant survives a daemon restart as revoked, and a held on
     var a = first.ask("Bash", { command: "find ." });
     answer(first, c, a.id, "allow_always");
     await a.promise;
-    var b = first.ask("Write", { file_path: "/work/a/x" });
+    var b = first.ask("Write", { file_path: tree.at("a/x") });
     answer(first, c, b.id, "allow_always");
     await b.promise;
-    assert.deepEqual(grantKeys(first), ["Bash:find", "Write:/work/a/x"]);
+    assert.deepEqual(grantKeys(first), ["Bash:find", "Write:" + tree.at("a/x")]);
     first.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: first.session.localId, key: "Bash:find" });
     first.shutdown();
 
     var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
     try {
       await second.startQuery();
-      assert.deepEqual(grantKeys(second), ["Write:/work/a/x"]);
+      assert.deepEqual(grantKeys(second), ["Write:" + tree.at("a/x")]);
       assert.equal(second.ask("Bash", { command: "find ." }).opened.length, 1, "the revoked grant stays revoked");
-      assert.equal(second.ask("Write", { file_path: "/work/a/x" }).opened.length, 0, "the held grant is still held");
-      assert.equal(second.ask("Write", { file_path: "/work/a/y" }).opened.length, 1, "a sibling still prompts");
+      assert.equal(second.ask("Write", { file_path: tree.at("a/x") }).opened.length, 0, "the held grant is still held");
+      assert.equal(second.ask("Write", { file_path: tree.at("a/y") }).opened.length, 1, "a sibling still prompts");
     } finally {
       second.shutdown();
     }
@@ -224,7 +257,7 @@ test("a client that may not see the session can neither list nor revoke its gran
   await withServer(async function (server) {
     server.session.ownerId = "u-owner";
     server.session.sessionVisibility = "private";
-    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true, "Write:/work/a": true });
+    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true, "Write:/work/a": "/work/a" });
     var stranger = client();
     stranger.ws._clagenticUser = { id: "u-other" };
     var owner = client();

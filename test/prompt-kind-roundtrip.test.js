@@ -223,7 +223,8 @@ var SPECS = {
       // A call shaped as its tool's real input is, so Allow for session has
       // something narrow to grant.
       var toolName = p.one(["Bash", "Write"]);
-      var toolInput = toolName === "Write" ? { file_path: "/work/f" + p.int(0, 9) } : { command: "make " + p.int(0, 9) };
+      // The Write target exists: a file grant binds to its realpath.
+      var toolInput = toolName === "Write" ? { file_path: __filename } : { command: "make " + p.int(0, 9) };
       return {
         req: { toolName: toolName, toolInput: toolInput, decisionReason: "", vendor: "claude" },
       };

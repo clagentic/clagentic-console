@@ -96,19 +96,32 @@ test("a file-writing grant is the exact requested path: a sibling, another direc
     assert.equal(key(tool, { file_path: "/work/proj/src/a.js" }), tool + ":/work/proj/src/a.js");
   });
   assert.equal(key("NotebookEdit", { notebook_path: "/work/n/x.ipynb" }), "NotebookEdit:/work/n/x.ipynb");
-  var map = { "Write:/work/proj/src/a.js": true };
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/a.js" }), true, "the same file");
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/b.js" }), false, "a sibling file in the same directory");
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/new.js" }), false, "a new file in the same directory");
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/other/a.js" }), false, "another directory");
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/deep/a.js" }), false, "a subdirectory");
-  assert.equal(grantKeys.isGranted(map, "Edit", { file_path: "/work/proj/src/a.js" }), false, "another tool");
+});
+
+test("a file grant covers that file only: a sibling, another directory and another tool prompt", function (t) {
+  var fs = require("fs");
+  var os = require("os");
+  var pathMod = require("path");
+  var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  fs.mkdirSync(pathMod.join(root, "src", "deep"), { recursive: true });
+  fs.mkdirSync(pathMod.join(root, "other"));
+  ["src/a.js", "src/b.js", "other/a.js", "src/deep/a.js"].forEach(function (f) { fs.writeFileSync(pathMod.join(root, f), "x"); });
+  var at = function (f) { return { file_path: pathMod.join(root, f) }; };
+  var map = {};
+  map[key("Write", at("src/a.js"))] = grantKeys.grantValue("Write", at("src/a.js"));
+  assert.equal(grantKeys.isGranted(map, "Write", at("src/a.js")), true, "the same file");
+  assert.equal(grantKeys.isGranted(map, "Write", at("src/b.js")), false, "a sibling file in the same directory");
+  assert.equal(grantKeys.isGranted(map, "Write", at("src/new.js")), false, "a new file in the same directory");
+  assert.equal(grantKeys.isGranted(map, "Write", at("other/a.js")), false, "another directory");
+  assert.equal(grantKeys.isGranted(map, "Write", at("src/deep/a.js")), false, "a subdirectory");
+  assert.equal(grantKeys.isGranted(map, "Edit", at("src/a.js")), false, "another tool");
 });
 
 test("the key is the path as written: it is never joined, resolved or normalised", function () {
   assert.equal(key("Write", { file_path: "/safe/link/../secret" }), "Write:/safe/link/../secret");
   assert.equal(key("Write", { file_path: "/safe//a/./b/" }), "Write:/safe//a/./b/");
-  var map = { "Write:/safe/secret": true, "Write:/safe": true };
+  var map = { "Write:/safe/secret": "/safe/secret", "Write:/safe": "/safe" };
   assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/safe/link/../secret" }), false, "link/.. does not collapse onto a granted name");
   assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/safe/./secret" }), false, "another spelling of the same file prompts");
 });
@@ -140,23 +153,54 @@ test("a path grant is bound to the file's realpath: a symlink swapped in after t
   assert.equal(grantKeys.isGranted(map, "Write", input), false, "and a third file");
 });
 
-test("a file that does not exist at grant time is stored as true and matched by name", function (t) {
+test("a file that does not exist at grant time stores nothing and the card says so", function (t) {
   var fs = require("fs");
   var os = require("os");
   var pathMod = require("path");
   var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
   t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
   var input = { file_path: pathMod.join(root, "later.txt") };
-  assert.equal(grantKeys.grantValue("Write", input), true);
-  var map = {};
-  map[key("Write", input)] = true;
-  assert.equal(grantKeys.isGranted(map, "Write", input), true);
+  assert.equal(grantKeys.grantValue("Write", input), null, "no realpath, nothing to store");
+  assert.equal(grantKeys.grantScopeText("Write", input), "This file does not exist yet, so this approval covers this call only");
+  assert.equal(grantKeys.isGranted({}, "Write", input), false, "the next Write prompts");
+  assert.equal(grantKeys.isGranted(Object.fromEntries([[key("Write", input), true]]), "Write", input), false, "a bare true under a file key is never accepted");
 });
 
-test("a stored realpath is only a valid value under a file-tool key", function () {
+test("a missing file later created as a symlink to an outside file prompts", function (t) {
+  var fs = require("fs");
+  var os = require("os");
+  var pathMod = require("path");
+  var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  var outside = pathMod.join(root, "outside.txt");
+  fs.writeFileSync(outside, "secret");
+  var input = { file_path: pathMod.join(root, "later.txt") };
+  var map = {};
+  var value = grantKeys.grantValue("Write", input);
+  if (value !== null) map[key("Write", input)] = value;
+  fs.symlinkSync(outside, input.file_path);
+  assert.equal(grantKeys.isGranted(map, "Write", input), false);
+});
+
+test("a stored realpath that no longer matches prompts", function (t) {
+  var fs = require("fs");
+  var os = require("os");
+  var pathMod = require("path");
+  var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  var input = { file_path: pathMod.join(root, "f.txt") };
+  fs.writeFileSync(input.file_path, "x");
+  var map = Object.fromEntries([[key("Write", input), pathMod.join(root, "gone.txt")]]);
+  assert.equal(grantKeys.isGranted(map, "Write", input), false);
+});
+
+test("a file-tool key holds only a realpath string; every other key holds only true", function () {
   assert.equal(grantKeys.isGrantValue("Write:/a", "/real/a"), true);
+  assert.equal(grantKeys.isGrantValue("Write:/a", true), false, "an unbound file grant is not a grant");
   assert.equal(grantKeys.isGrantValue("Write:/a", "relative"), false);
   assert.equal(grantKeys.isGrantValue("Bash:ls", "/real/a"), false);
+  assert.equal(grantKeys.isGrantValue("Bash:ls", true), true);
+  assert.equal(grantKeys.isGrantValue("Write", true), true, "legacy whole-tool");
   assert.equal(grantKeys.isGrantValue("Write", "/real/a"), false, "a whole-tool grant is only ever true");
   assert.equal(grantKeys.isGrantValue("Write:/a", ""), false);
 });
@@ -203,8 +247,8 @@ test("the scope sentence names exactly what the click grants", function () {
   assert.equal(grantKeys.grantScopeText("Bash", { command: "find . -name x" }), "Allow Bash commands starting with find in this session");
   assert.equal(grantKeys.grantScopeText("Bash", { command: "git status" }), "Allow Bash commands starting with git status in this session");
   assert.equal(grantKeys.grantScopeText("Bash", { command: "a; b" }), "Allow only this exact command in this session");
-  assert.equal(grantKeys.grantScopeText("Write", { file_path: "/work/p/a.js" }), "Allow Write on this file only (/work/p/a.js) in this session");
-  assert.doesNotMatch(grantKeys.grantScopeText("Write", { file_path: "/work/p/a.js" }), /director|files in/i);
+  assert.equal(grantKeys.grantScopeText("Write", { file_path: __filename }), "Allow Write on this file only (" + __filename + ") in this session");
+  assert.doesNotMatch(grantKeys.grantScopeText("Write", { file_path: __filename }), /director|files in/i);
   assert.equal(grantKeys.grantScopeText("Skill", { skill: "x" }), "Allow the x skill in this session");
   assert.equal(grantKeys.grantScopeText("mcp__a__b", {}), "Allow every mcp__a__b call in this session");
 });
@@ -230,6 +274,8 @@ test("a persisted map is sanitized to boolean true, bounded keys and at most MAX
   assert.deepEqual(Object.keys(out), ["Bash:find"]);
   var bound = utils.sanitizeAllowedTools({ "Write:/a/b": "/real/b", "Bash:ls": "/real/b", "Write:/c": "rel" });
   assert.deepEqual(Object.assign({}, bound), { "Write:/a/b": "/real/b" }, "a bound realpath survives only under a file key");
+  var unbound = utils.sanitizeAllowedTools({ "Write:/a/b": true, "Edit:/c": true, Write: true });
+  assert.deepEqual(Object.assign({}, unbound), { Write: true }, "an unbound file value is dropped on load, legacy whole-tool stays");
   var many = {};
   for (var i = 0; i < grantKeys.MAX_GRANTS + 10; i++) many["Bash:p" + i] = true;
   assert.equal(Object.keys(utils.sanitizeAllowedTools(many)).length, grantKeys.MAX_GRANTS);
