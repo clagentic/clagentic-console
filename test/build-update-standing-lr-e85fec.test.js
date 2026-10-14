@@ -141,7 +141,9 @@ test("a rejected read: the offer stays, says why, and is retried at most once pe
   await tick();
   assert.deepEqual(r.kinds(), ["show", "refresh"]);
   assert.equal(r.offer.current().changes.available, false);
-  assert.equal(r.offer.current().changes.reason, "git exploded");
+  assert.equal(r.offer.current().changes.reason, "the change list could not be read");
+  assert.doesNotMatch(JSON.stringify(r.offer.current()), /git exploded/, "reader detail never reaches clients");
+  assert.ok(r.lines.some(function (l) { return /git exploded/.test(l); }), "the detail goes to the journal");
   assert.equal(r.offer.current().actionable.action, "restart_for_build_update");
 
   r.clock = 500;
@@ -180,7 +182,7 @@ test("a reader that throws synchronously is a failed read, not a lost offer", as
   offer.reconcile(stale("A"));
   await tick();
   assert.deepEqual(sent.map(kind), ["show", "refresh"]);
-  assert.equal(offer.current().changes.reason, "sync");
+  assert.equal(offer.current().changes.reason, "the change list could not be read");
 });
 
 test("a change list that finishes after adoption sends nothing and leaves no offer", async function () {
