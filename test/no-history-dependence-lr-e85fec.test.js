@@ -13,13 +13,10 @@ var path = require("path");
 var OWN_REPO = new Set(["project-filesystem-policy.test.js"]);
 var PARENT_REF = /\bHEAD[~^]/;
 
-// Comments may name the ref without running it.
-function stripComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-}
-
+// Comments are scanned too: stripping them would need a tokenizer that knows
+// string literals, and a comment can be reworded.
 function asksForParent(source) {
-  return PARENT_REF.test(stripComments(source));
+  return PARENT_REF.test(source);
 }
 
 test("the parent-ref guard recognises every way a test can ask for one", function () {
@@ -30,8 +27,6 @@ test("the parent-ref guard recognises every way a test can ask for one", functio
     ['execSync("git log HEAD^..")', true],
     ["execSync(`git diff ${base} HEAD~2`)", true],
     ["var ref = `HEAD^`;", true],
-    ['// compares against HEAD~1 in a comment\nvar x = 1;', false],
-    ['/* HEAD^ named in a block comment */\nvar x = 1;', false],
     ['execSync("git rev-parse HEAD")', false],
     ['var s = "AHEAD~1";', false],
   ];
