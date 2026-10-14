@@ -49,6 +49,33 @@ test("a program that runs other programs is never granted by prefix", function (
   assert.equal(bash("FOO=1 ls"), "Bash=FOO=1 ls", "a leading assignment is not a plain command word");
 });
 
+test("a path, a wrapper or an assignment in front is never a prefix grant: the exact line is the key", function () {
+  [
+    "/bin/bash -c x", "/usr/bin/env x", "/usr/bin/sudo rm x", "./run.sh", "../bin/tool a", "sudo x", "doas x", "su root",
+    "git -C repo status", "git --no-pager log", "npm --prefix x test", "FOO=1 ls", "FOO=1 git status",
+    "busybox sh", "uvx tool", "pipx run x", "python x.py", "python3.12 x.py", "(ls)", "ls $(id)", "ls > out", "ls < in",
+    "ls <(id)", "a || b", "a && b", "a ; b", "a | b", "a &", "a\nb", "ssh h x", "env x", "xargs x", "nohup x", "exec x", "eval x",
+  ].forEach(function (cmd) {
+    assert.equal(bash(cmd), "Bash=" + cmd, JSON.stringify(cmd));
+  });
+  assert.equal(bash("git status"), "Bash:git status");
+  assert.equal(bash("find . -name x"), "Bash:find");
+});
+
+test("a later call outside the derived scope prompts", function () {
+  var map = {};
+  map[bash("git status")] = true;
+  ["git -C repo status", "git push", "/usr/bin/git status", "git status; rm x", "git status && rm x"].forEach(function (cmd) {
+    // The only call these could share a key with is their own exact line.
+    assert.equal(grantKeys.isGranted(map, "Bash", { command: cmd }), false, cmd);
+  });
+  var exactMap = {};
+  exactMap[bash("/bin/bash -c x")] = true;
+  assert.equal(grantKeys.isGranted(exactMap, "Bash", { command: "/bin/bash -c x" }), true, "the exact line repeats");
+  assert.equal(grantKeys.isGranted(exactMap, "Bash", { command: "/bin/bash -c y" }), false);
+  assert.equal(grantKeys.isGranted(exactMap, "Bash", { command: "bash -c x" }), false);
+});
+
 test("find with a flag that acts is its own exact line, so a find grant does not cover it", function () {
   assert.equal(bash("find . -delete"), "Bash=find . -delete");
   assert.equal(bash("find . -exec rm {} ;"), "Bash=find . -exec rm {} ;");
@@ -81,6 +108,48 @@ test("dot segments are resolved before the directory is taken", function () {
   assert.equal(grantKeys.isGranted({ "Write:/work/proj": true }, "Write", { file_path: "/work/proj/../secret/x" }), false);
 });
 
+test("a path grant is decided on the resolved target: a symlink out, a dot-dot escape and a sibling prefix prompt", function (t) {
+  var fs = require("fs");
+  var os = require("os");
+  var pathMod = require("path");
+  var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  var granted = pathMod.join(root, "b");
+  var outside = pathMod.join(root, "out");
+  fs.mkdirSync(granted);
+  fs.mkdirSync(outside);
+  fs.mkdirSync(pathMod.join(root, "bc"));
+  fs.symlinkSync(outside, pathMod.join(granted, "dirlink"));
+  fs.writeFileSync(pathMod.join(outside, "secret"), "x");
+  fs.symlinkSync(pathMod.join(outside, "secret"), pathMod.join(granted, "filelink"));
+  fs.symlinkSync(pathMod.join(root, "missing"), pathMod.join(granted, "dangling"));
+
+  var map = {};
+  map[key("Write", { file_path: pathMod.join(granted, "first.txt") })] = true;
+  assert.deepEqual(Object.keys(map), ["Write:" + granted]);
+  var covered = function (p) { return grantKeys.isGranted(map, "Write", { file_path: p }); };
+
+  assert.equal(covered(pathMod.join(granted, "new.txt")), true, "a new file under the granted dir");
+  assert.equal(covered(pathMod.join(granted, "existing-after.txt")), true);
+  assert.equal(covered(pathMod.join(granted, "dirlink", "x.txt")), false, "through a directory symlink that leaves the dir");
+  assert.equal(covered(pathMod.join(granted, "filelink")), false, "a file symlink that points outside");
+  assert.equal(covered(pathMod.join(granted, "dangling")), false, "a dangling link has no safe target");
+  assert.equal(covered(pathMod.join(granted, "..", "out", "x.txt")), false, "a dot-dot escape");
+  assert.equal(covered(pathMod.join(root, "bc", "x.txt")), false, "a sibling whose name starts the same");
+  assert.equal(key("Write", { file_path: pathMod.join(granted, "dangling") }), null);
+});
+
+test("a symlinked granted directory is granted by its real location", function (t) {
+  var fs = require("fs");
+  var os = require("os");
+  var pathMod = require("path");
+  var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  fs.mkdirSync(pathMod.join(root, "real"));
+  fs.symlinkSync(pathMod.join(root, "real"), pathMod.join(root, "alias"));
+  assert.equal(key("Write", { file_path: pathMod.join(root, "alias", "f") }), "Write:" + pathMod.join(root, "real"));
+});
+
 test("Codex's file change approval, which names path, is scoped the same way", function () {
   assert.equal(key("Edit", { changes: "update /work/a.txt", path: "/work/a.txt" }), "Edit:/work");
   assert.equal(key("Edit", { changes: "update /work/a.txt" }), null, "no path, nothing narrow to grant");
@@ -101,12 +170,12 @@ test("other tools keep the tool name, a skill keeps its own name, MCP tools are 
   assert.equal(key("mcp__browser__navigate", { url: "x" }), "mcp__browser__navigate");
   assert.equal(grantKeys.isGranted({ "mcp__browser__navigate": true }, "mcp__browser__screenshot", {}), false);
   assert.equal(grantKeys.isGranted({ "Skill:a": true }, "Skill", { skill: "b" }), false);
-  assert.equal(grantKeys.isGranted({ Skill: true }, "Skill", { skill: "b" }), false, "a bare Skill grant does not cover a named one");
+  assert.equal(grantKeys.isGranted({ "Skill:a": true }, "Skill", { skill: "a" }), true);
 });
 
 test("a whole-tool grant from before scoping still covers its tool and is described as whole-tool", function () {
-  ["Bash", "Write", "Edit", "MultiEdit"].forEach(function (tool) {
-    var input = tool === "Bash" ? { command: "rm x" } : { file_path: "/anywhere/x" };
+  ["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Skill"].forEach(function (tool) {
+    var input = tool === "Bash" ? { command: "rm x" } : tool === "Skill" ? { skill: "any" } : { file_path: "/anywhere/x" };
     assert.equal(grantKeys.isGranted({ [tool]: true }, tool, input), true, tool + " stays readable and in force");
     var d = grantKeys.describeGrantKey(tool);
     assert.equal(d.wholeTool, true);
