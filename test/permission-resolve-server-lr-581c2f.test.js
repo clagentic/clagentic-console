@@ -115,7 +115,8 @@ test("survives the idle reaper and allow_always still resolves and persists the 
     session.pendingPermissions = {};
     h.sm.sessions.set(session.localId, session);
 
-    var decision = h.bridge.handleCanUseTool(session, "Write", { file_path: "/tmp/x" }, { toolUseID: "tu-1", signal: null });
+    var grantKey = "Bash=find . -name x";
+    var decision = h.bridge.handleCanUseTool(session, "Bash", { command: "find . -name x" }, { toolUseID: "tu-1", signal: null });
     var requestId = Object.keys(session.pendingPermissions)[0];
     assert.ok(requestId, "a pending permission must be registered");
 
@@ -130,12 +131,13 @@ test("survives the idle reaper and allow_always still resolves and persists the 
 
     var result = await decision;
     assert.equal(result.behavior, "allow");
-    assert.equal(session.allowedTools["Write"], true);
+    assert.ok(session.allowedTools[grantKey], "the grant is the exact command line, not the whole tool");
+    assert.equal(session.allowedTools.Bash, undefined);
     var sm2 = makeSessionManager(h.tmpHome);
     var rebuilt = null;
     sm2.sessions.forEach(function (s) { if (s.cliSessionId === "sess-perm-resolve-idle") rebuilt = s; });
     assert.ok(rebuilt, "session must be rehydrated from disk");
-    assert.equal(rebuilt.allowedTools["Write"], true, "the grant must persist across rehydration");
+    assert.equal(rebuilt.allowedTools[grantKey], session.allowedTools[grantKey], "the grant must persist across rehydration");
   } finally {
     t.mock.timers.reset();
     cleanup(h);

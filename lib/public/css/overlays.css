@@ -544,6 +544,24 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 
 #skill-install-modal.hidden { display: none; }
 
+#session-grants-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.session-grants-dialog { max-width: 520px; }
+.session-grants-title { font-weight: 600; font-size: 16px; margin-bottom: 12px; color: var(--text); }
+.session-grants-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 50vh; overflow-y: auto; }
+.session-grants-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(var(--overlay-rgb), 0.05); border: 1px solid var(--border); }
+.session-grants-whole { border-color: var(--warning, #f39c12); }
+.session-grants-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+.session-grants-revoke { flex-shrink: 0; background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; padding: 4px 10px; font-size: 12px; }
+.session-grants-revoke:disabled { opacity: 0.5; cursor: default; }
+.session-grants-empty { font-size: 13px; color: var(--text-muted); }
+
 .skill-install-dialog { max-width: 460px; padding: 28px 32px; }
 .skill-install-title { font-weight: 600; font-size: 17px; margin-bottom: 8px; color: var(--text); }
 .skill-install-reason { color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin-bottom: 18px; }
