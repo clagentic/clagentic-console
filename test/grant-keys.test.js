@@ -91,67 +91,78 @@ test("a Bash call with no command, or a line too long to keep, cannot be granted
   assert.equal(key("Bash", { command: "ls; " + "x".repeat(400) }), null);
 });
 
-test("a file-writing grant is the file's directory: another directory, and a sibling tool, are not covered", function () {
+test("a file-writing grant is the exact requested path: a sibling, another directory and another tool are not covered", function () {
   ["Write", "Edit", "MultiEdit"].forEach(function (tool) {
-    assert.equal(key(tool, { file_path: "/work/proj/src/a.js" }), tool + ":/work/proj/src");
+    assert.equal(key(tool, { file_path: "/work/proj/src/a.js" }), tool + ":/work/proj/src/a.js");
   });
-  assert.equal(key("NotebookEdit", { notebook_path: "/work/n/x.ipynb" }), "NotebookEdit:/work/n");
-  var map = { "Write:/work/proj/src": true };
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/b.js" }), true, "same directory, other file");
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/other/b.js" }), false, "another directory");
-  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/deep/b.js" }), false, "a subdirectory is another directory");
-  assert.equal(grantKeys.isGranted(map, "Edit", { file_path: "/work/proj/src/b.js" }), false, "another tool");
+  assert.equal(key("NotebookEdit", { notebook_path: "/work/n/x.ipynb" }), "NotebookEdit:/work/n/x.ipynb");
+  var map = { "Write:/work/proj/src/a.js": true };
+  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/a.js" }), true, "the same file");
+  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/b.js" }), false, "a sibling file in the same directory");
+  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/new.js" }), false, "a new file in the same directory");
+  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/other/a.js" }), false, "another directory");
+  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/work/proj/src/deep/a.js" }), false, "a subdirectory");
+  assert.equal(grantKeys.isGranted(map, "Edit", { file_path: "/work/proj/src/a.js" }), false, "another tool");
 });
 
-test("dot segments are resolved before the directory is taken", function () {
-  assert.equal(key("Write", { file_path: "/work/proj/src/../../etc/x" }), "Write:/work/etc");
-  assert.equal(grantKeys.isGranted({ "Write:/work/proj": true }, "Write", { file_path: "/work/proj/../secret/x" }), false);
+test("the key is the path as written: it is never joined, resolved or normalised", function () {
+  assert.equal(key("Write", { file_path: "/safe/link/../secret" }), "Write:/safe/link/../secret");
+  assert.equal(key("Write", { file_path: "/safe//a/./b/" }), "Write:/safe//a/./b/");
+  var map = { "Write:/safe/secret": true, "Write:/safe": true };
+  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/safe/link/../secret" }), false, "link/.. does not collapse onto a granted name");
+  assert.equal(grantKeys.isGranted(map, "Write", { file_path: "/safe/./secret" }), false, "another spelling of the same file prompts");
 });
 
-test("a path grant is decided on the resolved target: a symlink out, a dot-dot escape and a sibling prefix prompt", function (t) {
+test("a path grant is bound to the file's realpath: a symlink swapped in after the grant prompts", function (t) {
   var fs = require("fs");
   var os = require("os");
   var pathMod = require("path");
   var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
   t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
-  var granted = pathMod.join(root, "b");
-  var outside = pathMod.join(root, "out");
-  fs.mkdirSync(granted);
-  fs.mkdirSync(outside);
-  fs.mkdirSync(pathMod.join(root, "bc"));
-  fs.symlinkSync(outside, pathMod.join(granted, "dirlink"));
-  fs.writeFileSync(pathMod.join(outside, "secret"), "x");
-  fs.symlinkSync(pathMod.join(outside, "secret"), pathMod.join(granted, "filelink"));
-  fs.symlinkSync(pathMod.join(root, "missing"), pathMod.join(granted, "dangling"));
+  var target = pathMod.join(root, "target.txt");
+  var elsewhere = pathMod.join(root, "elsewhere.txt");
+  var name = pathMod.join(root, "name.txt");
+  fs.writeFileSync(target, "x");
+  fs.writeFileSync(elsewhere, "y");
 
+  var input = { file_path: name };
+  fs.writeFileSync(name, "z");
   var map = {};
-  map[key("Write", { file_path: pathMod.join(granted, "first.txt") })] = true;
-  assert.deepEqual(Object.keys(map), ["Write:" + granted]);
-  var covered = function (p) { return grantKeys.isGranted(map, "Write", { file_path: p }); };
+  map[key("Write", input)] = grantKeys.grantValue("Write", input);
+  assert.equal(map["Write:" + name], name, "the realpath at grant time is stored");
+  assert.equal(grantKeys.isGranted(map, "Write", input), true, "unchanged");
 
-  assert.equal(covered(pathMod.join(granted, "new.txt")), true, "a new file under the granted dir");
-  assert.equal(covered(pathMod.join(granted, "existing-after.txt")), true);
-  assert.equal(covered(pathMod.join(granted, "dirlink", "x.txt")), false, "through a directory symlink that leaves the dir");
-  assert.equal(covered(pathMod.join(granted, "filelink")), false, "a file symlink that points outside");
-  assert.equal(covered(pathMod.join(granted, "dangling")), false, "a dangling link has no safe target");
-  assert.equal(covered(pathMod.join(granted, "..", "out", "x.txt")), false, "a dot-dot escape");
-  assert.equal(covered(pathMod.join(root, "bc", "x.txt")), false, "a sibling whose name starts the same");
-  assert.equal(key("Write", { file_path: pathMod.join(granted, "dangling") }), null);
+  fs.rmSync(name);
+  fs.symlinkSync(elsewhere, name);
+  assert.equal(grantKeys.isGranted(map, "Write", input), false, "the name now leads to another file");
+  fs.rmSync(name);
+  fs.symlinkSync(target, name);
+  assert.equal(grantKeys.isGranted(map, "Write", input), false, "and a third file");
 });
 
-test("a symlinked granted directory is granted by its real location", function (t) {
+test("a file that does not exist at grant time is stored as true and matched by name", function (t) {
   var fs = require("fs");
   var os = require("os");
   var pathMod = require("path");
   var root = fs.realpathSync(fs.mkdtempSync(pathMod.join(os.tmpdir(), "grant-keys-")));
   t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
-  fs.mkdirSync(pathMod.join(root, "real"));
-  fs.symlinkSync(pathMod.join(root, "real"), pathMod.join(root, "alias"));
-  assert.equal(key("Write", { file_path: pathMod.join(root, "alias", "f") }), "Write:" + pathMod.join(root, "real"));
+  var input = { file_path: pathMod.join(root, "later.txt") };
+  assert.equal(grantKeys.grantValue("Write", input), true);
+  var map = {};
+  map[key("Write", input)] = true;
+  assert.equal(grantKeys.isGranted(map, "Write", input), true);
 });
 
-test("Codex's file change approval, which names path, is scoped the same way", function () {
-  assert.equal(key("Edit", { changes: "update /work/a.txt", path: "/work/a.txt" }), "Edit:/work");
+test("a stored realpath is only a valid value under a file-tool key", function () {
+  assert.equal(grantKeys.isGrantValue("Write:/a", "/real/a"), true);
+  assert.equal(grantKeys.isGrantValue("Write:/a", "relative"), false);
+  assert.equal(grantKeys.isGrantValue("Bash:ls", "/real/a"), false);
+  assert.equal(grantKeys.isGrantValue("Write", "/real/a"), false, "a whole-tool grant is only ever true");
+  assert.equal(grantKeys.isGrantValue("Write:/a", ""), false);
+});
+
+test("Codex's file change approval, which names path, is keyed by that exact file", function () {
+  assert.equal(key("Edit", { changes: "update /work/a.txt", path: "/work/a.txt" }), "Edit:/work/a.txt");
   assert.equal(key("Edit", { changes: "update /work/a.txt" }), null, "no path, nothing narrow to grant");
 });
 
@@ -192,7 +203,8 @@ test("the scope sentence names exactly what the click grants", function () {
   assert.equal(grantKeys.grantScopeText("Bash", { command: "find . -name x" }), "Allow Bash commands starting with find in this session");
   assert.equal(grantKeys.grantScopeText("Bash", { command: "git status" }), "Allow Bash commands starting with git status in this session");
   assert.equal(grantKeys.grantScopeText("Bash", { command: "a; b" }), "Allow only this exact command in this session");
-  assert.equal(grantKeys.grantScopeText("Write", { file_path: "/work/p/a.js" }), "Allow Write on files directly in /work/p in this session");
+  assert.equal(grantKeys.grantScopeText("Write", { file_path: "/work/p/a.js" }), "Allow Write on this file only (/work/p/a.js) in this session");
+  assert.doesNotMatch(grantKeys.grantScopeText("Write", { file_path: "/work/p/a.js" }), /director|files in/i);
   assert.equal(grantKeys.grantScopeText("Skill", { skill: "x" }), "Allow the x skill in this session");
   assert.equal(grantKeys.grantScopeText("mcp__a__b", {}), "Allow every mcp__a__b call in this session");
 });
@@ -200,8 +212,8 @@ test("the scope sentence names exactly what the click grants", function () {
 test("a stored key is described for the operator", function () {
   assert.deepEqual(grantKeys.describeGrantKey("Bash:find"), { key: "Bash:find", tool: "Bash", wholeTool: false, text: "Bash commands starting with find" });
   assert.equal(grantKeys.describeGrantKey("Bash=ls; rm x").text, "Bash: exactly this command: ls; rm x");
-  assert.equal(grantKeys.describeGrantKey("Write:/work/p").text, "Write on files directly in /work/p");
-  assert.equal(grantKeys.describeGrantKey("Write:C:\\work").text, "Write on files directly in C:\\work", "a drive colon stays in the path");
+  assert.equal(grantKeys.describeGrantKey("Write:/work/p/a.js").text, "Write on this file: /work/p/a.js");
+  assert.equal(grantKeys.describeGrantKey("Write:C:\\work\\a.js").text, "Write on this file: C:\\work\\a.js", "a drive colon stays in the path");
 });
 
 test("the persisted grant record is bounded: a grant that does not fit is refused, one already held is not", function () {
@@ -216,6 +228,8 @@ test("a persisted map is sanitized to boolean true, bounded keys and at most MAX
   var raw = { "Bash:find": true, Bash: "yes", ["Write:/" + "d".repeat(200)]: true };
   var out = utils.sanitizeAllowedTools(raw);
   assert.deepEqual(Object.keys(out), ["Bash:find"]);
+  var bound = utils.sanitizeAllowedTools({ "Write:/a/b": "/real/b", "Bash:ls": "/real/b", "Write:/c": "rel" });
+  assert.deepEqual(Object.assign({}, bound), { "Write:/a/b": "/real/b" }, "a bound realpath survives only under a file key");
   var many = {};
   for (var i = 0; i < grantKeys.MAX_GRANTS + 10; i++) many["Bash:p" + i] = true;
   assert.equal(Object.keys(utils.sanitizeAllowedTools(many)).length, grantKeys.MAX_GRANTS);

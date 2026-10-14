@@ -110,7 +110,7 @@ test("lr-f969dc: permissionGrantKey uses the bare tool name for tools with nothi
   // Bash and the file-writing tools are scoped to the command prefix and the
   // directory (test/grant-keys.test.js); they no longer grant the whole tool.
   assert.equal(utils.permissionGrantKey("Bash", { command: "ls" }), "Bash:ls");
-  assert.equal(utils.permissionGrantKey("Edit", { file_path: "/tmp/x" }), "Edit:/tmp");
+  assert.equal(utils.permissionGrantKey("Edit", { file_path: "/tmp/x" }), "Edit:/tmp/x");
   // MCP tools already fold server+tool identity into the name — no
   // discriminator needed, bare name is correct.
   assert.equal(utils.permissionGrantKey("mcp__browser__navigate", { url: "https://a" }), "mcp__browser__navigate");

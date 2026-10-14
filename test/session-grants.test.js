@@ -61,18 +61,35 @@ test("a grant from a Bash find prompt covers find and not rm", async function ()
   });
 });
 
-test("a grant on Write to a path covers that directory and not another", async function () {
+test("a grant on Write to a path covers that file and no other", async function () {
   await withServer(async function (server) {
     var c = client();
     server.connect(c.ws);
     var first = server.ask("Write", { file_path: "/work/a/one.txt", content: "x" });
+    var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
+    assert.equal(prompt.grantScope, "Allow Write on this file only (/work/a/one.txt) in this session");
     answer(server, c, first.id, "allow_always");
     await first.promise;
-    assert.deepEqual(grantKeys(server), ["Write:/work/a"]);
+    assert.deepEqual(grantKeys(server), ["Write:/work/a/one.txt"]);
 
-    assert.equal(server.ask("Write", { file_path: "/work/a/two.txt" }).opened.length, 0, "another file in the directory");
+    assert.equal(server.ask("Write", { file_path: "/work/a/one.txt" }).opened.length, 0, "the same file");
+    assert.equal(server.ask("Write", { file_path: "/work/a/two.txt" }).opened.length, 1, "a sibling file in the same directory prompts");
     assert.equal(server.ask("Write", { file_path: "/work/b/one.txt" }).opened.length, 1, "a Write to another directory prompts");
+    assert.equal(server.ask("Write", { file_path: "/work/a/link/../one.txt" }).opened.length, 1, "another spelling prompts");
     assert.equal(server.ask("Edit", { file_path: "/work/a/one.txt" }).opened.length, 1, "an Edit is another tool");
+  });
+});
+
+test("a relative path is allowed once only", async function () {
+  await withServer(async function (server) {
+    var c = client();
+    server.connect(c.ws);
+    var rel = server.ask("Write", { file_path: "work/a.txt" });
+    var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === rel.id; })[0];
+    assert.equal(prompt.grantScope, null);
+    answer(server, c, rel.id, "allow_always");
+    await world.flush();
+    assert.deepEqual(grantKeys(server), []);
   });
 });
 
@@ -170,16 +187,17 @@ test("a revoked scoped grant survives a daemon restart as revoked, and a held on
     var b = first.ask("Write", { file_path: "/work/a/x" });
     answer(first, c, b.id, "allow_always");
     await b.promise;
-    assert.deepEqual(grantKeys(first), ["Bash:find", "Write:/work/a"]);
+    assert.deepEqual(grantKeys(first), ["Bash:find", "Write:/work/a/x"]);
     first.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: first.session.localId, key: "Bash:find" });
     first.shutdown();
 
     var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
     try {
       await second.startQuery();
-      assert.deepEqual(grantKeys(second), ["Write:/work/a"]);
+      assert.deepEqual(grantKeys(second), ["Write:/work/a/x"]);
       assert.equal(second.ask("Bash", { command: "find ." }).opened.length, 1, "the revoked grant stays revoked");
-      assert.equal(second.ask("Write", { file_path: "/work/a/y" }).opened.length, 0, "the held grant is still held");
+      assert.equal(second.ask("Write", { file_path: "/work/a/x" }).opened.length, 0, "the held grant is still held");
+      assert.equal(second.ask("Write", { file_path: "/work/a/y" }).opened.length, 1, "a sibling still prompts");
     } finally {
       second.shutdown();
     }
