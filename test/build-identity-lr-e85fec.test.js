@@ -65,6 +65,33 @@ test("assessBuild: a missing piece is inconclusive with its reason, never adopte
   );
 });
 
+test("assessBuild: differing shas with an unreadable installed tree are inconclusive, not stale", function () {
+  var r = assessBuild({ sha: "s1", contentHash: "h1" }, { sha: "s2", contentHash: null });
+  assert.equal(r.state, "inconclusive");
+  assert.equal(r.reason, "hash-unavailable");
+  var r2 = assessBuild({ sha: "s1", contentHash: null }, { sha: "s2", contentHash: "h2" });
+  assert.equal(r2.state, "inconclusive");
+});
+
+test("build-identity requires no other lib module, so identity is captured before any is loaded", function () {
+  var { spawnSync } = require("child_process");
+  var libDir = path.join(__dirname, "..", "lib");
+  var script =
+    "var Module = require('module'); var seen = [];" +
+    "var orig = Module._load;" +
+    "Module._load = function (req) { if (req.charAt(0) === '.') seen.push(req); return orig.apply(this, arguments); };" +
+    "require(process.argv[1]); process.stdout.write(JSON.stringify(seen));";
+  var res = spawnSync(process.execPath, ["-e", script, path.join(libDir, "build-identity.js")], { encoding: "utf8" });
+  assert.equal(res.status, 0, res.stderr);
+  assert.deepEqual(JSON.parse(res.stdout), []);
+});
+
+test("the daemon entry requires build-identity before any other lib module", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "daemon.js"), "utf8");
+  var first = /require\(["']\.\/([^"']+)["']\)/.exec(src);
+  assert.equal(first && first[1], "build-identity");
+});
+
 test("assessBuild: adopted is never reported while the shas differ", function () {
   ["s1", "", null].forEach(function (installedSha) {
     var r = assessBuild({ sha: "s0", contentHash: "h" }, { sha: installedSha, contentHash: "h" });
