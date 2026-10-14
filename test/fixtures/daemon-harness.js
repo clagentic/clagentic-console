@@ -229,4 +229,4 @@ async function bootDaemon(o) {
   return d;
 }
 
-module.exports = { bootDaemon,waitForExit, signalPid, pidAlive, httpRequest, findFreePort, SETUP_CODE, SUPERVISOR_ENV, DAEMON_SCRIPT };
+module.exports = { bootDaemon, waitForExit, signalPid, pidAlive, httpRequest, findFreePort, SETUP_CODE, SUPERVISOR_ENV, DAEMON_SCRIPT };
