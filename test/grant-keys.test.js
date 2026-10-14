@@ -17,7 +17,26 @@ test("a Bash grant is the exact command line, whatever the command is", function
     "find . -print", "  find . -type f ", "git status --short", "npm test", "ls; rm -rf x", "ls && rm x", "ls | sh",
     "cat a > b", "echo $(rm x)", "echo `rm x`", "ls\nrm x", "FOO=1 ls", "/bin/bash -c x", "sudo rm x", "git -C repo status",
   ].forEach(function (cmd) {
-    assert.equal(bash(cmd), "Bash=" + cmd.trim(), JSON.stringify(cmd));
+    assert.equal(bash(cmd), "Bash=" + cmd, JSON.stringify(cmd));
+  });
+});
+
+test("the Bash key is the command byte for byte: no trim, collapse or normalization", function () {
+  var NBSP = " ";
+  ["ls ", " ls", "ls\t", "ls\n", "ls" + NBSP, NBSP + "ls", "ls  -l", "é", "é", "LS"].forEach(function (cmd) {
+    assert.equal(bash(cmd), "Bash=" + cmd, JSON.stringify(cmd));
+  });
+  assert.notEqual(bash("é"), bash("é"), "canonically equivalent strings stay distinct");
+});
+
+test("a grant never covers the same command with or without trailing whitespace, either way round", function () {
+  var NBSP = " ";
+  var pairs = [["find . -print" + NBSP, "find . -print"], ["ls ", "ls"], ["ls", "ls "], ["ls", "ls" + NBSP], ["ls\n", "ls"]];
+  pairs.forEach(function (p) {
+    var map = {};
+    map[bash(p[0])] = true;
+    assert.equal(grantKeys.isGranted(map, "Bash", { command: p[0] }), true, "the granted line repeats: " + JSON.stringify(p[0]));
+    assert.equal(grantKeys.isGranted(map, "Bash", { command: p[1] }), false, JSON.stringify(p[0]) + " does not cover " + JSON.stringify(p[1]));
   });
 });
 
@@ -25,7 +44,7 @@ test("a grant from find . -print covers that line only, not find . '-delete', fi
   var map = {};
   map[bash("find . -print")] = true;
   assert.equal(grantKeys.isGranted(map, "Bash", { command: "find . -print" }), true, "the exact line repeats");
-  assert.equal(grantKeys.isGranted(map, "Bash", { command: "  find . -print  " }), true, "surrounding whitespace is not a different line");
+  assert.equal(grantKeys.isGranted(map, "Bash", { command: "  find . -print  " }), false, "surrounding whitespace is a different line");
   [
     "find . '-delete'", "find . \"-delete\"", "find . -print -delete", "find . -name x", "find .", "rm -rf x",
     "find . -print; rm x", "find . -print && rm x", "findx . -print",
@@ -46,7 +65,8 @@ test("a grant from one line never covers a longer line, a shorter one or a compo
 test("a Bash call with no command, or a line too long to keep, cannot be granted", function () {
   assert.equal(key("Bash", {}), null);
   assert.equal(key("Bash", null), null);
-  assert.equal(key("Bash", { command: "   " }), null);
+  assert.equal(key("Bash", { command: "" }), null);
+  assert.equal(key("Bash", { command: 5 }), null);
   assert.equal(key("Bash", { command: "ls; " + "x".repeat(400) }), null);
   assert.equal(grantKeys.grantScopeText("Bash", { command: "ls; " + "x".repeat(400) }), null, "its card offers no Allow for Session");
 });

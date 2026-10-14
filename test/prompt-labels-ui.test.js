@@ -87,6 +87,37 @@ test("the label drops the parts that are absent and reads nothing that is not a 
   assert.equal(label.promptLabelHtml({ project: "<b>x</b>", session: "S" }), '<div class="notif-banner-label">Project: &lt;b&gt;x&lt;/b&gt; | Session: S</div>', "escaped for the banner's innerHTML");
 });
 
+test("a permission banner drawn by the notification module carries the label and the scope, and one without a label does not", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  dom.setupGlobals();
+  var storeMod = await import(dom.moduleUrl("store.js"));
+  storeMod.createStore({ connected: true });
+  var notifications = await import(dom.moduleUrl("app-notifications.js"));
+  notifications.initAppNotifications();
+  var container = global.document.body.querySelector(".notif-banner-container");
+  assert.ok(container, "the banner container exists");
+
+  function created(id, meta) {
+    notifications.handleNotificationCreated({
+      unreadCount: 1,
+      notification: {
+        id: id, type: "permission_request", slug: "alpha", sessionId: 7, title: "Permission", body: "",
+        meta: Object.assign({ requestId: "r-" + id, kind: "permission", toolName: "Bash", toolInput: { command: "find /var/tmp" } }, meta),
+      },
+    });
+    return container.querySelector('[data-notif-id="' + id + '"]');
+  }
+
+  var labelled = created("n1", { label: LABEL, grantScope: SCOPE });
+  assert.ok(labelled, "the banner is drawn");
+  assert.ok(labelled.innerHTML.indexOf('<div class="notif-banner-label">Project: Project Alpha | Session: DO NOT ANSWER probe | Agent: scan the repository</div>') !== -1, "the label is in the banner");
+  assert.ok(labelled.innerHTML.indexOf('<div class="notif-banner-scope">' + SCOPE + "</div>") !== -1, "and so is the scope");
+
+  var plain = created("n2", {});
+  assert.ok(plain, "an older notification is still drawn");
+  assert.equal(plain.innerHTML.indexOf("notif-banner-label"), -1, "no label, none shown");
+});
+
 test("a banner states the scope for an ask that offers Allow for session, and only then", async function (t) {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   dom.setupGlobals();
