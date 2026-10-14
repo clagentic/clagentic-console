@@ -104,7 +104,7 @@ function makeBridge(sdkBridgeMod) {
 //    recorded by a live idle-reaper tick — this is the test that would FAIL
 //    against pre-fix code, since buildActivityDiagnosticsResponse did not
 //    exist before this change (confirmed by stash-testing: reverting
-//    lib/sdk-bridge.js to HEAD~ makes this throw TypeError, not merely
+//    lib/sdk-bridge.js to its parent commit makes this throw TypeError, not merely
 //    return a wrong value — see PR body).
 // ---------------------------------------------------------------------------
 

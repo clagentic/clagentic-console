@@ -31,6 +31,10 @@ var http = require("http");
 var { spawn } = require("child_process");
 var WebSocket = require("ws");
 var { sendIPCCommand } = require("../lib/ipc");
+var { unsupervisedEnv } = require("../lib/supervisor");
+var { bootDaemon: bootHarness } = require("./fixtures/daemon-harness");
+var { TOKEN_ENV, newHarnessToken, verifyOwnedPid } = require("./fixtures/process-ownership");
+var { makeInstall } = require("./fixtures/install-fixture");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var SETUP_CODE = "SHUTDOWNENTRY";
@@ -38,6 +42,7 @@ var SUMMARY = /\[session-reclaim\] Shutdown: 0 session\(s\) with background agen
 var SHUTDOWN_BUDGET_MS = 9000;
 var EXIT_CLEAN = 0;
 var EXIT_HANDOFF = 120;
+var NO_RESTART_GRACE_MS = 3000;
 
 function findFreePort() {
   return new Promise(function (resolve, reject) {
@@ -95,7 +100,7 @@ function signalPid(pid, signal) {
 
 // Starts a daemon over a private home. Returns what a case needs to drive it
 // and to clean up after it, including the detached successor a restart spawns.
-async function bootDaemon(config) {
+async function bootDaemon(config, extraEnv) {
   var home = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-shutdown-"));
   var consoleDir = path.join(home, "console");
   var projectDir = path.join(home, "project");
@@ -112,10 +117,15 @@ async function bootDaemon(config) {
 
   var configPath = path.join(consoleDir, "daemon.json");
   var log = [];
+  var token = newHarnessToken();
+  var env = Object.assign(unsupervisedEnv(), { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }, extraEnv || {});
+  env[TOKEN_ENV] = token; // the detached successor inherits it; the reaper trusts nothing else
   var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
     // HOME too: legacy-path reads (~/.clagentic, ~/.clagentic-rc, ~/clagentic-projects)
     // must not reach the operator's real home.
-    env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }),
+    // The test runner may itself run under a service unit; an inherited
+    // supervisor variable would turn every restart case into a supervised one.
+    env: env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.on("data", function (d) { log.push(d.toString()); });
@@ -142,7 +152,7 @@ async function bootDaemon(config) {
       await new Promise(function (r) { setTimeout(r, 200); });
       return res.headers["set-cookie"][0].split(";")[0];
     },
-    cleanup: function () { return reapDaemon(proc, home, configPath); },
+    cleanup: function () { return reapDaemon(proc, home, configPath, token); },
   };
   return d;
 }
@@ -159,7 +169,7 @@ function readSuccessorPid(configPath, ownPid) {
 // home. When the successor cannot be established the daemon and the home are
 // still cleaned up, then this rejects naming the daemon.json path, so a
 // possibly-live successor fails the test instead of leaking silently.
-async function reapDaemon(proc, home, configPath) {
+async function reapDaemon(proc, home, configPath, token) {
   var successor = null;
   var unreadable = null;
   try {
@@ -168,12 +178,21 @@ async function reapDaemon(proc, home, configPath) {
     unreadable = e;
   }
   if (proc.exitCode === null) signalPid(proc.pid, "SIGKILL");
+  // daemon.json is data the test does not control: signal only a pid that is
+  // verifiably this test's daemon.
+  var unverified = null;
   if (successor) {
-    signalPid(successor, "SIGTERM");
-    await new Promise(function (r) { setTimeout(r, 1500); });
-    signalPid(successor, "SIGKILL");
+    var verdict = verifyOwnedPid(successor, token);
+    if (verdict.ok) {
+      signalPid(successor, "SIGTERM");
+      await new Promise(function (r) { setTimeout(r, 1500); });
+      signalPid(successor, "SIGKILL");
+    } else if (fs.existsSync("/proc/" + successor)) {
+      unverified = "pid " + successor + " recorded in " + configPath + " was not signalled: " + verdict.reason;
+    }
   }
   fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  if (unverified) throw new Error(unverified);
   if (unreadable) {
     throw new Error("could not establish the restart successor from " + configPath
       + " (a detached daemon may still be running): " + unreadable.message);
@@ -251,9 +270,90 @@ entryCase("web-UI restart_server reaches the announcer", EXIT_HANDOFF, null, asy
   d.proc.once("exit", function () { ws.terminate(); });
 });
 
-entryCase("web-UI restart-to-apply-update reaches the announcer", EXIT_HANDOFF, null, async function (d) {
-  var ws = await sendWs(d, await d.adminCookie(), { type: "restart_for_build_update" });
-  d.proc.once("exit", function () { ws.terminate(); });
+// "Restart to apply update" is a two-step, confirm-gated offer: a request
+// without a token never restarts, and with no newer build installed there is
+// nothing to offer.
+test("web-UI restart-to-apply-update with nothing to apply restarts nothing", { timeout: 60000 }, async function () {
+  var d = await bootDaemon(null);
+  try {
+    var ws = await sendWs(d, await d.adminCookie(), { type: "restart_for_build_update" });
+    var result = await new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error("no restart_for_build_update_result")); }, 10000);
+      ws.on("message", function (raw) {
+        var m = JSON.parse(raw.toString());
+        if (m.type === "restart_for_build_update_result") { clearTimeout(timer); resolve(m); }
+      });
+    });
+    ws.terminate();
+    assert.equal(result.ok, false);
+    // A restart would reply and then exit; give it a bounded grace period to
+    // do so, so a reply-then-schedule-restart defect cannot pass by being early.
+    await new Promise(function (r) { setTimeout(r, NO_RESTART_GRACE_MS); });
+    assert.equal(d.proc.exitCode, null, "an unconfirmed request must not restart the daemon");
+  } finally {
+    await d.cleanup();
+  }
+});
+
+// The confirmed entry point: a stale install, the operator's first click (the
+// offer) and second click (its token) end in the handoff exit. Run as a
+// supervised daemon so the exit is observable with no self-spawned successor.
+test("web-UI restart-to-apply-update with a stale install, confirmed, exits with the handoff code", { timeout: 120000 }, async function () {
+  var inst = makeInstall("a".repeat(40));
+  var h = await bootHarness({
+    script: inst.daemonScript,
+    env: { CLAGENTIC_CONSOLE_BUILD_CHECK_MS: "300", INVOCATION_ID: "test-unit" },
+  });
+  try {
+    var sock = await h.openAdminSocket();
+    inst.installBuild("b".repeat(40), "marker-new");
+    await pollFor(async function () {
+      var s = await sendIPCCommand(h.sock, { cmd: "get_build_status" });
+      return s.state === "stale";
+    }, 15000, "the installed build to be seen as stale");
+    sock.ws.send(JSON.stringify({ type: "restart_for_build_update" }));
+    var offer = await pollFor(function () {
+      return sock.messages.find(function (m) {
+        return m.type === "diagnostic" && m.source === "build-update" && m.buildUpdate && m.buildUpdate.token;
+      });
+    }, 15000, "the confirmation offer");
+    assert.equal(h.proc.exitCode, null, "asking for the offer restarts nothing");
+    sock.ws.send(JSON.stringify({ type: "restart_for_build_update", confirmToken: offer.buildUpdate.token }));
+    var code = await waitForExit(h.proc, 30000);
+    assert.equal(code, EXIT_HANDOFF, "exit code; journal:\n" + h.journal().slice(-1500));
+    assert.equal(h.successorPid(), null, "a supervised restart spawns no replacement");
+    sock.ws.terminate();
+  } finally {
+    await h.cleanup();
+    inst.cleanup();
+  }
+});
+
+async function pollFor(attempt, ms, what) {
+  var end = Date.now() + ms;
+  while (Date.now() < end) {
+    var v = await attempt();
+    if (v) return v;
+    await new Promise(function (r) { setTimeout(r, 300); });
+  }
+  throw new Error("timed out waiting for " + what);
+}
+
+// Under a supervisor a restart is an exit with the restart code and no
+// self-spawned successor, and it still passes through the announcer first.
+test("supervised IPC restart reaches the announcer and spawns no successor", { timeout: 60000 }, async function () {
+  var d = await bootDaemon(null, { INVOCATION_ID: "test-unit-invocation" });
+  try {
+    var resp = await sendIPCCommand(d.sock, { cmd: "restart" });
+    assert.equal(resp.ok, true);
+    var code = await waitForExit(d.proc, 15000);
+    assert.equal(code, EXIT_HANDOFF, "exit code; journal:\n" + d.journal().slice(-1500));
+    assert.equal(d.successorPid(), null, "no self-spawned successor");
+    assert.match(d.journal(), SUMMARY, "the shutdown reached the announcer; journal:\n" + d.journal().slice(-1500));
+    assert.doesNotMatch(d.journal(), /Forced exit/);
+  } finally {
+    await d.cleanup();
+  }
 });
 
 // Cleanup must fail, not skip, when the successor pid cannot be established.

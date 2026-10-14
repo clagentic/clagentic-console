@@ -93,6 +93,8 @@ var ORIGINAL_CASE_LABELS = [
   "prompt_request", "prompt_pending", "prompt_resolved", "prompt_cancel",
   // The agent registry the picker and the capability-gated controls render from.
   "vendor_registry",
+  // Withdraws a source's diagnostics once their condition has cleared.
+  "diagnostic_retract",
 ];
 
 var REGISTRY_FILES = [
