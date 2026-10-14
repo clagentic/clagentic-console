@@ -25,6 +25,13 @@ function captureRegistryLog(t) {
   };
 }
 
+// The harness has no user store and access is not what these tests are about.
+// Call inside withServer: the harness re-evaluates lib/ on start, so the users
+// module to mock is the one loaded after it.
+function allowAnyUser(t) {
+  t.mock.method(require("../lib/users"), "canAccessSession", function () { return true; });
+}
+
 function answer(server, c, id, decision) {
   server.handlers.handleSessionsMessage(c.ws, { type: "prompt_response", requestId: id, kind: "permission", decision: decision });
 }
@@ -60,6 +67,7 @@ test("a prompt raised by a background agent names the owning Task", async functi
 test("an answer from a browser connection logs the client and user and records the same source", async function (t) {
   var log = captureRegistryLog(t);
   await withServer(async function (server) {
+    allowAnyUser(t);
     var c = client();
     c.ws._clagenticUser = { id: "u-7" };
     server.connect(c.ws);
@@ -82,13 +90,15 @@ test("an answer from a browser connection logs the client and user and records t
 test("two answers from one connection share a client id; another connection gets its own", async function (t) {
   captureRegistryLog(t);
   await withServer(async function (server) {
+    allowAnyUser(t);
     var a = client();
     var b = client();
     server.connect(a.ws);
     server.connect(b.ws);
-    var first = server.ask("Bash", { command: "ls" });
-    var second = server.ask("Bash", { command: "pwd" });
-    var third = server.ask("Bash", { command: "date" });
+    var first = server.ask("Bash", { command: "make one" });
+    var second = server.ask("Bash", { command: "make two" });
+    var third = server.ask("Bash", { command: "make three" });
+    assert.ok(first.id && second.id && third.id, "every call opens a prompt");
     answer(server, a, first.id, "allow");
     answer(server, a, second.id, "deny");
     answer(server, b, third.id, "allow");
