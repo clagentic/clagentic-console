@@ -18,7 +18,6 @@ function answer(server, c, id, decision) {
   server.handlers.handleSessionsMessage(c.ws, { type: "prompt_response", requestId: id, kind: "permission", decision: decision });
 }
 
-// The sessions's grant map as a plain object, keys sorted.
 function grantKeys(server) {
   return Object.keys(server.session.allowedTools || {}).sort();
 }
@@ -308,7 +307,14 @@ test("a client that may not see the session can neither list nor revoke its gran
 
     var id = server.session.localId;
     server.handlers.handleSessionsMessage(stranger.ws, { type: "list_session_grants", sessionId: id });
-    assert.equal(stranger.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0, "the list is not shown");
+    var listRefusal = stranger.inbox.filter(function (m) { return m.type === "session_grants"; });
+    assert.equal(listRefusal.length, 1, "the list is answered, not dropped");
+    assert.equal(listRefusal[0].sessionId, id, "the id the client sent is echoed");
+    assert.equal(typeof listRefusal[0].error, "string");
+    assert.equal(listRefusal[0].grants, undefined, "no grants are shown");
+    assert.equal(JSON.stringify(listRefusal[0]).indexOf("find"), -1, "nothing about the session is disclosed");
+    assert.equal(owner.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0);
+    stranger.inbox.length = 0;
     server.handlers.handleSessionsMessage(stranger.ws, { type: "revoke_session_grant", sessionId: id, key: "Bash" });
     var refusal = stranger.inbox.filter(function (m) { return m.type === "session_grants"; });
     assert.equal(refusal.length, 1);
@@ -322,14 +328,21 @@ test("a client that may not see the session can neither list nor revoke its gran
   });
 });
 
-test("listing and revoking name a session by id; an unknown or non-numeric id is ignored", async function () {
+test("listing and revoking name a session by id; an unknown or non-numeric id is answered with the error shape", async function () {
   await withServer(async function (server) {
     var c = client();
     server.connect(c.ws);
     c.inbox.length = 0;
     server.handlers.handleSessionsMessage(c.ws, { type: "list_session_grants", sessionId: 9999 });
     server.handlers.handleSessionsMessage(c.ws, { type: "list_session_grants", sessionId: "1" });
-    assert.equal(c.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0);
+    var errors = c.inbox.filter(function (m) { return m.type === "session_grants"; });
+    assert.equal(errors.length, 2);
+    assert.deepEqual(errors.map(function (m) { return m.sessionId; }), [9999, "1"]);
+    errors.forEach(function (m) {
+      assert.equal(m.error, "that session is not available to you");
+      assert.equal(m.grants, undefined);
+    });
+    c.inbox.length = 0;
     server.handlers.handleSessionsMessage(c.ws, { type: "list_session_grants" });
     assert.equal(c.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 1, "no id means the connection's own session");
   });
