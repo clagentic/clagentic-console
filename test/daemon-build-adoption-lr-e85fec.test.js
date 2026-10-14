@@ -11,6 +11,8 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var fs = require("fs");
+var os = require("os");
 var path = require("path");
 var { execFileSync } = require("child_process");
 
@@ -18,7 +20,19 @@ var { bootDaemon, waitForExit } = require("./fixtures/daemon-harness");
 var { makeInstall } = require("./fixtures/install-fixture");
 var { sendIPCCommand } = require("../lib/ipc");
 
-var REPO_ROOT = path.resolve(__dirname, "..");
+function makeHistoryRepo() {
+  var repo = fs.mkdtempSync(path.join(os.tmpdir(), "adoption-history-"));
+  function git(args) {
+    return execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid"].concat(args), { cwd: repo, encoding: "utf8" }).trim();
+  }
+  git(["init", "-q", "-b", "main"]);
+  var shas = ["running build", "installed build"].map(function (subject) {
+    git(["commit", "-q", "--allow-empty", "-m", subject]);
+    return git(["rev-parse", "HEAD"]);
+  });
+  return { repo: repo, shas: shas };
+}
+
 var SHA_A = "a".repeat(40);
 var SHA_B = "b".repeat(40);
 var CHECK_MS = "300";
@@ -94,15 +108,17 @@ test("an identical reinstall over a running daemon is still adopted and still lo
 });
 
 test("a different installed build is stale, offered, and restarts nothing until the operator confirms", { timeout: 120000 }, async function () {
-  // Real commits, so the offer's change list can be checked against git.
-  var shaNew = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT, encoding: "utf8" }).trim();
-  var shaOld = execFileSync("git", ["rev-parse", "HEAD~1"], { cwd: REPO_ROOT, encoding: "utf8" }).trim();
+  // A repository this test creates, so the offer's change list never depends on
+  // the checkout's history (CI checks out one commit).
+  var history = makeHistoryRepo();
+  var shaOld = history.shas[0];
+  var shaNew = history.shas[1];
   var inst = makeInstall(shaOld);
   // INVOCATION_ID: the restart is an exit, so this test can observe it without a self-spawned process.
   var d = await bootDaemon({
     script: inst.daemonScript,
     env: { CLAGENTIC_CONSOLE_BUILD_CHECK_MS: CHECK_MS, INVOCATION_ID: "test-unit" },
-    config: { buildSourceRepo: REPO_ROOT },
+    config: { buildSourceRepo: history.repo },
   });
   try {
     var sock = await d.openAdminSocket();
@@ -179,5 +195,6 @@ test("a different installed build is stale, offered, and restarts nothing until 
   } finally {
     await d.cleanup();
     inst.cleanup();
+    fs.rmSync(history.repo, { recursive: true, force: true });
   }
 });

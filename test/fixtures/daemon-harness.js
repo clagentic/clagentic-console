@@ -12,6 +12,7 @@ var net = require("net");
 var http = require("http");
 var { spawn } = require("child_process");
 var WebSocket = require("ws");
+var { TOKEN_ENV, newHarnessToken, verifyOwnedPid } = require("./process-ownership");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "..", "lib", "daemon.js");
 var SETUP_CODE = "HARNESSCODE";
@@ -78,28 +79,20 @@ function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
 }
 
-/**
- * Decides whether `pid` is the test daemon's self-spawned successor. A pid read
- * from daemon.json is data the test does not control, so it is signalled only
- * when its own /proc entry says it runs the daemon script over this test's home.
- * @returns {{ok: boolean, reason?: string}}
- */
-function verifySuccessor(pid, home, script) {
-  if (!Number.isInteger(pid) || pid <= 1) return { ok: false, reason: "not a usable pid" };
-  var cmdline;
-  var environ;
-  try {
-    cmdline = fs.readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\0");
-    environ = fs.readFileSync("/proc/" + pid + "/environ", "utf8").split("\0");
-  } catch (e) {
-    return { ok: false, reason: "its /proc entry cannot be read (" + e.code + ")" };
+// The daemon records its own pid in daemon.json with an asynchronous write
+// after it starts listening. Returning before that write lands lets it replace
+// a pid a test has since put in the file.
+async function waitForRecordedPid(file, pid, ms) {
+  var end = Date.now() + ms;
+  while (Date.now() < end) {
+    try {
+      if (JSON.parse(fs.readFileSync(file, "utf8")).pid === pid) return;
+    } catch (e) {
+      if (!(e instanceof SyntaxError) && e.code !== "ENOENT") throw e;
+    }
+    await new Promise(function (r) { setTimeout(r, 50); });
   }
-  if (cmdline.indexOf(script) === -1) return { ok: false, reason: "its command line is not the test daemon" };
-  var ownsHome = environ.concat(cmdline).some(function (entry) {
-    var m = /^(?:CLAGENTIC_CONSOLE_HOME|CLAGENTIC_CONSOLE_CONFIG)=(.*)$/.exec(entry);
-    return !!m && m[1].indexOf(home) === 0;
-  });
-  return ownsHome ? { ok: true } : { ok: false, reason: "its environment does not carry this test's home" };
+  throw new Error("the daemon did not record pid " + pid + " in " + file + " within " + ms + " ms");
 }
 
 /**
@@ -124,11 +117,14 @@ async function bootDaemon(o) {
     multiUser: true, setupCode: SETUP_CODE, users: [], invites: [], smtp: null,
   }, null, 2), { mode: 0o600 });
 
+  var token = newHarnessToken();
   var env = Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home });
   SUPERVISOR_ENV.forEach(function (k) { delete env[k]; });
   Object.keys(opts.env || {}).forEach(function (k) {
     if (opts.env[k] === null) delete env[k]; else env[k] = opts.env[k];
   });
+  // Set last so a test's env cannot remove it; a self-spawned successor inherits it.
+  env[TOKEN_ENV] = token;
 
   var log = [];
   var selfSpawnExpected = false;
@@ -140,8 +136,10 @@ async function bootDaemon(o) {
   }
   var proc = start();
   await waitForServer(port, 20000);
+  await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
 
   var d = {
+    token: token,
     home: home,
     consoleDir: consoleDir,
     port: port,
@@ -156,6 +154,7 @@ async function bootDaemon(o) {
       d.proc = start();
       proc = d.proc;
       await waitForServer(port, 20000);
+      await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
       return d.proc;
     },
     // The pid a self-spawning restart records for its successor. An unreadable
@@ -212,7 +211,7 @@ async function bootDaemon(o) {
       if (successor && !pidAlive(successor)) {
         successor = null; // already gone; nothing to stop
       } else if (successor) {
-        var verdict = verifySuccessor(successor, home, opts.script || DAEMON_SCRIPT);
+        var verdict = verifyOwnedPid(successor, token);
         if (!verdict.ok) {
           problems.push("pid " + successor + " recorded in daemon.json was not signalled: " + verdict.reason);
           successor = null;
@@ -230,4 +229,4 @@ async function bootDaemon(o) {
   return d;
 }
 
-module.exports = { bootDaemon, verifySuccessor, waitForExit, signalPid, pidAlive, httpRequest, findFreePort, SETUP_CODE, SUPERVISOR_ENV, DAEMON_SCRIPT };
+module.exports = { bootDaemon,waitForExit, signalPid, pidAlive, httpRequest, findFreePort, SETUP_CODE, SUPERVISOR_ENV, DAEMON_SCRIPT };

@@ -32,7 +32,8 @@ var { spawn } = require("child_process");
 var WebSocket = require("ws");
 var { sendIPCCommand } = require("../lib/ipc");
 var { unsupervisedEnv } = require("../lib/supervisor");
-var { bootDaemon: bootHarness, verifySuccessor } = require("./fixtures/daemon-harness");
+var { bootDaemon: bootHarness } = require("./fixtures/daemon-harness");
+var { TOKEN_ENV, newHarnessToken, verifyOwnedPid } = require("./fixtures/process-ownership");
 var { makeInstall } = require("./fixtures/install-fixture");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
@@ -116,12 +117,15 @@ async function bootDaemon(config, extraEnv) {
 
   var configPath = path.join(consoleDir, "daemon.json");
   var log = [];
+  var token = newHarnessToken();
+  var env = Object.assign(unsupervisedEnv(), { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }, extraEnv || {});
+  env[TOKEN_ENV] = token; // the detached successor inherits it; the reaper trusts nothing else
   var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
     // HOME too: legacy-path reads (~/.clagentic, ~/.clagentic-rc, ~/clagentic-projects)
     // must not reach the operator's real home.
     // The test runner may itself run under a service unit; an inherited
     // supervisor variable would turn every restart case into a supervised one.
-    env: Object.assign(unsupervisedEnv(), { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }, extraEnv || {}),
+    env: env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.on("data", function (d) { log.push(d.toString()); });
@@ -148,7 +152,7 @@ async function bootDaemon(config, extraEnv) {
       await new Promise(function (r) { setTimeout(r, 200); });
       return res.headers["set-cookie"][0].split(";")[0];
     },
-    cleanup: function () { return reapDaemon(proc, home, configPath); },
+    cleanup: function () { return reapDaemon(proc, home, configPath, token); },
   };
   return d;
 }
@@ -165,7 +169,7 @@ function readSuccessorPid(configPath, ownPid) {
 // home. When the successor cannot be established the daemon and the home are
 // still cleaned up, then this rejects naming the daemon.json path, so a
 // possibly-live successor fails the test instead of leaking silently.
-async function reapDaemon(proc, home, configPath) {
+async function reapDaemon(proc, home, configPath, token) {
   var successor = null;
   var unreadable = null;
   try {
@@ -178,7 +182,7 @@ async function reapDaemon(proc, home, configPath) {
   // verifiably this test's daemon.
   var unverified = null;
   if (successor) {
-    var verdict = verifySuccessor(successor, home, DAEMON_SCRIPT);
+    var verdict = verifyOwnedPid(successor, token);
     if (verdict.ok) {
       signalPid(successor, "SIGTERM");
       await new Promise(function (r) { setTimeout(r, 1500); });

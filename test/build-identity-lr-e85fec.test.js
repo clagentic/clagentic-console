@@ -136,6 +136,42 @@ test("a checkout without build-sha.json is inconclusive, not stale", function ()
   assert.equal(r.reason, "no-loaded-sha");
 });
 
+function captureStderr(fn) {
+  var lines = [];
+  var orig = console.error;
+  console.error = function (m) { lines.push(String(m)); };
+  try { fn(); } finally { console.error = orig; }
+  return lines;
+}
+
+test("an unexpected read failure is journaled with the path and is inconclusive with a reason", function () {
+  var root = makePackage({ "build-sha.json": '{"sha":"s1"}' });
+  var identity = createBuildIdentity(path.join(root, "lib"));
+  var shaFile = path.join(root, "lib", "build-sha.json");
+  fs.rmSync(shaFile);
+  fs.mkdirSync(shaFile); // reading a directory fails with EISDIR, not a missing file
+  var verdict;
+  var lines = captureStderr(function () { verdict = identity.assess(); });
+  assert.equal(verdict.state, "inconclusive");
+  assert.equal(verdict.reason, "no-installed-sha");
+  assert.ok(verdict.detail.indexOf(shaFile) !== -1, verdict.detail);
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0].indexOf(shaFile) !== -1, lines[0]);
+});
+
+test("a missing or half-written build-sha.json is expected: inconclusive, nothing journaled", function () {
+  var root = makePackage({ "build-sha.json": '{"sha":"s1"}' });
+  var identity = createBuildIdentity(path.join(root, "lib"));
+  var shaFile = path.join(root, "lib", "build-sha.json");
+  var lines = captureStderr(function () {
+    fs.writeFileSync(shaFile, '{"sha":');
+    assert.equal(identity.assess().reason, "no-installed-sha");
+    fs.rmSync(shaFile);
+    assert.equal(identity.assess().reason, "no-installed-sha");
+  });
+  assert.deepEqual(lines, []);
+});
+
 test("the hash is null while the tree cannot be read (an install in progress)", function () {
   var root = makePackage({ "a.js": "one" });
   var hasher = createTreeHasher(root);
