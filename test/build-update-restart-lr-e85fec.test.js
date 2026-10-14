@@ -148,6 +148,29 @@ test("a background agent that started after the offer was shown also means a new
   assert.equal(r.offer.interruptions.agentCount, 1);
 });
 
+test("a session shown as idle that starts a turn after the offer means a new offer that lists it as running", async function () {
+  var w = world();
+  var s = session("s1", "shown idle");
+  w.add("lore", s);
+  var offer = (await w.controller.request(null)).offer;
+  s.isProcessing = true;
+  var r = await w.controller.request(offer.token);
+  assert.equal(r.status, "confirm");
+  assert.match(r.note, /changed/);
+  assert.match(r.offer.interruptionText, /shown idle \(running a turn\)/);
+  assert.equal(w.idle, null);
+  assert.equal(w.restarts, 0);
+});
+
+test("a session shown as running that went idle does not invalidate the offer", async function () {
+  var w = world();
+  var s = session("s1", "shown busy", { isProcessing: true });
+  w.add("lore", s);
+  var offer = (await w.controller.request(null)).offer;
+  s.isProcessing = false;
+  assert.equal((await w.controller.request(offer.token)).status, "restarting");
+});
+
 test("a different build installed after the offer means a new offer", async function () {
   var w = world();
   var offer = (await w.controller.request(null)).offer;
@@ -246,10 +269,12 @@ test("describeInterruptions says plainly when nothing is live", function () {
 });
 
 test("collectInterruptions bounds and cleans what the model or user supplied", function () {
-  var long = "x".repeat(500) + "\n\nsecond line";
+  // The newline sits inside the first 80 characters, so truncation alone would keep it.
+  var long = "first part\n\nsecond line " + "x".repeat(500);
   var i = collectInterruptions([{ slug: "p", sm: { sessions: new Map([["1", session("1", long)]]) } }]);
   assert.ok(i.sessions[0].title.length <= 80);
   assert.doesNotMatch(i.sessions[0].title, /\n/);
+  assert.match(i.sessions[0].title, /^first part second line /);
   assert.equal(liveAgentTasks({ activeTaskToolIds: { a: true }, taskLabels: { a: "named\nagent" } })[0].label, "named agent");
   assert.equal(liveAgentTasks({ activeTaskToolIds: { a: true } })[0].label, "background agent");
 });
