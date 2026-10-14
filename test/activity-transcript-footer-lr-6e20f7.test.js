@@ -227,7 +227,7 @@ test("CI invariant: sdk-message-processor.js acquires an activity token for ever
   // acquireActivity must be called unconditionally within the tool_use body
   // (i.e. before any `if (block.name === "Task")` gate), not only inside it.
   var acquireIdx = toolUseBody.indexOf("acquireActivity(session, block.id");
-  var taskGateIdx = toolUseBody.indexOf('block.name === "Task"');
+  var taskGateIdx = toolUseBody.indexOf("isAgentDispatchTool(block.name)");
   assert.ok(acquireIdx !== -1, "expected an unconditional acquireActivity(session, block.id, ...) call in the tool_use block_stop body");
   assert.ok(taskGateIdx !== -1, "expected the Task-specific activeTaskToolIds bookkeeping to remain");
   assert.ok(

@@ -95,6 +95,8 @@ var ORIGINAL_CASE_LABELS = [
   "vendor_registry",
   // A session's Allow for session grants, for the revoke list.
   "session_grants",
+  // Withdraws a source's diagnostics once their condition has cleared.
+  "diagnostic_retract",
 ];
 
 var REGISTRY_FILES = [

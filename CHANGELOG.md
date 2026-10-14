@@ -1,3 +1,67 @@
+# [1.10.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.10.0-beta.1...v1.10.0-beta.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* **build-monitor:** an inconclusive poll always clears the unconfirmed streak (lr-e85fec) ([2292279](https://github.com/clagentic/clagentic-console/commit/229227970d0a5d2f1acc6bd72b5989a3c0e1cfb0))
+* **ci:** skip test-gate on pull_request_target where test is never dispatched (lr-1816cc) ([b5f789e](https://github.com/clagentic/clagentic-console/commit/b5f789ed6c695a122a22df6f7a1e8eaa59a77752))
+* **ci:** skip test-gate on pull_request_target where test is never dispatched (lr-1816cc) ([7a94844](https://github.com/clagentic/clagentic-console/commit/7a948443ca7c68198b77004a48f2bcea764e69c4))
+* **claude:** use the host-settable origin for loop and trigger turns (lr-f7c100) ([d053d81](https://github.com/clagentic/clagentic-console/commit/d053d81ccbe6591fc44fdade54bbe18b0bed66be))
+* **claude:** use the one host-settable automated origin for loop and trigger turns (lr-f7c100) ([549b4aa](https://github.com/clagentic/clagentic-console/commit/549b4aaa0f2f45d3a0b5a342e41de92ee7cd0550))
+* **codex:** disable Codex under OS user isolation and take the OS-user spawn helper out (lr-9b08f1) ([0fd8c62](https://github.com/clagentic/clagentic-console/commit/0fd8c62ec3f44e3602a971b7f9840e3243f616a8))
+* **codex:** do not offer in-place rewind for Codex sessions (lr-9b08f1) ([3c85efd](https://github.com/clagentic/clagentic-console/commit/3c85efd60648d1374a458606e27b347d61ebc16f))
+* **codex:** find codex through PATHEXT on win32 and test the failed-lookup branch (lr-9b08f1) ([ca3db38](https://github.com/clagentic/clagentic-console/commit/ca3db384e6faead042f951579a27a8e36287fc11))
+* **codex:** guard rewind against in-flight and appended turns, resolve the OS user for titles, gate every acquire path (lr-9b08f1) ([0f8ebe2](https://github.com/clagentic/clagentic-console/commit/0f8ebe2a8721e16031403225173c323591df7d5f))
+* **codex:** identify the product as clagentic-console with the real package version in the handshake (lr-f7c100) ([9e2b492](https://github.com/clagentic/clagentic-console/commit/9e2b49246ade2af989de5125d83bb45f7a1355c3))
+* **codex:** never set project trust from the console (lr-9b08f1) ([172281a](https://github.com/clagentic/clagentic-console/commit/172281a4868dd0d5d0e1d876538580609606cabe))
+* **codex:** reject junk-prefixed or suffixed version tokens and fail closed (lr-9b08f1) ([8de7846](https://github.com/clagentic/clagentic-console/commit/8de78463bc4c6ca2d30d650917e517ac5363c078))
+* **codex:** reject non-integer version parts and compare numeric prereleases as digit strings (lr-9b08f1) ([98f6ea1](https://github.com/clagentic/clagentic-console/commit/98f6ea13e84f86b0a381a5f154e6b615624710f3))
+* **codex:** run Windows cmd/bat shims through the command interpreter for version check, app-server and login probe (lr-9b08f1) ([d7f8fa6](https://github.com/clagentic/clagentic-console/commit/d7f8fa611c5282f653c0c28c6a485164fc153dec))
+* **codex:** win32-safe stand-in tests, prerelease normalisation, stronger key and caret assertions (lr-9b08f1) ([8ca8e30](https://github.com/clagentic/clagentic-console/commit/8ca8e303f48bc801c0d139ab763bf45353dc6ab3))
+* **daemon:** an inconclusive poll breaks the stale streak; the digest cache keys on ctime (lr-e85fec) ([d79c4c0](https://github.com/clagentic/clagentic-console/commit/d79c4c0bb30f60e9f9465eb49a6ad833d3d0debe))
+* **daemon:** capture build identity before any other lib module loads; missing hash is inconclusive (lr-e85fec) ([b0f5e44](https://github.com/clagentic/clagentic-console/commit/b0f5e4400bde35f39a9d520c01c21897e55b7feb))
+* **daemon:** clients get an operator-safe reason for a failed change list; detail goes to the journal (lr-e85fec) ([156207c](https://github.com/clagentic/clagentic-console/commit/156207c14fa3ace8564ea94ffc3a587e26dc3f42))
+* **daemon:** offer an installed build with its interruptions, judge adoption by sha and content, restart cleanly under a supervisor (lr-e85fec, lr-4ed1c8) ([241047f](https://github.com/clagentic/clagentic-console/commit/241047f67011817aab3dbb6dbbbc9f897a13645b))
+* **daemon:** offer an installed build with its interruptions, judge adoption by sha and content, restart cleanly under a supervisor (lr-e85fec) ([e0b1990](https://github.com/clagentic/clagentic-console/commit/e0b19905cc6a4b1633776d76410df079f068d514))
+* **daemon:** offer coverage includes each shown session's busy state (lr-e85fec) ([17d8f06](https://github.com/clagentic/clagentic-console/commit/17d8f0684c597eba56422eba761120ef78c7acf1))
+* **daemon:** reconcile the update offer from the current verdict instead of announce and retract events (lr-e85fec) ([669b77c](https://github.com/clagentic/clagentic-console/commit/669b77ceaa933c48698307ed607025b69383f394))
+* **daemon:** the update offer follows the current assessment; adoption retracts it from clients (lr-e85fec) ([b737003](https://github.com/clagentic/clagentic-console/commit/b73700328ecb0a1504ae802fffea9cab3721ba00))
+* **daemon:** the update offer is shown at once and never retracted for the same stale build (lr-e85fec) ([a92b12c](https://github.com/clagentic/clagentic-console/commit/a92b12c1f4f5377ff93fa19b123ebb1a2f5ad457))
+* **os-users:** start user processes through one helper that keeps the user's groups (lr-8212d6) ([7f58531](https://github.com/clagentic/clagentic-console/commit/7f5853150281ce428a7744e9e9c350af404211b6))
+* **reclaim:** destroy() takes an explicit reason, saveSessionFile failures are logged and counted (lr-8f12ca) ([e23f89f](https://github.com/clagentic/clagentic-console/commit/e23f89faa32ff22115e01c52bb3c0431c9ddb1c7))
+* **reclaim:** keep a Task's name while its prompt keeps the Task tracked (lr-8f12ca) ([309cfb1](https://github.com/clagentic/clagentic-console/commit/309cfb12b15a920f9b557ed6b1a40e11d92ce057))
+* **reclaim:** record background agents a daemon shutdown kills and tell the operator at next startup (lr-8f12ca) ([3c77476](https://github.com/clagentic/clagentic-console/commit/3c77476fd14b79a061e8e238a7ac3de8e6b2700d))
+* **sdk-bridge:** never idle-reap a session waiting on an open prompt (lr-8f12ca) ([4bf92f0](https://github.com/clagentic/clagentic-console/commit/4bf92f03433bd293b797e5fd4dee3f057c0ed681))
+* **sdk-bridge:** never idle-reap a session waiting on an open prompt; announce reaped background agents; run auto-title under root (lr-8f12ca) ([2a9391f](https://github.com/clagentic/clagentic-console/commit/2a9391f34ed4b23c2affb18489040f6f7cddb139))
+* **sdk:** recognise the Agent dispatch tool name alongside Task (lr-e85fec) ([9e53bbd](https://github.com/clagentic/clagentic-console/commit/9e53bbddd21ffb519b3c99f458f5f69567b4f35b))
+* **session-input:** archive at-least-once, record open prompt after start, refuse any malformed history line (lr-7b06b6) ([b804adb](https://github.com/clagentic/clagentic-console/commit/b804adb0ee092c532230fc00c8e65baeb046e7bd))
+* **session-input:** validate session ids before any path use, drop strict vendor read, object-only history lines (lr-7b06b6) ([9bb7117](https://github.com/clagentic/clagentic-console/commit/9bb7117cbee448998e7d703308091a9fd5514ba5))
+* **session:** report delivery only after the query start succeeds (lr-7b06b6) ([2a87e13](https://github.com/clagentic/clagentic-console/commit/2a87e132f163d3564a3a8ec704ed292c08082910))
+* **session:** report lookup, history and store failures as errors, never not-found (lr-7b06b6) ([5104df1](https://github.com/clagentic/clagentic-console/commit/5104df14a9aa381b49a211694a6962a6b95427a2))
+* **shutdown:** fail closed without canSee, fail test cleanup when successor pid is unknown (lr-8f12ca) ([d708cb1](https://github.com/clagentic/clagentic-console/commit/d708cb17d758c5c2d57da10913ad2b367bb512b3))
+* **skills:** let a session prefer its own agent's skill directory for a same-named skill (lr-9b08f1) ([5304aa8](https://github.com/clagentic/clagentic-console/commit/5304aa8bd64ada791f75e157abcc2d7ab36abdc2))
+* **skills:** name a skills directory that cannot be read, and document the final Codex state (lr-9b08f1) ([030bb1d](https://github.com/clagentic/clagentic-console/commit/030bb1ded71870e2e40c185004dcd8ebd928264e))
+* **test:** clear both max-sessions env names so a host-set scoped value cannot override the slot-counter ceiling (lr-3c00dd) ([3d21ff7](https://github.com/clagentic/clagentic-console/commit/3d21ff7d022ce08b896954e9251f8c327d01f840))
+* **test:** clear both max-sessions env names; test hygiene folds; Windows shim escaping round trip (lr-3c00dd) ([4efae4e](https://github.com/clagentic/clagentic-console/commit/4efae4e8a1a6e48f148e1b17b9e02f6d20548540))
+* **test:** revert require-cache-reset-guard to main, F2 moves to lr-fd4925 (lr-3c00dd) ([0c83636](https://github.com/clagentic/clagentic-console/commit/0c83636f0d7882f1dcaf8cc1f502b64dcc174b94))
+* **test:** token-based harness ownership, history-free adoption test, narrow build-identity catches (lr-e85fec) ([d91467e](https://github.com/clagentic/clagentic-console/commit/d91467e88993ca5c43907ec222f725ca7ccf72ae))
+* **trigger:** archive a handled trigger so a crash cannot redeliver it (lr-7b06b6) ([9838618](https://github.com/clagentic/clagentic-console/commit/98386187f8fe92f340c0e1cd2cce4c1ebef37553))
+* **ui:** a refreshed update offer replaces the held entry in place and never revives a declined one (lr-e85fec) ([eff75b4](https://github.com/clagentic/clagentic-console/commit/eff75b444e4b17f0bbae70da044f2ef666b0b765))
+* **ui:** count an Agent-only tool group by the dispatch name set (lr-e85fec) ([05ac72d](https://github.com/clagentic/clagentic-console/commit/05ac72d642a004745e358abbd961a4db3025fc19))
+
+
+### Features
+
+* **claude:** stamp every turn with its origin per turn and remove the session-level attestation (lr-f7c100) ([a7d4264](https://github.com/clagentic/clagentic-console/commit/a7d42649f492c9ff02a7f68871aa15c81b62d785))
+* **claude:** stamp every turn with its origin, per turn rather than per session (lr-f7c100) ([5d55ee4](https://github.com/clagentic/clagentic-console/commit/5d55ee4c82428bfc3f5c166cbaffc2d68e2781fc))
+* **codex:** gate the protocol on the running version, one app-server per OS user, rewind by thread/revert (lr-9b08f1) ([bfc2b96](https://github.com/clagentic/clagentic-console/commit/bfc2b965de37820c9de64895dca6901bb019c0d3))
+* **codex:** run the Codex the user installed, resolved and validated by version (lr-9b08f1) ([83da612](https://github.com/clagentic/clagentic-console/commit/83da6120c5dd44c9dd3fd9ac6063523768ac7146))
+* **codex:** run the user-installed Codex with a version-gated protocol (lr-9b08f1) ([8f80bd8](https://github.com/clagentic/clagentic-console/commit/8f80bd823c00c84c8278d76e99d8037bac7c54a4))
+* **console:** open sessions and send input from the CLI and file drop, resuming ended sessions (lr-7b06b6) ([e6daa8b](https://github.com/clagentic/clagentic-console/commit/e6daa8b5255377bd6b322031b4b6fd06733e813d))
+* **session-input:** open and send input into console sessions from outside the browser (lr-7b06b6) ([a0f5d59](https://github.com/clagentic/clagentic-console/commit/a0f5d59e977a7d37448249252c127b865ac99228))
+* **session-input:** remove failed opens, console session ids, strict history, no vendor lookup (lr-7b06b6) ([53dbb4e](https://github.com/clagentic/clagentic-console/commit/53dbb4e5b412f617af488cd38c974f95caf537f9))
+* **skills:** one skill list from both agents' directories (lr-77ec52) ([def634d](https://github.com/clagentic/clagentic-console/commit/def634d3982b31ee576833c8414ff982eddb6a67))
+
 # Unreleased
 
 ### Features

@@ -229,6 +229,36 @@
 }
 .diagnostics-actionable-btn .lucide { width: 12px; height: 12px; }
 
+/* A diagnostic's message may be several lines (the sessions a restart would end). */
+.diagnostic-multiline { white-space: pre-line; }
+
+/* Body of a "newer build installed" offer: both builds and the commits between them. */
+.build-update-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.build-update-builds { font-family: var(--font-mono, monospace); }
+.build-update-heading { font-weight: 600; }
+.build-update-commits {
+  margin: 0;
+  padding-left: 16px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.build-update-note { color: var(--text-muted); }
+.diagnostics-actionable-btn.build-update-decline,
+.toast-diagnostic-action-btn.build-update-decline {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.4));
+  margin-left: 6px;
+}
+
 /* Empty state */
 .diagnostics-empty {
   padding: 20px 14px;

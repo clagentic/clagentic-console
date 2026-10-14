@@ -119,8 +119,9 @@ test("scripts/verify-installed-build.js: main() exits non-zero on PROCESS_MISMAT
   var src = fs.readFileSync(path.join(__dirname, "..", "scripts", "verify-installed-build.js"), "utf8");
   assert.match(src, /resolveProcessBuildStatus/, "main() must call resolveProcessBuildStatus");
   assert.match(src, /PROCESS_MISMATCH/, "a distinct PROCESS_MISMATCH outcome must exist, separate from ARTIFACT_MISMATCH");
-  assert.match(src, /processMismatch \|\| processStatus\.staleInodes/,
-    "the process-mismatch branch must gate on either a SHA mismatch or the existing stale-inode detector");
+  assert.match(src, /processMismatch \|\| processStatus\.state === 'stale'/,
+    "the process-mismatch branch must gate on a SHA mismatch or the daemon's own stale verdict, not on staleInodes " +
+    "(an identical reinstall leaves staleInodes set although nothing the daemon runs differs)");
 
   // indexOf alone would find the header comment's mention of
   // "PROCESS_MISMATCH:" first, not the actual console.error call inside
