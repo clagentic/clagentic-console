@@ -108,9 +108,50 @@ test("the grants list draws one row per grant with a Revoke, marks whole-tool gr
   assert.match(rows[1].textContent, /whole-tool/);
   rows[0].querySelector(".session-grants-revoke").click();
   assert.deepEqual(sent, [{ type: "revoke_session_grant", sessionId: 7, key: "Bash:find" }]);
-  assert.equal(rows[0].querySelector(".session-grants-revoke").disabled, true, "a second click cannot send it twice");
+  assert.equal(rows[0].querySelector(".session-grants-revoke").disabled, true, "disabled while the request is in flight");
+  assert.equal(list.querySelectorAll(".session-grants-row").length, 2, "the row stays until the server confirms");
 
   mod.renderGrantList(list, [], 7, function () { return true; });
   assert.equal(list.querySelectorAll(".session-grants-row").length, 0);
   assert.match(list.textContent, /no Allow for session grants/);
+});
+
+test("a revoke whose send fails re-enables the button and says so, so it can be retried", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  dom.setupGlobals();
+  var mod = await import(dom.moduleUrl("session-grants.js"));
+  var list = new dom.FakeElement("div");
+  var attempts = 0;
+  var grants = [{ key: "Bash:find", tool: "Bash", wholeTool: false, text: "Bash commands starting with find" }];
+  mod.renderGrantList(list, grants, 7, function () { attempts++; return attempts > 1; });
+  var button = list.querySelector(".session-grants-revoke");
+  button.click();
+  assert.equal(button.disabled, false, "a false sendMsg leaves the button usable");
+  assert.match(list.querySelector(".session-grants-error").textContent, /Could not revoke/);
+  assert.equal(list.querySelectorAll(".session-grants-row").length, 1, "the grant is still listed");
+  button.click();
+  assert.equal(attempts, 2);
+  assert.equal(button.disabled, true, "the retry is in flight");
+  assert.equal(list.querySelector(".session-grants-error").textContent, "", "the old failure is cleared");
+});
+
+test("a server refusal re-enables every Revoke and shows why; the server's list removes the row", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  dom.setupGlobals();
+  var mod = await import(dom.moduleUrl("session-grants.js"));
+  var list = new dom.FakeElement("div");
+  var grants = [
+    { key: "Bash:find", tool: "Bash", wholeTool: false, text: "Bash commands starting with find" },
+    { key: "Write", tool: "Write", wholeTool: true, text: "Every Write call (whole-tool grant)" },
+  ];
+  mod.renderGrantList(list, grants, 7, function () { return true; });
+  list.querySelectorAll(".session-grants-revoke").forEach(function (b) { b.click(); });
+  mod.showGrantError(list, "Could not revoke: that session is not available to you");
+  list.querySelectorAll(".session-grants-revoke").forEach(function (b) { assert.equal(b.disabled, false); });
+  assert.match(list.querySelector(".session-grants-error").textContent, /not available to you/);
+  assert.equal(list.querySelectorAll(".session-grants-row").length, 2);
+
+  mod.renderGrantList(list, [grants[1]], 7, function () { return true; });
+  assert.equal(list.querySelectorAll(".session-grants-row").length, 1, "confirmed: the revoked row is gone");
+  assert.equal(list.querySelector(".session-grants-error").textContent, "");
 });

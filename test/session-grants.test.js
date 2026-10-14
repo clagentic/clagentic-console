@@ -202,6 +202,36 @@ test("revoke names a key the session does not hold: nothing changes and the list
   });
 });
 
+test("a client that may not see the session can neither list nor revoke its grants, and is told the revoke was refused", async function () {
+  await withServer(async function (server) {
+    server.session.ownerId = "u-owner";
+    server.session.sessionVisibility = "private";
+    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true, "Write:/work/a": true });
+    var stranger = client();
+    stranger.ws._clagenticUser = { id: "u-other" };
+    var owner = client();
+    owner.ws._clagenticUser = { id: "u-owner" };
+    server.connect(stranger.ws);
+    server.connect(owner.ws);
+    stranger.inbox.length = 0;
+    owner.inbox.length = 0;
+
+    var id = server.session.localId;
+    server.handlers.handleSessionsMessage(stranger.ws, { type: "list_session_grants", sessionId: id });
+    assert.equal(stranger.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0, "the list is not shown");
+    server.handlers.handleSessionsMessage(stranger.ws, { type: "revoke_session_grant", sessionId: id, key: "Bash" });
+    var refusal = stranger.inbox.filter(function (m) { return m.type === "session_grants"; });
+    assert.equal(refusal.length, 1);
+    assert.equal(typeof refusal[0].error, "string");
+    assert.equal(refusal[0].grants, undefined, "a refusal carries no grants");
+    assert.deepEqual(grantKeys(server), ["Bash", "Write:/work/a"], "nothing was revoked");
+    assert.equal(owner.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0);
+
+    server.handlers.handleSessionsMessage(owner.ws, { type: "revoke_session_grant", sessionId: id, key: "Bash" });
+    assert.deepEqual(grantKeys(server), ["Write:/work/a"], "the owner's revoke applies");
+  });
+});
+
 test("listing and revoking name a session by id; an unknown or non-numeric id is ignored", async function () {
   await withServer(async function (server) {
     var c = client();
