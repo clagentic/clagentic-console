@@ -210,3 +210,66 @@ test("a rename that lands while the transcript is read wins", async function () 
   assert.equal(await p, false);
   assert.equal(s.title, "Renamed meanwhile");
 });
+
+function overlayRefresher(opts) {
+  var h = makeSm();
+  return createAiTitleRefresher(Object.assign({ sm: h.sm, cwd: CWD, daemonHome: path.join(claudeDir(), "daemon-home") }, opts));
+}
+
+function writeTitle(configDir, title) {
+  fs.writeFileSync(transcriptFile(configDir, CWD, SID), aiTitle(title));
+}
+
+test("a session whose runtime env sets CLAUDE_CONFIG_DIR finds its ai-title there", async function () {
+  var redirected = claudeDir();
+  var daemonHome = claudeDir();
+  writeTitle(redirected, "From the redirected dir");
+  writeTitle(path.join(daemonHome, ".claude"), "From the daemon home");
+  var refresh = overlayRefresher({
+    daemonHome: daemonHome,
+    getRuntimeEnvOverlay: function () { return { CLAUDE_CONFIG_DIR: redirected }; },
+  });
+  var s = makeSession();
+  assert.equal(await refresh(s), true);
+  assert.equal(s.title, "From the redirected dir");
+});
+
+test("an owner-home session with a runtime CLAUDE_CONFIG_DIR uses the runtime dir", async function () {
+  var redirected = claudeDir();
+  var ownerHome = claudeDir();
+  writeTitle(redirected, "From the runtime dir");
+  writeTitle(path.join(ownerHome, ".claude"), "From the owner home");
+  var refresh = overlayRefresher({
+    resolveHome: function () { return ownerHome; },
+    getRuntimeEnvOverlay: function () { return { CLAUDE_CONFIG_DIR: redirected }; },
+  });
+  var s = makeSession();
+  await refresh(s);
+  assert.equal(s.title, "From the runtime dir");
+});
+
+test("with no runtime CLAUDE_CONFIG_DIR the owner home is used, then the daemon home", async function () {
+  var ownerHome = claudeDir();
+  var daemonHome = claudeDir();
+  writeTitle(path.join(ownerHome, ".claude"), "From the owner home");
+  writeTitle(path.join(daemonHome, ".claude"), "From the daemon home");
+  var withOwner = overlayRefresher({
+    daemonHome: daemonHome,
+    resolveHome: function () { return ownerHome; },
+    getRuntimeEnvOverlay: function () { return { OTHER: "x" }; },
+  });
+  var a = makeSession();
+  await withOwner(a);
+  assert.equal(a.title, "From the owner home");
+
+  var saved = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  try {
+    var daemonOnly = overlayRefresher({ daemonHome: daemonHome, getRuntimeEnvOverlay: function () { return null; } });
+    var b = makeSession();
+    await daemonOnly(b);
+    assert.equal(b.title, "From the daemon home");
+  } finally {
+    if (saved !== undefined) process.env.CLAUDE_CONFIG_DIR = saved;
+  }
+});
