@@ -220,8 +220,12 @@ function validValue(p, prop) {
 var SPECS = {
   permission: {
     request: function (p) {
+      // A call shaped as its tool's real input is, so Allow for session has
+      // something narrow to grant.
+      var toolName = p.one(["Bash", "Write"]);
+      var toolInput = toolName === "Write" ? { file_path: "/work/f" + p.int(0, 9) } : { command: "make " + p.int(0, 9) };
       return {
-        req: { toolName: p.one(["Bash", "Write"]), toolInput: { command: "make " + p.int(0, 9) }, decisionReason: "", vendor: "claude" },
+        req: { toolName: toolName, toolInput: toolInput, decisionReason: "", vendor: "claude" },
       };
     },
     // The hints (generated for every kind, see hintsFor) decide what the card

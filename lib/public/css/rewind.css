@@ -618,6 +618,14 @@
 
 /* The user's own ask rule that forced the prompt. */
 .permission-rule { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.permission-scope { font-size: 12px; color: var(--text-secondary); margin-top: 6px; overflow-wrap: anywhere; }
+.prompt-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--accent);
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
 
 /* An ask that must open on No: the approve choices lose their primary
    styling and the decline choice leads. */

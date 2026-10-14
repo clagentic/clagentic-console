@@ -93,6 +93,8 @@ var ORIGINAL_CASE_LABELS = [
   "prompt_request", "prompt_pending", "prompt_resolved", "prompt_cancel",
   // The agent registry the picker and the capability-gated controls render from.
   "vendor_registry",
+  // A session's Allow for session grants, for the revoke list.
+  "session_grants",
 ];
 
 var REGISTRY_FILES = [

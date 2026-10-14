@@ -88,6 +88,7 @@ function heldPromptIds(session) {
  * @param {string} [opts.home] - reuse a CLAGENTIC_HOME (daemon restart).
  * @param {string} [opts.cliSessionId] - session to adopt from disk.
  * @param {object} [opts.pushModule] - receives the bridge's push sends.
+ * @param {string} [opts.projectName] - the project's display name, for prompt labels.
  */
 async function createServer(opts) {
   opts = opts || {};
@@ -122,6 +123,7 @@ async function createServer(opts) {
     sendEach: transport.sendEach,
     getNotificationsModule: getNotificationsModule,
     onProcessingChanged: function () {},
+    getProjectName: function () { return opts.projectName || ""; },
   });
 
   var handles = [];

@@ -130,12 +130,12 @@ test("survives the idle reaper and allow_always still resolves and persists the 
 
     var result = await decision;
     assert.equal(result.behavior, "allow");
-    assert.equal(session.allowedTools["Write"], true);
+    assert.equal(session.allowedTools["Write:/tmp"], true, "the grant is the requested file's directory, not the whole tool");
     var sm2 = makeSessionManager(h.tmpHome);
     var rebuilt = null;
     sm2.sessions.forEach(function (s) { if (s.cliSessionId === "sess-perm-resolve-idle") rebuilt = s; });
     assert.ok(rebuilt, "session must be rehydrated from disk");
-    assert.equal(rebuilt.allowedTools["Write"], true, "the grant must persist across rehydration");
+    assert.equal(rebuilt.allowedTools["Write:/tmp"], true, "the grant must persist across rehydration");
   } finally {
     t.mock.timers.reset();
     cleanup(h);
