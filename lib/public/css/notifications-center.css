@@ -136,6 +136,21 @@
   letter-spacing: 0.12em;
   margin-bottom: 3px;
 }
+/* Whose prompt this is and what Allow for session grants: wrapped, never
+   cut off, because a clipped label is the failure these lines exist to fix. */
+.notif-banner-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--accent);
+  margin-bottom: 3px;
+  overflow-wrap: anywhere;
+}
+.notif-banner-scope {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
 .notif-banner-title {
   font-weight: 500;
   font-size: 13px;
