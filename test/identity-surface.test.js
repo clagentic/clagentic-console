@@ -588,3 +588,88 @@ test("a provider claiming a human origin for a turn nobody typed is refused and 
   assert.ok(typed.dir, "the same claim on a typed turn is allowed");
   typed.release();
 });
+
+// --- A provider that settles after the console stopped waiting ---
+
+function lateIdentityFor(raw, cfgDir, warnings) {
+  return createIdentity({
+    getConfig: function () { return raw; },
+    configDir: cfgDir,
+    providerTimeoutMs: 100,
+    warn: function (message) { warnings.push(message); },
+  });
+}
+
+function pause(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+var LATE_REQUEST = { definition: null, initiator: INITIATORS.LOOP, rt: "claude-code" };
+
+// Allocates its directory before the timeout, answers after it.
+var LATE_AFTER_ALLOCATE = MODULE_SIGNER
+  .replace("return { dir,", "await new Promise((r) => setTimeout(r, 400)); return { dir,");
+
+// Waits past the timeout, then asks for its directory.
+var LATE_BEFORE_ALLOCATE = MODULE_SIGNER
+  .replace("const dir = ctx.allocateDir();", "await new Promise((r) => setTimeout(r, 400)); const dir = ctx.allocateDir();");
+
+test("a module provider that answers after the timeout has its directory removed and its release called", async function () {
+  var cfgDir = scratch();
+  var warnings = [];
+  var lease = await lateIdentityFor({ provider_module: writeModule(LATE_AFTER_ALLOCATE) }, cfgDir, warnings).begin(LATE_REQUEST);
+  assert.equal(lease.dir, null, "the child is given no CLAGENTIC_IDENTITY_DIR");
+  assert.equal(lease.record.unavailable, "provider_timeout");
+  await pause(700);
+  assert.deepEqual(entries(path.join(cfgDir, "identity", "spawn")), [], "no directory remains under the spawn root");
+  assert.deepEqual(globalThis.__identityTestLog.filter(function (e) { return e.released; }), [{ released: "spiffe-client" }]);
+});
+
+test("a module provider that asks for a directory after the timeout is refused one", async function () {
+  var cfgDir = scratch();
+  var warnings = [];
+  var lease = await lateIdentityFor({ provider_module: writeModule(LATE_BEFORE_ALLOCATE) }, cfgDir, warnings).begin(LATE_REQUEST);
+  assert.equal(lease.dir, null);
+  await pause(700);
+  assert.deepEqual(entries(path.join(cfgDir, "identity", "spawn")), [], "no directory was made for a session nobody waits for");
+  assert.ok(warnings.some(function (w) { return /no longer waits/.test(w); }), warnings.join("|"));
+});
+
+test("the jwks-self signer settling after the timeout leaves no directory and gives the child none", async function () {
+  var cfgDir = scratch();
+  var identity = createIdentity({
+    getConfig: function () { return { provider: "jwks-self" }; },
+    configDir: cfgDir,
+    providerTimeoutMs: 1,
+    warn: function () {},
+  });
+  var lease = await identity.begin(LATE_REQUEST);
+  assert.equal(lease.dir, null);
+  assert.equal(lease.record.unavailable, "provider_timeout");
+  await pause(500);
+  assert.deepEqual(entries(path.join(cfgDir, "identity", "spawn")), [], "no directory remains under the spawn root");
+});
+
+test("a gatekeeper session still pending at the timeout is cancelled: no issued directory remains and no variable is passed", async function () {
+  var issuer = installFakeIssuer();
+  try {
+    var warnings = [];
+    var lease = await lateIdentityFor(gatekeeperConfig(issuer, "late.sock"), scratch(), warnings).begin(LATE_REQUEST);
+    assert.equal(lease.dir, null);
+    assert.equal(lease.record.unavailable, "provider_timeout");
+    await pause(1200);
+    assert.deepEqual(issuer.issued(), [], "the issuer's late session never came into being or was removed");
+    assert.deepEqual(issuer.inheritedDirs(), ["undefined"], "the client was not handed an identity directory");
+  } finally {
+    issuer.cleanup();
+  }
+});
+
+// --- A FIFO where the assertion should be ---
+
+test("a FIFO in place of the assertion file is refused without blocking", function () {
+  var root = path.join(scratch(), "spawn");
+  var dir = delivery.allocateDir(root);
+  require("child_process").execFileSync("mkfifo", [path.join(dir, "identity.jwt")]);
+  assert.throws(function () { delivery.inspect(dir, process.getuid()); }, /not a regular file/);
+});

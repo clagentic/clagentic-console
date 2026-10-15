@@ -145,6 +145,9 @@ test("with no provider configured, the launch options, the child environment and
     var runs = [];
     for (var i = 0; i < spellings.length; i++) {
       var h = await runSession(spellings[i], {}, INITIATORS.HUMAN);
+      // The session start saves nothing by itself; saving the finished record is
+      // what makes the saved-record check below able to fail.
+      h.sm.saveSessionFile(h.session);
       runs.push({
         options: launchOptions(h.query),
         env: h.query.env,
@@ -165,6 +168,7 @@ test("with no provider configured, the launch options, the child environment and
       assert.deepEqual(run.options, runs[0].options, "the launch options do not depend on how none is spelled");
       assert.equal(run.sent, runs[0].sent);
       assert.deepEqual(run.session, runs[0].session);
+      assert.ok(run.saves.length > 0, "a record was saved, so the check below is not vacuous");
       assert.equal(run.saves.some(function (s) { return s.indexOf('{"provider"') !== -1; }), false, "no saved session record carries an identity record");
     });
     assert.equal(fs.existsSync(CONSOLE_IDENTITY_DIR), false, "no identity directory, key or key set was created");
