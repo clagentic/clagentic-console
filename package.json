@@ -14,6 +14,7 @@
     "prepack": "node scripts/write-build-sha.js",
     "test": "node scripts/check-test-count.js test/*.test.js",
     "test:prompt-history": "node scripts/prompt-harness-history.js",
+    "vendor:identity-vectors": "node scripts/vendor-identity-vectors.js",
     "install:local-test": "node scripts/install-local-test.js",
     "verify:installed-build": "node scripts/verify-installed.js",
     "semantic-release": "semantic-release"
@@ -64,6 +65,7 @@
     "@anthropic-ai/sdk": "0.104.2",
     "@lydell/node-pty": "^1.2.0-beta.3",
     "ajv": "^8.20.0",
+    "jose": "^6.2.3",
     "nodemailer": "^10.1.0",
     "qrcode-terminal": "^0.12.0",
     "web-push": "^3.6.7",

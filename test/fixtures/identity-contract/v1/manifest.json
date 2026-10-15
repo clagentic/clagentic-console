@@ -1,0 +1,650 @@
+{
+  "contract_version": "1.0.0",
+  "cia": 1,
+  "trust": {
+    "issuers": [
+      {
+        "iss": "https://issuer.example"
+      }
+    ]
+  },
+  "jwks_files": {
+    "https://issuer.example": "jwks.json"
+  },
+  "vectors": [
+    {
+      "id": "valid-session-eddsa",
+      "description": "Session assertion, EdDSA, human acting directly with no act chain.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.TjIfP5JUB2v5kdm_AgfqaWH5nnJHmL2soaJZedqdkKg2pSIrchUZ5EiE3YOOBupq1Fv0YtzEwgf27RSt1b8XDg",
+      "expect": {
+        "ok": true,
+        "actor": "human:example-user",
+        "grade": "workload"
+      }
+    },
+    {
+      "id": "valid-session-es256",
+      "description": "Session assertion, ES256, agent acting for a human.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImVzLTEifQ.eyJhY3QiOnsic3ViIjoiYWdlbnQ6ZXhhbXBsZS1idWlsZGVyIn0sImNpYSI6MSwiZGlyIjoiL3J1bi9leGFtcGxlL2lkZW50aXR5L3NwYXduL2ExIiwiZXhwIjoxNzkyMDM5NTQwLCJncmFkZSI6Indvcmtsb2FkIiwiaWF0IjoxNzkxOTk5OTQwLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLTAwMDMiLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.EbESjHBZGD1iX_cAj9eJkAwuIKplfzSEJrtBOFHTNZ6OU54HTbv2EpUd6kBv47u6SsbNzW7B4sLMz7Efde7KUQ",
+      "expect": {
+        "ok": true,
+        "actor": "agent:example-builder",
+        "grade": "workload"
+      }
+    },
+    {
+      "id": "valid-child-eddsa",
+      "description": "Child assertion, grade harness, two-level act chain, own delivery directory.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/b2",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJhY3QiOnsiYWN0Ijp7InN1YiI6InJ1bnRpbWU6ZXhhbXBsZS1ydW50aW1lIn0sInN1YiI6ImFnZW50OmV4YW1wbGUtcmV2aWV3ZXIifSwiY2lhIjoxLCJkaXIiOiIvcnVuL2V4YW1wbGUvaWRlbnRpdHkvc3Bhd24vYjIiLCJleHAiOjE3OTIwMzk1NDAsImdyYWRlIjoiaGFybmVzcyIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAyIiwib3JpZ2luIjoiYWdlbnQiLCJyb2xlcyI6WyJyZXZpZXdlciJdLCJydCI6eyJpZCI6ImV4YW1wbGUtcnVudGltZSIsInZlcnNpb24iOiIxLjAuMCJ9LCJzaWQiOiJzZXNzLTAwMDEiLCJzcGF3biI6InNwYXduLTAwMDEiLCJzdWIiOiJodW1hbjpleGFtcGxlLXVzZXIifQ.rdKIIUgbb_3akNgv83vK7O_90G0SOJkwhpHVR-L6euU5ZD_wo4Ql-SMe5MEKbg1l0WQq68IDRdD4dGgaJRqkBw",
+      "expect": {
+        "ok": true,
+        "actor": "agent:example-reviewer",
+        "grade": "harness"
+      }
+    },
+    {
+      "id": "valid-unknown-claims-ignored",
+      "description": "Unknown claims, including inside rt, are ignored.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZXh0X25vdGUiOiJpZ25vcmVkIiwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImV4dCI6MSwiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.SSZ-ZYGmheA23hDCxwXW7sZycdFDmH9cggP5vTkC27-TaM9Q1d-vf-6W5lXyf0J7dWehqpwLFPi7a2RJYnLgCA",
+      "expect": {
+        "ok": true,
+        "actor": "human:example-user",
+        "grade": "workload"
+      }
+    },
+    {
+      "id": "valid-peer-es256",
+      "description": "Exchanged token for a peer, ES256, aud equals the peer identifier, no dir.",
+      "kind": "token",
+      "mode": "peer",
+      "peer_id": "peer.example",
+      "now": 1792000000,
+      "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImVzLTEifQ.eyJhY3QiOnsic3ViIjoiYWdlbnQ6ZXhhbXBsZS1idWlsZGVyIn0sImF1ZCI6InBlZXIuZXhhbXBsZSIsImNpYSI6MSwiZXhwIjoxNzkyMDAwODQwLCJncmFkZSI6Indvcmtsb2FkIiwiaWF0IjoxNzkxOTk5OTQwLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLXgtanRpLTAwMDEiLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.-WsKSeHu4lA8Z2NWGjObpWcdgDGTOhFRwiLyEyRnMygCFSnPhwr2CsBSPHSWo-TtV5RpnwsP0Gmkz-BuWioJLg",
+      "expect": {
+        "ok": true,
+        "actor": "agent:example-builder",
+        "grade": "workload"
+      }
+    },
+    {
+      "id": "valid-peer-child-eddsa",
+      "description": "Exchanged child token for a peer, EdDSA.",
+      "kind": "token",
+      "mode": "peer",
+      "peer_id": "peer.example",
+      "now": 1792000000,
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJhY3QiOnsiYWN0Ijp7InN1YiI6InJ1bnRpbWU6ZXhhbXBsZS1ydW50aW1lIn0sInN1YiI6ImFnZW50OmV4YW1wbGUtcmV2aWV3ZXIifSwiYXVkIjoicGVlci5leGFtcGxlIiwiY2lhIjoxLCJleHAiOjE3OTIwMDA4NDAsImdyYWRlIjoiaGFybmVzcyIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS14LWp0aS0wMDAyIiwib3JpZ2luIjoiYWdlbnQiLCJyb2xlcyI6WyJyZXZpZXdlciJdLCJydCI6eyJpZCI6ImV4YW1wbGUtcnVudGltZSIsInZlcnNpb24iOiIxLjAuMCJ9LCJzaWQiOiJzZXNzLTAwMDEiLCJzcGF3biI6InNwYXduLTAwMDEiLCJzdWIiOiJodW1hbjpleGFtcGxlLXVzZXIifQ.kxed1SyQuux5-H1tQKYrZlIX127Gf9p8i84iGprdDoVndMfM3HDt1rbZbmsjNShF73CoTCIeiCsYUU2cnXxPCQ",
+      "expect": {
+        "ok": true,
+        "actor": "agent:example-reviewer",
+        "grade": "harness"
+      }
+    },
+    {
+      "id": "expired",
+      "description": "exp is one hour before now.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MTk5NjQwMCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5MjgwMCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.gNu3fGr2Df78xMTAYRBakQw4Eorgd_wwmHtfPeABgOVoV-P7eOwTN_KrdM9NlpcjPRms74QUXWDc5qgyAeVCDA",
+      "expect": {
+        "ok": false,
+        "error": "expired"
+      }
+    },
+    {
+      "id": "expired-at-boundary",
+      "description": "exp equal to now is expired.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAwMDAwMCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.AL5SVS8n7RmbvvtFebt7LFBi_iLx10Ppj-DxMhluydFXPbdVxO9aj0obbNhZGeNHbo_ML310ySKvLS9R9Z51BA",
+      "expect": {
+        "ok": false,
+        "error": "expired"
+      }
+    },
+    {
+      "id": "not-yet-valid-nbf",
+      "description": "nbf is one hour after now.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwibmJmIjoxNzkyMDAzNjAwLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.KS50rAaCpDAFg4d8qZ3tYT0F8jws8_twj-Js_kVk1Z-SU8NHhY583EF4I3nl2d0G7mUY8nXUglGetdzfOeU0CQ",
+      "expect": {
+        "ok": false,
+        "error": "not_yet_valid"
+      }
+    },
+    {
+      "id": "not-yet-valid-iat",
+      "description": "iat is after now.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAwMzYwMCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MjAwMDAxMCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.o8yOSJRhpJ3PQH6a2Yk9AENVk1RPuKMDTrapsqdsrc7TZ7cr7MT1dwNgET1Xhje6fyCzLVvH6l2vkYDOLi8wDw",
+      "expect": {
+        "ok": false,
+        "error": "not_yet_valid"
+      }
+    },
+    {
+      "id": "ttl-exceeded",
+      "description": "exp minus iat is 43201 seconds.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjA0MzE0MSwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.FTCUuVqhCMJuYzxMPa6f0nNqLJmn_8yxDV21VhU3Dp7yPG1nuUFB1BjnSRxYVBXXXTQeEVv9iwiFujB_J5GfCQ",
+      "expect": {
+        "ok": false,
+        "error": "ttl_exceeded"
+      }
+    },
+    {
+      "id": "issuer-untrusted",
+      "description": "Valid signature from an issuer that is not in the trust list.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9vdGhlci1pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.Gq7VOvNZ8TyR-ZwRbTLEGpXYtHz9oQnJNtH-ZLFo6di0gp1MQwgsCzOt3lCfpU8RKwqM4IPoEOv9zgb836KJCg",
+      "expect": {
+        "ok": false,
+        "error": "issuer_untrusted"
+      }
+    },
+    {
+      "id": "signature-forged",
+      "description": "Names the trusted issuer and its kid but is signed by a different key.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.ZdXeUUahuDjuZB1Mj92rSVe-FQDOLWIA-f06DD8oKCb-zSBcA6KmrnXn6y24KqK5S-1oBkhg18kEJpnXb-i7Ag",
+      "expect": {
+        "ok": false,
+        "error": "signature_invalid"
+      }
+    },
+    {
+      "id": "tampered-payload",
+      "description": "Payload changed after signing (merger added to roles).",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIiwibWVyZ2VyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.TjIfP5JUB2v5kdm_AgfqaWH5nnJHmL2soaJZedqdkKg2pSIrchUZ5EiE3YOOBupq1Fv0YtzEwgf27RSt1b8XDg",
+      "expect": {
+        "ok": false,
+        "error": "signature_invalid"
+      }
+    },
+    {
+      "id": "key-not-found",
+      "description": "kid is not in the issuer's key set.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTkifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.dn3W--xzrTLONCbYufezbgP1M88ZLmRVodAJJT-wlUwdXvCea7YVA1c0Ifwy05AyTOQnLRSVGv45xWxcUTOjBg",
+      "expect": {
+        "ok": false,
+        "error": "key_not_found"
+      }
+    },
+    {
+      "id": "alg-none",
+      "description": "Unsigned token with alg none.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJub25lIiwia2lkIjoiZWQtMSJ9.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.",
+      "expect": {
+        "ok": false,
+        "error": "alg_not_allowed"
+      }
+    },
+    {
+      "id": "alg-hs256",
+      "description": "HMAC token, algorithm confusion attempt.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.whSwUK9wntVqJ8by2gQSigbjHTXC7yL3TJVhhSbSMQs",
+      "expect": {
+        "ok": false,
+        "error": "alg_not_allowed"
+      }
+    },
+    {
+      "id": "malformed-segments",
+      "description": "Two segments only.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "abc.def",
+      "expect": {
+        "ok": false,
+        "error": "malformed"
+      }
+    },
+    {
+      "id": "malformed-payload",
+      "description": "Payload is not a JSON object.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.bm90LWpzb24.c2ln",
+      "expect": {
+        "ok": false,
+        "error": "malformed"
+      }
+    },
+    {
+      "id": "malformed-header-trailing-value",
+      "description": "Header segment holds a valid object followed by a second JSON object; validly signed.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifXt9.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.RiVHUG9CB7oRU4oRabhE1rKXVq9yq-NmCeFYdNoTMvdUgkzVE-K6DNGKnW4aTsoHbMtZpXNDyyJsmtEMP-C7AA",
+      "expect": {
+        "ok": false,
+        "error": "malformed"
+      }
+    },
+    {
+      "id": "malformed-header-trailing-junk",
+      "description": "Header segment holds a valid object followed by junk; validly signed.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifSBqdW5r.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.c3ub2hc-Nj96bklXZZJePin9EHiICSS2p2H8lqGARl-x8IXHkna4NCB5jEkmMLjd8lum5Q2zVXyfd1MDyZO4Bg",
+      "expect": {
+        "ok": false,
+        "error": "malformed"
+      }
+    },
+    {
+      "id": "malformed-payload-trailing-value",
+      "description": "Payload segment holds a valid object followed by a second JSON object; validly signed.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9e30.EciA981hn9jVCZwjz8dNqTjOArHlEPV3sV25q4HcNcq6Gore0nohE1t9kUjj4kb_QvzV0TNIUox5qKZY1FjZBA",
+      "expect": {
+        "ok": false,
+        "error": "malformed"
+      }
+    },
+    {
+      "id": "malformed-payload-trailing-junk",
+      "description": "Payload segment holds a valid object followed by junk; validly signed.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9IGp1bms.jKuOn30VA4XK4GC0u4Kh0c68GE2yLHhciC3l2H660rwWmcHL2gxHz0GQQ-rcG_Sy776J9UbhhjLr2qpPAFkKCQ",
+      "expect": {
+        "ok": false,
+        "error": "malformed"
+      }
+    },
+    {
+      "id": "time-nbf-string",
+      "description": "nbf is a string; type is checked before any time comparison.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwibmJmIjoiMCIsIm9yaWdpbiI6Imh1bWFuIiwicm9sZXMiOlsiYnVpbGRlciJdLCJydCI6eyJpZCI6ImV4YW1wbGUtcnVudGltZSIsInZlcnNpb24iOiIxLjAuMCJ9LCJzaWQiOiJzZXNzLTAwMDEiLCJzdWIiOiJodW1hbjpleGFtcGxlLXVzZXIifQ.bqjNuhqB5T34qc8DaDDGY6Q8VlaBvMHTUZ0JWjO55mQqTQaPV0JQoHznEyeX-7Db-t3jBAqDix7QrMOar1m1CQ",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "time-nbf-string-expired",
+      "description": "nbf is a string and exp is already past; the type fault wins over expired.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MTk5NjQwMCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5MjgwMCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwibmJmIjoiMCIsIm9yaWdpbiI6Imh1bWFuIiwicm9sZXMiOlsiYnVpbGRlciJdLCJydCI6eyJpZCI6ImV4YW1wbGUtcnVudGltZSIsInZlcnNpb24iOiIxLjAuMCJ9LCJzaWQiOiJzZXNzLTAwMDEiLCJzdWIiOiJodW1hbjpleGFtcGxlLXVzZXIifQ.v8AR2YTQQQ7hmyM8zJMvaBOCzhX07V5ffYCdPWKp15PzPLW9sD0JyyJ7LCc2KehZRzcKMSXlkZbeSVLwxVKWDA",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "time-iat-string-expired",
+      "description": "iat is a string and exp is already past; the type fault wins over expired.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MTk5NjQwMCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6IjE3OTE5OTI4MDAiLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLTAwMDEiLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.lJnJC0ctASKznkOkkkgTOZY1rsuJEPHN2-yfa4HjSvBFXmqczIdyCBkbDslKPaq2AyUsUAdoJbGMc8aUDI08BA",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "time-exp-string",
+      "description": "exp is a string.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6IjE3OTIwMDA5MDAiLCJncmFkZSI6Indvcmtsb2FkIiwiaWF0IjoxNzkxOTk5OTQwLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLTAwMDEiLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.JdgGQ7TEDhxUXsO21-R9SxCRXD9_lnHczEmk2MaC5cBV6rGMNoQl5ytO18FygQaT0ggxZOD0XTaIHV8bTf7oAg",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "time-exp-fractional",
+      "description": "exp is a fractional number.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAwMDAwMC41LCJncmFkZSI6Indvcmtsb2FkIiwiaWF0IjoxNzkxOTk5OTQwLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLTAwMDEiLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.SzeFbhVcd2nO5MkY8ju_yIan3We29ekp02nyQ7irJzwUDaZNkn4B_0uz3U2ElnAOJHMqynoCEqp3bl8EUcJhBQ",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "time-exp-fractional-expired",
+      "description": "exp is fractional and also in the past; the type fault wins over expired.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MTk5NjQwMC41LCJncmFkZSI6Indvcmtsb2FkIiwiaWF0IjoxNzkxOTk5OTQwLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLTAwMDEiLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.sA6s1V_Z1IAtk7kEXLzzKskKcASSMj7xqM79gm8xGGQDR3Y6m9CdILuXIVRFOIqTl2XFIkvuIMzVnMrWeoYzDw",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "contract-version-unsupported",
+      "description": "Validly signed, cia is 2.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjIsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.iHjY1as978UZgDVDYWFSPmekJOpEESlZEqghXg3-cfqHRIVYGZjkejAnE_Qsekh8Qlny_byMYXW8aOBxDTq5DA",
+      "expect": {
+        "ok": false,
+        "error": "contract_version_unsupported"
+      }
+    },
+    {
+      "id": "workload-missing-dir",
+      "description": "Workload local assertion without dir.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.2n3emcHsfc2W4I1lPNYHwAB-UIECOjAFrKTvXFewUfjK4dBRVMTTXp7diEmCHSp9L9nKi0e9eknCR5WjyJThDQ",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "workload-missing-sid",
+      "description": "Workload assertion without sid.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.7sV2HLbUwcefF95xGfnFiE3AHbF0N9TBtqIJ_OP5DBTAEeTFkxQ2Lj9xXU0tMdaEynM0VB1lMoEME81u1wyWDA",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "harness-missing-spawn",
+      "description": "Harness assertion without spawn.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/b2",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJhY3QiOnsiYWN0Ijp7InN1YiI6InJ1bnRpbWU6ZXhhbXBsZS1ydW50aW1lIn0sInN1YiI6ImFnZW50OmV4YW1wbGUtcmV2aWV3ZXIifSwiY2lhIjoxLCJkaXIiOiIvcnVuL2V4YW1wbGUvaWRlbnRpdHkvc3Bhd24vYjIiLCJleHAiOjE3OTIwMzk1NDAsImdyYWRlIjoiaGFybmVzcyIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAyIiwib3JpZ2luIjoiYWdlbnQiLCJyb2xlcyI6WyJyZXZpZXdlciJdLCJydCI6eyJpZCI6ImV4YW1wbGUtcnVudGltZSIsInZlcnNpb24iOiIxLjAuMCJ9LCJzaWQiOiJzZXNzLTAwMDEiLCJzdWIiOiJodW1hbjpleGFtcGxlLXVzZXIifQ.DM5wgVRLACJL3dz6lhFcXgUpZo9GfS8TeJ2whB4VbzWDhbHDvlDLuwxW_o5J5Wo_-XWYHwNs_qC8OsFMXRVyAQ",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "harness-missing-act",
+      "description": "Harness assertion without act.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/b2",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9iMiIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJoYXJuZXNzIiwiaWF0IjoxNzkxOTk5OTQwLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLTAwMDIiLCJvcmlnaW4iOiJhZ2VudCIsInJvbGVzIjpbInJldmlld2VyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInNwYXduIjoic3Bhd24tMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.WCJk32YpWFePZN2K67lIi_4Oy3H-lv2L6p_KQml-wiGbqHyDVYKjT5bE9n_cvCalu4tjEzD94NAv6rqOQsE8AQ",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "grade-unknown",
+      "description": "grade is not workload or harness.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJzZXJ2aWNlIiwiaWF0IjoxNzkxOTk5OTQwLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwianRpIjoianRpLTAwMDEiLCJvcmlnaW4iOiJodW1hbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.srzrwrXugHNdcyE1wWmhFcFV7YpgMDep1ZMCEC0O_1HVefEGa5N_pNolQu9Spa8GdvZ9mO7ZhOvFn2d-cri1AQ",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "origin-unknown",
+      "description": "origin is not in the vocabulary.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiY3JvbiIsInJvbGVzIjpbImJ1aWxkZXIiXSwicnQiOnsiaWQiOiJleGFtcGxlLXJ1bnRpbWUiLCJ2ZXJzaW9uIjoiMS4wLjAifSwic2lkIjoic2Vzcy0wMDAxIiwic3ViIjoiaHVtYW46ZXhhbXBsZS11c2VyIn0.pfjWN_R7AXh4KVetabzZYSJIaGazbdtDS43FA8mIxaKSxd81_RL7CX57iTXjueAiDX9JzQ99Ke49QBWGLkFDAA",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "sub-bad-pattern",
+      "description": "sub lacks the actor type prefix.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6InNvbWVvbmUifQ.sL_CwZ-SgKVJQ8_VluEFt05MhPOSmIHfMDw-8YJw05YUVrT3DL8OtoJg_PZtfedd2PDk148ug4Ut20t2GPmxAQ",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "peer-dir-present",
+      "description": "Exchanged token that still carries dir.",
+      "kind": "token",
+      "mode": "peer",
+      "peer_id": "peer.example",
+      "now": 1792000000,
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJhdWQiOiJwZWVyLmV4YW1wbGUiLCJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAwMDg0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS14LWp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.RuF8tg3lMUel-81sG0mtZgg_bgK00xx9zrwkA1P8feCu1msZLFcPrA3JwjUn06Cmg_-MyyXLeOMPphsslGyLCw",
+      "expect": {
+        "ok": false,
+        "error": "claims_invalid"
+      }
+    },
+    {
+      "id": "audience-unexpected-local",
+      "description": "A token minted for a peer presented to a local consumer.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/a1",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJhdWQiOiJwZWVyLmV4YW1wbGUiLCJjaWEiOjEsImV4cCI6MTc5MjAwMDg0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS14LWp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.IHSYDQUR6D8wIw367RqYDYBWyXEKpjd65bvzwPOWivdpuoYb4dhzc5LvXiXytjqGGexJ4bk4ZQ9Nxdjf9vDcCQ",
+      "expect": {
+        "ok": false,
+        "error": "audience_unexpected"
+      }
+    },
+    {
+      "id": "audience-mismatch-peer",
+      "description": "aud names a different peer.",
+      "kind": "token",
+      "mode": "peer",
+      "peer_id": "peer.example",
+      "now": 1792000000,
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJhdWQiOiJvdGhlci1wZWVyLmV4YW1wbGUiLCJjaWEiOjEsImV4cCI6MTc5MjAwMDg0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS14LWp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.L0rwHL1FY0KR7KsDyL6f7eB4hvz5ImXA79xKcUpqZCzIF7_MOzVHw9eKGr7PcW3m7o2Xdxus0gfDzh43r00LAQ",
+      "expect": {
+        "ok": false,
+        "error": "audience_mismatch"
+      }
+    },
+    {
+      "id": "audience-missing-peer",
+      "description": "A local assertion presented to a peer.",
+      "kind": "token",
+      "mode": "peer",
+      "peer_id": "peer.example",
+      "now": 1792000000,
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.TjIfP5JUB2v5kdm_AgfqaWH5nnJHmL2soaJZedqdkKg2pSIrchUZ5EiE3YOOBupq1Fv0YtzEwgf27RSt1b8XDg",
+      "expect": {
+        "ok": false,
+        "error": "audience_mismatch"
+      }
+    },
+    {
+      "id": "dir-mismatch",
+      "description": "dir claim differs from the directory the token was read from.",
+      "kind": "token",
+      "mode": "local",
+      "now": 1792000000,
+      "observed_dir": "/run/example/identity/spawn/b2",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkLTEifQ.eyJjaWEiOjEsImRpciI6Ii9ydW4vZXhhbXBsZS9pZGVudGl0eS9zcGF3bi9hMSIsImV4cCI6MTc5MjAzOTU0MCwiZ3JhZGUiOiJ3b3JrbG9hZCIsImlhdCI6MTc5MTk5OTk0MCwiaXNzIjoiaHR0cHM6Ly9pc3N1ZXIuZXhhbXBsZSIsImp0aSI6Imp0aS0wMDAxIiwib3JpZ2luIjoiaHVtYW4iLCJyb2xlcyI6WyJidWlsZGVyIl0sInJ0Ijp7ImlkIjoiZXhhbXBsZS1ydW50aW1lIiwidmVyc2lvbiI6IjEuMC4wIn0sInNpZCI6InNlc3MtMDAwMSIsInN1YiI6Imh1bWFuOmV4YW1wbGUtdXNlciJ9.TjIfP5JUB2v5kdm_AgfqaWH5nnJHmL2soaJZedqdkKg2pSIrchUZ5EiE3YOOBupq1Fv0YtzEwgf27RSt1b8XDg",
+      "expect": {
+        "ok": false,
+        "error": "dir_mismatch"
+      }
+    },
+    {
+      "id": "delivery-ok",
+      "description": "0700 directory holding a regular identity.jwt.",
+      "kind": "delivery",
+      "layout": {
+        "dir": "present",
+        "dir_mode": "0700",
+        "file": "regular",
+        "content": "header.payload.signature"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "delivery-dir-unset",
+      "description": "CLAGENTIC_IDENTITY_DIR is not set.",
+      "kind": "delivery",
+      "layout": {
+        "dir": "unset"
+      },
+      "expect": {
+        "ok": false,
+        "error": "identity_dir_missing"
+      }
+    },
+    {
+      "id": "delivery-dir-absent",
+      "description": "The variable names a directory that does not exist.",
+      "kind": "delivery",
+      "layout": {
+        "dir": "absent"
+      },
+      "expect": {
+        "ok": false,
+        "error": "identity_dir_missing"
+      }
+    },
+    {
+      "id": "delivery-dir-unsafe-mode",
+      "description": "Directory mode 0755.",
+      "kind": "delivery",
+      "layout": {
+        "dir": "present",
+        "dir_mode": "0755",
+        "file": "regular",
+        "content": "header.payload.signature"
+      },
+      "expect": {
+        "ok": false,
+        "error": "identity_dir_unsafe"
+      }
+    },
+    {
+      "id": "delivery-file-missing",
+      "description": "Directory without identity.jwt.",
+      "kind": "delivery",
+      "layout": {
+        "dir": "present",
+        "dir_mode": "0700",
+        "file": "absent"
+      },
+      "expect": {
+        "ok": false,
+        "error": "identity_file_missing"
+      }
+    },
+    {
+      "id": "delivery-file-symlink",
+      "description": "identity.jwt is a symlink.",
+      "kind": "delivery",
+      "layout": {
+        "dir": "present",
+        "dir_mode": "0700",
+        "file": "symlink",
+        "content": "header.payload.signature"
+      },
+      "expect": {
+        "ok": false,
+        "error": "identity_file_symlink"
+      }
+    }
+  ]
+}
