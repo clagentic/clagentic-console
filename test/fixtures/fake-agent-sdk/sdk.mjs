@@ -20,6 +20,8 @@ export function query({ prompt, options }) {
     hasEnvOption: options.env !== undefined,
     cwd: options.cwd,
     model: options.model,
+    // The options the SDK was called with: they decide the CLI's argv.
+    options: options,
     // Every user message the query was handed, as the SDK received it.
     messages: [],
   };

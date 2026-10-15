@@ -13,7 +13,11 @@ var SCAN_DIRS = ["lib", "bin", "scripts", "deploy"];
 var SCAN_EXT = /\.(js|mjs|cjs|sh|service)$/;
 
 // Another product's own variable, read for lite detection (lib/lite-detect.js).
-var OTHER_PRODUCT_VARS = ["CLAGENTIC_LITE_HOME"];
+// The Identity Assertion contract's delivery variable (lib/identity/contract.js):
+// named by the published contract that every tool of the family shares, set by
+// the console for a session it started and never read from the console's own
+// configuration.
+var OTHER_PRODUCT_VARS = ["CLAGENTIC_LITE_HOME", "CLAGENTIC_IDENTITY_DIR"];
 // The deprecated-alias table: the one place old names are spelled out.
 var ALLOWLISTED_FILES = [path.join("lib", "env-compat.js")];
 
@@ -65,6 +69,8 @@ test("scanner flags a bare CLAGENTIC_ read in each form", function () {
 test("scanner accepts scoped names and another product's variable", function () {
   assert.deepStrictEqual(findBareReads("process.env.CLAGENTIC_CONSOLE_DEV; Environment=CLAGENTIC_CONSOLE_X=1"), []);
   assert.deepStrictEqual(findBareReads("process.env.CLAGENTIC_LITE_HOME || x"), []);
+  assert.deepStrictEqual(findBareReads("var n = 'CLAGENTIC_IDENTITY_DIR';"), []);
+  assert.ok(findBareReads("var n = 'CLAGENTIC_IDENTITY_DIR_OTHER';").length, "only the contract's exact name is accepted");
 });
 
 test("lib/, bin/, scripts/ and deploy/ read no bare CLAGENTIC_ variable", function () {

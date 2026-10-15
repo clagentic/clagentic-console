@@ -1,0 +1,9 @@
+{
+  "files": {
+    "manifest.json": "5f60459d3ad83b0be25dc95d1c37861c2647b59678a818ab546d6ecb37948415",
+    "jwks.json": "e0f84a48c64c21c659f07343f09cf8f16c08ffc69706ed228dac83ef25d041b2"
+  },
+  "contract_version": "1.0.0",
+  "cia": 1,
+  "source_ref": "c73ef8119e5b86d70d2cbb042a1403425c7f83a6"
+}
