@@ -1,3 +1,16 @@
+# [1.10.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.10.0-beta.2...v1.10.0-beta.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* **titles:** delete the model title query and show the CLI session title (lr-63be86) ([9822231](https://github.com/clagentic/clagentic-console/commit/982223138897cd05b6ba1bc344cdb944ea7eeb53))
+
+
+### Features
+
+* **logging:** journal session input, prompt lifecycle and sources, reaper skips; share one exit listener (lr-9f2d6c) ([5e17863](https://github.com/clagentic/clagentic-console/commit/5e17863fbbf47dd9e58054e3790945d94aedcdf3))
+* **prompts:** label every prompt and scope Allow for Session grants with a revoke list (lr-92b4ed) ([7fb27b2](https://github.com/clagentic/clagentic-console/commit/7fb27b2e7ca76882474f8afbd0f38718407a3c90))
+
 # [1.10.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.10.0-beta.1...v1.10.0-beta.2) (2026-10-14)
 
 
