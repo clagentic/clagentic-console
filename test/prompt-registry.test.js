@@ -88,7 +88,6 @@ test("open records the prompt, indexes it, notifies when asked, and refreshes th
   assert.deepEqual(eventsOf(h, "prompt_request"), [{
     type: "prompt_request", requestId: opened.requestId, kind: "permission", toolUseId: "tu-1",
     toolName: "Bash", toolInput: { command: "make" }, decisionReason: "", vendor: "claude",
-    grantScope: "Allow only this exact command in this session",
     label: { project: "", session: "(untitled session)", agent: "" },
   }]);
   assert.deepEqual(h.notified, [opened.requestId]);
@@ -819,7 +818,6 @@ test("lookup and respond expose a deep-frozen copy of the request, never the rec
   assert.equal(found.prompt.toolUseId, "tu-1");
   assert.deepEqual(found.prompt.request, {
     toolName: "Bash", toolInput: { command: "make" }, decisionReason: "", vendor: "claude",
-    grantScope: "Allow only this exact command in this session",
   });
   assert.equal(found.record, undefined);
   assert.equal(found.prompt.resolve, undefined);

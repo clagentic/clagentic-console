@@ -1,8 +1,8 @@
 "use strict";
-// Labelled prompts and scoped "Allow for Session" grants, on the real session
-// manager, SDK bridge, notifications module and WS session handlers
+// Labelled prompts and whole-tool "Allow for Session" grants, on the real
+// session manager, SDK bridge, notifications module and WS session handlers
 // (prompt-harness-world.js). The persisted grant shapes below are the shapes
-// older sessions carry in their meta record (allowedTools {Write: true},
+// sessions carry in their meta record (allowedTools {Write: true},
 // {Bash: true}, {Write: true, Bash: true}); only the shape is used.
 
 var test = require("node:test");
@@ -38,34 +38,33 @@ function persistedGrants(server) {
   return found;
 }
 
-test("a grant from a Bash find . -print prompt covers that exact line and nothing else", async function () {
+test("a grant from a Bash find prompt covers every later Bash call in the session, a rm included", async function () {
   await withServer(async function (server) {
     var c = client();
     server.connect(c.ws);
     var first = server.ask("Bash", { command: "find . -print" });
     var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
-    assert.equal(prompt.grantScope, "Allow only this exact command in this session", "the card states the scope before the click");
+    assert.equal(prompt.grantScope, undefined, "the prompt carries no narrowed scope");
     answer(server, c, first.id, "allow_always");
     assert.equal((await first.promise).behavior, "allow");
-    assert.deepEqual(grantKeys(server), ["Bash=find . -print"], "the grant is the exact line, not the whole tool");
+    assert.deepEqual(grantKeys(server), ["Bash"], "the grant is the whole tool");
+    assert.deepEqual(persistedGrants(server), { Bash: true }, "and it is persisted in the session meta");
 
-    var again = server.ask("Bash", { command: "find . -print" });
-    assert.equal(again.opened.length, 0, "the same line is answered by the grant");
-    assert.equal((await again.promise).behavior, "allow");
-
-    ["rm -rf /work/x", "find . '-delete'", "find . -print -delete", "find . -name y"].forEach(function (cmd) {
-      assert.equal(server.ask("Bash", { command: cmd }).opened.length, 1, cmd + " prompts");
+    ["find . -print", "rm -rf /work/x", "find . '-delete'", "ls; " + "x".repeat(400)].forEach(function (cmd) {
+      var again = server.ask("Bash", { command: cmd });
+      assert.equal(again.opened.length, 0, cmd.slice(0, 30) + " does not prompt");
     });
+    assert.equal(server.ask("Write", { file_path: "/work/a" }).opened.length, 1, "a Bash grant is not a Write grant");
   });
 });
 
-test("persisted Bash prefix keys are dropped on load and a legacy whole-tool Bash grant stays, and is revocable", async function () {
+test("a persisted #451-era Bash=<line> key is dropped on load; a whole-tool Bash grant stays and is revocable", async function () {
   var first = await world.createServer();
   var home = first.home;
   var cliSessionId = first.session.cliSessionId;
   try {
     await first.startQuery();
-    first.session.allowedTools = Object.assign(Object.create(null), { "Bash:find": true, "Bash:git status": true, Bash: true });
+    first.session.allowedTools = Object.assign(Object.create(null), { "Bash=find . -print": true, "Bash=git status": true, Bash: true });
     first.sm.saveSessionFile(first.session);
     first.shutdown();
 
@@ -73,7 +72,7 @@ test("persisted Bash prefix keys are dropped on load and a legacy whole-tool Bas
     try {
       await second.startQuery();
       assert.deepEqual(grantKeys(second), ["Bash"], "only the whole-tool grant survives");
-      assert.equal(second.ask("Bash", { command: "rm x" }).opened.length, 0, "the legacy grant is honoured");
+      assert.equal(second.ask("Bash", { command: "rm x" }).opened.length, 0, "the whole-tool grant is honoured");
       var c = client();
       second.connect(c.ws);
       second.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: second.session.localId, key: "Bash" });
@@ -86,13 +85,13 @@ test("persisted Bash prefix keys are dropped on load and a legacy whole-tool Bas
   }
 });
 
-test("a persisted Bash:find prefix key alone covers nothing after load", async function () {
+test("a persisted Bash=<line> key alone covers nothing after load", async function () {
   var first = await world.createServer();
   var home = first.home;
   var cliSessionId = first.session.cliSessionId;
   try {
     await first.startQuery();
-    first.session.allowedTools = Object.assign(Object.create(null), { "Bash:find": true });
+    first.session.allowedTools = Object.assign(Object.create(null), { "Bash=find . -print": true });
     first.sm.saveSessionFile(first.session);
     first.shutdown();
 
@@ -109,53 +108,54 @@ test("a persisted Bash:find prefix key alone covers nothing after load", async f
   }
 });
 
+// The Codex file-change approval reaches canUseTool as the Edit tool with a
+// change summary and no path.
 var FILE_TOOL_CALLS = [
-  ["Write", { file_path: "/work/a/one.txt", content: "x" }],
-  ["Edit", { file_path: "/work/a/one.txt" }],
-  ["MultiEdit", { file_path: "/work/a/one.txt" }],
-  ["NotebookEdit", { notebook_path: "/work/n/x.ipynb" }],
-  ["Write", { file_path: "work/a.txt" }],
+  ["Write", { file_path: "/work/a/one.txt", content: "x" }, { file_path: "/work/b/two.txt", content: "y" }],
+  ["Edit", { file_path: "/work/a/one.txt" }, { file_path: "/work/b/two.txt" }],
+  ["MultiEdit", { file_path: "/work/a/one.txt" }, { file_path: "/work/b/two.txt" }],
+  ["NotebookEdit", { notebook_path: "/work/n/x.ipynb" }, { notebook_path: "/work/m/y.ipynb" }],
+  ["Edit", { changes: "modify /work/a.txt" }, { changes: "modify /work/secret" }],
 ];
 
 FILE_TOOL_CALLS.forEach(function (call) {
-  test("a " + call[0] + " prompt offers no session grant, and Allow for Session from an old client allows this call only", async function () {
+  test("Allow for Session on a " + call[0] + " prompt grants the whole tool: a later call on another target does not prompt", async function () {
     await withServer(async function (server) {
       var c = client();
       server.connect(c.ws);
       var first = server.ask(call[0], call[1]);
-      var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
-      assert.equal(prompt.grantScope, null, "the card offers Allow and Deny only");
-
       c.inbox.length = 0;
       answer(server, c, first.id, "allow_always");
       assert.equal((await first.promise).behavior, "allow", "this call is allowed");
       assert.equal(c.inbox.filter(function (m) { return m.type === "prompt_pending"; }).length, 0, "it settled, it is not re-offered");
-      assert.deepEqual(grantKeys(server), [], "nothing is stored");
-      assert.deepEqual(persistedGrants(server), {}, "nor persisted");
-      assert.equal(server.ask(call[0], call[1]).opened.length, 1, "the next call prompts");
+      assert.deepEqual(grantKeys(server), [call[0]], "the grant is the whole tool");
+      assert.deepEqual(persistedGrants(server), { [call[0]]: true }, "persisted at once");
+      assert.equal(server.ask(call[0], call[1]).opened.length, 0, "the same call does not prompt");
+      var later = server.ask(call[0], call[2]);
+      assert.equal(later.opened.length, 0, "another target does not prompt");
+      assert.equal((await later.promise).behavior, "allow");
     });
   });
 });
 
-test("a persisted file-scoped key is dropped on load and a legacy whole-tool Write grant stays, and is revocable", async function () {
+test("a grant survives a daemon restart, a new session starts with none", async function () {
   var first = await world.createServer();
   var home = first.home;
   var cliSessionId = first.session.cliSessionId;
   try {
     await first.startQuery();
-    first.session.allowedTools = Object.assign(Object.create(null), { "Write:/work/a": true, "Edit:/work/a": "/work/a", Write: true });
-    first.sm.saveSessionFile(first.session);
+    var c = client();
+    first.connect(c.ws);
+    var a = first.ask("Write", { file_path: "/work/a" });
+    answer(first, c, a.id, "allow_always");
+    await a.promise;
     first.shutdown();
 
     var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
     try {
       await second.startQuery();
-      assert.deepEqual(grantKeys(second), ["Write"], "only the whole-tool grant survives");
-      assert.equal(second.ask("Write", { file_path: "/work/a" }).opened.length, 0, "the legacy grant is honoured");
-      var c = client();
-      second.connect(c.ws);
-      second.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: second.session.localId, key: "Write" });
-      assert.equal(second.ask("Write", { file_path: "/work/a" }).opened.length, 1, "revoked, the next Write prompts");
+      assert.deepEqual(grantKeys(second), ["Write"]);
+      assert.equal(second.ask("Write", { file_path: "/work/other" }).opened.length, 0, "the grant is still in force");
     } finally {
       second.shutdown();
     }
@@ -164,24 +164,11 @@ test("a persisted file-scoped key is dropped on load and a legacy whole-tool Wri
   }
 });
 
-test("a Bash call that cannot be granted narrowly offers no session grant and the answer settles nothing", async function () {
+test("a new session starts with no grants", async function () {
   await withServer(async function (server) {
-    var c = client();
-    server.connect(c.ws);
-    var bare = server.ask("Bash", { command: "ls; " + "x".repeat(400) });
-    var prompt = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === bare.id; })[0];
-    assert.equal(prompt.grantScope, null, "the card is told there is nothing to grant");
-
-    c.inbox.length = 0;
-    answer(server, c, bare.id, "allow_always");
-    await world.flush();
-    assert.deepEqual(server.heldPromptIds(), [bare.id], "still pending");
-    assert.deepEqual(grantKeys(server), [], "nothing was granted");
-    assert.equal(c.inbox.filter(function (m) { return m.type === "prompt_pending"; }).length, 1, "re-offered to the responder");
-
-    answer(server, c, bare.id, "allow");
-    assert.equal((await bare.promise).behavior, "allow", "Allow once still works");
     assert.deepEqual(grantKeys(server), []);
+    assert.equal(server.ask("Bash", { command: "rm -rf /work/x" }).opened.length, 1);
+    assert.equal(server.ask("Write", { file_path: "/work/a" }).opened.length, 1);
   });
 });
 
@@ -203,7 +190,7 @@ var OBSERVED_SHAPES = [
 ];
 
 OBSERVED_SHAPES.forEach(function (shape) {
-  test("persisted " + shape.name + ": still in force, listed as whole-tool, revocable, and the revoke is persisted", async function () {
+  test("persisted " + shape.name + ": in force, listed as whole-tool, revocable, and the revoke is persisted", async function () {
     await withServer(async function (server) {
       var c = client();
       server.connect(c.ws);
@@ -244,7 +231,7 @@ OBSERVED_SHAPES.forEach(function (shape) {
   });
 });
 
-test("a revoked scoped grant survives a daemon restart as revoked, and a held one as held", async function () {
+test("a revoked grant survives a daemon restart as revoked, and a held one as held", async function () {
   var first = await world.createServer();
   var home = first.home;
   var cliSessionId = first.session.cliSessionId;
@@ -255,20 +242,19 @@ test("a revoked scoped grant survives a daemon restart as revoked, and a held on
     var a = first.ask("Bash", { command: "find ." });
     answer(first, c, a.id, "allow_always");
     await a.promise;
-    var b = first.ask("Bash", { command: "git push origin" });
+    var b = first.ask("Write", { file_path: "/work/a" });
     answer(first, c, b.id, "allow_always");
     await b.promise;
-    assert.deepEqual(grantKeys(first), ["Bash=find .", "Bash=git push origin"]);
-    first.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: first.session.localId, key: "Bash=find ." });
+    assert.deepEqual(grantKeys(first), ["Bash", "Write"]);
+    first.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: first.session.localId, key: "Bash" });
     first.shutdown();
 
     var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
     try {
       await second.startQuery();
-      assert.deepEqual(grantKeys(second), ["Bash=git push origin"]);
+      assert.deepEqual(grantKeys(second), ["Write"]);
       assert.equal(second.ask("Bash", { command: "find ." }).opened.length, 1, "the revoked grant stays revoked");
-      assert.equal(second.ask("Bash", { command: "git push origin" }).opened.length, 0, "the held grant is still held");
-      assert.equal(second.ask("Bash", { command: "git push origin --force" }).opened.length, 1, "a longer line still prompts");
+      assert.equal(second.ask("Write", { file_path: "/work/b" }).opened.length, 0, "the held grant is still held");
     } finally {
       second.shutdown();
     }
@@ -281,12 +267,12 @@ test("revoke names a key the session does not hold: nothing changes and the list
   await withServer(async function (server) {
     var c = client();
     server.connect(c.ws);
-    server.session.allowedTools = Object.assign(Object.create(null), { "Bash=find .": true });
+    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true });
     c.inbox.length = 0;
-    ["Bash=rm", "constructor", "__proto__", 7, null, undefined].forEach(function (key) {
+    ["Write", "constructor", "__proto__", 7, null, undefined].forEach(function (key) {
       server.handlers.handleSessionsMessage(c.ws, { type: "revoke_session_grant", sessionId: server.session.localId, key: key });
     });
-    assert.deepEqual(grantKeys(server), ["Bash=find ."]);
+    assert.deepEqual(grantKeys(server), ["Bash"]);
     assert.equal(c.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 6);
   });
 });
@@ -295,7 +281,7 @@ test("a client that may not see the session can neither list nor revoke its gran
   await withServer(async function (server) {
     server.session.ownerId = "u-owner";
     server.session.sessionVisibility = "private";
-    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true, "Bash=find .": true });
+    server.session.allowedTools = Object.assign(Object.create(null), { Bash: true, Write: true });
     var stranger = client();
     stranger.ws._clagenticUser = { id: "u-other" };
     var owner = client();
@@ -312,7 +298,7 @@ test("a client that may not see the session can neither list nor revoke its gran
     assert.equal(listRefusal[0].sessionId, id, "the id the client sent is echoed");
     assert.equal(typeof listRefusal[0].error, "string");
     assert.equal(listRefusal[0].grants, undefined, "no grants are shown");
-    assert.equal(JSON.stringify(listRefusal[0]).indexOf("find"), -1, "nothing about the session is disclosed");
+    assert.equal(JSON.stringify(listRefusal[0]).indexOf("Write"), -1, "nothing about the session is disclosed");
     assert.equal(owner.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0);
     stranger.inbox.length = 0;
     server.handlers.handleSessionsMessage(stranger.ws, { type: "revoke_session_grant", sessionId: id, key: "Bash" });
@@ -320,11 +306,11 @@ test("a client that may not see the session can neither list nor revoke its gran
     assert.equal(refusal.length, 1);
     assert.equal(typeof refusal[0].error, "string");
     assert.equal(refusal[0].grants, undefined, "a refusal carries no grants");
-    assert.deepEqual(grantKeys(server), ["Bash", "Bash=find ."], "nothing was revoked");
+    assert.deepEqual(grantKeys(server), ["Bash", "Write"], "nothing was revoked");
     assert.equal(owner.inbox.filter(function (m) { return m.type === "session_grants"; }).length, 0);
 
     server.handlers.handleSessionsMessage(owner.ws, { type: "revoke_session_grant", sessionId: id, key: "Bash" });
-    assert.deepEqual(grantKeys(server), ["Bash=find ."], "the owner's revoke applies");
+    assert.deepEqual(grantKeys(server), ["Write"], "the owner's revoke applies");
   });
 });
 
@@ -398,7 +384,6 @@ test("prompts from two projects each carry their own project, session title and 
     var bannerB = notificationFor(b, askB.id);
     assert.deepEqual(bannerA.meta.label, cardA.label, "the banner carries the same label as the card");
     assert.deepEqual(bannerB.meta.label, cardB.label);
-    assert.equal(bannerA.meta.grantScope, "Allow only this exact command in this session", "and states the scope");
 
     assert.equal(pushA.sent.length, 1);
     assert.match(pushA.sent[0].body, /^Project: Project Alpha \| Session: DO NOT ANSWER probe\n/, "the push body leads with whose prompt it is");
