@@ -113,24 +113,60 @@ test("every process declares itself a host-scheduled run, whatever turn starts i
   assert.equal(after, undefined, "the daemon's own environment is not changed");
 });
 
-test("a typed turn starts the process, then injected turns and replayed buffered turns each keep their own origin in it", async function () {
-  var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
-  var handle = await adapter.createQuery({ cwd: os.tmpdir() });
-  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1", "the process a typed turn starts accepts a scheduled-trigger origin");
-  handle.pushMessage("typed", undefined, INITIATORS.HUMAN);
-  handle.pushMessage("injected while live", undefined, INITIATORS.TRIGGER);
-  // What startQuery does with messages buffered between turns.
-  handle.pushMessage("buffered injected", undefined, INITIATORS.SCHEDULED);
-  handle.pushMessage("buffered typed", undefined, INITIATORS.HUMAN);
+test("an injected turn buffered while no query is live is replayed into the next query with its own origin", async function () {
+  var realAdapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
+  var adapter = {
+    vendor: "claude",
+    createQuery: realAdapter.createQuery,
+    init: function () { return Promise.resolve({ models: [], skills: [] }); },
+    supportedModels: function () { return Promise.resolve([]); },
+  };
+  var modPath = require.resolve("../lib/sdk-bridge");
+  delete require.cache[modPath];
+  var { createSDKBridge } = require("../lib/sdk-bridge");
+  var sent = [];
+  var sm = {
+    sessions: new Map(), currentModel: null, currentPermissionMode: null, currentEffort: null, currentBetas: [],
+    modelsByVendor: {}, availableVendors: [], installedVendors: [], defaultVendor: "claude",
+    saveSessionFile: function () {}, broadcastSessionList: function () {}, getActiveSession: function () { return null; },
+    setSlashCommandsForVendor: function () {},
+    sendAndRecord: function (s, obj) { sent.push(obj); },
+    sendToSession: function (s, obj) { sent.push(obj); },
+  };
+  var bridge = createSDKBridge({
+    cwd: os.tmpdir(), slug: "initiator-replay", sessionManager: sm,
+    send: function (msg) { sent.push(msg); },
+    adapter: adapter, adapters: { claude: adapter },
+    onProcessingChanged: function () {}, getConfig: null,
+  });
+  var session = {
+    localId: 9001, queryInstance: null, messageQueue: null, abortController: null, isProcessing: false,
+    cliSessionId: null, history: [], blocks: {}, sentToolResults: {}, pendingPermissions: {}, pendingAskUser: {},
+    pendingElicitations: {}, activeTaskToolIds: {}, singleTurn: false, lastActivityAt: Date.now(),
+    _isCountedLive: false, _adapterWorkerState: null, _workerExitPromise: null,
+  };
+  sm.sessions.set(session.localId, session);
+
+  // No query is live, so the injected turn is buffered rather than delivered.
+  bridge.pushMessage(session, "buffered trigger", undefined, INITIATORS.TRIGGER);
+  assert.equal(session.pendingMessages.length, 1);
+  assert.equal(session.queryInstance, null);
+
+  // A typed turn starts the next query and the buffer is replayed into it.
+  await bridge.startQuery(session, "typed", undefined, null, INITIATORS.HUMAN);
   await sleep(50);
-  var origins = lastFakeQuery().messages.map(function (m) { return m.origin; });
-  assert.deepEqual(origins, [
-    { kind: "human" },
-    { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "trigger" },
-    { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "scheduled" },
-    { kind: "human" },
-  ]);
-  handle.close();
+
+  var query = lastFakeQuery();
+  assert.equal(query.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1", "the process the typed turn starts accepts a scheduled-trigger origin");
+  assert.equal(query.messages.length, 2);
+  assert.equal(query.messages[0].message.content[0].text, "typed");
+  assert.deepEqual(query.messages[0].origin, { kind: "human" });
+  assert.equal("client_composed" in query.messages[0], false);
+  assert.equal(query.messages[1].message.content[0].text, "buffered trigger");
+  assert.deepEqual(query.messages[1].origin, { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "trigger" });
+  assert.equal(query.messages[1].client_composed, true);
+  assert.deepEqual(session.pendingMessages, []);
+  if (session.queryInstance) session.queryInstance.close();
 });
 
 // --- Claude adapter, as sent to the OS user's worker ---
