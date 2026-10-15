@@ -177,12 +177,12 @@ test("with no provider configured, the launch options, the child environment and
   }
 });
 
-test("with no provider configured, an inherited identity variable passes through untouched", async function () {
+test("with no provider configured, an inherited identity variable is not passed on: only the console sets it", async function () {
   var before = process.env[IDENTITY_ENV];
   process.env[IDENTITY_ENV] = "/inherited/value";
   try {
     var h = await runSession("none", {}, INITIATORS.HUMAN);
-    assert.equal(h.query.env[IDENTITY_ENV], "/inherited/value");
+    assert.equal(IDENTITY_ENV in h.query.env, false);
     await h.end();
   } finally {
     if (before === undefined) delete process.env[IDENTITY_ENV];
@@ -326,8 +326,10 @@ test("a session that fails to start does not leave its identity directory behind
   var h = makeBridge(cfg, failing);
   var session = makeSession();
   h.sm.sessions.set(session.localId, session);
-  await h.bridge.startQuery(session, "hello", undefined, null, INITIATORS.HUMAN);
+  // A typed turn is never issued an identity, so it could not show a leak.
+  await h.bridge.startQuery(session, "hello", undefined, null, INITIATORS.LOOP);
   assert.equal(session.queryInstance, null);
+  assert.equal(session.identity.provider, "jwks-self", "an identity was issued, so there was a directory to leak");
   await sleep(60);
   var left = fs.existsSync(path.join(dir, "spawn")) ? fs.readdirSync(path.join(dir, "spawn")) : [];
   assert.deepEqual(left, []);
@@ -368,8 +370,9 @@ test("the identity variable is the console's alone: Settings cannot set it, the 
   assert.equal(withDir.KEEP, "1");
   assert.equal(IDENTITY_ENV in turnInitiator.claudeProcessEnv(base, overlay, { dir: null }), false);
   assert.equal(IDENTITY_ENV in turnInitiator.claudeProcessEnv(base, overlay, { dir: "" }), false);
-  assert.equal(turnInitiator.claudeProcessEnv(base, overlay)[IDENTITY_ENV], "/inherited", "without a provider the environment is untouched");
-  assert.equal(turnInitiator.claudeProcessEnv(base, null, INITIATORS.HUMAN)[IDENTITY_ENV], "/inherited", "a non-object third argument is not an identity");
+  assert.equal(IDENTITY_ENV in turnInitiator.claudeProcessEnv(base, overlay), false, "without a provider an inherited value is still not passed on");
+  assert.equal(IDENTITY_ENV in turnInitiator.claudeProcessEnv(base, null, INITIATORS.HUMAN), false, "a non-object third argument is not an identity");
+  assert.equal(turnInitiator.claudeProcessEnv(base, null, INITIATORS.HUMAN).PATH, "/bin", "the rest of the environment is untouched");
 });
 
 // --- Worker path ---
@@ -429,13 +432,17 @@ async function workerEnvFor(workerEnv, queryOptions) {
     var probe = received.find(function (m) { return m.type === "sdk_event" && m.event.call === "env"; });
     return { env: probe.event.env, optionKeys: probe.event.optionKeys };
   } finally {
-    try { child.kill("SIGKILL"); } catch (e) { /* already gone */ }
+    try {
+      child.kill("SIGKILL");
+    } catch (e) {
+      if (e.code !== "ESRCH") throw e;
+    }
     await new Promise(function (resolve) { server.close(resolve); if (connection) connection.destroy(); });
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-test("a real worker puts the identity directory in its Claude process's environment, removes an inherited one when there is none, and leaves it alone without a provider", async function () {
+test("a real worker puts the identity directory in its Claude process's environment and removes an inherited one whether or not there is a provider", async function () {
   var withDir = await workerEnvFor({ [IDENTITY_ENV]: "/inherited" }, { identity: { dir: "/run/issued/cc-1" } });
   assert.equal(withDir.env[IDENTITY_ENV], "/run/issued/cc-1");
   assert.equal(withDir.optionKeys.indexOf("identity"), -1, "the SDK is not handed the identity member");
@@ -444,6 +451,24 @@ test("a real worker puts the identity directory in its Claude process's environm
   assert.equal(IDENTITY_ENV in none.env, false);
 
   var plain = await workerEnvFor({ [IDENTITY_ENV]: "/inherited" }, {});
-  assert.equal(plain.env[IDENTITY_ENV], "/inherited");
+  assert.equal(IDENTITY_ENV in plain.env, false);
   assert.equal(plain.env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID);
+});
+
+// --- A later start without an identity ---
+
+test("a session whose identity was recorded and is later disabled does not keep the stale record, in memory or on disk", async function () {
+  var stale = { provider: "jwks-self", grade: "harness", origin: "loop" };
+  var spellings = ["none", { identity: { provider: "none" } }];
+  for (var i = 0; i < spellings.length; i++) {
+    var h = makeBridge(spellings[i]);
+    var session = makeSession({ identity: stale });
+    h.sm.sessions.set(session.localId, session);
+    await h.bridge.startQuery(session, "hello", undefined, null, INITIATORS.LOOP);
+    await sleep(40);
+    assert.equal("identity" in session, false, "the stale record is gone from the session");
+    assert.deepEqual(h.saves, ["null"], "and the session was saved without it");
+    session.queryInstance.close();
+    await sleep(60);
+  }
 });
