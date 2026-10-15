@@ -106,7 +106,7 @@ test("a Claude query with no Settings variables gets the daemon's environment pl
   assert.equal(none.hasEnvOption, true);
   assert.equal(none.env.PATH, process.env.PATH);
   assert.equal(none.env.CLAUDE_AGENT_SDK_CLIENT_APP, "clagentic-console/" + require("../package.json").version);
-  assert.equal(none.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
+  assert.equal(none.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
   assert.equal(none.env.FROM_SETTINGS, undefined);
   handleNone.close();
   var handleEmpty = await adapter.createQuery({ cwd: os.tmpdir(), runtimeEnv: {} });
@@ -261,22 +261,21 @@ test("a worker query with no Settings variables gets the worker's environment pl
     }, "the environment probe");
     assert.equal(probe.event.env.HOME, worker.dir);
     assert.equal(probe.event.env.CLAUDE_AGENT_SDK_CLIENT_APP, "clagentic-console/" + require("../package.json").version);
-    assert.equal(probe.event.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
+    assert.equal(probe.event.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
   } finally {
     await worker.stop();
   }
 });
 
-test("the worker declares a scheduled run for a scheduled first turn, keeps the initiator off the SDK options, and passes stamped messages through", async function () {
+test("the worker declares a host-scheduled run whatever starts it and passes stamped messages through", async function () {
   var worker = await startWorker();
   try {
-    worker.send({ type: "query_start", prompt: null, options: { cwd: os.tmpdir(), initiator: "scheduled" }, singleTurn: false });
+    worker.send({ type: "query_start", prompt: null, options: { cwd: os.tmpdir() }, singleTurn: false });
     var probe = await worker.next(function (m) {
       return m.type === "sdk_event" && m.event.type === "fake_probe" && m.event.call === "env";
     }, "the environment probe");
     assert.equal(probe.event.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
     assert.equal(probe.event.env.CLAUDE_AGENT_SDK_CLIENT_APP, "clagentic-console/" + require("../package.json").version);
-    assert.equal(probe.event.optionKeys.indexOf("initiator"), -1, "the initiator does not go on to the SDK as an option");
 
     var stamped = { type: "user", message: { role: "user", content: [{ type: "text", text: "hi" }] }, origin: { kind: "auto-continuation" }, client_composed: true };
     worker.send({ type: "push_message", content: stamped });

@@ -67,13 +67,10 @@ test("the Claude process environment keeps the base, then the overlay, then the 
   assert.equal(env.KEEP, "1");
   assert.equal(env.FROM_SETTINGS, "yes");
   assert.equal(env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID, "the product identity is not settable from Settings");
-  assert.equal(env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
-  [INITIATORS.SCHEDULED, INITIATORS.SCHEDULED_NOW, INITIATORS.LOOP, INITIATORS.TRIGGER].forEach(function (i) {
-    assert.equal(turnInitiator.claudeProcessEnv({}, null, i).CLAUDE_CODE_HOST_SCHEDULED_RUN, "1", i);
-  });
-  [INITIATORS.HUMAN, undefined].forEach(function (i) {
-    assert.equal(turnInitiator.claudeProcessEnv({}, null, i).CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined, String(i));
-  });
+  assert.equal(env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
+  assert.equal(turnInitiator.claudeProcessEnv({}, null).CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
+  assert.equal(turnInitiator.claudeProcessEnv({}, { CLAUDE_CODE_HOST_SCHEDULED_RUN: "0" }).CLAUDE_CODE_HOST_SCHEDULED_RUN, "1",
+    "the host declaration is not settable from Settings");
 });
 
 // --- Claude adapter, in process ---
@@ -98,23 +95,42 @@ test("one in-process session carries a different origin on each turn", async fun
   handle.close();
 });
 
-test("a process started for a scheduled turn declares itself a host-scheduled run, one for a typed turn does not", async function () {
+test("every process declares itself a host-scheduled run, whatever turn starts it", async function () {
   var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
-  var scheduled = await adapter.createQuery({ cwd: os.tmpdir(), initiator: INITIATORS.SCHEDULED_NOW });
-  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
-  assert.equal(lastFakeQuery().env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID);
-  scheduled.close();
-  var loop = await adapter.createQuery({ cwd: os.tmpdir(), initiator: INITIATORS.LOOP });
-  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
-  loop.close();
-  var trigger = await adapter.createQuery({ cwd: os.tmpdir(), initiator: INITIATORS.TRIGGER });
-  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1");
-  trigger.close();
-  var typed = await adapter.createQuery({ cwd: os.tmpdir(), initiator: INITIATORS.HUMAN });
-  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined);
-  assert.equal(lastFakeQuery().env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID);
-  assert.equal(process.env.CLAUDE_CODE_HOST_SCHEDULED_RUN, undefined, "the daemon's own environment is not changed");
-  typed.close();
+  // Absent from the daemon's own environment, so what the process sees is ours.
+  var before = process.env.CLAUDE_CODE_HOST_SCHEDULED_RUN;
+  delete process.env.CLAUDE_CODE_HOST_SCHEDULED_RUN;
+  // A stale caller still naming an initiator at start changes nothing.
+  var starts = [{}, { initiator: INITIATORS.HUMAN }, { initiator: INITIATORS.LOOP }, { initiator: INITIATORS.TRIGGER }];
+  for (var i = 0; i < starts.length; i++) {
+    var handle = await adapter.createQuery(Object.assign({ cwd: os.tmpdir() }, starts[i]));
+    assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1", String(i));
+    assert.equal(lastFakeQuery().env.CLAUDE_AGENT_SDK_CLIENT_APP, APP_ID);
+    handle.close();
+  }
+  var after = process.env.CLAUDE_CODE_HOST_SCHEDULED_RUN;
+  if (before !== undefined) process.env.CLAUDE_CODE_HOST_SCHEDULED_RUN = before;
+  assert.equal(after, undefined, "the daemon's own environment is not changed");
+});
+
+test("a typed turn starts the process, then injected turns and replayed buffered turns each keep their own origin in it", async function () {
+  var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
+  var handle = await adapter.createQuery({ cwd: os.tmpdir() });
+  assert.equal(lastFakeQuery().env.CLAUDE_CODE_HOST_SCHEDULED_RUN, "1", "the process a typed turn starts accepts a scheduled-trigger origin");
+  handle.pushMessage("typed", undefined, INITIATORS.HUMAN);
+  handle.pushMessage("injected while live", undefined, INITIATORS.TRIGGER);
+  // What startQuery does with messages buffered between turns.
+  handle.pushMessage("buffered injected", undefined, INITIATORS.SCHEDULED);
+  handle.pushMessage("buffered typed", undefined, INITIATORS.HUMAN);
+  await sleep(50);
+  var origins = lastFakeQuery().messages.map(function (m) { return m.origin; });
+  assert.deepEqual(origins, [
+    { kind: "human" },
+    { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "trigger" },
+    { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "scheduled" },
+    { kind: "human" },
+  ]);
+  handle.close();
 });
 
 // --- Claude adapter, as sent to the OS user's worker ---
@@ -132,16 +148,15 @@ function fakeWorker() {
   };
 }
 
-test("a worker query is told the first turn's initiator and every pushed message arrives stamped", async function () {
+test("a worker query is not told an initiator and every pushed message arrives stamped", async function () {
   var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
   var worker = fakeWorker();
   var handle = await adapter.createQuery({
     cwd: os.tmpdir(),
-    initiator: INITIATORS.SCHEDULED,
     adapterOptions: { CLAUDE: { linuxUser: "alice", _workerState: { worker: worker } } },
   });
   var start = worker.sent.find(function (m) { return m.type === "query_start"; });
-  assert.equal(start.options.initiator, INITIATORS.SCHEDULED);
+  assert.equal("initiator" in start.options, false, "the process environment does not depend on the first turn");
   assert.equal("env" in start.options, false, "the worker builds the environment from its own");
 
   handle.pushMessage("loop turn", undefined, INITIATORS.LOOP);
