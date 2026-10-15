@@ -105,6 +105,25 @@ test("a retraction followed by the same pair stays quiet after the operator clos
   assert.equal(c.toasts().length, 0);
 });
 
+test("a quiet pair retracts a different held notice and shows nothing until the cooldown passes", async function (t) {
+  var c = await client(t);
+  c.diagnostics.addDiagnostic(offer("a1", "b1"));
+  c.closeToast();
+  c.tick(5100);
+  c.diagnostics.addDiagnostic(offer("a1", "b2"));
+  assert.equal(c.toasts().length, 1);
+
+  c.tick(5100);
+  c.diagnostics.addDiagnostic(offer("a1", "b1"));
+  c.tick(300);
+  assert.equal(c.toasts().length, 0, "the obsolete held notice is retracted, nothing new shows");
+
+  c.tick(COOLDOWN);
+  c.diagnostics.addDiagnostic(offer("a1", "b1"));
+  assert.equal(c.toasts().length, 1, "after the cooldown the pair shows once");
+  assert.ok(c.toasts()[0].textContent.indexOf("b1") !== -1);
+});
+
 test("clear-all in the panel clears the notice, and it does not come back inside the cooldown", async function (t) {
   var c = await client(t);
   var panel = new dom.FakeElement("div");
