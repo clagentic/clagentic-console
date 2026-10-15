@@ -10,6 +10,7 @@
 //                         CLAGENTIC_IDENTITY_DIR=<dir>
 //   unreachable.sock      exits 1 as a client does when the socket cannot be dialled
 //   slow.sock             never answers
+//   late.sock             issues a session after 700 ms, if still running
 //   garbage.sock          prints something that is not an assignment
 //   badmode.sock          issues a directory that is not private
 //
@@ -30,9 +31,7 @@ var SCRIPT = [
   "var socket = flag('socket'), definition = flag('definition'), origin = flag('origin') || 'trigger';",
   "var mode = path.basename(socket);",
   "if (mode === 'unreachable.sock') { process.stderr.write('dial unix: no such file or directory\\n'); process.exit(1); }",
-  "if (mode === 'slow.sock') { setTimeout(function () {}, 60000); }",
-  "else if (mode === 'garbage.sock') { process.stdout.write('hello\\n'); }",
-  "else {",
+  "function issue() {",
   "  var root = path.join(base, 'spawn'); fs.mkdirSync(root, { recursive: true });",
   "  var dir = path.join(root, 'gk-' + crypto.randomBytes(8).toString('hex'));",
   "  var dirMode = mode === 'badmode.sock' ? 0o755 : 0o700;",
@@ -45,7 +44,22 @@ var SCRIPT = [
   "  fs.writeFileSync(path.join(dir, 'identity.jwt'), b64({ alg: 'EdDSA', kid: 'k' }) + '.' + b64(claims) + '.sig', { mode: 0o600 });",
   "  process.stdout.write('CLAGENTIC_IDENTITY_DIR=' + dir + '\\n');",
   "}",
+  "if (mode === 'slow.sock') { setTimeout(function () {}, 60000); }",
+  "else if (mode === 'late.sock') { setTimeout(issue, 700); }",
+  "else if (mode === 'garbage.sock') { process.stdout.write('hello\\n'); }",
+  "else { issue(); }",
 ].join("\n");
+
+// A log that was never written means no invocation; anything else (a corrupt
+// line, a permission error) must fail the test that reads it, not pass it.
+function orEmptyWhenMissing(read) {
+  try {
+    return read();
+  } catch (e) {
+    if (e && e.code === "ENOENT") return [];
+    throw e;
+  }
+}
 
 // Installs the script in a fresh directory and returns where it is.
 function installFakeIssuer() {
@@ -57,27 +71,21 @@ function installFakeIssuer() {
     binary: binary,
     // The arguments of each invocation, in order.
     invocations: function () {
-      try {
+      return orEmptyWhenMissing(function () {
         return fs.readFileSync(path.join(dir, "argv.log"), "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
-      } catch (e) {
-        return [];
-      }
+      });
     },
     // The value of CLAGENTIC_IDENTITY_DIR in each invocation's environment.
     inheritedDirs: function () {
-      try {
+      return orEmptyWhenMissing(function () {
         return fs.readFileSync(path.join(dir, "env.log"), "utf8").trim().split("\n");
-      } catch (e) {
-        return [];
-      }
+      });
     },
     // The delivery directories it has issued that still exist.
     issued: function () {
-      try {
+      return orEmptyWhenMissing(function () {
         return fs.readdirSync(path.join(dir, "spawn")).map(function (n) { return path.join(dir, "spawn", n); });
-      } catch (e) {
-        return [];
-      }
+      });
     },
     cleanup: function () { fs.rmSync(dir, { recursive: true, force: true }); },
   };

@@ -165,7 +165,7 @@ test("with no provider configured, the launch options, the child environment and
       assert.deepEqual(run.options, runs[0].options, "the launch options do not depend on how none is spelled");
       assert.equal(run.sent, runs[0].sent);
       assert.deepEqual(run.session, runs[0].session);
-      assert.equal(run.saves.indexOf('{"provider"'), -1);
+      assert.equal(run.saves.some(function (s) { return s.indexOf('{"provider"') !== -1; }), false, "no saved session record carries an identity record");
     });
     assert.equal(fs.existsSync(CONSOLE_IDENTITY_DIR), false, "no identity directory, key or key set was created");
   } finally {
