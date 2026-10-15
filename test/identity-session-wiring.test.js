@@ -233,7 +233,7 @@ test("class 1: a session with a persona and a non-typed origin gets the issuer's
     assert.equal(h.sent.some(function (m) { return m.source === "identity"; }), false, "no notice when an identity was issued");
 
     await h.end();
-    assert.deepEqual(issuer.issued(), [], "the directory is removed when the session ends");
+    assert.deepEqual(issuer.issued(), issued, "the issuer's directory is the issuer's: the console leaves it for the issuer's reaper");
   } finally {
     if (before !== undefined) process.env[IDENTITY_ENV] = before;
     issuer.cleanup();

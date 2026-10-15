@@ -179,26 +179,26 @@ test("removing a delivery directory touches only what was checked", function () 
   var root = path.join(scratch(), "spawn");
   var uid = process.getuid();
   var mine = delivery.allocateDir(root);
-  assert.equal(delivery.removeDelivery(mine, uid, true), true);
+  assert.equal(delivery.removeDelivery(mine, uid), true);
   assert.equal(fs.existsSync(mine), false);
 
-  // A provider's directory goes only while it still holds an assertion.
+  // A provider's directory is never the console's to remove.
   var theirs = path.join(scratch(), "issued");
   fs.mkdirSync(theirs, { mode: 0o700 });
-  assert.equal(delivery.removeDelivery(theirs, uid, false), false);
   fs.writeFileSync(path.join(theirs, "identity.jwt"), "a.b.c");
-  assert.equal(delivery.removeDelivery(theirs, uid, false), true);
+  assert.equal(delivery.removeDelivery(theirs, uid), false);
+  assert.equal(fs.existsSync(path.join(theirs, "identity.jwt")), true);
 
   // Never the wrong owner, a link, a relative path, or a top-level directory.
   var other = delivery.allocateDir(root);
-  assert.equal(delivery.removeDelivery(other, uid + 1, true), false);
-  assert.equal(delivery.removeDelivery(path.join(root, "nonexistent"), uid, true), false);
-  assert.equal(delivery.removeDelivery("relative", uid, true), false);
-  assert.equal(delivery.removeDelivery("/tmp", uid, true), false);
+  assert.equal(delivery.removeDelivery(other, uid + 1), false);
+  assert.equal(delivery.removeDelivery(path.join(root, "nonexistent"), uid), false);
+  assert.equal(delivery.removeDelivery("relative", uid), false);
+  assert.equal(delivery.removeDelivery("/tmp", uid), false);
   assert.equal(fs.existsSync(other), true);
   var link = path.join(root, "link");
   fs.symlinkSync(other, link);
-  assert.equal(delivery.removeDelivery(link, uid, true), false);
+  assert.equal(delivery.removeDelivery(link, uid), false);
   assert.equal(fs.existsSync(other), true);
 });
 
@@ -337,7 +337,11 @@ test("a session that ends removes its directory, and ending twice is harmless", 
 // owns; the console changes ownership, so this runs only where it may.
 test("a session of another OS user gets a directory that user owns, and it is removed at the end", { skip: process.getuid() !== 0 }, async function () {
   var OTHER = { uid: 65534, gid: 65534 };
-  var cfgDir = scratch();
+  // The other user must be able to reach its directory, which the per-spawn scratch
+  // area (under the console user's home) does not allow.
+  var cfgDir = fs.mkdtempSync(path.join("/tmp", "identity-other-"));
+  fs.chmodSync(cfgDir, 0o755);
+  fs.mkdirSync(path.join(cfgDir, "identity"), { mode: 0o711 });
   var identity = identityFor({ provider: "jwks-self" }, cfgDir);
   var lease = await identity.begin({ definition: "builder-agent", initiator: INITIATORS.HUMAN, rt: "claude-code", owner: OTHER });
   assert.ok(lease.dir, lease.notice);
@@ -350,6 +354,7 @@ test("a session of another OS user gets a directory that user owns, and it is re
   lease.release();
   await new Promise(function (resolve) { setTimeout(resolve, 50); });
   assert.equal(fs.existsSync(lease.dir), false);
+  fs.rmSync(cfgDir, { recursive: true, force: true });
 });
 
 // --- Unavailable ---
@@ -394,7 +399,8 @@ test("the issuer's client is run directly with the documented arguments, and its
     assert.equal(claims.rt.id, "claude-code");
     lease.release();
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
-    assert.deepEqual(issuer.issued(), [], "the session's directory is removed when it ends");
+    assert.deepEqual(issuer.issued(), [lease.dir], "the issuer's directory is the issuer's: the console leaves it for the issuer's reaper");
+    assert.equal(fs.existsSync(path.join(lease.dir, "identity.jwt")), true);
   } finally {
     issuer.cleanup();
   }

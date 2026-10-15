@@ -131,23 +131,37 @@ test("lease issued, directory from ctx.allocateDir: lease.release removes it at 
   assert.equal(s.releases()[0].released, lease.dir);
 });
 
-test("lease issued, provider made its own directory: only identity.jwt and tmp are removed from it", async function () {
+function ownDirContent(dir) {
+  return fs.readdirSync(dir).sort();
+}
+
+test("lease issued, provider made its own directory: the console removes nothing in it, and the provider is released once", async function () {
   var s = setup({ own: true });
   var lease = await s.identity.begin(REQUEST);
   assert.ok(lease.dir, lease.notice);
   assert.equal(path.dirname(lease.dir), s.ownRoot);
   lease.release();
-  assert.deepEqual(fs.readdirSync(lease.dir), ["keep.txt"], "the provider's other content is untouched");
+  lease.release();
+  assert.deepEqual(ownDirContent(lease.dir), ["identity.jwt", "keep.txt", "tmp"], "the issuer's directory is untouched");
   await pause(100);
-  assert.equal(s.releases().length, 1);
+  assert.equal(s.releases().length, 1, "release ran at most once");
 });
 
-test("lease issued, provider made its own directory with nothing else in it: the emptied directory goes too", async function () {
+test("a symlink swapped in for the provider's directory causes no removal anywhere", async function () {
   var s = setup({ own: true });
   var lease = await s.identity.begin(REQUEST);
-  fs.rmSync(path.join(lease.dir, "keep.txt"));
+  var victim = path.join(scratch(), "victim");
+  fs.mkdirSync(path.join(victim, "tmp"), { recursive: true });
+  fs.writeFileSync(path.join(victim, "identity.jwt"), "x");
+  fs.writeFileSync(path.join(victim, "tmp", "precious"), "x");
+  var moved = lease.dir + ".moved";
+  fs.renameSync(lease.dir, moved);
+  fs.symlinkSync(victim, lease.dir);
   lease.release();
-  assert.equal(fs.existsSync(lease.dir), false);
+  assert.deepEqual(ownDirContent(victim), ["identity.jwt", "tmp"]);
+  assert.deepEqual(fs.readdirSync(path.join(victim, "tmp")), ["precious"]);
+  assert.deepEqual(ownDirContent(moved), ["identity.jwt", "keep.txt", "tmp"]);
+  assert.equal(fs.lstatSync(lease.dir).isSymbolicLink(), true);
 });
 
 test("lease issued, release hangs: removal does not wait for it, it is called once, and the hang only produces a warning", async function () {
@@ -205,13 +219,13 @@ test("refused session from a ctx-allocated directory: removed, and the provider 
   assert.equal(s.releases().length, 1, "a refused session was yielded, so the provider is told it ended");
 });
 
-test("refused session from the provider's own directory: contract entries removed, its other content kept, provider released once", async function () {
+test("refused session from the provider's own directory: the console leaves it whole, provider released once", async function () {
   var s = setup({ own: true, claim: "human" });
   var lease = await s.identity.begin(REQUEST);
   assert.equal(lease.record.unavailable, "origin_mismatch");
   var own = fs.readdirSync(s.ownRoot).map(function (n) { return path.join(s.ownRoot, n); });
   assert.equal(own.length, 1);
-  assert.deepEqual(fs.readdirSync(own[0]), ["keep.txt"]);
+  assert.deepEqual(ownDirContent(own[0]), ["identity.jwt", "keep.txt", "tmp"]);
   await pause(100);
   assert.equal(s.releases().length, 1);
 });
@@ -239,14 +253,14 @@ test("late success from a ctx-allocated directory: nothing remains and the provi
   assert.equal(s.releases().length, 1);
 });
 
-test("late success from the provider's own directory: contract entries removed, its content kept, released once", async function () {
+test("late success from the provider's own directory: the console leaves it whole, released once", async function () {
   var s = setup({ own: true, waitMs: 400 });
   var lease = await s.identity.begin(REQUEST);
   assert.equal(lease.dir, null);
   await pause(700);
   var own = fs.readdirSync(s.ownRoot).map(function (n) { return path.join(s.ownRoot, n); });
   assert.equal(own.length, 1);
-  assert.deepEqual(fs.readdirSync(own[0]), ["keep.txt"]);
+  assert.deepEqual(ownDirContent(own[0]), ["identity.jwt", "keep.txt", "tmp"]);
   assert.equal(s.releases().length, 1);
 });
 
@@ -393,6 +407,112 @@ test("a root for the console's own sessions is left as it is", function () {
     delivery.allocateDir(root, { uid: process.getuid(), gid: process.getgid() });
     assert.equal(fs.statSync(root).mode & 0o777, 0o700);
   });
+});
+
+// --- A console-created directory chowned to another user is never walked by the console ---
+
+var IS_ROOT = typeof process.getuid === "function" && process.getuid() === 0;
+var CHOWNED = { uid: 54321, gid: 54321 };
+
+// Records every recursive removal the console's own process attempts.
+function spyRecursiveRemoval() {
+  var real = fs.rmSync;
+  var calls = [];
+  fs.rmSync = function (target, opts) {
+    if (opts && opts.recursive) calls.push(String(target));
+    return real.apply(fs, arguments);
+  };
+  return { calls: calls, restore: function () { fs.rmSync = real; } };
+}
+
+var rmUnspied = fs.rmSync;
+
+// Stands in for the child that runs as the directory's owner (its removals are not
+// the console's, so they bypass the spy).
+function childSpawner(log, empty) {
+  return function (bin, argv, opts) {
+    log.push({ dir: argv[argv.length - 1], uid: opts.uid, gid: opts.gid });
+    if (empty) {
+      fs.readdirSync(argv[argv.length - 1]).forEach(function (n) {
+        rmUnspied.call(fs, path.join(argv[argv.length - 1], n), { recursive: true, force: true });
+      });
+    }
+    return { status: 0 };
+  };
+}
+
+test("a console-created directory chowned to another user is emptied by a child as that user, and the console only rmdirs it", { skip: !IS_ROOT }, function () {
+  var root = path.join(scratch(), "spawn");
+  var log = [];
+  var dir = delivery.allocateDir(root, CHOWNED, childSpawner(log, true));
+  fs.writeFileSync(path.join(dir, "tmp", "planted"), "x");
+  var spy = spyRecursiveRemoval();
+  try {
+    assert.equal(delivery.removeDelivery(dir, CHOWNED.uid, childSpawner(log, true)), true);
+  } finally {
+    spy.restore();
+  }
+  assert.equal(fs.existsSync(dir), false);
+  assert.deepEqual(log.map(function (c) { return [c.uid, c.gid]; }), [[CHOWNED.uid, CHOWNED.gid]]);
+  assert.deepEqual(spy.calls.filter(function (c) { return c.indexOf(dir) === 0; }), [], "no recursive removal by the console on the chowned tree");
+});
+
+test("when the child cannot empty a chowned directory, the console leaves it and does not recurse", { skip: !IS_ROOT }, function () {
+  var root = path.join(scratch(), "spawn");
+  var dir = delivery.allocateDir(root, CHOWNED, childSpawner([], true));
+  var spy = spyRecursiveRemoval();
+  try {
+    assert.equal(delivery.removeDelivery(dir, CHOWNED.uid, function () { return { status: 1 }; }), false);
+  } finally {
+    spy.restore();
+  }
+  assert.equal(fs.existsSync(path.join(dir, "tmp")), true);
+  assert.deepEqual(spy.calls, []);
+});
+
+test("a stale chowned directory in the root is swept through the child, never recursively by the console", { skip: !IS_ROOT }, function () {
+  var root = path.join(scratch(), "spawn");
+  fs.mkdirSync(root, { mode: 0o711 });
+  var stale = path.join(root, "cc-" + "a".repeat(32));
+  fs.mkdirSync(path.join(stale, "tmp"), { recursive: true });
+  fs.chownSync(stale, CHOWNED.uid, CHOWNED.gid);
+  var old = new Date(Date.now() - 48 * 3600 * 1000);
+  fs.utimesSync(stale, old, old);
+  var log = [];
+  var spy = spyRecursiveRemoval();
+  var fresh;
+  try {
+    fresh = delivery.allocateDir(root, null, childSpawner(log, true));
+  } finally {
+    spy.restore();
+  }
+  assert.equal(fs.existsSync(stale), false);
+  assert.equal(log.length, 1);
+  assert.equal(log[0].uid, CHOWNED.uid);
+  assert.deepEqual(spy.calls.filter(function (c) { return c.indexOf(stale) === 0; }), []);
+  assert.equal(fs.existsSync(fresh), true);
+});
+
+test("the owner being the console user keeps the whole removal and starts no child", function () {
+  var root = path.join(scratch(), "spawn");
+  var log = [];
+  var dir = delivery.allocateDir(root, null, childSpawner(log, true));
+  assert.equal(delivery.removeDelivery(dir, process.getuid(), childSpawner(log, true)), true);
+  assert.equal(fs.existsSync(dir), false);
+  assert.deepEqual(log, []);
+});
+
+test("a directory the console did not create is never removed, whatever its name or owner", function () {
+  var base = scratch();
+  var foreign = path.join(base, "own-dir");
+  fs.mkdirSync(path.join(foreign, "tmp"), { recursive: true });
+  fs.writeFileSync(path.join(foreign, "identity.jwt"), "x");
+  assert.equal(delivery.removeDelivery(foreign, process.getuid()), false);
+  var named = path.join(base, "cc-" + "b".repeat(32));
+  fs.mkdirSync(named);
+  fs.symlinkSync(foreign, path.join(base, "cc-" + "c".repeat(32)));
+  assert.equal(delivery.removeDelivery(path.join(base, "cc-" + "c".repeat(32)), process.getuid()), false);
+  assert.deepEqual(ownDirContent(foreign), ["identity.jwt", "tmp"]);
 });
 
 // --- Delivery advisories ---
