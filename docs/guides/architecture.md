@@ -766,6 +766,24 @@ detector:**
    connects is sent the held offer, or an explicit `diagnostic_retract` when
    none stands (`onGetBuildUpdateDiagnostic`). The offer carries no session
    content, because it goes to every client.
+
+   The offer is an ordinary diagnostic: it is listed in the Diagnostics panel,
+   cleared by its clear-all, and toasted in the shared
+   `#diagnostic-toast-container` stack with the other toasts. Because the
+   daemon replays it to every connection (each project connection of each tab,
+   and each reconnect), the client decides what an arrival does
+   (`lib/public/modules/build-notice-gate.js`, called from `addDiagnostic` in
+   `lib/public/modules/diagnostics.js`). The notice is identified by its
+   running:installed build pair. An identical arrival never adds a second
+   entry or toast; a different pair replaces the held notice. Once the operator
+   closes the toast the same pair gets no toast, and once they dismiss the
+   panel entry or clear all it does not return, until the cooldown has passed
+   (default one hour; the daemon sends it as `noticeCooldownMs`, set by
+   `CLAGENTIC_CONSOLE_BUILD_NOTICE_COOLDOWN_MS`). A server retraction removes
+   the entry but not the operator's closure, so a re-shown notice for the same
+   pair stays quiet. Each browser tab keeps its own state. The restart
+   confirmation (`confirm_build_update_restart`) is a separate diagnostic and
+   is not gated.
 4. **A restart takes two operator clicks** (`lib/build-update-restart.js`,
    `restart_for_build_update` in `lib/project-sessions.js`, admin only). The
    first click sends `restart_for_build_update` with no token and gets back an
