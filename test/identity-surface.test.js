@@ -333,28 +333,44 @@ test("a session that ends removes its directory, and ending twice is harmless", 
   assert.deepEqual(entries(spawnRoot), []);
 });
 
-// A session of another OS user (per-user isolation) needs a directory that user
-// owns; the console changes ownership, so this runs only where it may.
-test("a session of another OS user gets a directory that user owns, and it is removed at the end", { skip: process.getuid() !== 0 }, async function () {
-  var OTHER = { uid: 65534, gid: 65534 };
-  // The other user must be able to reach its directory, which the per-spawn scratch
-  // area (under the console user's home) does not allow.
-  var cfgDir = fs.mkdtempSync(path.join("/tmp", "identity-other-"));
-  fs.chmodSync(cfgDir, 0o755);
-  fs.mkdirSync(path.join(cfgDir, "identity"), { mode: 0o711 });
-  var identity = identityFor({ provider: "jwks-self" }, cfgDir);
-  var lease = await identity.begin({ definition: "builder-agent", initiator: INITIATORS.HUMAN, rt: "claude-code", owner: OTHER });
-  assert.ok(lease.dir, lease.notice);
-  [lease.dir, path.join(lease.dir, "tmp"), path.join(lease.dir, "identity.jwt")].forEach(function (p) {
-    assert.equal(fs.lstatSync(p).uid, OTHER.uid, p);
+// The console delivers identity only to a session running as its own user. A
+// session of another OS user is answered owner_unsupported by every provider
+// class before any provider is asked, and nothing is allocated for it.
+test("a session of another OS user gets no directory, no provider call and owner_unsupported, for each provider class", async function () {
+  var OTHER = { uid: process.getuid() + 1, gid: process.getgid() };
+  var issuer = installFakeIssuer();
+  try {
+    var cases = [
+      ["jwks-self", { provider: "jwks-self" }],
+      ["module", { provider_module: writeModule(MODULE_SIGNER) }],
+      ["gatekeeper", gatekeeperConfig(issuer, "issuer.sock")],
+    ];
+    for (var i = 0; i < cases.length; i++) {
+      var cfgDir = scratch();
+      var lease = await identityFor(cases[i][1], cfgDir).begin({
+        definition: "builder-agent", initiator: INITIATORS.LOOP, rt: "claude-code", owner: OTHER,
+      });
+      var label = cases[i][0];
+      assert.equal(lease.dir, null, label + ": no CLAGENTIC_IDENTITY_DIR");
+      assert.deepEqual(lease.record, { provider: "declared", grade: null, origin: "loop", unavailable: "owner_unsupported" }, label);
+      assert.match(lease.notice, /could not obtain an identity/, label + ": the usual notice shows");
+      assert.deepEqual(entries(path.join(cfgDir, "identity", "spawn")), [], label + ": nothing under the spawn root");
+      assert.equal(fs.existsSync(path.join(cfgDir, "identity")), false, label + ": no key, root or file was made");
+    }
+    assert.deepEqual(issuer.invocations(), [], "the issuer's client was never run");
+  } finally {
+    issuer.cleanup();
+  }
+});
+
+test("a session whose owner is the console's own user is delivered to as before", async function () {
+  var own = { uid: process.getuid(), gid: process.getgid() };
+  var lease = await identityFor({ provider: "jwks-self" }, scratch()).begin({
+    definition: null, initiator: INITIATORS.LOOP, rt: "claude-code", owner: own,
   });
-  assert.equal(fs.lstatSync(lease.dir).mode & 0o777, 0o700);
-  assert.equal(delivery.inspect(lease.dir, OTHER.uid).grade, "harness");
-  assert.throws(function () { delivery.inspect(lease.dir, process.getuid()); }, /not private to the session's user/);
+  assert.ok(lease.dir, lease.notice);
+  assert.equal(fs.lstatSync(lease.dir).uid, process.getuid());
   lease.release();
-  await new Promise(function (resolve) { setTimeout(resolve, 50); });
-  assert.equal(fs.existsSync(lease.dir), false);
-  fs.rmSync(cfgDir, { recursive: true, force: true });
 });
 
 // --- Unavailable ---

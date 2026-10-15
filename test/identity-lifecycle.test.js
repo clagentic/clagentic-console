@@ -279,7 +279,7 @@ test("the owner settles once: a second end releases nothing more, and nothing ca
   var released = [];
   var holder = require("../lib/identity/holder").createHolder({
     provider: { release: function (info) { released.push(info.dir); } },
-    spawnRoot: path.join(base, "spawn"), owner: null, ownerUid: process.getuid(), warn: function () {},
+    spawnRoot: path.join(base, "spawn"), warn: function () {},
   });
   var dir = holder.allocateDir();
   assert.equal(fs.existsSync(dir), true);
@@ -355,151 +355,38 @@ test("no module of the identity surface tests a value against a contract pattern
   assert.equal(contract.matches(contract.ROLE_PATTERN, null), false);
 });
 
-// --- The spawn root is traversable by a session of another user ---
+// --- The spawn root and the console's own directories ---
 
-function withUmask(mask, fn) {
-  var before = process.umask(mask);
+test("the spawn root stays console-owned with no group or other access, whatever the umask", function () {
+  var before = process.umask(0o000);
   try {
-    return fn();
+    var root = path.join(scratch(), "spawn");
+    var dir = delivery.allocateDir(root);
+    assert.equal(fs.statSync(root).mode & 0o077, 0, "no group or other access to the root");
+    assert.equal(fs.statSync(root).uid, process.getuid());
+    assert.equal(fs.statSync(dir).uid, process.getuid());
+    assert.equal(delivery.removeDelivery(dir, process.getuid()), true);
+    assert.equal(fs.existsSync(dir), false, "the directory goes whole");
   } finally {
     process.umask(before);
   }
-}
-
-var OTHER_OWNER = { uid: process.getuid() + 1, gid: process.getgid() };
-
-// Creating the directory for another user needs the right to change its owner;
-// the root's mode is set before that step, which is what is judged.
-function allocateForOther(root) {
-  try {
-    return delivery.allocateDir(root, OTHER_OWNER);
-  } catch (e) {
-    if (e.identityCode !== "spawn_dir_failed") throw e;
-    return null;
-  }
-}
-
-test("a pre-existing 0700 root gets other-execute when the session belongs to another user", function () {
-  withUmask(0o077, function () {
-    var root = path.join(scratch(), "spawn");
-    fs.mkdirSync(root, { mode: 0o700 });
-    assert.equal(fs.statSync(root).mode & 0o777, 0o700);
-    allocateForOther(root);
-    assert.equal(fs.statSync(root).mode & 0o001, 0o001, "the session's user can traverse the root");
-    assert.equal(fs.statSync(root).mode & 0o022, 0, "and nobody gained write");
-    assert.equal(fs.statSync(root).mode & 0o044, 0, "and nobody gained read");
-  });
 });
-
-test("a root created under a restrictive umask is traversable by another user's session", function () {
-  withUmask(0o077, function () {
-    var root = path.join(scratch(), "spawn");
-    allocateForOther(root);
-    assert.equal(fs.statSync(root).mode & 0o001, 0o001);
-  });
-});
-
-test("a root for the console's own sessions is left as it is", function () {
-  withUmask(0o077, function () {
-    var root = path.join(scratch(), "spawn");
-    delivery.allocateDir(root);
-    assert.equal(fs.statSync(root).mode & 0o777, 0o700);
-    delivery.allocateDir(root, { uid: process.getuid(), gid: process.getgid() });
-    assert.equal(fs.statSync(root).mode & 0o777, 0o700);
-  });
-});
-
-// --- A console-created directory chowned to another user is never walked by the console ---
 
 var IS_ROOT = typeof process.getuid === "function" && process.getuid() === 0;
-var CHOWNED = { uid: 54321, gid: 54321 };
 
-// Records every recursive removal the console's own process attempts.
-function spyRecursiveRemoval() {
-  var real = fs.rmSync;
-  var calls = [];
-  fs.rmSync = function (target, opts) {
-    if (opts && opts.recursive) calls.push(String(target));
-    return real.apply(fs, arguments);
-  };
-  return { calls: calls, restore: function () { fs.rmSync = real; } };
-}
-
-var rmUnspied = fs.rmSync;
-
-// Stands in for the child that runs as the directory's owner (its removals are not
-// the console's, so they bypass the spy).
-function childSpawner(log, empty) {
-  return function (bin, argv, opts) {
-    log.push({ dir: argv[argv.length - 1], uid: opts.uid, gid: opts.gid });
-    if (empty) {
-      fs.readdirSync(argv[argv.length - 1]).forEach(function (n) {
-        rmUnspied.call(fs, path.join(argv[argv.length - 1], n), { recursive: true, force: true });
-      });
-    }
-    return { status: 0 };
-  };
-}
-
-test("a console-created directory chowned to another user is emptied by a child as that user, and the console only rmdirs it", { skip: !IS_ROOT }, function () {
+test("a stale directory under the root that the console does not own is neither swept nor entered", { skip: !IS_ROOT }, function () {
   var root = path.join(scratch(), "spawn");
-  var log = [];
-  var dir = delivery.allocateDir(root, CHOWNED, childSpawner(log, true));
-  fs.writeFileSync(path.join(dir, "tmp", "planted"), "x");
-  var spy = spyRecursiveRemoval();
-  try {
-    assert.equal(delivery.removeDelivery(dir, CHOWNED.uid, childSpawner(log, true)), true);
-  } finally {
-    spy.restore();
-  }
-  assert.equal(fs.existsSync(dir), false);
-  assert.deepEqual(log.map(function (c) { return [c.uid, c.gid]; }), [[CHOWNED.uid, CHOWNED.gid]]);
-  assert.deepEqual(spy.calls.filter(function (c) { return c.indexOf(dir) === 0; }), [], "no recursive removal by the console on the chowned tree");
-});
-
-test("when the child cannot empty a chowned directory, the console leaves it and does not recurse", { skip: !IS_ROOT }, function () {
-  var root = path.join(scratch(), "spawn");
-  var dir = delivery.allocateDir(root, CHOWNED, childSpawner([], true));
-  var spy = spyRecursiveRemoval();
-  try {
-    assert.equal(delivery.removeDelivery(dir, CHOWNED.uid, function () { return { status: 1 }; }), false);
-  } finally {
-    spy.restore();
-  }
-  assert.equal(fs.existsSync(path.join(dir, "tmp")), true);
-  assert.deepEqual(spy.calls, []);
-});
-
-test("a stale chowned directory in the root is swept through the child, never recursively by the console", { skip: !IS_ROOT }, function () {
-  var root = path.join(scratch(), "spawn");
-  fs.mkdirSync(root, { mode: 0o711 });
-  var stale = path.join(root, "cc-" + "a".repeat(32));
-  fs.mkdirSync(path.join(stale, "tmp"), { recursive: true });
-  fs.chownSync(stale, CHOWNED.uid, CHOWNED.gid);
+  fs.mkdirSync(root, { mode: 0o700 });
+  var foreign = path.join(root, "cc-" + "a".repeat(32));
+  fs.mkdirSync(path.join(foreign, "tmp"), { recursive: true });
+  fs.chownSync(foreign, 54321, 54321);
   var old = new Date(Date.now() - 48 * 3600 * 1000);
-  fs.utimesSync(stale, old, old);
-  var log = [];
-  var spy = spyRecursiveRemoval();
-  var fresh;
-  try {
-    fresh = delivery.allocateDir(root, null, childSpawner(log, true));
-  } finally {
-    spy.restore();
-  }
-  assert.equal(fs.existsSync(stale), false);
-  assert.equal(log.length, 1);
-  assert.equal(log[0].uid, CHOWNED.uid);
-  assert.deepEqual(spy.calls.filter(function (c) { return c.indexOf(stale) === 0; }), []);
+  fs.utimesSync(foreign, old, old);
+  var fresh = delivery.allocateDir(root);
+  assert.equal(fs.existsSync(path.join(foreign, "tmp")), true);
+  assert.equal(delivery.removeDelivery(foreign, 54321), false);
+  assert.equal(fs.existsSync(path.join(foreign, "tmp")), true);
   assert.equal(fs.existsSync(fresh), true);
-});
-
-test("the owner being the console user keeps the whole removal and starts no child", function () {
-  var root = path.join(scratch(), "spawn");
-  var log = [];
-  var dir = delivery.allocateDir(root, null, childSpawner(log, true));
-  assert.equal(delivery.removeDelivery(dir, process.getuid(), childSpawner(log, true)), true);
-  assert.equal(fs.existsSync(dir), false);
-  assert.deepEqual(log, []);
 });
 
 test("a directory the console did not create is never removed, whatever its name or owner", function () {
