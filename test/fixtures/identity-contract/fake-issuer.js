@@ -9,7 +9,6 @@
 //                         identity.jwt whose claims echo the arguments, prints
 //                         CLAGENTIC_IDENTITY_DIR=<dir>
 //   unreachable.sock      exits 1 as a client does when the socket cannot be dialled
-//   refuse-human.sock    exits 1 for --origin human, as the process adapter does
 //   slow.sock             never answers
 //   garbage.sock          prints something that is not an assignment
 //   badmode.sock          issues a directory that is not private
@@ -31,7 +30,6 @@ var SCRIPT = [
   "var socket = flag('socket'), definition = flag('definition'), origin = flag('origin') || 'trigger';",
   "var mode = path.basename(socket);",
   "if (mode === 'unreachable.sock') { process.stderr.write('dial unix: no such file or directory\\n'); process.exit(1); }",
-  "if (mode === 'refuse-human.sock' && origin === 'human') { process.stderr.write('origin human is not issued\\n'); process.exit(1); }",
   "if (mode === 'slow.sock') { setTimeout(function () {}, 60000); }",
   "else if (mode === 'garbage.sock') { process.stdout.write('hello\\n'); }",
   "else {",

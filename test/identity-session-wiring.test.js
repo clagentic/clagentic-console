@@ -188,13 +188,32 @@ test("with no provider configured, an inherited identity variable passes through
 
 // --- Class 1 and class 2 through the bridge ---
 
-test("class 1: a typed session with a persona gets the issuer's directory in its environment and the record says gatekeeper", async function () {
+test("class 1: a typed session gets no assertion, no identity variable and no notice, and the record says declared with the reason", async function () {
   var dir = scratch();
   var issuer = installFakeIssuer();
   var before = process.env[IDENTITY_ENV];
   delete process.env[IDENTITY_ENV];
   try {
     var h = await runSession(gatekeeperConfig(dir, issuer, "issuer.sock"), { agentName: "builder-agent" }, INITIATORS.HUMAN);
+    assert.deepEqual(h.query.env, plainEnv(), "the child environment is the plain one");
+    assert.equal(IDENTITY_ENV in h.query.env, false);
+    assert.deepEqual(issuer.invocations(), [], "the issuer's client was never run");
+    assert.deepEqual(h.session.identity, { provider: "declared", grade: null, origin: "human", unavailable: "origin_human_not_issued" });
+    assert.equal(h.sent.some(function (m) { return m.source === "identity"; }), false, "no notice for an expected absence");
+    await h.end();
+  } finally {
+    if (before !== undefined) process.env[IDENTITY_ENV] = before;
+    issuer.cleanup();
+  }
+});
+
+test("class 1: a session with a persona and a non-typed origin gets the issuer's directory in its environment and the record says gatekeeper", async function () {
+  var dir = scratch();
+  var issuer = installFakeIssuer();
+  var before = process.env[IDENTITY_ENV];
+  delete process.env[IDENTITY_ENV];
+  try {
+    var h = await runSession(gatekeeperConfig(dir, issuer, "issuer.sock"), { agentName: "builder-agent" }, INITIATORS.LOOP);
     var issued = issuer.issued();
     assert.equal(issued.length, 1);
     var expected = plainEnv();
@@ -203,9 +222,9 @@ test("class 1: a typed session with a persona gets the issuer's directory in its
 
     var claims = delivery.decodeClaims(fs.readFileSync(path.join(issued[0], "identity.jwt"), "utf8"));
     assert.equal(claims.act.sub, "agent:builder-agent");
-    assert.equal(claims.origin, "human");
+    assert.equal(claims.origin, "loop");
     assert.equal(claims.rt.id, "claude-code");
-    assert.deepEqual(h.session.identity, { provider: "gatekeeper", grade: "workload", origin: "human" });
+    assert.deepEqual(h.session.identity, { provider: "gatekeeper", grade: "workload", origin: "loop" });
     assert.deepEqual(JSON.parse(h.saves[h.saves.length - 1]), h.session.identity, "the record was saved");
     assert.equal(h.sent.some(function (m) { return m.source === "identity"; }), false, "no notice when an identity was issued");
 
@@ -244,13 +263,13 @@ test("class 1: an issuer that cannot be reached still lets the session start, wi
     var h = makeBridge(gatekeeperConfig(dir, issuer, "unreachable.sock"));
     var session = makeSession({ agentName: "builder-agent" });
     h.sm.sessions.set(session.localId, session);
-    await h.bridge.startQuery(session, "hello", undefined, null, INITIATORS.HUMAN);
+    await h.bridge.startQuery(session, "hello", undefined, null, INITIATORS.LOOP);
     await sleep(40);
 
     var query = lastFakeQuery();
     assert.equal(query.messages.length, 1, "the turn was delivered: the session started");
     assert.equal(IDENTITY_ENV in query.env, false, "no directory, and not the inherited one either");
-    assert.deepEqual(session.identity, { provider: "declared", grade: null, origin: "human", unavailable: "issuer_unavailable" });
+    assert.deepEqual(session.identity, { provider: "declared", grade: null, origin: "loop", unavailable: "issuer_unavailable" });
     var notices = h.sent.filter(function (m) { return m.source === "identity"; });
     assert.equal(notices.length, 1);
     assert.equal(notices[0].type, "diagnostic");
@@ -260,7 +279,7 @@ test("class 1: an issuer that cannot be reached still lets the session start, wi
     // The same failure at the next start is not announced again.
     session.queryInstance.close();
     await sleep(60);
-    await h.bridge.startQuery(session, "again", undefined, null, INITIATORS.HUMAN);
+    await h.bridge.startQuery(session, "again", undefined, null, INITIATORS.LOOP);
     await sleep(40);
     assert.equal(h.sent.filter(function (m) { return m.source === "identity"; }).length, 1);
     assert.equal(IDENTITY_ENV in lastFakeQuery().env, false);

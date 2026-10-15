@@ -384,13 +384,13 @@ test("the issuer's client is run directly with the documented arguments, and its
   var issuer = installFakeIssuer();
   try {
     var identity = identityFor(gatekeeperConfig(issuer, "issuer.sock"), scratch());
-    var lease = await identity.begin({ definition: "builder-agent", initiator: INITIATORS.HUMAN, rt: "claude-code" });
-    assert.deepEqual(issuer.invocations(), [["hook", "process", "--socket", "/run/test/issuer.sock", "--definition", "builder-agent", "--origin", "human"]]);
+    var lease = await identity.begin({ definition: "builder-agent", initiator: INITIATORS.LOOP, rt: "claude-code" });
+    assert.deepEqual(issuer.invocations(), [["hook", "process", "--socket", "/run/test/issuer.sock", "--definition", "builder-agent", "--origin", "loop"]]);
     assert.equal(lease.dir, issuer.issued()[0]);
-    assert.deepEqual(lease.record, { provider: "gatekeeper", grade: "workload", origin: "human" });
+    assert.deepEqual(lease.record, { provider: "gatekeeper", grade: "workload", origin: "loop" });
     var claims = readClaims(lease.dir);
     assert.equal(claims.act.sub, "agent:builder-agent");
-    assert.equal(claims.origin, "human");
+    assert.equal(claims.origin, "loop");
     assert.equal(claims.rt.id, "claude-code");
     lease.release();
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
@@ -424,7 +424,7 @@ test("an issuer that cannot be reached leaves the session without an identity an
   try {
     var warnings = [];
     var identity = identityFor(gatekeeperConfig(issuer, "unreachable.sock"), scratch(), warnings);
-    var lease = await identity.begin({ definition: "builder-agent", initiator: INITIATORS.HUMAN, rt: "claude-code" });
+    var lease = await identity.begin({ definition: "builder-agent", initiator: INITIATORS.LOOP, rt: "claude-code" });
     assert.equal(lease.dir, null);
     assert.equal(lease.record.provider, "declared");
     assert.equal(lease.record.grade, null);
@@ -437,15 +437,20 @@ test("an issuer that cannot be reached leaves the session without an identity an
   }
 });
 
-test("an issuer that refuses the human origin leaves a typed session without an identity", async function () {
+test("under the gatekeeper provider a typed session makes no issuer call, is declared with a stated reason, and shows no notice", async function () {
   var issuer = installFakeIssuer();
   try {
-    var identity = identityFor(gatekeeperConfig(issuer, "refuse-human.sock"), scratch());
-    var typed = await identity.begin({ definition: null, initiator: INITIATORS.HUMAN, rt: "claude-code" });
+    var warnings = [];
+    var identity = identityFor(gatekeeperConfig(issuer, "issuer.sock"), scratch(), warnings);
+    var typed = await identity.begin({ definition: "builder-agent", initiator: INITIATORS.HUMAN, rt: "claude-code" });
     assert.equal(typed.dir, null);
-    assert.equal(typed.record.unavailable, "issuer_unavailable");
+    assert.deepEqual(typed.record, { provider: "declared", grade: null, origin: "human", unavailable: "origin_human_not_issued" });
+    assert.equal(typed.notice, null);
+    assert.deepEqual(issuer.invocations(), [], "the issuer's client was never run");
+    assert.deepEqual(issuer.issued(), []);
+    assert.deepEqual(warnings, []);
     var loop = await identity.begin({ definition: null, initiator: INITIATORS.LOOP, rt: "claude-code" });
-    assert.ok(loop.dir);
+    assert.ok(loop.dir, "other origins are still issued");
     loop.release();
   } finally {
     issuer.cleanup();
