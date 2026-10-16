@@ -1,3 +1,17 @@
+# [1.10.0-beta.4](https://github.com/clagentic/clagentic-console/compare/v1.10.0-beta.3...v1.10.0-beta.4) (2026-10-16)
+
+
+### Bug Fixes
+
+* **notifications:** show one build-update notice per build pair with a close cooldown (lr-c81141) ([1b86063](https://github.com/clagentic/clagentic-console/commit/1b86063cf54888d6ba9d2ad37d7676da04f2e5ef))
+* **origin:** declare a host-scheduled run on every Claude process (lr-f7c100) ([4091dfb](https://github.com/clagentic/clagentic-console/commit/4091dfb680fa18d5a06db2bb7978090d07b85a21))
+* **permissions:** restore whole-tool Allow for Session for file tools and Bash (lr-3248ff) ([b8e17f5](https://github.com/clagentic/clagentic-console/commit/b8e17f531e7e21a192ba6a70d5b57196fd01ee4a))
+
+
+### Features
+
+* **identity:** add the console identity surface with three provider classes (lr-061832) ([679eb50](https://github.com/clagentic/clagentic-console/commit/679eb502b0b0c5b1e60ee409da2264933a9809f3))
+
 # [1.10.0-beta.3](https://github.com/clagentic/clagentic-console/compare/v1.10.0-beta.2...v1.10.0-beta.3) (2026-10-15)
 
 
