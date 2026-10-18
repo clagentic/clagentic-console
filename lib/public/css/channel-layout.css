@@ -84,6 +84,16 @@ body.wide-view .dm-bubble-avatar {
   background: var(--bg-elevated, var(--bg-hover));
   border-radius: 20px 20px 20px 4px;
 }
+/* Injected by another process, not typed by anyone in this chat */
+.msg-user-injected .bubble {
+  border: 1px dashed var(--text-dimmer);
+}
+.msg-user-injected .injected-label {
+  font-size: 12px;
+  color: var(--text-dimmer);
+  margin: 2px 0 4px;
+  overflow-wrap: anywhere;
+}
 .msg-user-other .dm-bubble-avatar-other {
   display: block;
 }
