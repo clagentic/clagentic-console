@@ -71,6 +71,9 @@ body.wide-view .dm-bubble-avatar {
   font-size: 15px;
   color: var(--text);
 }
+.dm-bubble-name-tappable {
+  cursor: pointer;
+}
 .dm-bubble-time {
   font-size: 12px;
   color: var(--text-dimmer);
@@ -84,8 +87,15 @@ body.wide-view .dm-bubble-avatar {
   background: var(--bg-elevated, var(--bg-hover));
   border-radius: 20px 20px 20px 4px;
 }
-/* Injected by another process, not typed by anyone in this chat */
-.msg-user-injected .bubble {
+/* The base rule above right-aligns every .msg-user content column (the local
+   user's own bubble). Another sender's content is left-aligned in bubble view,
+   beside its avatar; channel view already left-aligns every row. */
+.msg-user-other .dm-bubble-content {
+  align-items: flex-start;
+}
+/* Injected by another process, not typed by anyone in this chat. The dashed
+   frame belongs to bubble view; a channel row is unframed text. */
+body:not(.wide-view) .msg-user-injected .bubble {
   border: 1px dashed var(--text-dimmer);
 }
 .msg-user-injected .injected-label {
