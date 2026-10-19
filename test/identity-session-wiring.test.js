@@ -45,12 +45,16 @@ async function until(predicate, label) {
 }
 
 // The environment a plain Claude process gets: the daemon's own, plus the two
-// variables the console always adds. Written out, not computed by the code under test.
+// variables the console always adds and its reference to the session (project
+// slug and session id, set whatever the provider). Written out, not computed by
+// the code under test.
 function plainEnv() {
   var env = {};
   Object.keys(process.env).forEach(function (k) { env[k] = process.env[k]; });
   env.CLAUDE_AGENT_SDK_CLIENT_APP = APP_ID;
   env.CLAUDE_CODE_HOST_SCHEDULED_RUN = "1";
+  env.CLAGENTIC_CONSOLE_PROJECT = "identity-wiring";
+  env.CLAGENTIC_CONSOLE_SESSION_ID = "9001";
   return env;
 }
 
