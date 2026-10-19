@@ -1,0 +1,10 @@
+# Standing rulings on review findings, read by the loadout review gate from the
+# base revision only. Schema: clagentic_loadout/review/dispositions.py.
+dispositions:
+  - path: "lib/build-update-restart.js"
+    rule_id: "amos.path-choice.5"
+    kind: by_design
+    rationale: "Product daemon restart handler, not a crew hook, gate, merge step or test runner; the confirm-card consent is operator ruling lr-01293b seq 14."
+    by: "holden"
+    at: 2026-10-19
+    expires: 2027-01-17
