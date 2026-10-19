@@ -861,13 +861,13 @@ detector:**
    from `session.activeTaskToolIds` through one helper in
    `lib/build-update-offer.js`. The offer carries a one-use token. "Restart
    now" sends the token back; "Not now" closes the offer. The restart is
-   scheduled only if the token is current, the installed build is still the
-   one offered, and nothing is live that the offer did not list. Otherwise a
-   fresh offer replaces it and the operator confirms again. Running turns and
-   agents then get up to 60 seconds to finish, and when the wait ends the same
-   check runs once more: a session that started after the confirmation
-   cancels the restart (announced to every client) instead of being ended
-   unseen. Nothing times a restart, schedules one, or fires one as a side
+   scheduled whenever the token is known, unexpired and unspent: the card is
+   the explicit consent and states that the restart also ends any session or
+   turn that starts before it happens, so a changed session set never refuses
+   the click (the daemon journals one line naming what changed). An unknown or
+   expired token gets a fresh offer; a restart already waiting is ignored.
+   Running turns and agents then get up to 60 seconds to finish, and the
+   restart fires. Nothing times a restart, schedules one, or fires one as a side
    effect of install or merge, and no crew agent restarts the service.
 5. **`verify:installed-build`** asks the daemon for its verdict
    (`clagentic-console --process-build-status`) and reports exactly one of
