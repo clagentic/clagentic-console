@@ -259,6 +259,13 @@
   margin-left: 6px;
 }
 
+/* Shown beside a restart button whose click could not be sent. */
+.build-update-send-failed {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--error, #FF4D6A);
+}
+
 /* Empty state */
 .diagnostics-empty {
   padding: 20px 14px;
