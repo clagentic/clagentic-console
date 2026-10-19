@@ -202,11 +202,12 @@ test("the daemon journals a confirmation that restarted nothing", async function
 
   var offer = (await controller.request(null)).offer;
   sessions.set("s1", { localId: "s1", title: "late", queryInstance: {}, isProcessing: false, activeTaskToolIds: {} });
-  await controller.request(offer.token);
-  assert.ok(lines.some(function (l) { return /live sessions changed since the offer/.test(l); }), lines.join("\n"));
+  // Ruled contract change (seq 14): a changed session set proceeds and is journaled.
+  assert.equal((await controller.request(offer.token)).status, "restarting");
+  assert.ok(lines.some(function (l) { return /Restart confirmed after the offer changed \(now live and not offered: lore#s1\)/.test(l); }), lines.join("\n"));
 
-  var current = (await controller.request(null)).offer;
-  assert.equal((await controller.request(current.token)).status, "restarting");
+  var again = (await controller.request(null)).offer;
+  assert.equal((await controller.request(again.token)).status, "restarting");
   var second = (await controller.request(null)).offer;
   await controller.request(second.token);
   assert.ok(lines.some(function (l) { return /a confirmed restart is already waiting/.test(l); }), lines.join("\n"));

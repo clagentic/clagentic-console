@@ -124,42 +124,39 @@ test("an offer that expired is replaced, not honoured", async function () {
   assert.equal(w.idle, null);
 });
 
-test("a live session that appeared after the offer was shown means a new offer, not a restart", async function () {
+// Contract change (operator ruling, lr-01293b seq 14): the confirm card is the
+// consent, so a changed session set no longer refuses a confirmed restart.
+test("a live session that appeared after the offer was shown still restarts on confirm", async function () {
   var w = world();
   w.add("lore", session("s1", "shown"));
   var offer = (await w.controller.request(null)).offer;
   w.add("workspace", session("s2", "appeared later"));
   var r = await w.controller.request(offer.token);
-  assert.equal(r.status, "confirm");
-  assert.match(r.note, /changed/);
-  assert.equal(r.offer.interruptions.sessionCount, 2, "the new offer lists the session that was missing");
-  assert.equal(w.idle, null);
-  assert.equal(w.restarts, 0);
+  assert.equal(r.status, "restarting");
+  assert.ok(w.idle, "the restart was scheduled");
+  w.idle.onIdle();
+  assert.equal(w.restarts, 1);
 });
 
-test("a background agent that started after the offer was shown also means a new offer", async function () {
+test("a background agent that started after the offer was shown still restarts on confirm", async function () {
   var w = world();
   var s = session("s1", "shown");
   w.add("lore", s);
   var offer = (await w.controller.request(null)).offer;
   s.activeTaskToolIds = { late: true };
-  var r = await w.controller.request(offer.token);
-  assert.equal(r.status, "confirm");
-  assert.equal(r.offer.interruptions.agentCount, 1);
+  assert.equal((await w.controller.request(offer.token)).status, "restarting");
+  assert.ok(w.idle);
 });
 
-test("a session shown as idle that starts a turn after the offer means a new offer that lists it as running", async function () {
+test("a session shown as idle that starts a turn after the offer still restarts on confirm", async function () {
   var w = world();
   var s = session("s1", "shown idle");
   w.add("lore", s);
   var offer = (await w.controller.request(null)).offer;
   s.isProcessing = true;
-  var r = await w.controller.request(offer.token);
-  assert.equal(r.status, "confirm");
-  assert.match(r.note, /changed/);
-  assert.match(r.offer.interruptionText, /shown idle \(running a turn\)/);
-  assert.equal(w.idle, null);
-  assert.equal(w.restarts, 0);
+  assert.equal((await w.controller.request(offer.token)).status, "restarting");
+  assert.ok(w.idle);
+  assert.equal(w.restarts, 0, "scheduled is not restarted");
 });
 
 test("a session shown as running that went idle does not invalidate the offer", async function () {
@@ -171,14 +168,12 @@ test("a session shown as running that went idle does not invalidate the offer", 
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
 });
 
-test("a different build installed after the offer means a new offer", async function () {
+test("a different build installed after the offer still restarts on confirm", async function () {
   var w = world();
   var offer = (await w.controller.request(null)).offer;
   w.installed = { sha: "newer", hash: "h-newer" };
-  var r = await w.controller.request(offer.token);
-  assert.equal(r.status, "confirm");
-  assert.equal(r.offer.installedBuildSha, "newer");
-  assert.equal(w.idle, null);
+  assert.equal((await w.controller.request(offer.token)).status, "restarting");
+  assert.ok(w.idle);
 });
 
 test("sessions that finished since the offer do not invalidate it", async function () {
@@ -190,20 +185,22 @@ test("sessions that finished since the offer do not invalidate it", async functi
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
 });
 
-test("a session that starts while the confirmed restart waits cancels it and tells everyone", async function () {
+test("a session that starts while the confirmed restart waits does not cancel it", async function () {
   var w = world();
   w.add("lore", session("s1", "busy", { isProcessing: true }));
   var offer = (await w.controller.request(null)).offer;
   await w.controller.request(offer.token);
   w.add("workspace", session("s9", "started after confirming"));
   w.idle.onIdle();
-  assert.equal(w.restarts, 0, "a session the operator never saw must not be ended");
-  assert.equal(w.announced.length, 1);
-  assert.match(w.announced[0], /cancelled/);
-  // The operator can ask again.
-  var again = await w.controller.request(null);
-  assert.equal(again.status, "confirm");
-  assert.equal(again.offer.interruptions.sessionCount, 2);
+  assert.equal(w.restarts, 1, "the card said sessions that start before the restart end with it");
+  assert.equal(w.announced.length, 0);
+});
+
+test("the confirm card states that sessions starting before the restart end with it", async function () {
+  var w = world();
+  w.add("lore", session("s1", "shown"));
+  var offer = (await w.controller.request(null)).offer;
+  assert.match(offer.interruptionText, /ends these sessions and any that start before the restart happens/);
 });
 
 test("a second confirmation while one restart is waiting does not schedule another", async function () {
