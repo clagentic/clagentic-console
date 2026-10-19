@@ -276,7 +276,7 @@ entryCase("web-UI restart_server reaches the announcer", EXIT_HANDOFF, null, asy
 test("web-UI restart-to-apply-update with nothing to apply restarts nothing", { timeout: 60000 }, async function () {
   var d = await bootDaemon(null);
   try {
-    var ws = await sendWs(d, await d.adminCookie(), { type: "restart_for_build_update" });
+    var ws = await sendWs(d, await d.adminCookie(), { type: "restart_for_build_update", requestId: "bu-echo-1" });
     var result = await new Promise(function (resolve, reject) {
       var timer = setTimeout(function () { reject(new Error("no restart_for_build_update_result")); }, 10000);
       ws.on("message", function (raw) {
@@ -286,6 +286,7 @@ test("web-UI restart-to-apply-update with nothing to apply restarts nothing", { 
     });
     ws.terminate();
     assert.equal(result.ok, false);
+    assert.equal(result.requestId, "bu-echo-1", "the result echoes the request id so the client can correlate it");
     // A restart would reply and then exit; give it a bounded grace period to
     // do so, so a reply-then-schedule-restart defect cannot pass by being early.
     await new Promise(function (r) { setTimeout(r, NO_RESTART_GRACE_MS); });

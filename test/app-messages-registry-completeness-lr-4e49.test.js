@@ -97,6 +97,8 @@ var ORIGINAL_CASE_LABELS = [
   "session_grants",
   // Withdraws a source's diagnostics once their condition has cleared.
   "diagnostic_retract",
+  // The daemon's answer to a build-update restart click; frees the dimmed buttons.
+  "restart_for_build_update_result",
 ];
 
 var REGISTRY_FILES = [

@@ -853,7 +853,10 @@ detector:**
 4. **A restart takes two operator clicks** (`lib/build-update-restart.js`,
    `restart_for_build_update` in `lib/project-sessions.js`, admin only). The
    first click sends `restart_for_build_update` with no token and gets back an
-   offer that adds what a restart now would end: every live session (one with
+   offer (the client sets a `requestId` on every request; the daemon echoes it
+   unchanged in `restart_for_build_update_result`, and a client settles only
+   the pending slot with the matching `requestId`) that adds what a restart
+   now would end: every live session (one with
    a running agent process) and each background agent it still tracks, read
    from `session.activeTaskToolIds` through one helper in
    `lib/build-update-offer.js`. The offer carries a one-use token. "Restart
