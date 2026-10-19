@@ -66,7 +66,8 @@ test("the first click only asks for the offer: no token, no restart; the interru
   var c = await client(t);
   c.diagnostics.addDiagnostic(standingOffer());
   c.button("Restart to apply update").click();
-  assert.deepEqual(c.sent, [{ type: "restart_for_build_update" }]);
+  assert.deepEqual(c.sent, [{ type: "restart_for_build_update", requestId: c.sent[0].requestId }]);
+  assert.equal(typeof c.sent[0].requestId, "string");
 
   // The daemon's answer to that click arrives as another diagnostic.
   c.diagnostics.addDiagnostic(confirmOffer("tok-1"));
@@ -83,7 +84,7 @@ test("confirming sends exactly one restart carrying the daemon's token", async f
   var confirm = c.button("Restart now");
   confirm.click();
   confirm.click(); // a second click on the same button
-  assert.deepEqual(c.sent, [{ type: "restart_for_build_update", confirmToken: "tok-2" }]);
+  assert.deepEqual(c.sent, [{ type: "restart_for_build_update", confirmToken: "tok-2", requestId: c.sent[0].requestId }]);
 });
 
 test("an offer with no token sends nothing when confirmed", async function (t) {

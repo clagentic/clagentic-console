@@ -74,7 +74,7 @@ test("a click made while the socket is down sends nothing, keeps the button usab
 
   c.socket.readyState = 1; // the socket came back
   btn.click();
-  assert.deepEqual(c.sent, [{ type: "restart_for_build_update", confirmToken: "tok-1" }]);
+  assert.deepEqual(c.sent, [{ type: "restart_for_build_update", confirmToken: "tok-1", requestId: c.sent[0].requestId }]);
   assert.equal(btn.disabled, true, "a sent request waits for the daemon's answer");
   assert.doesNotMatch(c.container.textContent, /Not connected/, "the note goes once the click went through");
 });
@@ -86,13 +86,13 @@ test("a daemon answer other than ok gives the button back; ok keeps it dimmed", 
   var offerBtn = c.button("Restart to apply update");
   offerBtn.click();
   assert.equal(offerBtn.disabled, true);
-  c.diagnostics.settleBuildUpdateRequest({ type: "restart_for_build_update_result", ok: false, needsConfirmation: true });
+  c.diagnostics.settleBuildUpdateRequest({ type: "restart_for_build_update_result", requestId: c.sent[0].requestId, ok: false, needsConfirmation: true });
   assert.equal(offerBtn.disabled, false);
 
   c.diagnostics.addDiagnostic(confirmOffer("tok-2"));
   var confirmBtn = c.button("Restart now");
   confirmBtn.click();
-  c.diagnostics.settleBuildUpdateRequest({ type: "restart_for_build_update_result", ok: true });
+  c.diagnostics.settleBuildUpdateRequest({ type: "restart_for_build_update_result", requestId: c.sent[1].requestId, ok: true });
   assert.equal(confirmBtn.disabled, true, "a scheduled restart keeps the button dimmed");
 });
 
@@ -115,9 +115,54 @@ test("a refusal from the daemon is shown to the operator, not swallowed", async 
   c.socket.readyState = 1;
   c.diagnostics.addDiagnostic(confirmOffer("tok-9"));
   c.button("Restart now").click();
-  c.diagnostics.settleBuildUpdateRequest({ ok: false, error: "No newer build is installed, so there is nothing to apply." });
+  c.diagnostics.settleBuildUpdateRequest({ requestId: c.sent[0].requestId, ok: false, error: "No newer build is installed, so there is nothing to apply." });
   assert.match(c.container.textContent, /nothing to apply/);
   assert.equal(c.button("Restart now").disabled, false);
+});
+
+test("a result releases only the request it answers; an uncorrelated result releases nothing", async function (t) {
+  var c = await client(t);
+  c.socket.readyState = 1;
+  c.diagnostics.addDiagnostic(standingOffer());
+  var panelLike = c.button("Restart to apply update");
+  c.diagnostics.addDiagnostic(confirmOffer("tok-a"));
+  var confirmBtn = c.button("Restart now");
+  panelLike.click();
+  confirmBtn.click();
+  assert.equal(c.sent.length, 2);
+  assert.notEqual(c.sent[0].requestId, c.sent[1].requestId);
+
+  c.diagnostics.settleBuildUpdateRequest({ ok: false, error: "no id" });
+  c.diagnostics.settleBuildUpdateRequest({ requestId: "bu-unknown", ok: false });
+  assert.equal(panelLike.disabled, true);
+  assert.equal(confirmBtn.disabled, true);
+
+  c.diagnostics.settleBuildUpdateRequest({ requestId: c.sent[1].requestId, ok: false, needsConfirmation: true });
+  assert.equal(confirmBtn.disabled, false, "the answered request is released");
+  assert.equal(panelLike.disabled, true, "the other request still waits for its own answer");
+  t.mock.timers.tick(15000);
+  assert.equal(panelLike.disabled, false, "its own timeout still frees it");
+});
+
+test("Enter or Space on a toast button activates the button and does not dismiss the card", async function (t) {
+  var c = await client(t);
+  c.socket.readyState = 1;
+  c.diagnostics.addDiagnostic(confirmOffer("tok-k"));
+  var toast = c.container.querySelectorAll('[data-diag-source="build-update"]')[0];
+  var btn = c.button("Restart now");
+  var fire = function (key, target) {
+    toast._listeners.keydown.slice().forEach(function (fn) { fn({ key: key, target: target }); });
+  };
+  fire("Enter", btn);
+  fire(" ", btn);
+  t.mock.timers.tick(300);
+  assert.equal(c.container.querySelectorAll('[data-diag-source="build-update"]').length, 1, "still on screen");
+  btn.click();
+  assert.equal(c.sent.length, 1, "the button still activates");
+
+  fire("Escape", btn);
+  t.mock.timers.tick(300);
+  assert.equal(c.container.querySelectorAll('[data-diag-source="build-update"]').length, 0, "Escape still dismisses");
 });
 
 test("a re-issued confirmation replaces the spent one, even when its text is identical", async function (t) {
@@ -130,7 +175,8 @@ test("a re-issued confirmation replaces the spent one, even when its text is ide
   t.mock.timers.tick(300);
   assert.equal(c.buttons("Restart now").length, 1, "one live confirmation, not a dimmed spent card beside it");
   c.button("Restart now").click();
-  assert.deepEqual(c.sent[c.sent.length - 1], { type: "restart_for_build_update", confirmToken: "tok-new" });
+  var last = c.sent[c.sent.length - 1];
+  assert.deepEqual(last, { type: "restart_for_build_update", confirmToken: "tok-new", requestId: last.requestId });
 });
 
 test("the daemon journals a confirmation that restarted nothing", async function () {
