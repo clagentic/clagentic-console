@@ -169,6 +169,53 @@ test("an injected turn buffered while no query is live is replayed into the next
   if (session.queryInstance) session.queryInstance.close();
 });
 
+test("lead messages reach the vendor as turns of their own, before the first message, each with its own origin and uuid", async function () {
+  var realAdapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
+  var adapter = {
+    vendor: "claude",
+    createQuery: realAdapter.createQuery,
+    init: function () { return Promise.resolve({ models: [], skills: [] }); },
+    supportedModels: function () { return Promise.resolve([]); },
+  };
+  var modPath = require.resolve("../lib/sdk-bridge");
+  delete require.cache[modPath];
+  var { createSDKBridge } = require("../lib/sdk-bridge");
+  var noopFn = function () {};
+  var sm = {
+    sessions: new Map(), currentModel: null, currentPermissionMode: null, currentEffort: null, currentBetas: [],
+    modelsByVendor: {}, availableVendors: [], installedVendors: [], defaultVendor: "claude",
+    saveSessionFile: noopFn, broadcastSessionList: noopFn, getActiveSession: function () { return null; },
+    setSlashCommandsForVendor: noopFn, sendAndRecord: noopFn, sendToSession: noopFn,
+  };
+  var bridge = createSDKBridge({
+    cwd: os.tmpdir(), slug: "lead-messages", sessionManager: sm, send: noopFn,
+    adapter: adapter, adapters: { claude: adapter }, onProcessingChanged: noopFn, getConfig: null,
+  });
+  var session = {
+    localId: 9002, queryInstance: null, messageQueue: null, abortController: null, isProcessing: false,
+    cliSessionId: null, history: [], blocks: {}, sentToolResults: {}, pendingPermissions: {}, pendingAskUser: {},
+    pendingElicitations: {}, activeTaskToolIds: {}, singleTurn: true, lastActivityAt: Date.now(),
+    _isCountedLive: false, _adapterWorkerState: null, _workerExitPromise: null,
+  };
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "iteration prompt", undefined, null, INITIATORS.LOOP, "uuid-loop", [
+    { text: "operator one", initiator: INITIATORS.HUMAN, messageId: "uuid-op-1" },
+    { text: "operator two", initiator: INITIATORS.HUMAN, messageId: "uuid-op-2" },
+  ]);
+  await sleep(50);
+
+  var messages = lastFakeQuery().messages;
+  assert.deepEqual(messages.map(function (m) { return m.message.content[0].text; }), ["operator one", "operator two", "iteration prompt"]);
+  assert.deepEqual(messages.map(function (m) { return m.uuid; }), ["uuid-op-1", "uuid-op-2", "uuid-loop"]);
+  assert.deepEqual(messages[0].origin, { kind: "human" });
+  assert.deepEqual(messages[1].origin, { kind: "human" });
+  assert.equal("client_composed" in messages[0], false);
+  assert.equal(messages[2].origin.fireReason, "loop");
+  assert.equal(messages[2].client_composed, true);
+  if (session.queryInstance) session.queryInstance.close();
+});
+
 // --- Claude adapter, as sent to the OS user's worker ---
 
 function fakeWorker() {

@@ -7,14 +7,15 @@
  * stream is closed (handle.endInput()) immediately after the first message
  * is pushed, so a live message cannot be injected into the in-flight turn.
  * The chosen semantics: queue the message and deliver it at the START of
- * the NEXT iteration, folded into that iteration's prompt and also recorded
- * as its own session.history entry so the transcript shows what was sent.
+ * the NEXT iteration, sent to the vendor as a human user message of its own
+ * (never merged into the iteration's prompt) and recorded as its own
+ * session.history entry so the transcript shows what was sent.
  *
  * Covered:
  *   1. loop_message is rejected (with loop_message_error) when no loop is running.
  *   2. loop_message queues the text and broadcasts loop_pending_messages.
- *   3. runNextIteration() drains the queue into the next iteration's prompt
- *      and session history, then clears the queue.
+ *   3. runNextIteration() drains the queue into lead messages of the next
+ *      iteration's query and into session history, then clears the queue.
  *   4. finishLoop() clears any undelivered queued messages so they cannot
  *      leak into a future run.
  */
@@ -186,11 +187,15 @@ test("lr-e31b: loop_message with blank text is a silent no-op", function() {
   }
 });
 
-test("lr-e31b: runNextIteration() drains the queue into the next iteration prompt and session history, then clears it", function() {
+test("lr-e31b: runNextIteration() drains the queue into the next iteration as human lead messages and session history, then clears it", function() {
   var cwd = makeTempHome();
   var capturedPrompts = [];
+  var capturedLeads = [];
   var { engine, ctx, cleanup } = makeEngine(cwd, {
-    startQuery: function(session, text) { capturedPrompts.push(text); },
+    startQuery: function(session, text, images, user, initiator, messageId, leadMessages) {
+      capturedPrompts.push(text);
+      capturedLeads.push(leadMessages);
+    },
   });
   try {
     var ls = engine.loopState;
@@ -271,14 +276,20 @@ test("lr-e31b: runNextIteration() drains the queue into the next iteration promp
 
     assert.strictEqual(capturedPrompts.length, 2, "iteration 2 should have started a query");
     var iter2Prompt = capturedPrompts[1];
-    assert.ok(
-      iter2Prompt.indexOf("focus on the staging config first") !== -1,
-      "queued message text must be folded into iteration 2's prompt"
+    assert.strictEqual(
+      iter2Prompt.indexOf("focus on the staging config first"), -1,
+      "the operator's words are never merged into the iteration's own message"
     );
     assert.ok(
       iter2Prompt.indexOf("Do the task.") !== -1,
       "original PROMPT.md text must still be present"
     );
+    assert.deepStrictEqual(
+      capturedLeads[1].map(function(m) { return [m.text, m.initiator]; }),
+      [["focus on the staging config first", "human"]],
+      "the queued message is delivered as a user message of its own, from the human"
+    );
+    assert.deepStrictEqual(capturedLeads[0], [], "iteration 1 had nothing queued");
 
     // Queue must be drained after being consumed.
     assert.strictEqual(ls.pendingUserMessages.length, 0);
