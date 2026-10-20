@@ -69,8 +69,8 @@ function makeWorld(vendor, opts) {
 
   var calls = [];
   var sdk = {
-    startQuery: function (s, text, images, user, initiator, messageId) {
-      calls.push({ kind: "start", localId: s.localId, text: text, initiator: initiator, messageId: messageId });
+    startQuery: function (s, text, images, user, initiator, messageId, leadMessages) {
+      calls.push({ kind: "start", localId: s.localId, text: text, initiator: initiator, messageId: messageId, leadMessages: leadMessages });
     },
     pushMessage: function (s, text, images, initiator, messageId) {
       calls.push({ kind: "push", localId: s.localId, text: text, initiator: initiator, messageId: messageId });
@@ -113,7 +113,9 @@ function makeWorld(vendor, opts) {
       if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME; else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
       if (origLegacyHome === undefined) delete process.env.CLAGENTIC_HOME; else process.env.CLAGENTIC_HOME = origLegacyHome;
       ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
-      fs.rmSync(home, { recursive: true, force: true });
+      // A loop saves its state asynchronously into this directory, so removal
+      // can meet a file written meanwhile: retry.
+      fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     },
   };
   return world;
@@ -589,5 +591,231 @@ test("no console code names a consumer of the record", function () {
   files.forEach(function (rel) {
     var text = fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
     assert.equal(/\blore\b/i.test(text), false, rel + " must not name a consumer");
+  });
+});
+
+// --- no record is dropped while the vendor session id is unknown ---
+
+VENDORS.forEach(function (vendor) {
+  test(vendor + ": more than 100 messages sent before the vendor names the session are all published, in order", function () {
+    return inWorld(vendor, function (w) {
+      var { stampRecord } = require("../lib/injected-sender");
+      var session = w.newSession();
+      var ids = [];
+      for (var i = 0; i < 250; i++) {
+        var entry = stampRecord({ type: "user_message", text: "m" + i, initiator: INITIATORS.HUMAN });
+        ids.push(entry.messageId);
+        w.sm.recordHistoryEntry(session, entry, true);
+      }
+      assert.equal(fs.existsSync(path.join(w.recordsDir, "message-senders")), false);
+      w.assign(session, "sess-many");
+      var recs = w.messages("sess-many");
+      assert.deepEqual(recs.map(function (r) { return r.messageId; }), ids);
+    });
+  });
+});
+
+// --- operator words typed into a running loop ---
+
+// An attached loop engine over the real session manager. Timers the loop arms
+// are held, not run: `fireDelay(ms)` runs the ones armed with that delay.
+async function withLoopEngine(w, vendor, maxIterations, fn) {
+  var cwd = fs.mkdtempSync(path.join(os.tmpdir(), "console-sender-loopq-"));
+  var gitEnv = Object.assign({}, process.env, {
+    GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.com",
+    GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.com",
+  });
+  execFileSync("git", ["init", "-q"], { cwd: cwd, env: gitEnv });
+  execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "init"], { cwd: cwd, env: gitEnv });
+  var dir = path.join(cwd, ".claude", "loops", "loop_queued1");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "PROMPT.md"), "Do the task.");
+  fs.writeFileSync(path.join(dir, "LOOP.json"), JSON.stringify({ loopMode: "simple", maxIterations: maxIterations }));
+  ["../lib/store", "../lib/scheduler", "../lib/project-loop", "../lib/loop-handoff"]
+    .forEach(function (m) { delete require.cache[require.resolve(m)]; });
+  var origSetTimeout = global.setTimeout;
+  var held = [];
+  global.setTimeout = function (fn, delay) {
+    var timer = origSetTimeout(fn, 1e9);
+    clearTimeout(timer);
+    held.push({ fn: fn, delay: delay });
+    return timer;
+  };
+  var noop = function () {};
+  var sessions = [];
+  try {
+    var loopSm = Object.create(w.sm);
+    loopSm.setResolveLoopInfo = noop;
+    loopSm.createSession = function () {
+      var s = w.sm.createSessionRaw({ vendor: vendor });
+      s.loop = {};
+      s.cliSessionId = "sess-loop-" + (sessions.length + 1);
+      sessions.push(s);
+      return s;
+    };
+    var sent = [];
+    var engine = require("../lib/project-loop").attachLoop({
+      cwd: cwd, slug: "p", sm: loopSm, sdk: w.sdk,
+      send: function (m) { sent.push(m); }, sendTo: noop, sendToSession: noop, pushModule: null, notificationsModule: null,
+      getHubSchedules: function () { return []; }, getAllProjectSessions: function () { return []; },
+      getStatus: noop, getLinuxUserForSession: function () { return null; }, onProcessingChanged: noop, hydrateImageRefs: noop,
+    });
+    engine.stopTimer();
+    engine.loopState.loopId = "loop_queued1";
+    engine.loopState.loopFilesId = "loop_queued1";
+    engine.loopState.wizardData = { loopMode: "simple", name: "daily" };
+    fn({
+      engine: engine, sessions: sessions, sent: sent,
+      fireDelay: function (ms) {
+        var due = held.filter(function (h) { return h.delay === ms; });
+        held = held.filter(function (h) { return h.delay !== ms; });
+        due.forEach(function (h) { h.fn(); });
+      },
+    });
+  } finally {
+    global.setTimeout = origSetTimeout;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+  // The loop saves its state asynchronously into the data directory, which the
+  // world removes when the test ends.
+  await new Promise(function (resolve) { setTimeout(resolve, 250); });
+}
+
+// What the vendor adapters do with the messages the bridge pushed for one
+// startQuery: the lead messages, then the first.
+function pushedMessages(call) {
+  return (call.leadMessages || []).map(function (m) {
+    return { text: m.text, initiator: m.initiator, messageId: m.messageId };
+  }).concat([{ text: call.text, initiator: call.initiator, messageId: call.messageId }]);
+}
+
+VENDORS.forEach(function (vendor) {
+  test(vendor + ": a message the operator queued into a running loop is its own human message and record, and the iteration stays the loop", function () {
+    return inWorld(vendor, function (w) {
+      return withLoopEngine(w, vendor, 2, function (loop) {
+        loop.engine.startLoop({ maxIterations: 2 });
+        assert.equal(w.calls.length, 1);
+        assert.deepEqual(w.calls[0].leadMessages, []);
+        var ws = { _clagenticUser: { id: "user-1", displayName: "Operator One" } };
+        loop.engine.handleLoopMessage(ws, { type: "loop_message", text: "also check the docs" });
+        loop.engine.handleLoopMessage(ws, { type: "loop_message", text: "and the tests" });
+        // The first iteration ends; the next one starts at the boundary.
+        loop.sessions[0].onQueryComplete(loop.sessions[0]);
+        loop.fireDelay(1000);
+        assert.equal(w.calls.length, 2);
+
+        var call = w.calls[1];
+        assert.equal(call.initiator, INITIATORS.LOOP, "the iteration keeps the loop initiator");
+        assert.equal(call.text, "Do the task.", "the operator words are not merged into the iteration message");
+        assert.deepEqual(call.leadMessages.map(function (m) { return [m.text, m.initiator]; }),
+          [["also check the docs", INITIATORS.HUMAN], ["and the tests", INITIATORS.HUMAN]]);
+
+        var recs = w.messages("sess-loop-2");
+        assert.equal(recs.length, 3, "a record for each of the two operator messages and one for the iteration");
+        assert.deepEqual(recs.map(function (r) { return r.initiator; }), ["human", "human", "loop"]);
+        assert.equal(recs[0].senderName, "Operator One");
+        assert.equal(recs[0].senderKind, null);
+        assert.equal(recs[2].senderKind, "automation");
+        assert.equal(recs[2].senderName, "Loop");
+        var sentIds = pushedMessages(call).map(function (m) { return m.messageId; });
+        assert.deepEqual(recs.map(function (r) { return r.messageId; }), sentIds, "each record joins the message the vendor got");
+        assert.equal(new Set(sentIds).size, 3, "every message has its own id");
+
+        var history = loop.sessions[1].history;
+        assert.deepEqual(history.map(function (h) { return h.initiator; }), ["human", "human", "loop"]);
+        assert.equal(history[0].messageId, sentIds[0]);
+        assert.equal(history[2].text.indexOf("also check the docs"), -1, "the iteration entry holds only the loop's own text");
+
+        // Delivered once: the queue is empty for the iteration after.
+        assert.deepEqual(loop.engine.loopState.pendingUserMessages, []);
+      });
+    });
+  });
+});
+
+test("claude: the queued operator message reaches the vendor with origin human and its own uuid, ahead of the loop iteration", function () {
+  return inWorld("claude", function (w) {
+    return withLoopEngine(w, "claude", 2, function (loop) {
+      loop.engine.startLoop({ maxIterations: 2 });
+      loop.engine.handleLoopMessage({}, { type: "loop_message", text: "typed while it ran" });
+      loop.sessions[0].onQueryComplete(loop.sessions[0]);
+      loop.fireDelay(1000);
+      var queue = [];
+      var handle = claudeAdapter._test_createQueryHandle({}, queue, null);
+      pushedMessages(w.calls[1]).forEach(function (m) { handle.pushMessage(m.text, undefined, m.initiator, m.messageId); });
+      assert.equal(queue.length, 2);
+      assert.deepEqual(queue[0].origin, { kind: "human" });
+      assert.equal("client_composed" in queue[0], false);
+      assert.equal(queue[0].message.content[0].text, "typed while it ran");
+      assert.equal(queue[0].uuid, w.messages("sess-loop-2")[0].messageId);
+      assert.equal(queue[1].origin.fireReason, "loop");
+      assert.equal(queue[1].uuid, w.messages("sess-loop-2")[1].messageId);
+    });
+  });
+});
+
+test("codex: the queued operator message starts its own turn, joined to its own message id, ahead of the loop iteration", async function () {
+  var calls;
+  await inWorld("codex", function (w) {
+    return withLoopEngine(w, "codex", 2, function (loop) {
+      loop.engine.startLoop({ maxIterations: 2 });
+      loop.engine.handleLoopMessage({}, { type: "loop_message", text: "typed while it ran" });
+      loop.sessions[0].onQueryComplete(loop.sessions[0]);
+      loop.fireDelay(1000);
+      calls = pushedMessages(w.calls[1]);
+    });
+  });
+  var handle = codexAdapter._test_createCodexQueryHandle(fakeCodexServer(["turn-op", "turn-loop"]), { model: "gpt-5.4" });
+  var seen = [];
+  var iterator = handle[Symbol.asyncIterator]();
+  calls.forEach(function (m) { handle.pushMessage(m.text, null, m.initiator, m.messageId); });
+  while (seen.length < 2) {
+    var ev = await iterator.next();
+    if (ev.value && ev.value.yokeType === "turn_start") seen.push(ev.value);
+  }
+  handle.close();
+  assert.deepEqual(seen.map(function (e) { return [e.messageId, e.turnId]; }),
+    [[calls[0].messageId, "turn-op"], [calls[1].messageId, "turn-loop"]]);
+  assert.deepEqual(calls.map(function (m) { return m.initiator; }), ["human", "loop"]);
+});
+
+// --- plan approval and prompt-response entries in a loop session ---
+
+VENDORS.forEach(function (vendor) {
+  test(vendor + ": feedback and a cleared-context plan the operator answers in a loop session are recorded as human", function () {
+    return inWorld(vendor, async function (w) {
+      var { attachPromptResponses } = require("../lib/project-prompt-responses");
+      var { promptsFor } = require("../lib/prompt-registry");
+      var noop = function () {};
+      var session = w.newSession({ cliSessionId: "sess-loop-plan" });
+      session.loop = { active: true, iteration: 1, role: "coder", loopId: "loop_x", name: "daily" };
+      w.sm.sessions.set(session.localId, session);
+      var responses = attachPromptResponses({
+        sm: w.sm, sdk: w.sdk, send: noop, sendTo: noop, sendToSession: noop,
+        getSessionForWs: function () { return session; },
+        ensureProjectAccessForSession: function () { return null; },
+      });
+      var feedback = promptsFor(w.sm).open(session, "plan", { toolName: "ExitPlanMode", toolInput: { plan: "p" } }, { toolUseId: "tu-fb" });
+      responses.handlePromptMessage({}, { type: "prompt_response", kind: "plan", requestId: feedback.requestId, decision: "deny_with_feedback", feedback: "use make test" });
+      await new Promise(function (r) { setTimeout(r, 300); });
+      var fresh = promptsFor(w.sm).open(session, "plan", { toolName: "ExitPlanMode", toolInput: { plan: "p" } }, { toolUseId: "tu-clear" });
+      responses.handlePromptMessage({}, { type: "prompt_response", kind: "plan", requestId: fresh.requestId, decision: "allow_clear_context", planContent: "step one" });
+      var deadline = Date.now() + 5000;
+      while (w.calls.length < 2 && Date.now() < deadline) await new Promise(function (r) { setTimeout(r, 50); });
+
+      assert.equal(w.calls.length, 2);
+      w.calls.forEach(function (c) { assert.equal(c.initiator, INITIATORS.HUMAN); assert.ok(c.messageId); });
+      var feedbackRec = only(w.messages("sess-loop-plan"));
+      assert.equal(feedbackRec.initiator, "human");
+      assert.equal(feedbackRec.senderKind, null);
+      assert.equal(feedbackRec.messageId, w.calls[0].messageId);
+      // The cleared-context plan runs in a fresh session once the vendor names it.
+      var started = Array.from(w.sm.sessions.values()).filter(function (s) { return s !== session && s.history && s.history.length; });
+      assert.equal(started.length, 1);
+      assert.equal(started[0].history[0].initiator, INITIATORS.HUMAN);
+      assert.equal(started[0].history[0].messageId, w.calls[1].messageId);
+      w.assign(started[0], "sess-plan-fresh");
+      assert.equal(only(w.messages("sess-plan-fresh")).initiator, "human");
+    });
   });
 });
