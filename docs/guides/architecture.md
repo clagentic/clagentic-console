@@ -950,9 +950,12 @@ detector:**
    the explicit consent and states that the restart also ends any session or
    turn that starts before it happens, so a changed session set never refuses
    the click (the daemon journals one line naming what changed). An unknown or
-   expired token gets a fresh offer; a restart already waiting is ignored.
-   Running turns and agents then get up to 60 seconds to finish, and the
-   restart fires. Nothing times a restart, schedules one, or fires one as a side
+   expired token gets a fresh offer. Running turns and agents then get up to
+   60 seconds to finish (the restart destroys every session, which aborts a
+   turn mid-tool), and the restart fires. While it waits, the offer is withdrawn
+   from every client and replaced by one `persistent` diagnostic (source
+   `build-update-restart`) that has no timer; any further request, from any tab,
+   gets that state back and never a new offer or a second wait. Nothing times a restart, schedules one, or fires one as a side
    effect of install or merge, and no crew agent restarts the service.
 5. **`verify:installed-build`** asks the daemon for its verdict
    (`clagentic-console --process-build-status`) and reports exactly one of
