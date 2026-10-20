@@ -89,24 +89,89 @@ test("the banner is not dismissable and is added once", () => {
   assert.match(made[0].children[0].textContent, /^Clagentic: Console /);
 });
 
-test("the info message and /info carry the build id; the client feeds both to the guard", () => {
-  assert.match(read("lib/project-connection.js"), /type: "info"[^\n]*buildId: clientBuildId\.get\(\)/);
-  assert.match(read("lib/project.js"), /type: "info"[^\n]*buildId: clientBuildId\.get\(\)/);
-  assert.match(read("lib/server.js"), /buildId: clientBuildId\.get\(\)/);
-  assert.match(read("lib/public/modules/app-messages.js"), /observeBuildId\(msg\.buildId\)/);
-  assert.match(read("lib/public/modules/app-connection.js"), /observeBuildId\(info\.buildId\)/);
+// A real server (test/access-harness.js) started under a given build id. The
+// lib modules are dropped from the require cache first, so each start gets a
+// fresh client-build-id and the id really is fixed by init for that run.
+function freshLib() {
+  const libDir = path.join(ROOT, "lib") + path.sep;
+  for (const key of Object.keys(require.cache)) {
+    if (key.startsWith(libDir)) delete require.cache[key];
+  }
+}
+
+async function underBuildId(buildId, fn) {
+  freshLib();
+  const harness = require("./access-harness");
+  require("../lib/client-build-id").init(buildId);
+  const h = await harness.start({ users: [{ key: "u", username: "u", role: "admin" }], projects: [{ slug: "p", ownerKey: "u" }] });
+  try {
+    return await fn(h);
+  } finally {
+    await h.stop();
+  }
+}
+
+// What the daemon sends under one build id: the WebSocket info message of a
+// first connect, the /info response of a reconnect, and the served sw.js.
+function serverShapes(buildId) {
+  return underBuildId(buildId, async (h) => {
+    const conn = await h.connect("p", "u");
+    assert.equal(conn.ok, true);
+    const wsInfo = await conn.waitFor((m) => m.type === "info");
+    const httpInfo = JSON.parse((await h.request("GET", "/info", "u")).body);
+    const sw = await h.request("GET", "/sw.js", "u");
+    const swAgain = await h.request("GET", "/sw.js", "u");
+    return { wsInfo, httpInfo, sw, swAgain };
+  });
+}
+
+test("both info shapes the server sends reach the client guard: it fires on a mismatch and not on a match", async () => {
+  const a = await serverShapes("sha-a");
+  const b = await serverShapes("sha-b");
+  assert.equal(a.wsInfo.buildId, "sha-a");
+  assert.equal(a.httpInfo.buildId, "sha-a");
+
+  // A tab booted on the WebSocket info of build A, then told A again by /info
+  // (reconnect), then B by /info and by the WebSocket after the restart.
+  const viaHttp = guard(false);
+  assert.equal(viaHttp.g.observeInfo(a.wsInfo), "booted");
+  assert.equal(viaHttp.g.observeInfo(a.httpInfo), "same");
+  assert.equal(viaHttp.g.observeInfo(a.wsInfo), "same");
+  assert.deepEqual(viaHttp.calls, { reload: 0, banner: 0 });
+  assert.equal(viaHttp.g.observeInfo(b.httpInfo), "reload");
+  assert.deepEqual(viaHttp.calls, { reload: 1, banner: 0 });
+
+  const viaWs = guard(true);
+  viaWs.g.observeInfo(a.httpInfo);
+  assert.equal(viaWs.g.observeInfo(b.wsInfo), "banner");
+  assert.deepEqual(viaWs.calls, { reload: 0, banner: 1 });
+});
+
+test("the client entry points both go through the guard's observeInfo", () => {
+  assert.match(read("lib/public/modules/app-messages.js"), /observeBuildInfo\(msg\)/);
+  assert.match(read("lib/public/modules/app-connection.js"), /observeBuildInfo\(info\)/);
+  assert.match(read("lib/public/modules/app-connection.js"), /buildGuard\.observeInfo\(info\)/);
 });
 
 // --- (ii) sw.js changes with the build id, and only with it ---
 
-test("sw.js differs under two build ids and is identical under the same id", () => {
+test("the served sw.js differs under two build ids and is identical under the same id", async () => {
+  const a = await serverShapes("sha-a");
+  const b = await serverShapes("sha-b");
+  assert.equal(a.sw.status, 200);
+  assert.equal(a.sw.body, a.swAgain.body, "same id, same bytes");
+  assert.notEqual(a.sw.body, b.sw.body, "a different id, different bytes");
+  assert.match(a.sw.body, /var CACHE_NAME = "clagentic-console-offline-vsha-a"/);
+  assert.match(b.sw.body, /var CACHE_NAME = "clagentic-console-offline-vsha-b"/);
+  const again = await serverShapes("sha-a");
+  assert.equal(again.sw.body, a.sw.body, "a restart onto the same build keeps the worker");
+});
+
+test("stampServiceWorker stamps only the cache name", () => {
   const source = read("lib/public/sw.js");
   const a1 = clientBuildId.stampServiceWorker(source, "sha-a");
-  const a2 = clientBuildId.stampServiceWorker(source, "sha-a");
-  const b = clientBuildId.stampServiceWorker(source, "sha-b");
-  assert.equal(a1, a2);
-  assert.notEqual(a1, b);
-  assert.match(a1, /var CACHE_NAME = "clagentic-console-offline-vsha-a"/);
+  assert.equal(a1, clientBuildId.stampServiceWorker(source, "sha-a"));
+  assert.notEqual(a1, clientBuildId.stampServiceWorker(source, "sha-b"));
 });
 
 test("a build id cannot break out of the stamped string", () => {
@@ -114,26 +179,28 @@ test("a build id cannot break out of the stamped string", () => {
   assert.doesNotMatch(out, /alert\(1\)/);
 });
 
-test("the id is the daemon's build SHA when it has one, a per-start nonce otherwise, fixed once set", () => {
-  clientBuildId.resetForTest();
-  assert.equal(clientBuildId.init("abc123"), "abc123");
-  assert.equal(clientBuildId.init("other"), "abc123");
-  assert.equal(clientBuildId.get(), "abc123");
+// Each process start is a fresh module instance, which is what a restart is.
+function freshClientBuildId() {
+  freshLib();
+  return require("../lib/client-build-id");
+}
 
-  clientBuildId.resetForTest();
-  const first = clientBuildId.init(null);
-  assert.match(first, /^start-[0-9a-f]+$/);
-  assert.equal(clientBuildId.get(), first);
-  clientBuildId.resetForTest();
-  assert.notEqual(clientBuildId.init(null), first, "a restart without a SHA still changes the id");
-  clientBuildId.resetForTest();
+test("the id is the daemon's build SHA when it has one, a per-start nonce otherwise, fixed once set", () => {
+  const withSha = freshClientBuildId();
+  assert.equal(withSha.init("abc123"), "abc123");
+  assert.equal(withSha.init("other"), "abc123");
+  assert.equal(withSha.get(), "abc123");
+
+  const first = freshClientBuildId();
+  const firstId = first.init(null);
+  assert.match(firstId, /^start-[0-9a-f]+$/);
+  assert.equal(first.get(), firstId);
+  assert.notEqual(freshClientBuildId().init(null), firstId, "a restart without a SHA still changes the id");
 });
 
-test("server.js stamps sw.js from the build id, not the package version", () => {
-  const server = read("lib/server.js");
-  assert.match(server, /clientBuildId\.stampServiceWorker\(.*clientBuildId\.get\(\)\)/);
-  assert.doesNotMatch(server, /var appVersion = pkg\.version/);
+test("the daemon fixes the id from the build SHA it loaded at start", () => {
   assert.match(read("lib/daemon.js"), /require\("\.\/client-build-id"\)\.init\(loadedBuildSha\)/);
+  assert.equal(Object.keys(clientBuildId).includes("resetForTest"), false, "no test seam on the production export");
 });
 
 // --- (iii) an extracted entry renders as agent@project, live and on replay ---
