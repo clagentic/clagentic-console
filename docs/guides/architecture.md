@@ -213,7 +213,7 @@ Every line carries `formatVersion`, `kind`, `vendor`, `vendorSessionId`, `messag
 
 **The join key.** `messageId` is stable because the console mints it once, before the message is sent, and it never changes. It reaches the vendor transcript differently per vendor:
 
-- Claude: the console sends it as the `uuid` of the streamed user message (`SDKUserMessage.uuid`), so the transcript line for that message carries it as `uuid`. A tool matches `messageId` to the transcript line `uuid`.
+- Claude: the console sends it as the `uuid` of the streamed user message (`SDKUserMessage.uuid`), so the transcript line for that message carries it as `uuid`. A tool matches `messageId` to the transcript line `uuid` for a message that started a turn. A message queued into a turn that is already running is persisted by the vendor as an `attachment` record instead, and its `uuid` differs: there the `messageId` is the record's `source_uuid`. A tool therefore tries `uuid` first and `source_uuid` second.
 - Codex: the app-server accepts no client message id. When the turn starts the console appends a `turn` line pairing `messageId` with the app-server's `turnId`, which the rollout records as `turn_id` on that turn's events. A tool matches `turnId` to the rollout.
 
 A message with no `turn` line (a turn that never started) has no turn to match. A tool that needs a typed Codex message to count as the person's reads `initiator`: `human` is the operator; `scheduled`, `scheduled-now`, `loop` and `trigger` are never the operator.
