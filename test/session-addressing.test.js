@@ -258,6 +258,7 @@ test("to: the delivered input is recorded with the caller's extracted sender", f
   assert.equal(entry.senderKind, "extracted");
   assert.equal(entry.fromName, "naomi@lane");
   assert.equal(entry.senderSessionId, "3");
+  assert.equal(entry.senderCliSessionId, "cli-3", "recorded from the sender's own session at injection time");
 });
 
 // ---- send-input --reply ----
@@ -266,12 +267,14 @@ function injected(extra) {
   return Object.assign({ type: "user_message", text: "ping", source: "external-trigger", initiator: "trigger" }, extra);
 }
 
-function extractedFrom(name, project, sessionId) {
+// cliSessionId defaults to what session() gives the sender; null records none.
+function extractedFrom(name, project, sessionId, cliSessionId) {
   var parts = name.split("@");
   return senderFields("trigger", undefined, {
     name: name,
     project: project,
     sessionId: sessionId,
+    cliSessionId: cliSessionId === undefined ? "cli-" + sessionId : cliSessionId,
     agent: parts[0] === "claude" ? null : parts[0],
     agentSlug: parts[0] === "claude" ? null : parts[0],
     vendor: "claude",
@@ -372,12 +375,52 @@ test("reply: refused from outside a console session, or on a reference the conso
 test("reply: a recorded sender id that now names a different session is refused, never redirected", function () {
   var w = world({
     lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("naomi@lane", "lane", "3"))] })],
-    lane: [session(3, { agent: "someone-else" })],
+    lane: [session(3, { agent: "someone-else", cliSessionId: "cli-other" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
   assert.equal(r.result, "refused");
   assert.match(r.reason, /someone-else@lane/);
   assert.equal(w.calls.push.length, 0);
+});
+
+test("reply: a different session with the SAME label under the recorded console id is refused", function () {
+  var w = world({
+    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "3", "cli-original"))] })],
+    lane: [session(3, { vendor: "claude", cliSessionId: "cli-impostor" })],
+  });
+  var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
+  assert.equal(r.result, "refused");
+  assert.match(r.reason, /not the sender/);
+  assert.equal(w.calls.push.length + w.calls.start.length, 0);
+});
+
+test("reply: delivers when the stable id matches, even for a reaped plain session", function () {
+  var w = world({
+    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "3", "cli-keep"))] })],
+    lane: [session(3, { vendor: "claude", cliSessionId: "cli-keep", runtime: "reaped" })],
+  });
+  var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
+  assert.equal(r.result, "resumed-and-delivered");
+  assert.equal(w.calls.start[0].localId, 3);
+});
+
+test("reply: a message with no stable sender id is refused with a reason, never matched by label", function () {
+  var recorded = extractedFrom("naomi@lane", "lane", "3", null);
+  assert.equal(recorded.senderCliSessionId, undefined);
+  var w = world({
+    lore: [session(2, { agent: "Holden", history: [injected(recorded)] })],
+    lane: [session(3, { agent: "naomi" })],
+  });
+  var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
+  assert.equal(r.result, "refused");
+  assert.match(r.reason, /no stable identifier/);
+  assert.equal(w.calls.push.length + w.calls.start.length, 0);
+});
+
+test("sender record: the vendor session id is stored beside the console id", function () {
+  var fields = extractedFrom("naomi@lane", "lane", "3");
+  assert.equal(fields.senderSessionId, "3");
+  assert.equal(fields.senderCliSessionId, "cli-3");
 });
 
 test("reply: a sender that no longer exists is not-found", async function () {
