@@ -39,6 +39,7 @@ function project(sessions, calls) {
     createSession: function (o) {
       calls.created.push(o);
       var s = session(900 + calls.created.length, { cliSessionId: null, runtime: "reaped", vendor: o.vendor || null, agent: o.agentName });
+      if (o.sessionName) s.sessionName = o.sessionName;
       sm.sessions.set(s.localId, s);
       return s;
     },
@@ -169,7 +170,7 @@ test("to: a vendor address never reaches a named-agent session of that vendor", 
 });
 
 test("to: several plain sessions are refused with candidates, nothing is delivered", function () {
-  var w = world({ lore: [session(1, { title: "first" }), session(2, { title: "second", runtime: "live" })] });
+  var w = world({ lore: [session(1, { title: "first", runtime: "live" }), session(2, { title: "second", runtime: "live" })] });
   var r = w.input.sendInput({ to: "claude@lore", prompt: "hi" });
   assert.equal(r.ok, false);
   assert.equal(r.result, "ambiguous");
@@ -210,11 +211,146 @@ test("to: a session with a runtime is preferred over a reaped one", function () 
   assert.equal(w.calls.start.length, 0);
 });
 
-test("to: several with a runtime are ambiguous even when a reaped one exists", function () {
-  var w = world({ lore: [session(1, { agent: "Holden", runtime: "reaped" }), session(2, { agent: "Holden" }), session(3, { agent: "Holden", runtime: "live" })] });
+test("to: several live are ambiguous even when an idle and a reaped one exist; only the live tier is listed", function () {
+  var w = world({ lore: [
+    session(1, { agent: "Holden", runtime: "reaped" }), session(2, { agent: "Holden" }),
+    session(3, { agent: "Holden", runtime: "live" }), session(4, { agent: "Holden", runtime: "live" }),
+  ] });
   var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
   assert.equal(r.result, "ambiguous");
-  assert.deepEqual(r.candidates.map(function (c) { return c.consoleSessionId; }).sort(), ["2", "3"]);
+  assert.deepEqual(r.candidates.map(function (c) { return c.consoleSessionId; }).sort(), ["3", "4"]);
+  assert.equal(w.calls.push.length + w.calls.start.length, 0);
+});
+
+test("tiers: one live and one idle delivers to the live one, whatever the order", function () {
+  var w = world({ lore: [session(256, { agent: "Holden", runtime: "idle" }), session(257, { agent: "Holden", runtime: "live" })] });
+  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  assert.equal(r.result, "delivered");
+  assert.equal(r.consoleSessionId, "257");
+  var w2 = world({ lore: [session(257, { agent: "Holden", runtime: "live" }), session(256, { agent: "Holden", runtime: "idle" })] });
+  assert.equal(w2.input.sendInput({ to: "holden@lore", prompt: "x" }).consoleSessionId, "257");
+});
+
+test("tiers: several idle with no live are ambiguous, and a reaped one is not consulted", function () {
+  var w = world({ lore: [session(1, { agent: "Holden" }), session(2, { agent: "Holden" }), session(3, { agent: "Holden", runtime: "reaped" })] });
+  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  assert.equal(r.result, "ambiguous");
+  assert.deepEqual(r.candidates.map(function (c) { return c.consoleSessionId; }).sort(), ["1", "2"]);
+});
+
+test("tiers: one idle alone is delivered without a resume, and with a reaped one it still wins", function () {
+  var w = world({ lore: [session(1, { agent: "Holden", runtime: "reaped" }), session(2, { agent: "Holden" })] });
+  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  assert.equal(r.result, "delivered");
+  assert.equal(r.consoleSessionId, "2");
+  assert.equal(w.calls.start.length, 0);
+});
+
+test("tiers: several reaped are ambiguous, and the @project form tiers the same way", function () {
+  var w = world({ lore: [session(1, { agent: "Holden", runtime: "reaped" }), session(2, { runtime: "reaped" })] });
+  assert.equal(w.input.sendInput({ to: "@lore", prompt: "x" }).result, "ambiguous");
+  var mixed = world({ lore: [session(1, { agent: "Holden" }), session(2, { runtime: "live" })] });
+  assert.equal(mixed.input.sendInput({ to: "@lore", prompt: "x" }).consoleSessionId, "2");
+});
+
+// ---- named sessions ----
+
+function named(localId, name, opts) {
+  var s = session(localId, opts);
+  s.sessionName = name;
+  return s;
+}
+
+test("parseAddress: the optional /<name> follows the project in each form and is lowercased", function () {
+  assert.deepEqual(directory.parseAddress("holden@lore/Lane-2"), { project: "lore", token: "holden", name: "lane-2" });
+  assert.deepEqual(directory.parseAddress("claude@lore/a_b"), { project: "lore", token: "claude", name: "a_b" });
+  assert.deepEqual(directory.parseAddress("@lore/x"), { project: "lore", token: "", name: "x" });
+  ["holden@lore/", "holden@/x", "holden@lore/a/b", "holden@lore/-x", "holden@lore/" + "n".repeat(33), "holden@lore/a.b"].forEach(function (bad) {
+    assert.ok(directory.parseAddress(bad).error, "refused: " + bad);
+  });
+});
+
+test("list: a session carries its name, null when it has none", function () {
+  var w = world({ lore: [named(1, "lane-a", { agent: "Holden" }), session(2)] });
+  var byId = {};
+  w.input.listSessions({}).sessions.forEach(function (s) { byId[s.consoleSessionId] = s; });
+  assert.equal(byId["1"].name, "lane-a");
+  assert.equal(byId["1"].label, "Holden@lore");
+  assert.equal(byId["2"].name, null);
+});
+
+test("named: the name reaches the chosen session when two of the agent are live", function () {
+  var w = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "live" }), named(2, "lane-b", { agent: "Holden", runtime: "live" })] });
+  assert.equal(w.input.sendInput({ to: "holden@lore", prompt: "x" }).result, "ambiguous");
+  var r = w.input.sendInput({ to: "holden@lore/lane-a", prompt: "x" });
+  assert.equal(r.result, "delivered");
+  assert.equal(r.consoleSessionId, "1");
+  assert.equal(w.input.sendInput({ to: "HOLDEN@lore/Lane-B", prompt: "x" }).consoleSessionId, "2");
+  assert.equal(w.input.sendInput({ to: "@lore/lane-b", prompt: "x" }).consoleSessionId, "2");
+});
+
+test("named: an idle named session is reached though a live twin of the agent exists", function () {
+  var w = world({ lore: [named(1, "old", { agent: "Holden", runtime: "idle" }), session(2, { agent: "Holden", runtime: "live" })] });
+  assert.equal(w.input.sendInput({ to: "holden@lore", prompt: "x" }).consoleSessionId, "2");
+  var r = w.input.sendInput({ to: "holden@lore/old", prompt: "x" });
+  assert.equal(r.result, "delivered");
+  assert.equal(r.consoleSessionId, "1");
+});
+
+test("named: no match is not-found and never falls to another session; a wrong agent does not match", function () {
+  var w = world({ lore: [named(1, "lane-a", { agent: "Holden" }), session(2, { agent: "Holden", runtime: "live" })] });
+  assert.equal(w.input.sendInput({ to: "holden@lore/missing", prompt: "x" }).result, "not-found");
+  assert.equal(w.input.sendInput({ to: "naomi@lore/lane-a", prompt: "x" }).result, "not-found");
+  assert.equal(w.calls.push.length + w.calls.start.length, 0);
+});
+
+test("named: a reaped named session is resumed, and a running twin of the name outranks a reaped one", function () {
+  var w = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "reaped" })] });
+  var r = w.input.sendInput({ to: "holden@lore/lane-a", prompt: "x" });
+  assert.equal(r.result, "resumed-and-delivered");
+  assert.equal(r.consoleSessionId, "1");
+  var twins = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "reaped" }), named(2, "lane-a", { agent: "Holden", runtime: "idle" })] });
+  assert.equal(twins.input.sendInput({ to: "holden@lore/lane-a", prompt: "x" }).consoleSessionId, "2");
+});
+
+test("open: --name names the session, shown in the result and passed to createSession; the address form does the same", function () {
+  var w = world({ lore: [] });
+  var r = w.input.openSession({ projectSlug: "lore", agentName: "Holden", sessionName: "Lane-A", prompt: "go" });
+  assert.equal(r.result, "opened");
+  assert.equal(r.name, "lane-a");
+  assert.deepEqual(w.calls.created[0], { agentName: "Holden", sessionName: "lane-a" });
+  var viaAddress = w.input.openSession({ to: "naomi@lore/lane-b", prompt: "go" });
+  assert.equal(viaAddress.result, "opened");
+  assert.deepEqual(w.calls.created[1], { agentName: "naomi", sessionName: "lane-b" });
+});
+
+test("open: a name in use by a non-reaped session of the project is refused, a reaped holder is not", function () {
+  var w = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "idle" }), named(2, "old", { agent: "Holden", runtime: "reaped" })], other: [named(1, "lane-a", { agent: "Holden" })] });
+  var clash = w.input.openSession({ projectSlug: "lore", sessionName: "LANE-A", prompt: "go" });
+  assert.equal(clash.result, "refused");
+  assert.match(clash.reason, /already in use by session 1/);
+  assert.equal(w.input.openSession({ to: "holden@lore/lane-a", prompt: "go" }).result, "refused");
+  assert.equal(w.calls.created.length, 0);
+  assert.equal(w.input.openSession({ projectSlug: "lore", sessionName: "old", prompt: "go" }).result, "opened");
+  assert.equal(w.input.openSession({ projectSlug: "other", sessionName: "fresh", prompt: "go" }).result, "opened");
+});
+
+test("open: a bad name, or a name given twice, is refused and opens nothing", function () {
+  var w = world({ lore: [] });
+  assert.equal(w.input.openSession({ projectSlug: "lore", sessionName: "a b", prompt: "go" }).result, "refused");
+  assert.equal(w.input.openSession({ projectSlug: "lore", sessionName: "../x", prompt: "go" }).result, "refused");
+  var twice = w.input.openSession({ to: "@lore/x", sessionName: "y", prompt: "go" });
+  assert.equal(twice.result, "refused");
+  assert.equal(w.calls.created.length, 0);
+});
+
+test("reply: shares the resolver, so live outranks idle among sessions of the recorded identity", function () {
+  var w = world({
+    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "3", "dup-id"))] })],
+    lane: [session(3, { vendor: "claude", cliSessionId: "dup-id" }), session(4, { vendor: "claude", cliSessionId: "dup-id", runtime: "live" })],
+  });
+  var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
+  assert.equal(r.consoleSessionId, "4");
 });
 
 test("to: a single reaped match is resumed and delivered", function () {
@@ -577,6 +713,18 @@ test("cli: the target is named one way only", function () {
 
 test("cli: open-session takes --to in place of --project", function () {
   assert.deepEqual(cli.parseSessionArgs("open-session", ["--to", "codex@lore", "--prompt", "x"]).request, { to: "codex@lore", prompt: "x" });
+});
+
+test("cli: open-session takes --name, and send-input and list-sessions do not", function () {
+  assert.deepEqual(cli.parseSessionArgs("open-session", ["--project", "lore", "--name", "lane-a", "--prompt", "x"]).request, { projectSlug: "lore", sessionName: "lane-a", prompt: "x" });
+  assert.match(cli.parseSessionArgs("send-input", ["--to", "a@b", "--name", "x", "--prompt", "x"]).error, /--name/);
+  assert.match(cli.parseSessionArgs("list-sessions", ["--name", "x"]).error, /--name/);
+});
+
+test("ipc: sessionName reaches open-session", function () {
+  var seen = [];
+  handleSessionCommand({ openSession: function (req) { seen.push(req); } }, { cmd: "open_session", projectSlug: "p", sessionName: "lane-a", prompt: "x" });
+  assert.equal(seen[0].sessionName, "lane-a");
 });
 
 test("cli: list-sessions takes only its four filters, all optional", function () {
