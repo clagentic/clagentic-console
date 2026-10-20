@@ -166,21 +166,52 @@ test("run-now records the scheduled-now initiator and the schedule's note, then 
 
 // --- legacy and fail closed ---
 
-test("an entry with no recorded initiator and no browser marker never renders as the operator", async function () {
-  var shown = await shownFor({ type: "user_message", text: "old" });
+test("a legacy entry (no marker, no initiator) renders as the operator, as it always did", async function () {
+  assert.equal((await shownFor({ type: "user_message", text: "old" })).operator, true);
+});
+
+test("a legacy multi-user entry keeps its from and fromName path", async function () {
+  var entry = { type: "user_message", text: "old", from: "u1", fromName: "Andy" };
+  assert.equal(sender.forClient(entry), entry);
+  assert.equal((await shownFor(entry)).operator, true);
+});
+
+test("a legacy injected entry (external-trigger source) still takes the injected path", async function () {
+  var shown = await shownFor({ type: "user_message", text: "old", source: "external-trigger", initiator: "trigger" });
+  assert.equal(shown.operator, false);
+  assert.equal(shown.name, "injected (sender not recorded)");
+});
+
+test("a new entry written by the browser composer is marked, names the human initiator and is the operator", async function () {
+  var h = makeMessageHandler();
+  h.handler.handleUserMessage({}, { type: "message", text: "typed" });
+  var typed = h.session.history[0];
+  assert.equal(typed[sender.RECORD_FORMAT_FIELD], 1);
+  assert.equal(typed.initiator, INITIATORS.HUMAN);
+  assert.equal((await shownFor(typed)).operator, true);
+});
+
+test("a new (marked) entry missing its initiator fails closed: not the operator", async function () {
+  var shown = await shownFor(sender.stampRecord({ type: "user_message", text: "lost initiator" }));
   assert.equal(shown.operator, false);
   assert.equal(shown.kind, "unrecorded");
   assert.equal(shown.name, "injected (sender not recorded)");
 });
 
-test("a legacy multi-user entry that carries a user id stays that user's", async function () {
-  var shown = await shownFor({ type: "user_message", text: "old", from: "u1", fromName: "Andy" });
-  assert.equal(shown.operator, true);
+test("a marked entry cannot claim a user id to escape attribution", async function () {
+  var shown = await shownFor(sender.stampRecord({ type: "user_message", text: "x", from: "u1", fromName: "Andy" }));
+  assert.equal(shown.operator, false);
 });
 
 test("an entry cannot claim a user id to escape attribution once it names an initiator", async function () {
   var shown = await shownFor({ type: "user_message", text: "x", from: "u1", fromName: "Andy", initiator: "loop", senderKind: "automation" });
   assert.equal(shown.operator, false);
+});
+
+test("every new automation entry is marked", function () {
+  [INITIATORS.SCHEDULED, INITIATORS.SCHEDULED_NOW, INITIATORS.LOOP].forEach(function (i) {
+    assert.equal(sender.consoleTurnEntry(i, "t")[sender.RECORD_FORMAT_FIELD], 1);
+  });
 });
 
 // --- loop iteration ---
@@ -275,7 +306,7 @@ async function render(t, wide) {
   storeMod.createStore({ connected: true, myUserId: "me", cachedAllUsers: [] });
   var rendering = await import(dom.moduleUrl("app-rendering.js") + "?automation=" + (wide ? "wide" : "bubble"));
   var label = await clientModule();
-  var typed = { type: "user_message", text: "typed by me", initiator: "human" };
+  var typed = sender.stampRecord({ type: "user_message", text: "typed by me", initiator: "human" });
   var loop = sender.forClient(sender.consoleTurnEntry(INITIATORS.LOOP, "iteration prompt", "job-hunter daily · iteration 3"));
   [typed, loop].forEach(function (e) {
     rendering.addUserMessage(e.text, null, null, e.from, e.fromName, label.injectedFromMessage(e));
