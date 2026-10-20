@@ -138,8 +138,9 @@ test("activating deletes the old-named caches and keeps the current one", async 
   assert.deepStrictEqual(sw.deleted.sort(), ["clagentic-offline-v1.0.0", "clagentic-offline-v9.9.9"]);
 });
 
-test("server.js stamps the version into the console-scoped cache name sw.js ships with", function () {
-  var serverSrc = fs.readFileSync(path.join(REPO, "lib", "server.js"), "utf8");
+test("the build id is stamped into the console-scoped cache name sw.js ships with", function () {
+  // The rewrite lives in client-build-id.js, which server.js serves sw.js through.
+  var serverSrc = fs.readFileSync(path.join(REPO, "lib", "client-build-id.js"), "utf8");
   var m = serverSrc.match(/\/(var CACHE_NAME = "clagentic-console-offline-\[\^"\]\*")\//);
   assert.ok(m, "server.js must rewrite the console-scoped CACHE_NAME");
   var re = new RegExp(m[1]);
