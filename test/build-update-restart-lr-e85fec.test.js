@@ -101,8 +101,45 @@ test("a token is good once", async function () {
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
   w.idle.onIdle();
   var again = await w.controller.request(offer.token);
-  assert.notEqual(again.status, "restarting", "a replayed token must not schedule a second restart");
-  assert.equal(again.status, "confirm");
+  assert.equal(again.status, "restarting", "a replayed token reports the pending restart");
+  assert.equal(again.already, true);
+  assert.equal(w.restarts, 1, "a replayed token must not restart a second time");
+});
+
+test("a request while a restart is pending returns the pending state: no offer, no second wait", async function () {
+  var w = world();
+  w.add("lore", session("s1", "busy", { isProcessing: true }));
+  var scheduled = [];
+  w.controller = createBuildUpdateRestart({
+    assess: function () {
+      return {
+        state: "stale", reason: "sha", detail: "d", loadedBuildSha: "old", installedBuildSha: "new",
+        loadedContentHash: "h-old", installedContentHash: "h-new",
+      };
+    },
+    getProjects: function () { return w.projects; },
+    listChanges: async function () { return { available: true, commits: [], truncated: false, reason: null }; },
+    restart: function () { w.restarts += 1; },
+    waitForIdleThenAct: function (opts) { w.idle = opts; w.waits = (w.waits || 0) + 1; },
+    onScheduled: function (seconds) { scheduled.push(seconds); },
+    waitMs: 60000,
+  });
+  var first = (await w.controller.request(null)).offer;
+  var spare = (await w.controller.request(null)).offer;
+  assert.equal((await w.controller.request(first.token)).status, "restarting");
+  assert.deepEqual(scheduled, [60], "the pending restart is announced once, with its wait");
+  var waitingOn = w.idle;
+
+  var viaNoToken = await w.controller.request(null);
+  assert.equal(viaNoToken.status, "restarting");
+  assert.equal(viaNoToken.offer, undefined, "the restart prompt is not offered again");
+  var viaStaleToken = await w.controller.request(spare.token);
+  assert.equal(viaStaleToken.status, "restarting");
+  assert.equal(w.waits, 1, "no second wait was started");
+  assert.equal(w.idle, waitingOn);
+  assert.deepEqual(scheduled, [60], "a repeat request announces nothing new");
+  w.idle.onIdle();
+  assert.equal(w.restarts, 1);
 });
 
 test("a token the daemon did not issue restarts nothing and returns a fresh offer", async function () {

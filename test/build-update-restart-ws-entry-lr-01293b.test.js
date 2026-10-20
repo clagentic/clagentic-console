@@ -118,6 +118,8 @@ async function rig(t) {
         diagnostics.settleBuildUpdateRequest(msg);
       } else if (msg.type === "diagnostic") {
         diagnostics.addDiagnostic(msg);
+      } else if (msg.type === "diagnostic_retract") {
+        diagnostics.retractDiagnostics(msg.source);
       }
     },
   };
@@ -226,19 +228,19 @@ test("a second confirm while one waits restarts once and is journaled as already
   assert.equal(r.results[1].ok, true);
   var firstConfirm = r.frames[1];
 
-  // Another tab (or this one after a reconnect) asks for a fresh offer and
-  // confirms it while the first restart is still waiting on the running turn.
+  // Another tab (or this one after a reconnect) asks again while the first
+  // restart is still waiting on the running turn.
   var other = r.otherSocket();
   other.send({ type: "restart_for_build_update", requestId: "bu-other-1" });
   await flush();
-  var offerCard = other.got.find(function (m) { return m.type === "diagnostic" && m.buildUpdate && m.buildUpdate.token; });
-  assert.ok(offerCard, "a second offer is issued while the first restart waits");
-  other.send({ type: "restart_for_build_update", confirmToken: offerCard.buildUpdate.token, requestId: "bu-other-2" });
+  assert.ok(!other.got.some(function (m) { return m.type === "diagnostic" && m.buildUpdate; }), "no offer is issued while a restart waits");
+  other.send({ type: "restart_for_build_update", confirmToken: "f".repeat(32), requestId: "bu-other-2" });
   await flush();
 
   assert.ok(r.lines.some(function (l) { return /a confirmed restart is already waiting/.test(l); }), r.lines.join("\n"));
   var second = other.got.find(function (m) { return m.type === "restart_for_build_update_result" && m.requestId === "bu-other-2"; });
   assert.ok(second, "the second confirm is answered, with its own requestId");
+  assert.equal(second.ok, true, "a repeat reports the pending restart, not a refusal");
 
   t.mock.timers.tick(WAIT_MS);
   assert.equal(r.restarts(), 1, "two confirms schedule one restart");
@@ -249,6 +251,38 @@ test("a second confirm while one waits restarts once and is journaled as already
   await flush();
   t.mock.timers.tick(WAIT_MS);
   assert.equal(r.restarts(), 1, "a spent token never restarts a second time");
+});
+
+test("a confirmed restart leaves one restarting card that does not close on a timer and no prompt to click again", async function (t) {
+  var r = await rig(t);
+  r.sessions.set(1, liveSession(1, true));
+  r.standing();
+  r.button("Restart to apply update").click();
+  await flush();
+  r.button("Restart now").click();
+  await flush();
+  t.mock.timers.tick(400); // the withdrawn cards finish leaving
+
+  assert.equal(r.results[1].ok, true);
+  assert.equal(r.results[1].waitSeconds, WAIT_MS / 1000);
+  assert.equal(r.button("Restart to apply update"), null, "the first prompt is withdrawn");
+  assert.equal(r.button("Restart now"), null, "the confirm prompt is withdrawn");
+  var pending = /Restarting Clagentic: Console to apply the installed update\./g;
+  assert.equal((r.container.textContent.match(pending) || []).length, 1);
+
+  // A repeat from the same tab restates the state; it does not stack a card or ask again.
+  var tab = r.otherSocket();
+  tab.send({ type: "restart_for_build_update", requestId: "bu-repeat" });
+  await flush();
+  assert.equal(r.frames.length, 2, "no prompt was left to click");
+  t.mock.timers.tick(400);
+  assert.equal((r.container.textContent.match(pending) || []).length, 1);
+
+  // Well past the toast's old 6 s life and past the wait itself, still readable.
+  t.mock.timers.tick(WAIT_MS * 3);
+  assert.equal(r.restarts(), 1);
+  assert.equal((r.container.textContent.match(pending) || []).length, 1, "the state stays until the page is replaced");
+  assert.equal(r.button("Restart now"), null);
 });
 
 test("a non-admin socket sending the confirm frame is refused and restarts nothing", async function (t) {

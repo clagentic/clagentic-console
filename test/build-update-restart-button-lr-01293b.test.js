@@ -206,9 +206,8 @@ test("the daemon journals a confirmation that restarted nothing", async function
   assert.equal((await controller.request(offer.token)).status, "restarting");
   assert.ok(lines.some(function (l) { return /Restart confirmed after the offer changed \(now live and not offered: lore#s1\)/.test(l); }), lines.join("\n"));
 
-  var again = (await controller.request(null)).offer;
-  assert.equal((await controller.request(again.token)).status, "restarting");
-  var second = (await controller.request(null)).offer;
-  await controller.request(second.token);
+  var again = await controller.request(null);
+  assert.equal(again.status, "restarting");
+  assert.equal(again.offer, undefined, "a pending restart is never offered again");
   assert.ok(lines.some(function (l) { return /a confirmed restart is already waiting/.test(l); }), lines.join("\n"));
 });
