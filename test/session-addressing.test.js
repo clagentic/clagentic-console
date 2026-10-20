@@ -351,6 +351,29 @@ test("open: claiming a name held only by reaped sessions clears it from all of t
   assert.equal(other.sessionName, "keep", "another name is untouched");
 });
 
+test("open: a failed first-turn start leaves the reaped holder of the name untouched and addressable", function () {
+  var old = named(1, "coordinator", { agent: "Holden", runtime: "reaped" });
+  var w = world({ lore: [old] });
+  var sm = w.projects.lore.sm;
+  var saved = [];
+  sm.saveSessionFile = function (s) { saved.push(s.localId); };
+  sm.deleteSession = function (id) { sm.sessions.delete(id); };
+  var pendingTwinWins = null;
+  w.projects.lore.sdk.startQuery = function () {
+    // While the start is pending the new session is live and the old holder stays named.
+    pendingTwinWins = old.sessionName === "coordinator";
+    throw new Error("vendor down");
+  };
+  var r = w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" });
+  assert.equal(r.result, "error");
+  assert.ok(pendingTwinWins);
+  assert.equal(old.sessionName, "coordinator", "the old holder keeps its name");
+  assert.ok(!saved.includes(1), "the old holder was not rewritten");
+  w.projects.lore.sdk.startQuery = function () {};
+  var again = w.input.sendInput({ to: "holden@lore/coordinator", prompt: "x" });
+  assert.equal(again.consoleSessionId, "1", "the named address still resolves to it");
+});
+
 test("open: claiming a name held by a non-reaped session is refused and clears nothing", function () {
   var reaped = named(1, "coordinator", { agent: "Holden", runtime: "reaped" });
   var w = world({ lore: [reaped, named(2, "coordinator", { agent: "Holden", runtime: "idle" })] });
