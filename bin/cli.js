@@ -172,10 +172,11 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --list            List registered projects");
   console.log("       clagentic-console --activity-diagnostics  Print activity-divergence probe totals as JSON (agent-readable)");
   console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
-  console.log("       clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|-> [--vendor <id>] [--agent <name>]  Open a session and run a first prompt (prints JSON)");
+  console.log("       clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|-> [--vendor <id>] [--agent <name>] [--name <session-name>]  Open a session and run a first prompt (prints JSON)");
   console.log("       clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) --prompt <text|->  Send input to a session, resuming it if needed (prints JSON; exit 3 ambiguous, 4 not found by address)");
   console.log("       clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <id>] [--state live|idle|reaped|any]  List the console's sessions (prints JSON)");
-  console.log("         <address> is <agent>@<project>, <vendor>@<project> (a plain session) or @<project>");
+  console.log("         <address> is <agent>@<project>, <vendor>@<project> (a plain session) or @<project>, each with an optional /<session-name>");
+  console.log("         Several matches resolve live over idle over reaped; /<session-name> names one session exactly");
   console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");
   console.log("       clagentic-console daemon            Run the daemon in the foreground (used by the systemd unit)");
     console.log("");
