@@ -65,6 +65,8 @@ above. Use the canonical path.
 | `sessionId` | v2 only, optional | The `cliSessionId` of the target session. Find it in the session's JSONL file under `~/.clagentic/console/sessions/`. When present, injects into that session instead of spawning. |
 | `contextNote` | optional | Human-readable label shown in the session title for spawned sessions. Ignored on inject. |
 | `cwd` | optional | Working directory for spawned sessions. Ignored on inject. |
+| `from` | optional | Name of the sender, shown in the chat and published in the per-message sender record. Self-reported. |
+| `fromSession` | optional | The sending session's id at its own vendor. Stored with the sender and published in the per-message sender record (see architecture.md, "Integrating other tools"). |
 | `createdAt` | optional | ISO timestamp. Informational only. |
 
 ## Critical: `projectSlug` is NOT a path encoding
