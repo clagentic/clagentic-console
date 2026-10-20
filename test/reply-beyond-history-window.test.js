@@ -67,3 +67,25 @@ test("reply: an injected message older than the in-memory window still answers",
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
+
+test("reply: a session manager with no stored-history reader is a logged refusal, not 'no injected message'", function () {
+  var errors = [];
+  var origError = console.error;
+  console.error = function (m) { errors.push(String(m)); };
+  try {
+    var caller = { localId: 1, cliSessionId: "c", queryInstance: {}, vendor: "claude", history: [] };
+    var sm = { sessions: new Map([[1, caller]]), defaultVendor: "claude" };
+    var projects = { lore: { cwd: "/unused", sm: sm, sdk: {}, onProcessingChanged: function () {}, getLinuxUserForSession: function () { return null; } } };
+    var input = createSessionInput({
+      getProject: function (slug) { return projects[slug] || null; },
+      listProjects: function () { return [{ slug: "lore", project: projects.lore }]; },
+      agentCatalog: function () { return []; },
+    });
+    var r = input.sendInput({ reply: true, prompt: "done", senderProject: "lore", senderSessionId: "1" });
+    assert.equal(r.ok, false);
+    assert.ok(/cannot be searched/.test(r.reason), r.reason);
+    assert.ok(errors.some(function (e) { return /no stored-history reader/.test(e); }));
+  } finally {
+    console.error = origError;
+  }
+});

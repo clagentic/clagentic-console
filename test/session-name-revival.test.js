@@ -70,6 +70,37 @@ test("reaped lane-a, a new lane-a opened, then the old one is started: it is unn
   }
 });
 
+test("two same-named reaped sessions started in the same tick: exactly one keeps the name", async function () {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-namerevive-"));
+  try {
+    var r = rig(tmpHome);
+    var a = reapedNamed(r.sm, "sess-a", "lane-a");
+    var b = reapedNamed(r.sm, "sess-b", "lane-a");
+    var starts = [r.bridge.startQuery(a, "x", null, undefined), r.bridge.startQuery(b, "x", null, undefined)];
+    assert.equal(a.sessionName, "lane-a", "the first revival holds the name from the moment it starts");
+    assert.ok(!b.sessionName, "the second, in the same tick, sees the first as a holder and comes back unnamed");
+    await Promise.all(starts);
+    assert.equal([a, b].filter(function (s) { return s.sessionName === "lane-a"; }).length, 1);
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("a revival whose start fails does not keep holding the name", async function () {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-namerevive-"));
+  try {
+    var r = rig(tmpHome);
+    var a = reapedNamed(r.sm, "sess-a", "lane-a");
+    var b = reapedNamed(r.sm, "sess-b", "lane-a");
+    await r.bridge.startQuery(a, "x", null, undefined);
+    assert.equal(a._nameReserved, false, "the mark is released when the start ends");
+    await r.bridge.startQuery(b, "x", null, undefined);
+    assert.equal(b.sessionName, "lane-a", "a failed start left the session reaped, so it held nothing against the next");
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
 test("a revived session keeps its name when nobody else holds it, or only a reaped session does", async function () {
   var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-namerevive-"));
   try {

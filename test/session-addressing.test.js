@@ -36,6 +36,10 @@ function project(sessions, calls) {
     defaultVendor: "claude",
     recordHistoryEntry: function (s, e) { s.history.push(e); calls.recorded.push({ localId: s.localId, entry: e }); },
     appendToSessionFile: function () {},
+    findNewestHistoryEntry: function (s, accept) {
+      for (var i = s.history.length - 1; i >= 0; i--) if (accept(s.history[i])) return s.history[i];
+      return null;
+    },
     createSession: function (o) {
       calls.created.push(o);
       var s = session(900 + calls.created.length, { cliSessionId: null, runtime: "reaped", vendor: o.vendor || null, agent: o.agentName });
@@ -333,6 +337,40 @@ test("open: a name in use by a non-reaped session of the project is refused, a r
   assert.equal(w.calls.created.length, 0);
   assert.equal(w.input.openSession({ projectSlug: "lore", sessionName: "old", prompt: "go" }).result, "opened");
   assert.equal(w.input.openSession({ projectSlug: "other", sessionName: "fresh", prompt: "go" }).result, "opened");
+});
+
+test("open: claiming a name held only by reaped sessions clears it from all of them", function () {
+  var reaped = [1, 2, 3].map(function (i) { return named(i, "coordinator", { agent: "Holden", runtime: "reaped" }); });
+  var other = named(4, "keep", { agent: "Holden", runtime: "reaped" });
+  var w = world({ lore: reaped.concat([other]) });
+  var saved = [];
+  w.projects.lore.sm.saveSessionFile = function (s) { saved.push(s.localId); };
+  assert.equal(w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" }).result, "opened");
+  reaped.forEach(function (s) { assert.ok(!s.sessionName, "session " + s.localId); });
+  assert.deepEqual(saved.filter(function (id) { return id <= 3; }).sort(), [1, 2, 3], "each cleared session is persisted");
+  assert.equal(other.sessionName, "keep", "another name is untouched");
+});
+
+test("open: claiming a name held by a non-reaped session is refused and clears nothing", function () {
+  var reaped = named(1, "coordinator", { agent: "Holden", runtime: "reaped" });
+  var w = world({ lore: [reaped, named(2, "coordinator", { agent: "Holden", runtime: "idle" })] });
+  var r = w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" });
+  assert.equal(r.result, "refused");
+  assert.equal(reaped.sessionName, "coordinator");
+});
+
+test("named: a coordinator addressed by name resolves when it and all its predecessors are reaped", function () {
+  var w = world({ lore: [] });
+  for (var i = 0; i < 8; i++) {
+    assert.equal(w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" }).result, "opened");
+    w.projects.lore.sm.sessions.forEach(function (s) { s.cliSessionId = "cli-" + s.localId; s.queryInstance = null; s.isProcessing = false; });
+  }
+  var holders = [];
+  w.projects.lore.sm.sessions.forEach(function (s) { if (s.sessionName === "coordinator") holders.push(s); });
+  assert.equal(holders.length, 1, "only the newest still holds the name");
+  var r = w.input.sendInput({ to: "holden@lore/coordinator", prompt: "x" });
+  assert.equal(r.result, "resumed-and-delivered");
+  assert.equal(r.consoleSessionId, String(holders[0].localId));
 });
 
 test("open: two open-session calls for one name in the same tick give it to exactly one", async function () {
