@@ -335,6 +335,16 @@ test("open: a name in use by a non-reaped session of the project is refused, a r
   assert.equal(w.input.openSession({ projectSlug: "other", sessionName: "fresh", prompt: "go" }).result, "opened");
 });
 
+test("open: two open-session calls for one name in the same tick give it to exactly one", async function () {
+  var w = world({ lore: [] });
+  var results = await Promise.all([
+    w.input.openSession({ projectSlug: "lore", sessionName: "lane-a", prompt: "go" }),
+    w.input.openSession({ projectSlug: "lore", sessionName: "lane-a", prompt: "go" }),
+  ]);
+  assert.deepEqual(results.map(function (r) { return r.result; }).sort(), ["opened", "refused"]);
+  assert.equal(w.calls.created.length, 1);
+});
+
 test("open: a bad name, or a name given twice, is refused and opens nothing", function () {
   var w = world({ lore: [] });
   assert.equal(w.input.openSession({ projectSlug: "lore", sessionName: "a b", prompt: "go" }).result, "refused");

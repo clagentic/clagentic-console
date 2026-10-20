@@ -59,3 +59,58 @@ test("a session name round-trips through the meta line and a restart; an unnamed
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
+
+// Writes a stored session file with a name, as a past open-session left it.
+function storeNamed(sm, cliSessionId, name) {
+  var s = sm.createSessionRaw({});
+  s.cliSessionId = cliSessionId;
+  s.sessionName = name;
+  sm.sendAndRecord(s, { type: "user_message", text: "hello" });
+  sm.saveSessionFile(s);
+  return s;
+}
+
+function holderOf(sm, name) {
+  return Array.from(sm.sessions.values()).filter(function (s) { return s.sessionName === name; });
+}
+
+test("resume: a name held by another non-reaped session is cleared, the resume is not refused, the holder keeps it", function () {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-sessname-"));
+  try {
+    var sm = manager(tmpHome);
+    var old = storeNamed(sm, "sess-old", "lane-a");
+    // The old lane-a is reaped, so a replacement may take the name.
+    var replacement = sm.createSessionRaw({});
+    replacement.sessionName = "lane-a";
+    replacement.cliSessionId = "sess-new";
+    replacement.isProcessing = true;
+    sm.sessions.delete(old.localId);
+
+    var resumed = sm.resumeSession("sess-old", { sessionName: "lane-a", title: "t", history: [], activate: false });
+    assert.ok(resumed, "the resume is not refused");
+    assert.ok(!resumed.sessionName, "the resumed session is unnamed");
+    assert.equal(holderOf(sm, "lane-a").length, 1);
+    assert.equal(holderOf(sm, "lane-a")[0], replacement);
+
+    var meta = JSON.parse(fs.readFileSync(path.join(sm.sessionsDir, "sess-old.jsonl"), "utf8").split("\n")[0]);
+    assert.ok(!meta.sessionName, "the cleared name is gone from the stored meta too");
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("resume: a name nobody holds, or only a reaped session holds, is kept", function () {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-sessname-"));
+  try {
+    var sm = manager(tmpHome);
+    var reapedHolder = sm.createSessionRaw({});
+    reapedHolder.sessionName = "lane-b";
+    reapedHolder.cliSessionId = "sess-reaped";
+    var free = sm.resumeSession("sess-free", { sessionName: "lane-a", title: "t", history: [], activate: false });
+    assert.equal(free.sessionName, "lane-a");
+    var overReaped = sm.resumeSession("sess-over", { sessionName: "lane-b", title: "t", history: [], activate: false });
+    assert.equal(overReaped.sessionName, "lane-b");
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
