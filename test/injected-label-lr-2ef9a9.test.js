@@ -5,7 +5,13 @@ import { injectedSenderName, injectedLabel, injectedFromMessage } from "../lib/p
 
 test("operator-typed message has no injected descriptor", () => {
   assert.equal(injectedFromMessage({ type: "user_message", text: "hi", from: "u1", fromName: "Andy" }), null);
-  assert.equal(injectedFromMessage({ type: "user_message", text: "hi" }), null);
+  assert.equal(injectedFromMessage({ type: "user_message", text: "hi", initiator: "human" }), null);
+});
+
+test("a message that records no operator marker and no sender is never the operator", () => {
+  const inj = injectedFromMessage({ type: "user_message", text: "hi" });
+  assert.equal(inj.senderKind, "unrecorded");
+  assert.equal(injectedSenderName(inj), "injected (sender not recorded)");
 });
 
 test("declared sender shows its name and the declared marker", () => {

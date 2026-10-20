@@ -95,8 +95,16 @@ test("a stored sender cannot claim a user id or a spoofed kind on the way out", 
 test("an operator-typed message is returned untouched", function () {
   var typed = { type: "user_message", text: "hi", from: "u1", fromName: "Andy" };
   assert.equal(sender.forClient(typed), typed);
+  var stamped = { type: "user_message", text: "hi", initiator: "human" };
+  assert.equal(sender.forClient(stamped), stamped);
+});
+
+test("an entry with neither an operator marker nor a sender is attributed, not drawn as the operator", function () {
   var plain = { type: "user_message", text: "hi" };
-  assert.equal(sender.forClient(plain), plain);
+  var out = sender.forClient(plain);
+  assert.equal(out.senderKind, "unrecorded");
+  assert.equal(out.from.indexOf("injected:"), 0);
+  assert.equal(plain.senderKind, undefined);
 });
 
 test("CLI and IPC carry --from for both verbs", function () {
