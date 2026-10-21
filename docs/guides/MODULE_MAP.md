@@ -155,7 +155,7 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 | `prompt-state.js` | Per-requestId mirror of the server's prompt state (terminal states are final) and the mapping of older recorded message shapes onto the one prompt shape |
 | `prompt-card.js` | The card shell every kind shares: pending/sending/confirmed state machine, terminal outcome rendering |
 | `prompt-kinds/` | One renderer per prompt kind (permission, plan, ask-user, elicitation): body and answer controls, outcome labels. `permission-choices.js` decides which answers a tool-permission ask offers, and in what order, from the SDK's hints; the card and the banner both read it |
-| `mode-options.js` | The permission modes the config chip offers: the three every session has, Don't ask and Auto only for a vendor that declares them, Full auto when the daemon allows it |
+| `mode-options.js` | The permission modes the config chip offers: the three every session has, Don't ask and Auto only for a vendor that declares them, Bypass permissions when the daemon allows it |
 | `app-skills-install.js` | Skill install dialog, requireSkills |
 | `app-favicon.js` | Dynamic favicon, IO blink, urgent blink, send button mode, activity indicator |
 | `app-header.js` | Session rename, session info popover, progressive history loading |
