@@ -192,7 +192,6 @@ test("the daemon journals a confirmation that restarted nothing", async function
     getProjects: function () { return [{ slug: "lore", sm: { sessions: sessions } }]; },
     listChanges: async function () { return { available: false, commits: [], truncated: false, reason: null }; },
     restart: function () {},
-    waitForIdleThenAct: function () {},
     announce: function () {},
     log: function (line) { lines.push(line); },
   });
@@ -209,5 +208,5 @@ test("the daemon journals a confirmation that restarted nothing", async function
   var again = await controller.request(null);
   assert.equal(again.status, "restarting");
   assert.equal(again.offer, undefined, "a pending restart is never offered again");
-  assert.ok(lines.some(function (l) { return /a confirmed restart is already waiting/.test(l); }), lines.join("\n"));
+  assert.ok(lines.some(function (l) { return /a confirmed restart is already pending/.test(l); }), lines.join("\n"));
 });

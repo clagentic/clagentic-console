@@ -6,7 +6,7 @@
 // (lib/public/modules/diagnostics.js) produces them from button clicks, its
 // socket hands each one to the real restart_for_build_update handler in
 // lib/project-sessions.js, which calls the real createBuildUpdateRestart and
-// the real waitForIdleThenAct. The handler's answers (the result frame and the
+// the restart() stand-in. The handler's answers (the result frame and the
 // confirmation diagnostic) are fed back into the client's own entry points, so
 // the loop a phone or a desktop tab runs is closed. Only the build assessment,
 // the change list and the final restart() are stand-ins.
@@ -19,10 +19,8 @@ var { pathToFileURL } = require("url");
 var dom = require("./fake-dom-prompt-cards");
 var { attachSessions } = require("../lib/project-sessions");
 var { createBuildUpdateRestart } = require("../lib/build-update-restart");
-var { waitForIdleThenAct } = require("../lib/build-update-check");
 
 var MODULES = path.join(__dirname, "..", "lib", "public", "modules");
-var WAIT_MS = 3000;
 var instance = 0;
 
 var BUILDS = {
@@ -101,8 +99,6 @@ async function rig(t) {
     getProjects: function () { return [{ slug: "lore", sm: { sessions: sessions } }]; },
     listChanges: async function () { return { available: true, commits: [], truncated: false, reason: null }; },
     restart: function () { restarts += 1; },
-    waitForIdleThenAct: waitForIdleThenAct,
-    waitMs: WAIT_MS,
     log: function (line) { lines.push(line); },
   });
   var handler = attachSessions(makeCtx({ onRestartForBuildUpdate: function (token) { return controller.request(token); } }, sessions));
@@ -155,7 +151,7 @@ async function rig(t) {
   };
 }
 
-test("a session that starts a turn between offer and confirm: the confirm schedules the restart and the result echoes requestId", async function (t) {
+test("a session that starts a turn between offer and confirm: the confirm restarts at once and the result echoes requestId", async function (t) {
   var r = await rig(t);
   r.sessions.set(1, liveSession(1, false));
   r.standing();
@@ -188,10 +184,7 @@ test("a session that starts a turn between offer and confirm: the confirm schedu
   assert.equal(result.ok, true);
   assert.equal(r.button("Restart now").disabled, true, "a scheduled restart keeps the button dimmed");
   assert.ok(r.lines.some(function (l) { return /Restart confirmed after the offer changed/.test(l); }), r.lines.join("\n"));
-  assert.equal(r.restarts(), 0, "running turns get their bounded wait first");
-
-  t.mock.timers.tick(WAIT_MS);
-  assert.equal(r.restarts(), 1, "the restart fires once the wait is over, whatever the session set did");
+  assert.equal(r.restarts(), 1, "the restart fires at the confirm, whatever the session set did");
 });
 
 test("an unknown token is refused with its reason, restarts nothing and leaves the card usable", async function (t) {
@@ -213,11 +206,11 @@ test("an unknown token is refused with its reason, restarts nothing and leaves t
   assert.equal(r.results[0].needsConfirmation, true);
   assert.match(r.container.textContent, /That offer expired\. Review the current one\./, "the reason reaches the operator");
   assert.ok(r.lines.some(function (l) { return /the offer was unknown or expired/.test(l); }), r.lines.join("\n"));
-  t.mock.timers.tick(WAIT_MS * 2);
+  t.mock.timers.tick(6000);
   assert.equal(r.restarts(), 0);
 });
 
-test("a second confirm while one waits restarts once and is journaled as already waiting", async function (t) {
+test("a second confirm while one is pending restarts once and is journaled as already pending", async function (t) {
   var r = await rig(t);
   r.sessions.set(1, liveSession(1, true));
   r.standing();
@@ -229,27 +222,25 @@ test("a second confirm while one waits restarts once and is journaled as already
   var firstConfirm = r.frames[1];
 
   // Another tab (or this one after a reconnect) asks again while the first
-  // restart is still waiting on the running turn.
+  // restart is still pending.
   var other = r.otherSocket();
   other.send({ type: "restart_for_build_update", requestId: "bu-other-1" });
   await flush();
-  assert.ok(!other.got.some(function (m) { return m.type === "diagnostic" && m.buildUpdate; }), "no offer is issued while a restart waits");
+  assert.ok(!other.got.some(function (m) { return m.type === "diagnostic" && m.buildUpdate; }), "no offer is issued while a restart is pending");
   other.send({ type: "restart_for_build_update", confirmToken: "f".repeat(32), requestId: "bu-other-2" });
   await flush();
 
-  assert.ok(r.lines.some(function (l) { return /a confirmed restart is already waiting/.test(l); }), r.lines.join("\n"));
+  assert.ok(r.lines.some(function (l) { return /a confirmed restart is already pending/.test(l); }), r.lines.join("\n"));
   var second = other.got.find(function (m) { return m.type === "restart_for_build_update_result" && m.requestId === "bu-other-2"; });
   assert.ok(second, "the second confirm is answered, with its own requestId");
   assert.equal(second.ok, true, "a repeat reports the pending restart, not a refusal");
 
-  t.mock.timers.tick(WAIT_MS);
-  assert.equal(r.restarts(), 1, "two confirms schedule one restart");
+  assert.equal(r.restarts(), 1, "two confirms restart once");
 
   // The first confirm's token is spent: replaying its frame (a reconnect that
   // resends) does not restart again.
   other.send(firstConfirm);
   await flush();
-  t.mock.timers.tick(WAIT_MS);
   assert.equal(r.restarts(), 1, "a spent token never restarts a second time");
 });
 
@@ -264,7 +255,8 @@ test("a confirmed restart leaves one restarting card that does not close on a ti
   t.mock.timers.tick(400); // the withdrawn cards finish leaving
 
   assert.equal(r.results[1].ok, true);
-  assert.equal(r.results[1].waitSeconds, WAIT_MS / 1000);
+  assert.equal(r.results[1].waitSeconds, undefined, "no wait is reported");
+  assert.doesNotMatch(r.container.textContent, /seconds/, "the restarting card promises no wait");
   assert.equal(r.button("Restart to apply update"), null, "the first prompt is withdrawn");
   assert.equal(r.button("Restart now"), null, "the confirm prompt is withdrawn");
   var pending = /Restarting Clagentic: Console to apply the installed update\./g;
@@ -278,8 +270,8 @@ test("a confirmed restart leaves one restarting card that does not close on a ti
   t.mock.timers.tick(400);
   assert.equal((r.container.textContent.match(pending) || []).length, 1);
 
-  // Well past the toast's old 6 s life and past the wait itself, still readable.
-  t.mock.timers.tick(WAIT_MS * 3);
+  // Well past the toast's old 6 s life, still readable.
+  t.mock.timers.tick(10000);
   assert.equal(r.restarts(), 1);
   assert.equal((r.container.textContent.match(pending) || []).length, 1, "the state stays until the page is replaced");
   assert.equal(r.button("Restart now"), null);
