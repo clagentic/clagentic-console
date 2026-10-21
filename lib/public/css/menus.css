@@ -493,6 +493,7 @@
   border-radius: 12px;
   padding: 4px 0;
   min-width: 220px;
+  max-width: calc(100vw - 16px);
   max-height: min(600px, calc(100vh - 120px));
   overflow-y: auto;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
@@ -566,6 +567,22 @@
 
 .config-radio-item:hover { background: rgba(var(--overlay-rgb),0.05); color: var(--text); }
 .config-radio-item.active { color: var(--accent); font-weight: 600; }
+
+/* Mode entries carry a one-line hint under the label. The hint wraps and the
+   item is capped so the popover never grows past a phone viewport. */
+.config-mode-item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 280px;
+}
+.config-mode-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dimmer);
+  white-space: normal;
+  line-height: 1.35;
+}
 
 /* lr-f22787: same catalog-sourced marker as .settings-model-catalog-badge
    (server-settings.css), for the session-chip model picker surface. */
