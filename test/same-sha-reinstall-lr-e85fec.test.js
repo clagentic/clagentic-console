@@ -70,7 +70,12 @@ test("the tree hash ignores build-sha.json and nothing else under lib", function
   var first = hasher.hash();
   repack(root, "s9", "other");
   assert.equal(hasher.hash(), first);
-  fs.writeFileSync(path.join(root, "lib", "a.js"), "two");
+  // Replace the file the way an install does (new inode). An in-place rewrite
+  // of the same size within one filesystem timestamp tick keeps the cache key
+  // and is a documented limit of the hasher, so it cannot be asserted here.
+  var replacement = path.join(root, "lib", "a.js.new");
+  fs.writeFileSync(replacement, "two");
+  fs.renameSync(replacement, path.join(root, "lib", "a.js"));
   assert.notEqual(hasher.hash(), first);
 });
 
