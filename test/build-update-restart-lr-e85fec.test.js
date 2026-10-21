@@ -20,7 +20,6 @@ function world() {
     installed: { sha: "new", hash: "h-new" },
     restarts: 0,
     announced: [],
-    idle: null,
     clock: 1000,
     add: function (slug, s) { w.projects.find(function (p) { return p.slug === slug; }).sm.sessions.set(s.localId, s); },
     remove: function (slug, id) { w.projects.find(function (p) { return p.slug === slug; }).sm.sessions.delete(id); },
@@ -36,10 +35,8 @@ function world() {
     getProjects: function () { return w.projects; },
     listChanges: async function () { return { available: true, commits: [{ sha: "abc1234", subject: "fix a thing" }], truncated: false, reason: null }; },
     restart: function () { w.restarts += 1; },
-    waitForIdleThenAct: function (opts) { w.idle = opts; },
     announce: function (m) { w.announced.push(m); },
     nowMs: function () { return w.clock; },
-    waitMs: 60000,
   });
   return w;
 }
@@ -60,7 +57,6 @@ test("asking for the offer restarts nothing and names every live session and bac
   var r = await w.controller.request(null);
   assert.equal(r.status, "confirm");
   assert.equal(w.restarts, 0);
-  assert.equal(w.idle, null, "nothing is scheduled by asking");
   var offer = r.offer;
   assert.equal(offer.loadedBuildSha, "old");
   assert.equal(offer.installedBuildSha, "new");
@@ -71,7 +67,7 @@ test("asking for the offer restarts nothing and names every live session and bac
   assert.match(offer.interruptionText, /2 live sessions and 2 background agents/);
   assert.match(offer.interruptionText, /\[lore\] HOLDEN lane \(running a turn; background agents:/);
   assert.match(offer.interruptionText, /\[workspace\] idle one \(idle\)/);
-  assert.match(offer.interruptionText, /up to 60 seconds/);
+  assert.doesNotMatch(offer.interruptionText, /second|wait|finish first/i, "the card promises no wait");
   assert.ok(offer.token);
 });
 
@@ -82,31 +78,67 @@ test("a session with a worker and no query instance is live", async function () 
   assert.equal(r.offer.interruptions.sessionCount, 1);
 });
 
-test("the confirmed offer schedules the restart; it fires only when the wait ends", async function () {
+test("the confirmed offer restarts at once, even with a turn running", async function () {
   var w = world();
   w.add("lore", session("s1", "busy", { isProcessing: true }));
   var offer = (await w.controller.request(null)).offer;
   var r = await w.controller.request(offer.token);
   assert.equal(r.status, "restarting");
-  assert.ok(w.idle, "the bounded wait was started");
-  assert.equal(w.restarts, 0, "scheduled is not restarted");
-  assert.equal(w.idle.getActiveCount(), 1, "a running turn is what the wait is for");
-  w.idle.onIdle();
-  assert.equal(w.restarts, 1);
+  assert.equal(r.waitSeconds, undefined, "no wait is reported");
+  assert.equal(w.restarts, 1, "restart was called before the confirm returned");
+});
+
+test("the restarting state is announced before the restart is performed", async function () {
+  var w = world();
+  var order = [];
+  w.controller = createBuildUpdateRestart({
+    assess: function () {
+      return {
+        state: "stale", reason: "sha", detail: "d", loadedBuildSha: "old", installedBuildSha: "new",
+        loadedContentHash: "h-old", installedContentHash: "h-new",
+      };
+    },
+    getProjects: function () { return w.projects; },
+    listChanges: async function () { return { available: true, commits: [], truncated: false, reason: null }; },
+    restart: function () { order.push("restart"); },
+    onScheduled: function () { order.push("announce"); },
+  });
+  var offer = (await w.controller.request(null)).offer;
+  await w.controller.request(offer.token);
+  assert.deepEqual(order, ["announce", "restart"]);
+});
+
+test("a restart that throws leaves nothing pending", async function () {
+  var w = world();
+  var calls = 0;
+  w.controller = createBuildUpdateRestart({
+    assess: function () {
+      return {
+        state: "stale", reason: "sha", detail: "d", loadedBuildSha: "old", installedBuildSha: "new",
+        loadedContentHash: "h-old", installedContentHash: "h-new",
+      };
+    },
+    getProjects: function () { return w.projects; },
+    listChanges: async function () { return { available: true, commits: [], truncated: false, reason: null }; },
+    restart: function () { calls += 1; if (calls === 1) throw new Error("boom"); },
+  });
+  var offer = (await w.controller.request(null)).offer;
+  await assert.rejects(w.controller.request(offer.token), /boom/);
+  var again = await w.controller.request(null);
+  assert.equal(again.status, "confirm", "the operator can ask again");
 });
 
 test("a token is good once", async function () {
   var w = world();
   var offer = (await w.controller.request(null)).offer;
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
-  w.idle.onIdle();
   var again = await w.controller.request(offer.token);
   assert.equal(again.status, "restarting", "a replayed token reports the pending restart");
   assert.equal(again.already, true);
   assert.equal(w.restarts, 1, "a replayed token must not restart a second time");
 });
 
-test("a request while a restart is pending returns the pending state: no offer, no second wait", async function () {
+test("a request while a restart is pending returns the pending state: no offer, no second restart", async function () {
   var w = world();
   w.add("lore", session("s1", "busy", { isProcessing: true }));
   var scheduled = [];
@@ -120,26 +152,21 @@ test("a request while a restart is pending returns the pending state: no offer, 
     getProjects: function () { return w.projects; },
     listChanges: async function () { return { available: true, commits: [], truncated: false, reason: null }; },
     restart: function () { w.restarts += 1; },
-    waitForIdleThenAct: function (opts) { w.idle = opts; w.waits = (w.waits || 0) + 1; },
-    onScheduled: function (seconds) { scheduled.push(seconds); },
-    waitMs: 60000,
+    onScheduled: function () { scheduled.push("announced"); },
   });
   var first = (await w.controller.request(null)).offer;
   var spare = (await w.controller.request(null)).offer;
   assert.equal((await w.controller.request(first.token)).status, "restarting");
-  assert.deepEqual(scheduled, [60], "the pending restart is announced once, with its wait");
-  var waitingOn = w.idle;
+  assert.deepEqual(scheduled, ["announced"], "the pending restart is announced once");
+  assert.equal(w.restarts, 1);
 
   var viaNoToken = await w.controller.request(null);
   assert.equal(viaNoToken.status, "restarting");
   assert.equal(viaNoToken.offer, undefined, "the restart prompt is not offered again");
   var viaStaleToken = await w.controller.request(spare.token);
   assert.equal(viaStaleToken.status, "restarting");
-  assert.equal(w.waits, 1, "no second wait was started");
-  assert.equal(w.idle, waitingOn);
-  assert.deepEqual(scheduled, [60], "a repeat request announces nothing new");
-  w.idle.onIdle();
-  assert.equal(w.restarts, 1);
+  assert.deepEqual(scheduled, ["announced"], "a repeat request announces nothing new");
+  assert.equal(w.restarts, 1, "restart called once");
 });
 
 test("a token the daemon did not issue restarts nothing and returns a fresh offer", async function () {
@@ -147,7 +174,6 @@ test("a token the daemon did not issue restarts nothing and returns a fresh offe
   var r = await w.controller.request("not-a-real-token");
   assert.equal(r.status, "confirm");
   assert.equal(w.restarts, 0);
-  assert.equal(w.idle, null);
   assert.ok(r.offer.token && r.offer.token !== "not-a-real-token");
 });
 
@@ -158,7 +184,7 @@ test("an offer that expired is replaced, not honoured", async function () {
   var r = await w.controller.request(offer.token);
   assert.equal(r.status, "confirm");
   assert.match(r.note, /expired/);
-  assert.equal(w.idle, null);
+  assert.equal(w.restarts, 0);
 });
 
 // Contract change (operator ruling, lr-01293b seq 14): the confirm card is the
@@ -170,8 +196,6 @@ test("a live session that appeared after the offer was shown still restarts on c
   w.add("workspace", session("s2", "appeared later"));
   var r = await w.controller.request(offer.token);
   assert.equal(r.status, "restarting");
-  assert.ok(w.idle, "the restart was scheduled");
-  w.idle.onIdle();
   assert.equal(w.restarts, 1);
 });
 
@@ -182,7 +206,7 @@ test("a background agent that started after the offer was shown still restarts o
   var offer = (await w.controller.request(null)).offer;
   s.activeTaskToolIds = { late: true };
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
-  assert.ok(w.idle);
+  assert.equal(w.restarts, 1);
 });
 
 test("a session shown as idle that starts a turn after the offer still restarts on confirm", async function () {
@@ -192,8 +216,7 @@ test("a session shown as idle that starts a turn after the offer still restarts 
   var offer = (await w.controller.request(null)).offer;
   s.isProcessing = true;
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
-  assert.ok(w.idle);
-  assert.equal(w.restarts, 0, "scheduled is not restarted");
+  assert.equal(w.restarts, 1);
 });
 
 test("a session shown as running that went idle does not invalidate the offer", async function () {
@@ -210,7 +233,7 @@ test("a different build installed after the offer still restarts on confirm", as
   var offer = (await w.controller.request(null)).offer;
   w.installed = { sha: "newer", hash: "h-newer" };
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
-  assert.ok(w.idle);
+  assert.equal(w.restarts, 1);
 });
 
 test("sessions that finished since the offer do not invalidate it", async function () {
@@ -222,14 +245,15 @@ test("sessions that finished since the offer do not invalidate it", async functi
   assert.equal((await w.controller.request(offer.token)).status, "restarting");
 });
 
-test("a session that starts while the confirmed restart waits does not cancel it", async function () {
+test("a session that starts after the confirm does not start a second restart", async function () {
   var w = world();
   w.add("lore", session("s1", "busy", { isProcessing: true }));
   var offer = (await w.controller.request(null)).offer;
   await w.controller.request(offer.token);
   w.add("workspace", session("s9", "started after confirming"));
-  w.idle.onIdle();
-  assert.equal(w.restarts, 1, "the card said sessions that start before the restart end with it");
+  var again = await w.controller.request(null);
+  assert.equal(again.status, "restarting");
+  assert.equal(w.restarts, 1);
   assert.equal(w.announced.length, 0);
 });
 
@@ -240,15 +264,14 @@ test("the confirm card states that sessions starting before the restart end with
   assert.match(offer.interruptionText, /ends these sessions and any that start before the restart happens/);
 });
 
-test("a second confirmation while one restart is waiting does not schedule another", async function () {
+test("a second confirmation while a restart is pending does not restart again", async function () {
   var w = world();
   var o1 = (await w.controller.request(null)).offer;
   var o2 = (await w.controller.request(null)).offer;
   await w.controller.request(o1.token);
-  var first = w.idle;
   var r = await w.controller.request(o2.token);
   assert.equal(r.status, "restarting");
-  assert.equal(w.idle, first, "no second wait was started");
+  assert.equal(w.restarts, 1);
 });
 
 test("no offer is issued for a build that was adopted while its change list was read", async function () {
@@ -265,7 +288,6 @@ test("no offer is issued for a build that was adopted while its change list was 
     getProjects: function () { return w.projects; },
     listChanges: function () { return new Promise(function (resolve) { release = resolve; }); },
     restart: function () { w.restarts += 1; },
-    waitForIdleThenAct: function (opts) { w.idle = opts; },
     announce: function () {},
   });
   var pending = controller.request(null);
@@ -291,7 +313,6 @@ test("the offer lists a session that started while its change list was read", as
       return { available: true, commits: [], truncated: false, reason: null };
     },
     restart: function () {},
-    waitForIdleThenAct: function () {},
     announce: function () {},
   });
   var r = await w.controller.request(null);
@@ -299,7 +320,7 @@ test("the offer lists a session that started while its change list was read", as
 });
 
 test("describeInterruptions says plainly when nothing is live", function () {
-  assert.match(describeInterruptions(collectInterruptions([]), 60), /No session is live/);
+  assert.match(describeInterruptions(collectInterruptions([])), /No session is live/);
 });
 
 test("collectInterruptions bounds and cleans what the model or user supplied", function () {
