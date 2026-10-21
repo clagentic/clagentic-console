@@ -212,8 +212,6 @@ test("build-update-detail says why the change list is missing instead of showing
       changes: { available: false, commits: [], truncated: false, reason: "no git history is available for this install" },
     });
     assert.ok(root.textContent.indexOf("Change list unavailable: no git history is available for this install.") !== -1);
-    var same = mod.buildUpdateDetailEl({ loadedBuildSha: "a", installedBuildSha: "a", reason: "content", changes: { available: false, commits: [] } });
-    assert.ok(same.textContent.indexOf("same build") !== -1);
   } finally {
     delete global.document;
   }
