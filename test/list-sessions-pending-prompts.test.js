@@ -1,6 +1,3 @@
-// list-sessions reports each session's pending operator prompts from the
-// daemon's in-memory registry state: tool, one-line summary, requestId, age.
-
 var test = require("node:test");
 var assert = require("node:assert/strict");
 
