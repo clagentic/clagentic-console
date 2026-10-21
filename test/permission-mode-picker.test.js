@@ -31,9 +31,28 @@ test("the picker offers the three base modes always, and Don't ask and Auto only
 
   var labels = {};
   modeOptions(claudeCapabilities(), true).forEach(function (o) { labels[o.value] = o.label; });
-  assert.equal(labels.dontAsk, "Don’t ask");
-  assert.equal(labels.auto, "Auto");
+  assert.equal(labels.dontAsk, "Don’t ask (deny)");
+  assert.equal(labels.auto, "Auto (model decides)");
   assert.equal(labels.bypassPermissions, "Full auto");
+});
+
+test("each mode value has one pinned label and hint", async function () {
+  var { modeOptions } = await modeOptionsModule();
+  var pinned = {
+    default: ["Default", "Asks before each action that needs permission."],
+    plan: ["Plan", "Plans only and makes no changes until you approve the plan."],
+    acceptEdits: ["Accept edits", "Approves file edits automatically and asks for everything else."],
+    dontAsk: ["Don’t ask (deny)", "Never asks. Denies any action that is not already approved."],
+    auto: ["Auto (model decides)", "A model approves or denies each action and asks you only when it cannot decide."],
+    bypassPermissions: ["Full auto", "Skips permission checks and approves every action."],
+  };
+  var options = modeOptions(claudeCapabilities(), true);
+  assert.deepEqual(values(options), Object.keys(pinned));
+  options.forEach(function (o) {
+    assert.deepEqual([o.label, o.hint], pinned[o.value], o.value);
+  });
+  var labels = options.map(function (o) { return o.label; });
+  assert.equal(new Set(labels).size, labels.length, "no two modes share a label");
 });
 
 test("a Claude session declares every mode the picker can offer", function () {
