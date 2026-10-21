@@ -15,7 +15,10 @@
 // trailing JSON array specifically (the only valid JSON substring `npm pack
 // --json` ever emits), rather than trusting the whole stdout to be clean.
 
+const fs = require('fs');
+const path = require('path');
 const { execFileSync } = require('child_process');
+const { createTreeHasher } = require('../lib/build-identity');
 
 // Extracts the packed tarball filename from `npm pack --json`'s raw stdout.
 // Exported (not just used internally) so tests can exercise the parsing
@@ -66,7 +69,48 @@ function packAndGetFilename() {
   return extractTarballFilename(raw);
 }
 
+// A same-sha reinstall replaces the installed files with new inodes under a
+// running daemon, so it can only do harm: the daemon is already running that
+// build. True when the installed build has this tree's sha and the same files.
+// `read` is injectable for tests; it must return { headSha, installedSha,
+// repoHash, installedHash } and any of them may be null when unknown.
+function installedMatchesTree(read) {
+  const s = read();
+  return !!(s.headSha && s.installedSha === s.headSha &&
+    s.repoHash && s.installedHash === s.repoHash);
+}
+
+function readTreeState() {
+  const repoRoot = path.join(__dirname, '..');
+  const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+  const globalRoot = execFileSync('npm', ['root', '-g'], { encoding: 'utf8' }).trim();
+  const installedRoot = path.join(globalRoot, '@clagentic', 'console');
+  const installedSha = JSON.parse(fs.readFileSync(path.join(installedRoot, 'lib', 'build-sha.json'), 'utf8')).sha;
+  return {
+    headSha,
+    installedSha,
+    repoHash: createTreeHasher(repoRoot).hash(),
+    installedHash: createTreeHasher(installedRoot).hash(),
+  };
+}
+
+// Any failure to establish the match (nothing installed yet, unreadable
+// tree) means "install", never "skip".
+function shouldSkipInstall(read) {
+  try {
+    return installedMatchesTree(read || readTreeState);
+  } catch (err) {
+    console.log(`[install-local-test] could not compare with the installed build (${err.message}); installing`);
+    return false;
+  }
+}
+
 function main() {
+  if (!process.argv.includes('--force') && shouldSkipInstall()) {
+    console.log('[install-local-test] ok: this build is already installed with identical files; nothing to do (--force reinstalls)');
+    return;
+  }
+
   let tarball;
   try {
     tarball = packAndGetFilename();
@@ -90,7 +134,7 @@ function main() {
   console.log('[install-local-test] ok: installed');
 }
 
-module.exports = { extractTarballFilename };
+module.exports = { extractTarballFilename, installedMatchesTree, shouldSkipInstall };
 
 if (require.main === module) {
   main();
