@@ -63,8 +63,29 @@ test("toLaunchToolList returns null when there is nothing to pass", function () 
   assert.equal(agents.toLaunchToolList(null), null);
   assert.equal(agents.toLaunchToolList(undefined), null);
   assert.equal(agents.toLaunchToolList("Read"), null);
-  assert.equal(agents.toLaunchToolList([]), null);
-  assert.equal(agents.toLaunchToolList(["", "(x)", 7, null]), null);
+});
+
+test("toLaunchToolList keeps an empty list empty, including one that reduces to empty", function () {
+  assert.deepEqual(agents.toLaunchToolList([]), []);
+  assert.deepEqual(agents.toLaunchToolList(["", "(x)", 7, null]), []);
+});
+
+test("a list of only MCP names stays those names", function () {
+  assert.deepEqual(agents.toLaunchToolList(["mcp__srv__a", "mcp__srv__b"]), ["mcp__srv__a", "mcp__srv__b"]);
+});
+
+test("every non-empty entry keeps its tool name, so a non-empty list never reduces to empty", function () {
+  var entries = ["Read", "Agent(helper)", "Bash(cmd:*)", "mcp__srv__lookup", "X(y)"];
+  assert.equal(agents.toLaunchToolList(entries).length, entries.length);
+});
+
+test("an explicit empty tools field in a definition reads as [] and an absent one as null", function () {
+  var empty = withAgentsDir({ lane: definition("tools: []") }, function (dir) { return launchToolsFor(dir, "lane"); });
+  assert.deepEqual(empty, []);
+  var absent = withAgentsDir({ lane: definition(null) }, function (dir) { return launchToolsFor(dir, "lane"); });
+  assert.equal(absent, null);
+  var unparseable = withAgentsDir({ lane: definition("tools: [Read") }, function (dir) { return launchToolsFor(dir, "lane"); });
+  assert.equal(unparseable, null);
 });
 
 // --- definition to SDK options, in process ---
@@ -112,9 +133,28 @@ test("a plain session leaves the tools option unset", async function () {
   withOptions.close();
 });
 
-test("an empty or malformed tools value is never passed on", async function () {
+test("an explicit empty tools list reaches the SDK as [] (no built-in tools), in process", async function () {
+  var tools = withAgentsDir({ lane: definition("tools: []") }, function (dir) { return launchToolsFor(dir, "lane"); });
   var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
-  var values = [[], [""], "Read", null, { type: "preset", preset: "claude_code" }];
+  var handle = await adapter.createQuery({ cwd: os.tmpdir(), adapterOptions: { CLAUDE: { agent: "lane", tools: tools } } });
+  assert.deepEqual(lastFakeQuery().options.tools, []);
+  handle.close();
+  var onlyBlank = await adapter.createQuery({ cwd: os.tmpdir(), adapterOptions: { CLAUDE: { tools: [""] } } });
+  assert.deepEqual(lastFakeQuery().options.tools, []);
+  onlyBlank.close();
+});
+
+test("a definition of only MCP names reaches the SDK as those names", async function () {
+  var tools = withAgentsDir({ lane: definition('tools: ["mcp__srv__a"]') }, function (dir) { return launchToolsFor(dir, "lane"); });
+  var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
+  var handle = await adapter.createQuery({ cwd: os.tmpdir(), adapterOptions: { CLAUDE: { agent: "lane", tools: tools } } });
+  assert.deepEqual(lastFakeQuery().options.tools, ["mcp__srv__a"]);
+  handle.close();
+});
+
+test("a non-list tools value is never passed on", async function () {
+  var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
+  var values = ["Read", null, { type: "preset", preset: "claude_code" }];
   for (var i = 0; i < values.length; i++) {
     var handle = await adapter.createQuery({ cwd: os.tmpdir(), adapterOptions: { CLAUDE: { tools: values[i] } } });
     assert.equal("tools" in lastFakeQuery().options, false, "value " + JSON.stringify(values[i]));
@@ -146,6 +186,17 @@ test("an OS-user session sends the agent's tools list to the worker", async func
   });
   var start = worker.sent.find(function (m) { return m.type === "query_start"; });
   assert.deepEqual(start.options.tools, ["Read", "Grep", "Glob"]);
+});
+
+test("an OS-user session sends an explicit empty tools list as []", async function () {
+  var adapter = claudeModule.createClaudeAdapter({ cwd: os.tmpdir() });
+  var worker = fakeWorker();
+  await adapter.createQuery({
+    cwd: os.tmpdir(),
+    adapterOptions: { CLAUDE: { linuxUser: "alice", _workerState: { worker: worker }, tools: [] } },
+  });
+  var start = worker.sent.find(function (m) { return m.type === "query_start"; });
+  assert.deepEqual(start.options.tools, []);
 });
 
 test("an OS-user session with no tools list sends none", async function () {

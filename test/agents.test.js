@@ -194,7 +194,7 @@ maybeTest("readAgentToolsFromFile: returns null for malformed JSON array", funct
   }
 });
 
-maybeTest("readAgentToolsFromFile: returns null for empty JSON array", function () {
+maybeTest("readAgentToolsFromFile: returns [] for an explicit empty JSON array", function () {
   var slug = TEMP_AGENT_PREFIX + "empty-array";
   var content = [
     "---",
@@ -206,9 +206,9 @@ maybeTest("readAgentToolsFromFile: returns null for empty JSON array", function 
   writeTempAgent(slug, content);
   try {
     var result = readAgentToolsFromFile(slug);
-    // An empty tools array means no tools — caller should leave enforcement
-    // to the SDK's own agent option rather than restricting to an empty set.
-    assert.strictEqual(result, null, "empty array should return null (caller leaves restriction to SDK)");
+    // An explicit empty list is a list naming no tool; it stays distinct from
+    // an absent field (null) so the caller does not widen it to the default.
+    assert.deepStrictEqual(result, [], "empty array should stay an empty list");
   } finally {
     removeTempAgent(slug);
   }
