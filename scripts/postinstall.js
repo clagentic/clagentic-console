@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-// postinstall.js — installs/updates the systemd service unit on Linux global npm installs.
+// postinstall.js — installs/updates the systemd service unit on Linux global npm installs,
+// and adds the one Claude Code allow rule for `clagentic-console list-sessions` (lib/claude-allow-rule.js).
 // Runs automatically after `npm install -g @clagentic/console`.
 // Does nothing on non-Linux platforms, on non-global installs (a local `npm ci` /
 // `npm install` in a dev checkout or worktree must never touch /etc/systemd or
@@ -12,8 +13,10 @@
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
+const { ensureAllowRule, settingsPathFor } = require('../lib/claude-allow-rule');
 const {
   LEGACY_WRAPPER_PATH,
   isLegacyWrapperContent,
@@ -46,6 +49,7 @@ function realDeps() {
     legacyWrapperPath: LEGACY_WRAPPER_PATH,
     pkgDir: PKG_DIR,
     unitSrc: UNIT_SRC,
+    claudeSettingsPath: settingsPathFor(process.env, os.homedir()),
     log: (msg) => console.log(`${PREFIX} ${msg}`),
     // Returns stdout string on success, throws on failure.
     runCmd: (cmd, args) => execFileSync(cmd, args, { stdio: 'pipe' }).toString().trim(),
@@ -266,6 +270,11 @@ function run(deps) {
 
   // Step 6: Apply the memory-limit drop-in.
   applyMemoryDropIn(deps);
+
+  // Step 7: Register the one allow rule that lets a session read liveness.
+  if (deps.claudeSettingsPath) {
+    ensureAllowRule(deps.fs, deps.claudeSettingsPath, log);
+  }
 
   log('done');
   return 'installed';

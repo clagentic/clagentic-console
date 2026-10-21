@@ -40,6 +40,14 @@ npx @clagentic/console
 
 On Linux, a global npm install runs a postinstall script that registers and enables a `clagentic-console.service` systemd unit. The script never restarts an already-running daemon — active sessions are not interrupted. Self-updates triggered from inside the app skip the restart entirely and let systemd's `Restart=always` handle the handoff after graceful shutdown.
 
+The same script adds one entry to the Claude Code user settings of the account running the install (the script only runs as root; `~/.claude/settings.json`, or `$CLAUDE_CONFIG_DIR/settings.json`), under `permissions.allow`:
+
+```
+Bash(clagentic-console list-sessions *)
+```
+
+It lets a Claude Code session read which Clagentic: Console sessions are live and which are waiting on a permission prompt (`clagentic-console list-sessions`, read-only) without raising a prompt itself. It is added once (a reinstall does not duplicate it), every other setting and entry is kept, and nothing is ever removed. If the settings file is unreadable or not valid JSON, the script logs a warning and leaves the file untouched. No other permission rule is added. To remove it, delete that line from `permissions.allow` in the settings file; a later reinstall adds it back unless you install with `--ignore-scripts`.
+
 To skip the postinstall script:
 
 ```bash
