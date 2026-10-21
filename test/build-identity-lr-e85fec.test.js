@@ -47,10 +47,10 @@ test("assessBuild: a different sha is stale and carries both shas", function () 
   assert.equal(r.installedBuildSha, "s2");
 });
 
-test("assessBuild: the same sha over different files is stale", function () {
+test("assessBuild: the same sha over different files is inconclusive, never an offer", function () {
   var r = assessBuild({ sha: "s1", contentHash: "h1" }, { sha: "s1", contentHash: "h2" });
-  assert.equal(r.state, "stale");
-  assert.equal(r.reason, "content");
+  assert.equal(r.state, "inconclusive");
+  assert.equal(r.reason, "same-sha-content-differs");
 });
 
 test("assessBuild: a missing piece is inconclusive with its reason, never adopted or stale", function () {
@@ -108,13 +108,13 @@ test("an identical reinstall (new inodes, same bytes) hashes the same: adopted",
   assert.equal(after.state, "adopted", JSON.stringify(after));
 });
 
-test("one changed file makes the installed tree differ: stale (content) under the same sha", function () {
+test("one changed file under the same sha is a diagnostic (inconclusive), not stale", function () {
   var root = makePackage({ "a.js": "one", "build-sha.json": '{"sha":"s1"}' });
   var identity = createBuildIdentity(path.join(root, "lib"));
   fs.writeFileSync(path.join(root, "lib", "a.js"), "changed");
   var after = identity.assess();
-  assert.equal(after.state, "stale");
-  assert.equal(after.reason, "content");
+  assert.equal(after.state, "inconclusive");
+  assert.equal(after.reason, "same-sha-content-differs");
 });
 
 test("a new sha in build-sha.json is stale (sha)", function () {
