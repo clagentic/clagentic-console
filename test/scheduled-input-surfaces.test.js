@@ -59,6 +59,30 @@ test("only the scheduled-input messages are taken; others fall through", functio
   } finally { t.cleanup(); }
 });
 
+test("a message type that is a property of Object.prototype is not ours and sends nothing early", async function () {
+  var t = setup();
+  try {
+    t.handle({ type: "schedule_message", text: "hi", resetsAt: t.clock.now() + 60 * MIN });
+    t.sent.length = 0;
+    ["toString", "constructor", "__proto__", "hasOwnProperty", "valueOf", "isPrototypeOf"].forEach(function (type) {
+      assert.equal(t.handle({ type: type }), false, type + " falls through");
+      assert.equal(t.handle({ type: type, id: t.armed()[0].id }), false, type + " with an id falls through");
+    });
+    assert.equal(t.sessionInput.calls.length, 0, "the earliest armed input was not sent");
+    assert.equal(t.armed().length, 1, "and was not cancelled");
+    assert.deepEqual(t.sent, []);
+  } finally { t.cleanup(); }
+});
+
+test("the CLI verb tables and the daemon's command switch do not take Object.prototype names", async function () {
+  ["toString", "constructor", "__proto__", "hasOwnProperty"].forEach(function (name) {
+    assert.match(cli.parseScheduleArgs(name, [], Date.now(), {}).error, /Unknown schedule-input command/);
+    assert.match(cli.parseScheduleArgs("list", ["--" + name], Date.now(), {}).error, /Unknown option/);
+    assert.equal(handleScheduledInputCommand({ service: null, getProject: function () { return null; } }, { cmd: name }), undefined);
+  });
+  assert.match(cli.parseScheduleArgs("list", ["__proto__", "x"], Date.now(), {}).error, /Unknown option/);
+});
+
 test("schedule_message in its original shape arms a once input that fires at exactly its time", async function () {
   var t = setup();
   try {
