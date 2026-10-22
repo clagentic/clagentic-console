@@ -1,7 +1,0 @@
-# DRAFT repo profile, inferred from the file tree. Review every line before committing.
-# Observations:
-#   - root packaging manifest: package.json
-#   - hidden directory .crew/ looks like tool state, not product
-class: released-tool
-paths:
-  ".crew/**": {class: internal}
