@@ -1,8 +1,10 @@
 // The composer's schedule button used to be disabled by one page-wide flag that
-// only the on-screen session's events could change. Its state is derived from
-// the on-screen session's own list of scheduled inputs: the button is off only
-// while that session is at the cap the server sent, and the list for a session
-// that is not on screen is kept and never disturbs the one that is.
+// only the on-screen session's events could change. Whether a session is at its
+// cap is derived from the on-screen session's own list of scheduled inputs and
+// the cap the server sent, and the list for a session that is not on screen is
+// kept and never disturbs the one that is. The button is never disabled, also at
+// the cap: it must open the panel to cancel or send now. At the cap only the
+// arming control is off (test/scheduled-input-surfaces.test.js drives the panel).
 //
 // These tests drive the production entry points the websocket handler and the
 // session-switch hook call (applyScheduledInputList,
@@ -41,6 +43,14 @@ function makeFakeElement() {
 
 var scheduleBtn = makeFakeElement();
 scheduleBtn.disabled = false;
+var btnClasses = new Set();
+scheduleBtn.classList = {
+  add: function (c) { btnClasses.add(c); },
+  remove: function (c) { btnClasses.delete(c); },
+  toggle: function (c, on) { if (on) btnClasses.add(c); else btnClasses.delete(c); },
+  contains: function (c) { return btnClasses.has(c); },
+  has: function (c) { return btnClasses.has(c); },
+};
 
 global.document = {
   addEventListener: function () {},
@@ -93,8 +103,13 @@ function listed(localId, n) {
   appRateLimit.applyScheduledInputList(msg);
 }
 
-function buttonDisabled() {
-  return scheduleBtn.disabled === true;
+// Whether the on-screen session is shown at its cap. The button itself is never
+// disabled: it always opens the panel, where a queued input is cancelled or sent
+// now; at the cap only the panel's Schedule control is off.
+function atCap() {
+  assert.notEqual(scheduleBtn.disabled, true, 'the schedule button is never disabled');
+  assert.notEqual(scheduleBtn.style.pointerEvents, 'none', 'the schedule button always takes clicks');
+  return scheduleBtn.classList.has('schedule-at-cap');
 }
 
 test.beforeEach(function () {
@@ -103,6 +118,7 @@ test.beforeEach(function () {
   appRateLimit.resetRateLimitState();
   scheduleBtn.disabled = false;
   scheduleBtn.style = {};
+  btnClasses.clear();
 });
 
 test.afterEach(function () {
@@ -111,61 +127,61 @@ test.afterEach(function () {
 
 test('fill A to the cap, switch to B: B is enabled; back to A: A is disabled while at the cap', function () {
   listed('A', LIMIT);
-  assert.equal(buttonDisabled(), true);
+  assert.equal(atCap(), true);
   switchTo('B');
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
   switchTo('A');
-  assert.equal(buttonDisabled(), true);
+  assert.equal(atCap(), true);
 });
 
 test('a session below the cap keeps its button enabled', function () {
   listed('A', 1);
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
   listed('A', LIMIT - 1);
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
 });
 
 test("A's inputs fire while B is on screen: both are enabled afterwards", function () {
   listed('A', LIMIT);
   switchTo('B');
   listed('A', 0);
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
   switchTo('A');
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
 });
 
 test('a background list for B does not disable the button while A is on screen', function () {
   listed('B', LIMIT);
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
   switchTo('B');
-  assert.equal(buttonDisabled(), true);
+  assert.equal(atCap(), true);
 });
 
 test("B's list changes do not enable or disable A", function () {
   listed('A', LIMIT);
   listed('B', LIMIT);
   listed('B', 0);
-  assert.equal(buttonDisabled(), true);
+  assert.equal(atCap(), true);
 });
 
 test('a list with no localId acts on the on-screen session', function () {
   listed(undefined, LIMIT);
-  assert.equal(buttonDisabled(), true);
+  assert.equal(atCap(), true);
   listed(undefined, 0);
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
 });
 
 test('a full list followed by an empty one leaves the session enabled', function () {
   listed('A', LIMIT);
   listed('A', 0);
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
 });
 
 test("the cap is the server's: a list that carries another limit moves the threshold", function () {
   appRateLimit.applyScheduledInputList({ type: 'scheduled_input_list', localId: 'A', limit: 2, inputs: inputsOf(2) });
-  assert.equal(buttonDisabled(), true);
+  assert.equal(atCap(), true);
   appRateLimit.applyScheduledInputList({ type: 'scheduled_input_list', localId: 'A', limit: 3, inputs: inputsOf(2) });
-  assert.equal(buttonDisabled(), false);
+  assert.equal(atCap(), false);
 });
 
 test('the list is kept per session and drawn only for the one on screen', function () {

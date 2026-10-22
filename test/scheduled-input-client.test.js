@@ -204,6 +204,40 @@ test("the panel lists the session's armed inputs with send now and cancel for ea
   assert.match(el.querySelector(".schedule-preview").textContent, /reached its limit/);
 });
 
+test("a session already at the cap can still open the panel; only arming is off, send now and cancel work", async function () {
+  await boot();
+  var { createSchedulePanel } = await import(dom.moduleUrl("schedule-panel.js"));
+  var inputs = [{ id: "si_a", kind: "once", createdBy: "browser", nextAt: NOW + 600000, firedCount: 0 }];
+  var armed = [];
+  var sent = [];
+  var cancelled = [];
+  var panel = createSchedulePanel({
+    anchorEl: new dom.FakeElement("button"),
+    getInputs: function () { return inputs; },
+    canArm: function () { return false; },
+    onArm: function (spec) { armed.push(spec); },
+    onSendNow: function (id) { sent.push(id); },
+    onCancel: function (id) { cancelled.push(id); },
+    now: function () { return NOW; },
+  });
+  panel.toggle();
+  assert.equal(panel.isOpen(), true, "the panel opens at the cap");
+  var el = document.body.querySelector(".schedule-panel");
+  var arm = el.querySelector(".schedule-arm");
+  dom.typeInto(el.querySelectorAll(".schedule-inline-input")[0], "10");
+  assert.equal(arm.disabled, true);
+  assert.match(el.querySelector(".schedule-preview").textContent, /reached its limit/);
+  click(arm);
+  assert.deepEqual(armed, [], "arming is refused at the cap");
+  var row = el.querySelectorAll(".schedule-list-row")[0];
+  assert.notEqual(row.querySelector(".scheduled-msg-send-now").disabled, true, "send now stays usable");
+  assert.notEqual(row.querySelector(".scheduled-msg-cancel").disabled, true, "cancel stays usable");
+  click(row.querySelector(".scheduled-msg-send-now"));
+  click(row.querySelector(".scheduled-msg-cancel"));
+  assert.deepEqual(sent, ["si_a"]);
+  assert.deepEqual(cancelled, ["si_a"]);
+});
+
 test("a repeat names its end in the panel before it is armed", async function () {
   await boot();
   var { createSchedulePanel } = await import(dom.moduleUrl("schedule-panel.js"));
