@@ -217,9 +217,43 @@ test("a record that keeps failing ends after the limit, with and without a faili
       if (!failLast) {
         assert.equal(mem(t)[0].state, "ended");
         assert.match(mem(t)[0].endReason, /kept failing/);
+      } else {
+        // The put-back could not be saved, so the record stays as last saved: a
+        // once record advanced before its delivery is done, and is not retried.
+        fixSaves(t);
+        await t.clock.advance(RETRY_ERROR_MS * 4);
+        assert.equal(calls, MAX_FAILURES, "not delivered again");
+        assert.notEqual(mem(t)[0].state, "armed", "it does not stay armed");
+        assert.equal(t.clock.timers.length, 0, "nothing is waited for");
+        same(t, "after the save works again");
       }
     } finally { done(t); }
   }
+});
+
+test("a recurring record whose last allowed failure could not be saved still ends once saving works", async function () {
+  var t = setup();
+  try {
+    var calls = 0;
+    t.script = function () {
+      calls += 1;
+      if (calls === MAX_FAILURES) breakSaves(t);
+      return { ok: false, result: "error", retryable: true, reason: "turn start failed" };
+    };
+    repeat(t, 10 * MIN, { count: 100 });
+    await t.clock.advance(10 * MIN);
+    for (var i = 1; i < MAX_FAILURES; i++) await t.clock.advance(RETRY_ERROR_MS);
+    assert.equal(calls, MAX_FAILURES);
+    fixSaves(t);
+    // Bounded: it must end within another MAX_FAILURES failures.
+    for (var j = 0; j < MAX_FAILURES * 2 && mem(t)[0].state === "armed"; j++) {
+      await t.clock.advance(10 * MIN);
+    }
+    assert.equal(mem(t)[0].state, "ended");
+    assert.match(mem(t)[0].endReason, /kept failing/);
+    assert.ok(calls <= MAX_FAILURES * 2 + 1, "ended after a bounded number of failures");
+    same(t, "ended after the save works again");
+  } finally { done(t); }
 });
 
 test("a record ended by its session during an in-flight delivery that then fails busy stays ended, in memory and on disk", async function () {
@@ -231,7 +265,7 @@ test("a record ended by its session during an in-flight delivery that then fails
     await t.clock.advance(10 * MIN);
     assert.equal(t.sessionInput.calls.length, 1);
     t.service.sessionEnded(SLUG, t.session);
-    assert.equal(mem(t)[0].state, "ended");
+    assert.equal(mem(t)[0].state, "armed", "only settle() changes a record in flight");
     release({ ok: false, result: "busy", retryable: true, reason: "mid-turn" });
     await fakes.flush();
     assert.equal(mem(t)[0].state, "ended", "not re-armed by the late failure");
