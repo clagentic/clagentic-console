@@ -1,7 +1,4 @@
 "use strict";
-// The browser side of scheduled input: the time arithmetic and wording, the
-// schedule panel, and the scheduled-message bubbles, run as the production
-// modules over the repo's hand-built DOM.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");

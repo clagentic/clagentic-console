@@ -88,7 +88,6 @@ if (SESSION_VERBS.indexOf(args[0]) !== -1) {
   return;
 }
 
-// --- `schedule-input`: text sent into a session later, through the running daemon ---
 if (args[0] === "schedule-input") {
   require("../lib/cli/schedule-input-subcommands").runScheduleInput(args.slice(1));
   return;

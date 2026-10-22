@@ -21,7 +21,6 @@ function makeClock(start) {
     clearTimer: function (id) {
       clock.timers = clock.timers.filter(function (x) { return x.id !== id; });
     },
-    // Moves time forward, running every timer that falls due on the way.
     advance: async function (ms) {
       var target = clock.t + ms;
       for (;;) {
