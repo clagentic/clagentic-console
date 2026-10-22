@@ -156,6 +156,40 @@ test("cancel by id deletes that input only; without an id (an older browser) the
   } finally { t.cleanup(); }
 });
 
+test("a cancel or a CLI delete of an input being sent is refused as busy, with the reason shown", async function () {
+  var dir = fakes.tmpDir();
+  var clock = fakes.makeClock();
+  var session = fakes.makeSession(1, "vendor-1");
+  var project = fakes.makeProject("/work/p", [session]);
+  var release = null;
+  var sessionInput = fakes.makeSessionInput(project, function () { return new Promise(function (resolve) { release = resolve; }); });
+  var service = createScheduledInputService({
+    dir: dir, getProject: function (slug) { return slug === SLUG ? project : null; }, sessionInput: sessionInput,
+    now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+  });
+  service.attachProject(SLUG);
+  var sent = [];
+  var handlers = createWsHandlers({
+    slug: SLUG, service: service,
+    getSessionForWs: function () { return session; },
+    sendTo: function (target, obj) { sent.push(obj); },
+  });
+  try {
+    var made = service.create(SLUG, { target: records.targetOf(session), session: session, kind: "once", text: "x", createdBy: "t", at: clock.now() + MIN });
+    await clock.advance(MIN);
+    assert.equal(sessionInput.calls.length, 1);
+    handlers.handle({}, { type: "cancel_scheduled_message", id: made.record.id });
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, "error");
+    assert.match(sent[0].text, /could not cancel that: that scheduled input is being sent; try again in a moment/);
+    var out = handleScheduledInputCommand({ service: service, getProject: function () { return project; } }, { cmd: "schedule_input_delete", id: made.record.id });
+    assert.equal(out.ok, false);
+    assert.equal(out.result, "busy");
+    release({ ok: true, result: "delivered" });
+    await fakes.flush();
+  } finally { service.stop(); fakes.removeDir(dir); }
+});
+
 test("send now by id, and without an id, delivers as scheduled-now even into a running turn", async function () {
   var t = setup();
   try {

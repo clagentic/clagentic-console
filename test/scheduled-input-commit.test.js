@@ -278,18 +278,28 @@ test("a record ended by its session during an in-flight delivery that then fails
   } finally { done(t); }
 });
 
-test("a record deleted during an in-flight delivery is not brought back by its result", async function () {
+test("a delete during an in-flight delivery is refused as busy and changes nothing; after the delivery it succeeds", async function () {
   var t = setup();
   try {
     var release = null;
     t.script = function () { return new Promise(function (resolve) { release = resolve; }); };
     var made = repeat(t, 10 * MIN);
     await t.clock.advance(10 * MIN);
-    assert.equal(t.service.remove(SLUG, made.record.id).ok, true);
+    var memoryBefore = json(mem(t));
+    var diskBefore = json(onDisk(t));
+    var refused = t.service.remove(SLUG, made.record.id);
+    assert.equal(refused.ok, false);
+    assert.equal(refused.result, "busy");
+    assert.equal(refused.reason, "that scheduled input is being sent; try again in a moment");
+    assert.deepEqual(json(mem(t)), memoryBefore);
+    assert.deepEqual(json(onDisk(t)), diskBefore);
     release({ ok: false, result: "error", retryable: true, reason: "x" });
     await fakes.flush();
+    assert.equal(mem(t).length, 1);
+    same(t, "late result of a refused delete");
+    assert.equal(t.service.remove(SLUG, made.record.id).ok, true);
     assert.equal(mem(t).length, 0);
-    same(t, "late result of a deleted record");
+    same(t, "delete after the delivery");
   } finally { done(t); }
 });
 

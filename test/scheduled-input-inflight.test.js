@@ -1,10 +1,11 @@
 "use strict";
-// A record being delivered has one owner: settle() (service.js). Every other
-// operation that would change it is held and applied by settle() after the
-// delivery's own outcome, in one commit. So for each outcome a delivery can have
-// and each operation that can arrive while it is in flight, the final state in
-// memory and on disk is the one reached by finishing the delivery first and then
-// doing the operation.
+// A record being delivered has one owner: settle() (service.js). A daemon-made
+// transition with no caller is held and applied by settle() after the delivery's
+// own outcome, in one commit; so for each outcome a delivery can have and each
+// such operation that can arrive while it is in flight, the final state in memory
+// and on disk is the one reached by finishing the delivery first. An operation
+// with a caller is never held: a delete is refused as busy, and a resume arming
+// is saved before it is answered (tests below).
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -93,8 +94,6 @@ var OPERATIONS = [
   { name: "upgrade by a tick", scenario: "console", run: function (t) { t.fresh.cliSessionId = "vendor-up"; t.service.tick(); } },
   { name: "upgrade by a list", scenario: "console", run: function (t) { t.fresh.cliSessionId = "vendor-up"; t.service.list(SLUG, { state: "any" }); } },
   { name: "the session ending", scenario: "plain", run: function (t) { t.service.sessionEnded(SLUG, t.session); } },
-  { name: "a delete", scenario: "plain", run: function (t) { assert.equal(t.service.remove(SLUG, t.store.all()[0].id).ok, true); } },
-  { name: "a resume arming", scenario: "resume", run: function (t) { assert.equal(t.service.armResume(SLUG, t.session, RESUME_SPEC(t)).ok, true); } },
   { name: "a second tick", scenario: "plain", run: function (t) { t.service.tick(); } },
 ];
 
@@ -177,35 +176,85 @@ test("nothing outside settle() changes a record that is being delivered", async 
       function () { t.service.tick(); },
       function () { t.service.tick(); },
       function () { t.service.sessionEnded(SLUG, t.fresh); },
-      function () { assert.equal(t.service.remove(SLUG, id).ok, true); },
+      function () {
+        var refused = t.service.remove(SLUG, id);
+        assert.equal(refused.ok, false);
+        assert.equal(refused.result, "busy");
+        assert.match(refused.reason, /being sent; try again in a moment/);
+      },
     ].forEach(function (act, i) {
       act();
       assert.deepEqual(json(t.store.all()), memoryBefore, "memory unchanged after operation " + i);
       assert.deepEqual(json(onDisk(t)), diskBefore, "disk unchanged after operation " + i);
     });
     await finish();
-    assert.equal(t.store.all().length, 0, "the held delete is applied by settle()");
+    assert.equal(t.store.all().length, 1, "the refused delete left the record");
     assertMemoryIsDisk(t, "after settle");
+    assert.equal(t.service.remove(SLUG, id).ok, true, "a delete succeeds once the send is over");
+    assert.equal(t.store.all().length, 0);
+    assertMemoryIsDisk(t, "after the delete");
   } finally { done(t); }
 });
 
-test("nothing outside settle() changes a resume record that is being delivered", async function () {
-  var s = sessionsFor("resume");
+function armedResumes(list) {
+  return list.filter(function (r) { return r.state === "armed" && r.createdBy === "rate-limit"; });
+}
+
+OUTCOMES.slice(0, 4).forEach(function (outcome) {
+  test("arming a resume during a resume delivery that answers " + outcome.name + " is saved before the answer and leaves one armed resume, the newer", async function () {
+    var s = sessionsFor("resume");
+    var t = setup(s.list);
+    t.session = s.list[0];
+    try {
+      var finish = await startDelivery(t, "resume", outcome);
+      var answer = t.service.armResume(SLUG, t.session, RESUME_SPEC(t));
+      assert.equal(answer.ok, true);
+      var saved = onDisk(t).filter(function (r) { return r.id === answer.record.id; });
+      assert.equal(saved.length, 1, "the new record is on disk when the answer is given");
+      assert.equal(saved[0].state, "armed");
+      assertMemoryIsDisk(t, "after the arming");
+      await finish();
+      var armed = armedResumes(t.store.all());
+      assert.equal(armed.length, 1, "exactly one armed resume");
+      assert.equal(armed[0].id, answer.record.id, "the newer one");
+      assert.equal(armed[0].text, "continue later");
+      assertMemoryIsDisk(t, "after settle");
+      assertMemoryIsDisk(t, "final");
+      if (outcome.name === "busy" || outcome.name === "error") {
+        var old = t.store.all().filter(function (r) { return r.id !== answer.record.id; })[0];
+        assert.equal(old.state, "ended");
+        assert.equal(old.endReason, "replaced by a newer resume");
+      }
+    } finally { done(t); }
+  });
+});
+
+test("a crash during a delivery loses nothing a caller was told: a refused delete leaves the record, an answered resume is there", async function () {
+  var s = sessionsFor("plain");
   var t = setup(s.list);
   t.session = s.list[0];
   try {
-    var finish = await startDelivery(t, "resume", { res: { ok: false, result: "busy", retryable: true, reason: "mid-turn" }, failures: 0 });
-    var memoryBefore = json(t.store.all());
-    var diskBefore = json(onDisk(t));
-    assert.equal(t.service.armResume(SLUG, t.session, RESUME_SPEC(t)).ok, true);
-    assert.deepEqual(json(t.store.all()), memoryBefore, "memory unchanged");
-    assert.deepEqual(json(onDisk(t)), diskBefore, "disk unchanged");
+    var finish = await startDelivery(t, "plain", { res: { ok: true, result: "delivered" }, failures: 0 });
+    var id = t.store.all()[0].id;
+    assert.equal(t.service.remove(SLUG, id).result, "busy");
+    var resume = t.service.armResume(SLUG, t.session, RESUME_SPEC(t));
+    assert.equal(resume.ok, true);
+    // A fresh service on the same store file: the pending map is lost.
+    var again = createScheduledInputService({
+      dir: t.dir,
+      getProject: function (slug) { return slug === SLUG ? t.project : null; },
+      sessionInput: t.sessionInput,
+      now: t.clock.now,
+      setTimer: t.clock.setTimer,
+      clearTimer: t.clock.clearTimer,
+    });
+    again.attachProject(SLUG);
+    try {
+      var listed = again.list(SLUG, { state: "any" }).inputs;
+      assert.ok(listed.some(function (r) { return r.id === id; }), "no deleted record came back, because none was reported deleted: the record is still there");
+      assert.ok(listed.some(function (r) { return r.id === resume.record.id && r.state === "armed"; }), "the answered resume is present and armed");
+    } finally { again.stop(); }
     await finish();
-    var all = t.store.all();
-    assert.equal(all.length, 1, "the busy resume was moved, not duplicated");
-    assert.equal(all[0].state, "armed");
-    assert.equal(all[0].text, "continue later");
-    assertMemoryIsDisk(t, "after settle");
   } finally { done(t); }
 });
 

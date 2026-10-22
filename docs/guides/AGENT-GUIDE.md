@@ -396,7 +396,7 @@ Result:
 
 `list` prints `{ "ok": true, "result": "listed", "count": N, "inputs": [...] }`: for each record its `id`, `project`, `sessionId`, `kind`, `state`, `preview` (the start of the text), `nextAt`, the end (`until` or `count`), `firedCount`, `lastOutcome` (`delivered`, `resumed-and-delivered`, or why the last attempt was skipped or failed), `endReason` and `createdBy`. The default is the armed records of every project, soonest first; `--state done`, `ended` or `any` shows finished ones too (the last 20 per project are kept). `--session` and `--project` narrow it.
 
-`delete --id <id>` cancels a record and removes it; `--project` is only needed to narrow the search, since an id is unique. An unknown id is `not-found`. The CLI has no send-now verb: use `send-input` for an immediate send.
+`delete --id <id>` cancels a record and removes it; `--project` is only needed to narrow the search, since an id is unique. An unknown id is `not-found`. A record whose text is being sent at that moment is not deleted: the answer is `busy` (exit 1) with the reason "that scheduled input is being sent; try again in a moment", and the record is unchanged. Try again once the send is over. The CLI has no send-now verb: use `send-input` for an immediate send.
 
 Exit codes: `0` when the request was acted on (scheduled, listed, deleted), `1` when it was refused, not found or failed. A usage mistake (an unknown option, a missing value, conflicting timing flags, a repeat with no end) prints the usage line to stderr and exits 1 without contacting the daemon.
 
@@ -440,7 +440,7 @@ The `result` field of the JSON, and the process exit code:
 | `refused` | The request is invalid or not allowed; `reason` says why (unknown project, vendor, agent or visibility, bad initiator, bad name or address, a name already held, an empty prompt, an unsafe id, conflicting targets). Not a failure to deliver. | 1 |
 | `error` | Delivery was attempted and failed, or the daemon could not be reached. `retryable` says whether sending again can help. | 1 |
 
-`schedule-input` answers `scheduled`, `listed` or `deleted` (exit 0), and `refused` (an invalid request: a bad interval or time, no end on a repeat, the limit of 5, an unknown project), `not-found` (an unknown session or id) or `error` (exit 1). See [Scheduled input](#scheduled-input).
+`schedule-input` answers `scheduled`, `listed` or `deleted` (exit 0), and `refused` (an invalid request: a bad interval or time, no end on a repeat, the limit of 5, an unknown project), `not-found` (an unknown session or id), `busy` (a delete of a record that is being sent) or `error` (exit 1). See [Scheduled input](#scheduled-input).
 
 A CLI usage mistake (an unknown option, a missing value, a missing target or `--prompt`) prints the usage line to stderr and exits 1 without contacting the daemon.
 
