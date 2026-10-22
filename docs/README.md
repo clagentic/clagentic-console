@@ -3,6 +3,7 @@
 ```
 docs/
 ├── guides/                             Maintenance & development guides
+│   ├── AGENT-GUIDE.md                  Agents as console users: open-session, send-input, list-sessions
 │   ├── architecture.md                 System overview, SDK, WebSocket protocol
 │   ├── MODULE_MAP.md                   File-by-file module guide
 │   ├── STATE_CONVENTIONS.md            State management patterns
