@@ -78,6 +78,40 @@ test("an invalid or past full date-time is refused; an impossible clock time too
   assert.match(resolveClockTime("noon", now).error, /not a time/);
 });
 
+test("every field of a full date-time must come back as typed: an out-of-range field is refused, not carried over", function () {
+  var now = local(2026, 3, 1, 6, 0);
+  [
+    "2026-12-01T20:99", // 21:39 once normalised
+    "2026-12-01T20:60",
+    "2026-12-01T24:00", // midnight of the next day once normalised
+    "2026-12-01T25:30",
+    "2026-13-01T09:00", // January of the next year
+    "2026-00-10T09:00",
+    "2026-04-31T09:00", // April has 30 days
+    "2026-02-29T09:00", // 2026 is not a leap year
+    "2026-12-00T09:00",
+    "2026-12-32T09:00",
+  ].forEach(function (bad) {
+    var out = resolveClockTime(bad, now);
+    assert.match(out.error || "", /not a date and time/, "expected a refusal for " + bad);
+    assert.equal(out.ms, undefined);
+  });
+  assert.equal(resolveClockTime("2028-02-29T23:59", now).ms, local(2028, 2, 29, 23, 59), "a real leap day is accepted");
+  assert.equal(resolveClockTime("2026-12-31T00:00", now).ms, local(2026, 12, 31, 0, 0));
+  assert.equal(resolveClockTime("2026-12-01 20:59", now).ms, local(2026, 12, 1, 20, 59), "the space form is the same");
+});
+
+test("--at with an impossible date-time is refused before anything is sent to the daemon", function () {
+  var now = local(2026, 3, 1, 6, 0);
+  var { parseScheduleArgs } = require("../lib/cli/schedule-input-subcommands");
+  var args = ["--session", "s1", "--project", "p", "--prompt", "go", "--at", "2026-12-01T20:99"];
+  var out = parseScheduleArgs("create", args, now, {});
+  assert.match(out.error, /--at: not a date and time/);
+  assert.equal(out.request, undefined);
+  var ok = parseScheduleArgs("create", args.slice(0, -1).concat("2026-12-01T20:59"), now, {});
+  assert.equal(ok.request.at, local(2026, 12, 1, 20, 59));
+});
+
 test("formatLocal prints the unambiguous absolute local form", function () {
   assert.equal(formatLocal(local(2026, 3, 1, 9, 5)), "2026-03-01 09:05");
 });
