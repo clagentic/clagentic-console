@@ -297,7 +297,7 @@ function classifyRun(result, files, resultsByFile, totalTests, floor) {
       reason: (
         missingFiles.length + " test file(s) reported ZERO test results — " +
         "treated as a truncated/incomplete run, not a pass, regardless of the overall exit code. This is " +
-        "exactly the failure class lr-795882 fixed (MILLER, lr-a7b03e): a file whose tests silently vanish " +
+        "exactly the failure class lr-795882 fixed (lr-a7b03e): a file whose tests silently vanish " +
         "while the overall run still exits 0.\n  " + missingFiles.join("\n  ")
       ),
     };

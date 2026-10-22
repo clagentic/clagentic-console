@@ -6,7 +6,7 @@
 // "global" skills, and no user's own global skills were ever visible.
 //
 // Fix: discoverClaudeSkills / discoverSkillsWithMeta / attachSkillDiscovery's
-// discoverSkillDirs / readAgentToolsFromFile all accept an optional
+// discoverSkillDirs all accept an optional
 // homeOverride that callers resolve from the session's linuxUser
 // (os-users.getLinuxUserHome) and thread through per-query/per-session
 // instead of falling back to the frozen REAL_HOME constant.
@@ -27,7 +27,6 @@ var path = require("path");
 var codexAdapter = require("../lib/yoke/adapters/codex");
 var discoverClaudeSkills = codexAdapter._test_discoverClaudeSkills;
 var { discoverSkillsWithMeta, attachSkillDiscovery } = require("../lib/sdk-skill-discovery");
-var { readAgentToolsFromFile } = require("../lib/agents");
 
 function makeUserHome(skillNames) {
   var home = fs.mkdtempSync(path.join(os.tmpdir(), "lr-3ccc78-home-"));
@@ -129,41 +128,6 @@ test("lr-3ccc78: attachSkillDiscovery's discoverSkillDirs isolates users via hom
     rmrf(carolHome);
     rmrf(cwd);
   }
-});
-
-// ---------------------------------------------------------------------------
-// readAgentToolsFromFile (the twin — agents.js, same REAL_HOME defect class)
-// ---------------------------------------------------------------------------
-
-function makeAgentsDir(agentName, tools) {
-  var home = fs.mkdtempSync(path.join(os.tmpdir(), "lr-3ccc78-agents-"));
-  var agentsDir = path.join(home, ".claude", "agents");
-  fs.mkdirSync(agentsDir, { recursive: true });
-  var body = "---\nname: " + agentName + "\ntools: " + JSON.stringify(tools) + "\n---\nBody.\n";
-  fs.writeFileSync(path.join(agentsDir, agentName + ".md"), body);
-  return agentsDir;
-}
-
-test("lr-3ccc78 (twin): readAgentToolsFromFile isolates two users' agent definitions via globalAgentsDir override", function () {
-  var opAgentsDir = makeAgentsDir("shared-agent-name", ["Read", "Bash"]);
-  var daveAgentsDir = makeAgentsDir("shared-agent-name", ["Read"]);
-  try {
-    var opTools = readAgentToolsFromFile("shared-agent-name", opAgentsDir);
-    assert.deepEqual(opTools, ["Read", "Bash"]);
-
-    var daveTools = readAgentToolsFromFile("shared-agent-name", daveAgentsDir);
-    assert.deepEqual(daveTools, ["Read"]);
-  } finally {
-    rmrf(path.dirname(opAgentsDir));
-    rmrf(path.dirname(daveAgentsDir));
-  }
-});
-
-test("lr-3ccc78 (twin): readAgentToolsFromFile without override still works (backward compat)", function () {
-  // No second argument — must not throw, returns null (no such agent) rather
-  // than crashing on the fallback-to-AGENTS_SOURCE_DIR path.
-  var result = readAgentToolsFromFile("lr-3ccc78-nonexistent-agent-name");
-  assert.equal(result, null);
 });
 
 // ---------------------------------------------------------------------------

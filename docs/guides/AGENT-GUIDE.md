@@ -23,7 +23,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [Delivery semantics](#delivery-semantics)
 - [Results and exit codes](#results-and-exit-codes)
 - [The sender record](#the-sender-record)
-- [Named-agent sessions get their definition's tools](#named-agent-sessions-get-their-definitions-tools)
+- [Named-agent sessions and tools](#named-agent-sessions-and-tools)
 - [External triggers (file drop)](#external-triggers-file-drop)
 - [Suggested allow rules](#suggested-allow-rules)
 
@@ -483,14 +483,9 @@ An agent calling the verbs from inside a console session gets `extracted` for fr
 
 The chat draws every injected message as coming from its sender, with the initiator, context note and sender kind as its label, never as the local user. For tools that read sessions, every message is also published in a per-message sender record; see "Integrating other tools" in [architecture.md](./architecture.md#integrating-other-tools).
 
-## Named-agent sessions get their definition's tools
+## Named-agent sessions and tools
 
-A session that runs a named agent hands the Claude Agent SDK the tools list from the agent's own definition: the `tools:` field in the frontmatter of the agent file (`~/.claude/agents/<name>.md`). The console names no tool itself. This applies to a new session, a resumed one and injected input into a reaped one, because every turn start builds its options from the session's agent name.
-
-- **Field absent** (or not a JSON array): the option is unset, as for a plain session; the console restricts nothing.
-- **Field present:** the agent gets the built-in tools it names. Write it as a one-line JSON array, for example `tools: ["Read", "Grep", "Glob"]`. A comma-separated list is not parsed as a list and leaves the option unset. Permission-pattern entries such as `Bash(git:*)` are reduced to the tool name (`Bash`); MCP tool names are never filtered by this list.
-- **Explicit `[]`:** `tools: []` disables every built-in tool. It is a list that names no tool, not an absent field, and it is never widened to the default.
-- **Codex** sessions never read it.
+A session that runs a named agent is launched like `claude --agent <name>`. The console passes no tool list of its own. The agent's tools are whatever Claude Code's agent option gives it, the same as when you run the agent from the CLI. **Codex** sessions have no named agents.
 
 ## External triggers (file drop)
 
