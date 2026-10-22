@@ -175,6 +175,38 @@ test("until before the first firing and a bad count are refused", function () {
   assert.match(build(repeat({ count: LIMITS.MAX_COUNT + 1 })).error, /count must be/);
 });
 
+test("count and every are whole safe numbers within range; the cap itself is accepted", function () {
+  [0, -1, 1.5, 9007199254740993, LIMITS.MAX_COUNT + 1, "3", NaN].forEach(function (bad) {
+    assert.match(build(repeat({ count: bad })).error, /count must be/, String(bad));
+  });
+  assert.ok(build(repeat({ count: 1 })).record);
+  assert.ok(build(repeat({ count: LIMITS.MAX_COUNT })).record);
+  [-MIN, 0, 10 * MIN + 0.5, Infinity, NaN].forEach(function (bad) {
+    assert.match(build(repeat({ every: bad })).error, /between 1 minute and 24 hours/, String(bad));
+  });
+});
+
+test("at and until are whole positive times", function () {
+  [-1, 0, NOW + 0.5, Infinity, NaN, "x"].forEach(function (bad) {
+    assert.match(build(once({ at: bad })).error, /needs the time/, String(bad));
+  });
+  [-1, NOW + 60 * MIN + 0.5, NaN].forEach(function (bad) {
+    assert.match(build(repeat({ count: undefined, until: bad })).error, /until must be a time/, String(bad));
+  });
+});
+
+test("isValidRecord accepts what buildRecord makes and refuses a record missing a firing field", function () {
+  var made = build(repeat()).record;
+  assert.equal(records.isValidRecord(made), true);
+  assert.equal(records.isValidRecord(build(once()).record), true);
+  ["id", "sessionId", "sessionIdKind", "kind", "text", "state", "nextAt", "every"].forEach(function (k) {
+    var copy = Object.assign({}, made);
+    delete copy[k];
+    assert.equal(records.isValidRecord(copy), false, k);
+  });
+  assert.equal(records.isValidRecord(Object.assign({}, made, { count: null })), false, "a repeat with no end");
+});
+
 test("the first firing of a recurring record is one interval after creation", function () {
   assert.equal(build(repeat()).record.nextAt, NOW + 10 * MIN);
 });

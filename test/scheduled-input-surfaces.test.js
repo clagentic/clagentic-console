@@ -285,6 +285,27 @@ test("create --every needs exactly one end, --until or --count", function () {
   assert.match(parse("create", base.concat(["--count", "four"])).error, /whole number/);
 });
 
+test("--count is a whole number from 1 to the cap; 0, negatives, fractions, unsafe and above-cap are refused", function () {
+  var base = ["--session", "s1", "--project", "p", "--every", "30m", "--prompt", "x"];
+  ["0", "-1", "1.5", "9007199254740993", "1001", "99999999999999999999"].forEach(function (bad) {
+    assert.match(parse("create", base.concat(["--count", bad])).error, /--count must be a whole number from 1 to 1000/, bad);
+  });
+  assert.equal(parse("create", base.concat(["--count", "1"])).request.count, 1);
+  assert.equal(parse("create", base.concat(["--count", "1000"])).request.count, 1000);
+});
+
+test("the daemon side refuses a bad count and a fractional or non-positive time too", function () {
+  var ipc = require("../lib/scheduled-input/ipc");
+  var service = { resolveTarget: function () { throw new Error("must not be reached"); } };
+  var send = function (extra) {
+    return ipc.handleScheduledInputCommand({ service: service, getProject: function () { return null; } },
+      Object.assign({ cmd: "schedule_input_create", projectSlug: "p", sessionId: "s", prompt: "x" }, extra));
+  };
+  return Promise.all([{ at: 1.5 }, { at: -5 }, { every: 60000.5 }, { every: 0 }].map(send)).then(function (outs) {
+    outs.forEach(function (out) { assert.equal(out.ok, false); });
+  });
+});
+
 test("a past --until means tomorrow", function () {
   var out = parse("create", ["--session", "s", "--project", "p", "--every", "1h", "--until", "07:00", "--prompt", "x"]);
   assert.equal(out.request.until, local(2026, 3, 2, 7, 0));
