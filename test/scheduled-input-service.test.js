@@ -450,6 +450,74 @@ test("a corrupt store file is set aside, not overwritten, and the project starts
   fakes.removeDir(dir);
 });
 
+function validStoredRecord() {
+  var made = targets.buildRecord(
+    { sessionId: "vendor-aaa", sessionIdKind: "vendor", kind: "once", text: "go", createdBy: "t", at: 1700000000000 + MIN },
+    { now: 1700000000000, armedForSession: 0 }
+  );
+  return made.record;
+}
+
+function loadStoreFile(content) {
+  var dir = fakes.tmpDir();
+  var file = path.join(dir, "-work-proj.json");
+  fs.writeFileSync(file, content);
+  var project = fakes.makeProject("/work/proj", []);
+  var service = createScheduledInputService({
+    dir: dir, getProject: function () { return project; }, sessionInput: fakes.makeSessionInput(project),
+  });
+  service.attachProject(SLUG);
+  return { dir: dir, file: file, service: service };
+}
+
+[
+  ["a future format", function (rec) { return JSON.stringify({ format: 2, records: [rec] }); }],
+  ["no format", function (rec) { return JSON.stringify({ records: [rec] }); }],
+  ["a record without nextAt", function (rec) { delete rec.nextAt; return JSON.stringify({ format: 1, records: [rec] }); }],
+  ["a record without a kind of session id", function (rec) { delete rec.sessionIdKind; return JSON.stringify({ format: 1, records: [rec] }); }],
+  ["a recurring record with no end", function (rec) {
+    return JSON.stringify({ format: 1, records: [Object.assign(rec, { kind: "recurring", every: 10 * MIN, until: null, count: null })] });
+  }],
+].forEach(function (c) {
+  test("a store file with " + c[0] + " is set aside whole and its content survives", function () {
+    var original = c[1](validStoredRecord());
+    var t = loadStoreFile(original);
+    try {
+      assert.equal(t.service.list(SLUG, {}).count, 0, "starts empty");
+      var asideName = fs.readdirSync(t.dir).filter(function (n) { return n.indexOf("-work-proj.json.unreadable-") === 0; })[0];
+      assert.ok(asideName, "the file was set aside");
+      assert.equal(fs.readFileSync(path.join(t.dir, asideName), "utf8"), original);
+    } finally { t.service.stop(); fakes.removeDir(t.dir); }
+  });
+});
+
+test("a store file that fails the shape check and cannot be set aside is read-only and never overwritten", function () {
+  var rec = validStoredRecord();
+  delete rec.nextAt;
+  var original = JSON.stringify({ format: 1, records: [rec] });
+  var real = fs.renameSync;
+  var t;
+  try {
+    fs.renameSync = function (from) {
+      if (String(from).endsWith("-work-proj.json")) throw new Error("EACCES: rename refused");
+      return real.apply(fs, arguments);
+    };
+    t = loadStoreFile(original);
+  } finally { fs.renameSync = real; }
+  try {
+    assert.equal(t.service.list(SLUG, {}).store.state, "read-only");
+    assert.equal(fs.readFileSync(t.file, "utf8"), original);
+  } finally { t.service.stop(); fakes.removeDir(t.dir); }
+});
+
+test("a well-formed format 1 store file loads", function () {
+  var t = loadStoreFile(JSON.stringify({ format: 1, records: [validStoredRecord()] }));
+  try {
+    assert.equal(t.service.list(SLUG, { state: "any" }).count, 1);
+    assert.deepEqual(fs.readdirSync(t.dir), ["-work-proj.json"]);
+  } finally { t.service.stop(); fakes.removeDir(t.dir); }
+});
+
 // --- saving: at most once, and a store that cannot be written ---
 
 // The store writes through <file>.tmp; a directory of that name makes every save
