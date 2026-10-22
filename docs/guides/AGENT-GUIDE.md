@@ -375,6 +375,8 @@ This is a suggestion only. Clagentic: Console never reads or writes your Claude 
 
 `list-sessions` only reads. `send-input` and `open-session` start work in other sessions, so allow them only where you want agents to be able to do that.
 
+An allowed `send-input` or `open-session` lets the calling agent start work in another session, and that session may run with broader tool permissions than the caller (a different named agent, or a plain session). The rules therefore let an agent act at the target session's level. Allow them only for agents you trust to do that.
+
 Migration: the 1.10.x installer added the `list-sessions` rule to the Claude Code settings of the installing account. Later releases stop doing so. A rule already added is left in place and is yours to keep or remove.
 
 Passing long or multi-line prompt text inline in a Bash argument can still trigger Claude Code's own safety prompt, whatever the allow rules say. The verbs have no `--prompt-file` option. They do read the prompt from stdin when you give `--prompt -`, so put long text in a file and redirect it:
