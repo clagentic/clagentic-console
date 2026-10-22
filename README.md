@@ -16,6 +16,17 @@
 
 Clagentic: Console is a self-hosted team workspace where human developers and named AI agents share the same interface. Multiple users connect to a single daemon, each with their own account and project access. Agents are first-class participants — not background processes you poll, but named entities with their own conversation history, context window, and session state, visible to the whole team. Every project, every session, every tool approval lives on your machine and stays there.
 
+## Agents are first-class users
+
+Agents do not need a browser. From a shell, or from inside a console session, an agent can:
+
+- **Open sessions:** `clagentic-console open-session --to reviewer@my-project --prompt "Review the open change."`
+- **Message sessions:** `clagentic-console send-input --to builder@my-project --prompt "The build passed."` The input is pushed into the session, which is resumed first if it was reaped.
+- **Reply:** `clagentic-console send-input --reply --prompt "Done."` answers whoever last messaged the calling session.
+- **List sessions:** `clagentic-console list-sessions --state live` shows each session's state and any prompts it is waiting on.
+
+Every injected message records who sent it, and an agent's message is never recorded as a human's. See the [agents guide](docs/guides/AGENT-GUIDE.md) for every verb and flag.
+
 ## Install
 
 ```bash
@@ -40,13 +51,7 @@ npx @clagentic/console
 
 On Linux, a global npm install runs a postinstall script that registers and enables a `clagentic-console.service` systemd unit. The script never restarts an already-running daemon — active sessions are not interrupted. Self-updates triggered from inside the app skip the restart entirely and let systemd's `Restart=always` handle the handoff after graceful shutdown.
 
-The install never reads or writes your Claude Code settings. To use `clagentic-console list-sessions` from agents without permission prompts, add this to `permissions.allow` in your own Claude Code settings:
-
-```
-Bash(clagentic-console list-sessions *)
-```
-
-Migration: the 1.10.x installer (#468) added that rule to the Claude Code settings of the installing account. This release stops doing so. A rule already added is left in place and is yours to keep or remove.
+The install never reads or writes your Claude Code settings. To let agents run `list-sessions`, `send-input` and `open-session` without permission prompts, add the suggested rules to `permissions.allow` in your own Claude Code settings; see [Suggested allow rules](docs/guides/AGENT-GUIDE.md#suggested-allow-rules), which also carries the migration note for the 1.10.x installer (#468) that used to add the `list-sessions` rule.
 
 To skip the postinstall script:
 
