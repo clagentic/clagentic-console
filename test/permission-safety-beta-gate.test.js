@@ -81,6 +81,17 @@ var PROMPTS = [
   "top",
   "tree -o out",
   "yq -i x f",
+  "GIT_EXTERNAL_DIFF=x git diff",
+  "FOO=1 ls",
+  "git diff --ext-diff",
+  "git diff --textconv",
+  "git -c core.pager=x log",
+  "git diff -c",
+  "git diff --output f",
+  "git diff --output=f",
+  "git --exec-path x log",
+  "git log --exec-path",
+  "git log --format=%H",
 ];
 
 PROMPTS.forEach(function (cmd) {
@@ -90,7 +101,7 @@ PROMPTS.forEach(function (cmd) {
 });
 
 ["ls -la", "git status", "cat README.md | grep x", "ls && pwd", "date", "date +%Y", "hostname",
-  "ip addr", "ip route", "ifconfig", "tail -n 5 log", "rg foo", "git log --oneline"].forEach(function (cmd) {
+  "ip addr", "ip route", "ifconfig", "tail -n 5 log", "rg foo", "git log --oneline", "git diff"].forEach(function (cmd) {
   test("bash auto-approve still allows read-only: " + cmd, function () {
     var result = bash(cmd);
     assert.ok(result && result.behavior === "allow");
