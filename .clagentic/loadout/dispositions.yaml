@@ -1,0 +1,8 @@
+dispositions:
+  - path: "lib/yoke/adapters/claude.js"
+    rule_id: "amos.path-choice.5"
+    kind: accepted_risk
+    rationale: "PR 476 is an exact revert of merged PR 473 (lr-9e4a98): it restores the pre-473 code byte-for-byte to stop the SDK tools option from capping Agent() subagents, which removed Edit from every lane-spawned builder. PEACHES 6346591871 (fp2:fbdfa7be0db240d2) flagged a missing CREW_SOP section 6 record. The PR body carries that record (in-process path, OS-user worker path, plain sessions, Codex, plus the authorization effect and a pending post-merge real run), but the detector did not settle it (crew-manifest lr-21e4a9, the known false-positive class for product PRs, and lr-21d441, detector defects). The main-thread tool restriction from the agent option predates 473 and is unchanged. Scope: this path plus this rule id, so every amos.path-choice.5 finding in claude.js is cleared until expiry; the short expiry bounds that breadth. Ruled by ROCI 2026-10-22; recorded by HOLDEN (lr-9e4a98)."
+    by: holden
+    at: 2026-10-22
+    expires: 2026-11-05
