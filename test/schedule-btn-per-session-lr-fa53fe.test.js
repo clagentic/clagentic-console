@@ -184,6 +184,14 @@ test("the cap is the server's: a list that carries another limit moves the thres
   assert.equal(atCap(), false);
 });
 
+test("a server limit of 0 is honoured: nothing can be armed; an absent limit keeps the default", function () {
+  appRateLimit.applyScheduledInputList({ type: 'scheduled_input_list', localId: 'A', limit: 0, inputs: [] });
+  assert.equal(atCap(), true);
+  appRateLimit.applyScheduledInputList({ type: 'scheduled_input_list', localId: 'B', inputs: inputsOf(LIMIT - 1) });
+  switchTo('B');
+  assert.equal(atCap(), false);
+});
+
 test('the list is kept per session and drawn only for the one on screen', function () {
   listed('A', 2);
   listed('B', 3);
