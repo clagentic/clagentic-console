@@ -123,6 +123,15 @@ test("app-messages.js: the older scheduled-message events take no state; the lis
   assert.ok(queuedIdx !== -1 && cancelIdx !== -1);
   assert.match(APP_MESSAGES_JS.slice(queuedIdx, queuedIdx + 60), /scheduled_message_queued:\s*function \(\) \{\}/);
   assert.match(APP_MESSAGES_JS.slice(cancelIdx, cancelIdx + 60), /scheduled_message_cancelled:\s*function \(\) \{\}/);
+  // scheduled_message_sent is not a no-op: it only shows the session as
+  // processing, and only for the session on screen. It must not touch the list.
+  var sentIdx = APP_MESSAGES_JS.indexOf("scheduled_message_sent:");
+  assert.ok(sentIdx !== -1);
+  var sentEnd = APP_MESSAGES_JS.indexOf("\n  },", sentIdx);
+  var sentBlock = APP_MESSAGES_JS.slice(sentIdx, sentEnd);
+  assert.match(sentBlock, /msg\.localId == null \|\| msg\.localId === store\.get\('activeSessionId'\)/);
+  assert.match(sentBlock, /setStatus\("processing"\)/);
+  assert.doesNotMatch(sentBlock, /setScheduledInputs|applyScheduledInputList/);
 });
 
 test("app-messages.js: session_switched calls restoreRateLimitStateForSession after resetClientState (redraw-on-switch-in hook)", function () {

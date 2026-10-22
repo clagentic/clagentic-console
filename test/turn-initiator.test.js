@@ -320,11 +320,13 @@ test("a typed message names the human as the initiator, both when it starts a tu
   assert.equal("humanOriginated" in h.session, false, "nothing about the initiator is kept on the session");
 });
 
-test("forcing a scheduled message to send now makes a scheduled-now turn, and a typed one after it is human again", function () {
+test("forcing a scheduled message to send now makes a scheduled-now turn, and a typed one after it is human again", async function () {
   var calls = [];
   var h = makeMessageHandler(calls);
   h.handler.handleUserMessage({}, { type: "schedule_message", text: "scheduled text", resetsAt: Date.now() + 3600000 });
   h.handler.handleUserMessage({}, { type: "send_scheduled_now" });
+  // The delivery is a promise chain behind the handler; wait for it to settle.
+  await new Promise(function (resolve) { setImmediate(resolve); });
   h.handler.handleUserMessage({}, { type: "message", text: "typed after" });
   h.cleanup();
   assert.deepEqual(calls.map(function (c) { return c.text + ":" + c.initiator; }), ["scheduled text:scheduled-now", "typed after:human"]);
