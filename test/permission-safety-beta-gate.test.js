@@ -92,6 +92,21 @@ var PROMPTS = [
   "git --exec-path x log",
   "git log --exec-path",
   "git log --format=%H",
+  "${X:---output}",
+  "git diff {--output,f}",
+  "git diff -\\-output f",
+  "git diff \"--out\"\"put\" f",
+  "git diff 'a'",
+  "git diff *",
+  "ls $HOME",
+  "ls ${HOME}",
+  "grep \"a b\" f",
+  "ls *.js",
+  "ls ?",
+  "ls [a]",
+  "echo !x",
+  "ls # note",
+  "ls café",
 ];
 
 PROMPTS.forEach(function (cmd) {
@@ -101,7 +116,8 @@ PROMPTS.forEach(function (cmd) {
 });
 
 ["ls -la", "git status", "cat README.md | grep x", "ls && pwd", "date", "date +%Y", "hostname",
-  "ip addr", "ip route", "ifconfig", "tail -n 5 log", "rg foo", "git log --oneline", "git diff"].forEach(function (cmd) {
+  "ip addr", "ip route", "ifconfig", "tail -n 5 log", "rg foo", "git log --oneline", "git diff",
+  "git log -5", "ls -la src/", "cat README.md | grep foo"].forEach(function (cmd) {
   test("bash auto-approve still allows read-only: " + cmd, function () {
     var result = bash(cmd);
     assert.ok(result && result.behavior === "allow");
@@ -234,14 +250,16 @@ test("default-mode setters need an admin or the project owner", async function (
   await withServer(async function (server) {
     var s = defaultSetters(server, {});
     server.sm.capabilitiesByVendor = { claude: claudeCapabilities() };
+    // ok is per message type: the server-wide default is an admin's alone.
     var cases = [
-      { who: { id: "u9", role: "user" }, ok: false },
-      { who: null, ok: false },
-      { who: { id: "owner-1", role: "user" }, ok: true },
-      { who: { id: "a1", role: "admin" }, ok: true },
+      { who: { id: "u9", role: "user" }, ok: { project: false, server: false } },
+      { who: null, ok: { project: false, server: false } },
+      { who: { id: "owner-1", role: "user" }, ok: { project: true, server: false } },
+      { who: { id: "a1", role: "admin" }, ok: { project: true, server: true } },
     ];
-    cases.forEach(function (k) {
+    cases.forEach(function (k0) {
       ["set_project_default_mode", "set_server_default_mode"].forEach(function (type) {
+        var k = { who: k0.who, ok: k0.ok[type === "set_server_default_mode" ? "server" : "project"] };
         var c = client();
         c.ws._clagenticUser = k.who;
         c.ws._clagenticAuthenticated = true;
@@ -356,6 +374,53 @@ test("a stored bypassPermissions, or a loop's, does not start a query while the 
 // ---------------------------------------------------------------------------
 // A worker's mode change stays on its own session
 // ---------------------------------------------------------------------------
+
+test("a stored auto mode on a vendor without auto starts in default", async function () {
+  var server = await world.createServer();
+  try {
+    server.sm.capabilitiesByVendor = { claude: Object.assign({}, claudeCapabilities(), { permissionModes: ["default", "acceptEdits", "plan"] }) };
+    server.session.permissionMode = "auto";
+    await server.startQuery();
+    var opts = server.queryOptions[server.queryOptions.length - 1];
+    assert.notEqual(opts.adapterOptions.CLAUDE.permissionMode, "auto");
+    assert.equal(server.session.permissionMode, "default");
+    await server.endQuery();
+  } finally {
+    server.shutdown();
+    world.removeHome(server.home);
+  }
+});
+
+test("a worker's refused permission_mode_changed is not stored", async function () {
+  var server = await world.createServer();
+  try {
+    var events = [{ type: "_worker_meta", subtype: "permission_mode_changed", data: { mode: "bypassPermissions" } }];
+    var adapter = {
+      vendor: "claude",
+      init: function () { return Promise.resolve({ models: [], skills: [] }); },
+      supportedModels: function () { return Promise.resolve([]); },
+      createQuery: function () {
+        var handle = { pushMessage: function () {}, endInput: function () {}, close: function () {}, abort: function () {}, setPermissionMode: function () { return Promise.resolve(); } };
+        handle[Symbol.asyncIterator] = function () {
+          return { next: function () { return Promise.resolve(events.length ? { value: events.shift(), done: false } : { value: undefined, done: true }); } };
+        };
+        return Promise.resolve(handle);
+      },
+    };
+    var bridge = require(world.LIB_ROOT + "/sdk-bridge").createSDKBridge({
+      cwd: server.home, slug: "harness", sessionManager: server.sm, send: function () {},
+      adapter: adapter, adapters: { claude: adapter }, onProcessingChanged: function () {},
+    });
+    server.session.permissionMode = "default";
+    await bridge.startQuery(server.session, "go", null, null);
+    await world.flush();
+    if (server.session.streamPromise) await server.session.streamPromise;
+    assert.equal(server.session.permissionMode, "default", "the previous mode stands");
+  } finally {
+    server.shutdown();
+    world.removeHome(server.home);
+  }
+});
 
 test("a worker's permission_mode_changed changes that session only, not the project mode", async function () {
   var server = await world.createServer();
