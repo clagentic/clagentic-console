@@ -159,7 +159,6 @@ function setupGlobals() {
     createElement: function (t) { return new FakeElement(t); },
     getElementById: function () { return null; },
     addEventListener: function () {},
-    removeEventListener: function () {},
     querySelector: function () { return null; },
     body: new FakeElement("body"),
   };

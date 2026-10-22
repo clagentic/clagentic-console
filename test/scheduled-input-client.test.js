@@ -7,7 +7,7 @@ var test = require("node:test");
 var assert = require("node:assert/strict");
 
 var dom = require("./fake-dom-prompt-cards");
-var serverTime = require("../lib/scheduled-input/time");
+var serverTime = require("../lib/cli/schedule-input-subcommands");
 
 function local(y, mo, d, h, mi) {
   return new Date(y, mo - 1, d, h, mi, 0, 0).getTime();
@@ -103,6 +103,7 @@ test("labels are plain, and the automatic resume is named only for the auto-cont
 
 async function boot() {
   dom.setupGlobals();
+  document.removeEventListener = function () {};
   var messages = new dom.FakeElement("div");
   document.getElementById = function (id) { return id === "messages" ? messages : null; };
   var storeMod = await import(dom.moduleUrl("store.js"));

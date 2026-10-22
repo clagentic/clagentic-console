@@ -45,10 +45,10 @@ var APP_RATE_LIMIT_JS = readMod("lib/public/modules/app-rate-limit.js");
 // Server-side: WS payloads stamped with session localId
 // ---------------------------------------------------------------------------
 
-// The scheduled-message events are now sent by lib/scheduled-input/publisher.js;
+// The scheduled-message events are now sent by lib/scheduled-input/ws.js;
 // these run it rather than reading its source.
 function publishedBy(eventType, recordExtra) {
-  var { createPublisher } = require("../lib/scheduled-input/publisher");
+  var { createPublisher } = require("../lib/scheduled-input/ws");
   var session = { localId: 41, cliSessionId: "vendor-41" };
   var recorded = [];
   var live = [];
