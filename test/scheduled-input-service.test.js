@@ -475,6 +475,9 @@ function loadStoreFile(content) {
   ["no format", function (rec) { return JSON.stringify({ records: [rec] }); }],
   ["a record without nextAt", function (rec) { delete rec.nextAt; return JSON.stringify({ format: 1, records: [rec] }); }],
   ["a record without a kind of session id", function (rec) { delete rec.sessionIdKind; return JSON.stringify({ format: 1, records: [rec] }); }],
+  ["a record without firedCount", function (rec) { delete rec.firedCount; return JSON.stringify({ format: 1, records: [rec] }); }],
+  ["a record without failures", function (rec) { delete rec.failures; return JSON.stringify({ format: 1, records: [rec] }); }],
+  ["a record with firedCount as a string", function (rec) { rec.firedCount = "0"; return JSON.stringify({ format: 1, records: [rec] }); }],
   ["a recurring record with no end", function (rec) {
     return JSON.stringify({ format: 1, records: [Object.assign(rec, { kind: "recurring", every: 10 * MIN, until: null, count: null })] });
   }],

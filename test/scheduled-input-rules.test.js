@@ -207,6 +207,63 @@ test("isValidRecord accepts what buildRecord makes and refuses a record missing 
   assert.equal(records.isValidRecord(Object.assign({}, made, { count: null })), false, "a repeat with no end");
 });
 
+test("every record buildRecord makes, and each after a state change, passes isValidRecord", function () {
+  var cases = {
+    once: build(once()).record,
+    recurringUntil: build(repeat({ count: undefined, until: NOW + 60 * MIN })).record,
+    recurringCount: build(repeat()).record,
+  };
+  Object.keys(cases).forEach(function (name) {
+    assert.equal(records.isValidRecord(cases[name]), true, name + " as built");
+  });
+  var afterDelivery = build(repeat({ count: 2 })).record;
+  records.afterDelivery(afterDelivery, NOW + 10 * MIN, "delivered");
+  assert.equal(records.isValidRecord(afterDelivery), true, "after a delivery, still armed");
+  records.afterDelivery(afterDelivery, NOW + 20 * MIN, "delivered");
+  assert.equal(afterDelivery.state, STATE.DONE);
+  assert.equal(records.isValidRecord(afterDelivery), true, "after a delivery that reached its count");
+  var sentOnce = build(once()).record;
+  records.afterDelivery(sentOnce, NOW + 11 * MIN, "delivered");
+  assert.equal(records.isValidRecord(sentOnce), true, "a once record after its delivery");
+  var gone = build(repeat()).record;
+  records.sessionGone(gone, NOW + 5 * MIN, "the session was closed");
+  assert.equal(gone.state, STATE.ENDED);
+  assert.equal(records.isValidRecord(gone), true, "after sessionGone");
+  var past = build(repeat({ count: undefined, until: NOW + 25 * MIN })).record;
+  records.endReached(past, NOW + 30 * MIN);
+  assert.equal(records.isValidRecord(past), true, "after endReached");
+});
+
+test("the field table names exactly the keys buildRecord writes", function () {
+  var written = {};
+  [build(once()).record, build(repeat()).record, build(repeat({ count: undefined, until: NOW + 60 * MIN })).record].forEach(function (rec) {
+    Object.keys(rec).forEach(function (k) { written[k] = true; });
+  });
+  assert.deepEqual(Object.keys(written).sort(), Object.keys(records.RECORD_FIELDS).sort());
+});
+
+test("a field the code counts or compares with must hold its type, not just be present", function () {
+  var made = build(repeat()).record;
+  var bad = {
+    firedCount: [undefined, "0", -1, 1.5, NaN, null],
+    failures: [undefined, "0", -1, 1.5, NaN, null],
+    createdAt: [undefined, 0, "1"],
+    lastFiredAt: [undefined, 0, "1"],
+    endedAt: [undefined, 0, "1"],
+    lastOutcome: [undefined, 1],
+    endReason: [undefined, 1],
+    note: [undefined, 1],
+    createdBy: [undefined, null, 1],
+  };
+  Object.keys(bad).forEach(function (k) {
+    bad[k].forEach(function (v) {
+      var copy = Object.assign({}, made);
+      if (v === undefined) delete copy[k]; else copy[k] = v;
+      assert.equal(records.isValidRecord(copy), false, k + " = " + String(v));
+    });
+  });
+});
+
 test("the first firing of a recurring record is one interval after creation", function () {
   assert.equal(build(repeat()).record.nextAt, NOW + 10 * MIN);
 });
