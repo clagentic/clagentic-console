@@ -88,6 +88,11 @@ if (SESSION_VERBS.indexOf(args[0]) !== -1) {
   return;
 }
 
+if (args[0] === "schedule-input") {
+  require("../lib/cli/schedule-input-subcommands").runScheduleInput(args.slice(1));
+  return;
+}
+
 var port = _isDev ? 2635 : 2633;
 var useHttps = true;
 var forceMkcert = false;
@@ -172,9 +177,13 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --list            List registered projects");
   console.log("       clagentic-console --activity-diagnostics  Print activity-divergence probe totals as JSON (agent-readable)");
   console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
-  console.log("       clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|-> [--vendor <id>] [--agent <name>] [--name <session-name>]  Open a session and run a first prompt (prints JSON)");
-  console.log("       clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) --prompt <text|->  Send input to a session, resuming it if needed (prints JSON; exit 3 ambiguous, 4 not found by address)");
+  console.log("       clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|-> [--vendor <id>] [--agent <name>] [--name <session-name>] [--visibility shared|private] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Open a session and run a first prompt (prints JSON)");
+  console.log("       clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) --prompt <text|-> [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Send input to a session, resuming it if needed (prints JSON; exit 3 ambiguous, 4 not found by address)");
   console.log("       clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <id>] [--state live|idle|reaped|any]  List the console's sessions (prints JSON)");
+  console.log("       clagentic-console schedule-input create --session <id> [--project <slug>] (--in <dur> | --at <time> | --every <dur> (--until <time> | --count <n>)) (--prompt <text|-> | --prompt-file <path>)  Send text into a session later, once or on a repeat with an end (prints JSON)");
+  console.log("       clagentic-console schedule-input list [--session <id>] [--project <slug>] [--state armed|done|ended|any]  List scheduled input, from the browser or the CLI (prints JSON)");
+  console.log("       clagentic-console schedule-input delete --id <id> [--project <slug>]  Cancel a scheduled input");
+  console.log("         <dur> is minutes or parts like 90, 10m, 1h30m; <time> is a local HH:MM (a past one means tomorrow)");
   console.log("         <address> is <agent>@<project>, <vendor>@<project> (a plain session) or @<project>, each with an optional /<session-name>");
   console.log("         Several matches resolve live over idle over reaped; /<session-name> names one session exactly");
   console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");

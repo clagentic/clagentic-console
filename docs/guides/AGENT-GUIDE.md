@@ -1,14 +1,15 @@
 # Agents in Clagentic: Console
 
-Agents are first-class users of Clagentic: Console. A script, a CI job or an AI agent running inside a console session can use three shell verbs, with no browser and no API token:
+Agents are first-class users of Clagentic: Console. A script, a CI job or an AI agent running inside a console session can use these shell verbs, with no browser and no API token:
 
 - `clagentic-console open-session` opens a new session and runs its first prompt.
 - `clagentic-console send-input` sends input to an existing session, and resumes it if its runtime was reaped.
 - `clagentic-console list-sessions` lists the console's sessions with their state and any prompts they are waiting on.
+- `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
 
 This guide is the canonical reference for these verbs. [architecture.md](./architecture.md) describes how they are built; where the two ever differ, fix the difference in the same change. Writers who cannot run the CLI can use the file drop, covered in [EXTERNAL-TRIGGERS.md](./EXTERNAL-TRIGGERS.md) and not repeated here.
 
-All three verbs talk to the running daemon over its Unix socket (`~/.clagentic/console/daemon.sock`, mode 0700), so the caller must be the daemon's own OS user and the daemon must be running. Each verb prints its result as JSON on stdout. Without a running daemon the result is `{ "ok": false, "result": "error", "reason": "no running daemon" }`.
+Every verb talks to the running daemon over its Unix socket (`~/.clagentic/console/daemon.sock`, mode 0700), so the caller must be the daemon's own OS user and the daemon must be running. Each verb prints its result as JSON on stdout. Without a running daemon the result is `{ "ok": false, "result": "error", "reason": "no running daemon" }`.
 
 Examples use the generic project `my-project` and the generic agents `reviewer` and `builder`.
 
@@ -18,6 +19,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [open-session](#open-session)
 - [send-input](#send-input)
 - [list-sessions](#list-sessions)
+- [Scheduled input](#scheduled-input)
 - [Delivery semantics](#delivery-semantics)
 - [Results and exit codes](#results-and-exit-codes)
 - [The sender record](#the-sender-record)
@@ -278,6 +280,141 @@ Result:
 
 `pendingPrompts` tells a session that is waiting on an answer from one that is working: a session blocked on a prompt is still `live`. Each element is `{ requestId, kind, tool, summary, ageSeconds }`. `kind` is the prompt kind (`permission`, `plan`, `ask_user`, `elicitation`), `tool` the tool name or `null`, `ageSeconds` the whole seconds since the prompt opened, and `summary` the one-line text the permission banner already shows for a tool call (empty for other kinds). Tool input beyond that line, a question's or form's text and a plan's content are never included. The list is read from the daemon's memory; an answered, expired or cancelled prompt is gone from the next call. An older daemon's entries lack the field: treat a missing `pendingPrompts` as "not reported", not as "nothing pending".
 
+## Scheduled input
+
+Scheduled input is text the console sends into one session at a later time. It is a feature for people and agents alike: a person uses the clock button next to the message box, an agent or a script uses `clagentic-console schedule-input`. Both make the same record, show in the same list and use the same firing path, so a schedule made in the browser appears in the CLI's list and the reverse.
+
+There are two kinds:
+
+| Kind | What it does |
+|---|---|
+| **Once** | Sends one time, at a time you give: in N minutes, or at a clock time. |
+| **Repeat** | Sends every N minutes, from one minute to 24 hours, and always has an end: until a clock time, or for N times. A repeat with no end is refused. |
+
+Scheduling is never always-on. Every record has a time it ends, and the caller sets it.
+
+### From the browser
+
+1. Click the clock button next to the message box. A small panel opens.
+2. Choose **Once** or **Repeat**.
+   - **Once:** type minutes (`In 10 min`) or a clock time (`At 20:01`, for example just after an 8 pm limit reset).
+   - **Repeat:** type the interval in minutes (`Every 30 min`) and an end, either `Until 21:00` or `For 4 times`.
+3. The panel says when the message will go before anything is armed, for example `Sends today at 20:01.` A clock time that has already passed today means tomorrow, and the panel says `tomorrow`. Clock times use the browser's local time zone.
+4. Press **Schedule**, then type your message and press Send as usual. The message does not go now: it appears as a scheduled-message bubble at the end of the chat, with its next time and **Send now** and **Cancel**.
+5. The same panel lists the session's armed scheduled messages, with their kind, next time and end, and Send now and Cancel for each. A repeat is labelled `Scheduled repeat`, a one-time message `Scheduled message`. The console's own automatic continue after a rate limit is listed as `Automatic resume after rate limit`.
+
+The browser schedules only for the session on screen. A session can hold 5 armed scheduled messages; at 5 the clock button is off until one is cancelled or sent (the bubbles keep their Cancel).
+
+### From a shell
+
+```
+clagentic-console schedule-input create --session <id> [--project <slug>]
+    (--in <dur> | --at <time> | --every <dur> (--until <time> | --count <n>))
+    (--prompt <text|-> | --prompt-file <path>)
+clagentic-console schedule-input list [--session <id>] [--project <slug>] [--state armed|done|ended|any]
+clagentic-console schedule-input delete --id <id> [--project <slug>]
+```
+
+All options are flag/value pairs, so each command shape can be allow-listed (see [Suggested allow rules](#suggested-allow-rules)).
+
+`create`:
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--session <id>` | yes | The session to send into: the console session id or the vendor-assigned id, as `send-input --session` takes. It may be any session of the project; the CLI is not limited to the caller's own. |
+| `--project <slug>` | when not inside a console session | The project the session is in. Inside a console session it defaults to that session's own project. |
+| `--in <dur>` | one timing flag | Once, after this long. |
+| `--at <time>` | one timing flag | Once, at this local time. |
+| `--every <dur>` | one timing flag | Repeat at this interval. The first send is one interval from now. |
+| `--until <time>` | with `--every`, or `--count` | The repeat ends at this local time. |
+| `--count <n>` | with `--every`, or `--until` | The repeat ends after this many sends (1 to 1000). |
+| `--prompt <text\|->` | one text flag | The text to send. `-` reads it from stdin (a single trailing newline is removed). |
+| `--prompt-file <path>` | one text flag | Reads the text from a file (a single trailing newline is removed). Use it for long or multi-line text. |
+
+Exactly one of `--in`, `--at`, `--every`. `--until` and `--count` belong to `--every`, and a repeat needs exactly one of them.
+
+`<dur>` is a number of minutes or a run of `s`, `m`, `h` and `d` parts: `90`, `10m`, `2h`, `1h30m`. `<time>` is a local `HH:MM` (24-hour), or a local `YYYY-MM-DDTHH:MM`. Times are read in the caller's own time zone. An `HH:MM` that has already passed today means tomorrow, and the result shows the absolute time it resolved to, so a mistake is visible:
+
+```bash
+# Once, in ten minutes
+clagentic-console schedule-input create --session 12 --project my-project --in 10m \
+  --prompt "Check whether the deploy finished."
+
+# Once, at a clock time (tomorrow if 08:00 has passed)
+clagentic-console schedule-input create --session 12 --project my-project --at 08:00 \
+  --prompt "Start the morning review."
+
+# A repeat every 30 minutes, until 21:00
+clagentic-console schedule-input create --session 12 --project my-project --every 30m --until 21:00 \
+  --prompt "Wake up and report where the build stands."
+
+# A repeat every 2 hours, four times, with the text from a file
+clagentic-console schedule-input create --session 12 --project my-project --every 2h --count 4 \
+  --prompt-file message.txt
+
+# From inside a console session, for itself (the project defaults to the caller's own)
+clagentic-console schedule-input create --session "$CLAGENTIC_CONSOLE_SESSION_ID" --every 20m --count 6 \
+  --prompt "Check the queue again."
+```
+
+Result:
+
+```json
+{
+  "ok": true,
+  "result": "scheduled",
+  "record": {
+    "id": "si_3f9a1c7b2e",
+    "sessionId": "6f1c…",
+    "kind": "recurring",
+    "state": "armed",
+    "preview": "Wake up and report where the build stands.",
+    "createdBy": "reviewer@my-project",
+    "at": null,
+    "nextAt": 1793000000000,
+    "every": 1800000,
+    "until": 1793010000000,
+    "count": null,
+    "firedCount": 0,
+    "lastFiredAt": null,
+    "lastOutcome": null,
+    "endReason": null
+  },
+  "project": "my-project",
+  "resolved": {
+    "every": 1800000,
+    "firstAt": 1793000000000,
+    "firstAtLocal": "2026-10-22 19:30",
+    "until": 1793010000000,
+    "untilLocal": "2026-10-22 21:00",
+    "tomorrow": false
+  }
+}
+```
+
+`createdBy` records who made the schedule: the calling console session as `<agent>@<project>` (or `<vendor>@<project>`), the plain `cli` outside a session, `browser` or `browser:<user>` for the clock button, and `rate-limit` for the console's own automatic continue. A once record has `at`; a repeat has `every` and `until` or `count`. `nextAt` and the other times are milliseconds since the epoch. `resolved` repeats the times in the caller's local time (`atLocal`, `firstAtLocal`, `untilLocal`, as `YYYY-MM-DD HH:MM`) and says whether a clock time rolled over to `tomorrow`; for a once record it is `{ at, atLocal, tomorrow }`.
+
+`list` prints `{ "ok": true, "result": "listed", "count": N, "inputs": [...] }`: for each record its `id`, `project`, `sessionId`, `kind`, `state`, `preview` (the start of the text), `nextAt`, the end (`until` or `count`), `firedCount`, `lastOutcome` (`delivered`, `resumed-and-delivered`, or why the last attempt was skipped or failed), `endReason` and `createdBy`. The default is the armed records of every project, soonest first; `--state done`, `ended` or `any` shows finished ones too (the last 20 per project are kept). `--session` and `--project` narrow it.
+
+`delete --id <id>` cancels a record and removes it; `--project` is only needed to narrow the search, since an id is unique. An unknown id is `not-found`. A record whose text is being sent at that moment is not deleted: the answer is `busy` (exit 1) with the reason "that scheduled input is being sent; try again in a moment", and the record is unchanged. Try again once the send is over. The CLI has no send-now verb: use `send-input` for an immediate send.
+
+Exit codes: `0` when the request was acted on (scheduled, listed, deleted), `1` when it was refused, not found or failed. A usage mistake (an unknown option, a missing value, conflicting timing flags, a repeat with no end) prints the usage line to stderr and exits 1 without contacting the daemon.
+
+### Rules
+
+- **The limits.** `--every` from 1 minute to 24 hours. At most 5 armed records per session; a sixth is refused. The automatic continue after a rate limit still counts toward the 5 but is never refused for it, so a person's own schedules can never make a rate-limited session lose its resume. A once record may be at most 366 days ahead.
+- **One session, never another.** A record targets exactly one session and never moves to a different one. There is no address resolution when it fires. It is stored under the session's vendor-assigned id, which survives a restart; a session that has not run its first turn has no vendor id yet, so a record armed on it is keyed by the console id. Such a record is upgraded to the vendor id as soon as the session has one; if the daemon restarts first it is `ended` ("the session had not started when the daemon restarted") at the next start, because the console id is renumbered by a restart and could name another session. Records keyed by the vendor id survive a restart.
+- **It goes through `send-input`'s path.** At its time the text is delivered into the session the way `send-input` delivers: into the running query, or, for a session whose runtime was reaped, by resuming it by id first. No new session is created. The chat shows it as the automation (`Scheduled message`, labelled `scheduled message` or `scheduled repeat`), never as a person's turn.
+- **Mid-turn firings are skipped.** If the session is in the middle of a turn when a record is due, nothing is sent; the console tries again every 15 seconds and sends once the session is idle. For a repeat, only one send is made when the turn ends (missed sends are not made up in a burst), and the next send is one interval after that delivery.
+- **Send now is the exception.** A person pressing Send now forced the send, so it is not skipped: it goes into the running turn, as `send-input` does, with the initiator `scheduled-now`. Send now on a repeat counts as one of its sends and the next is one interval later.
+- **A repeat's next time is the delivery time plus the interval.** It ends at its `--until` time or after its `--count` sends and is then `done`.
+- **Downtime.** Records are kept on disk, per project in `~/.clagentic/console/scheduled-input/`, and survive a daemon restart. A once record whose time passed while the daemon was down is sent once, a few seconds after startup, rather than lost. A repeat is not caught up: it sends at most once, then carries on from that delivery; if its end passed while the daemon was down it is `done` without a send.
+- **Ended.** A record is `ended` when its session is closed or deleted. A session whose runtime was only reaped is not ended: the next send resumes it by id. A record that reached its end is `done`.
+- **A successor arms its own.** When one session hands off to another, the outgoing session deletes its schedules and the successor arms its own as a step of the handoff. Nothing is inferred from an address, and a record never follows a session to its successor.
+- **Failures.** A send that fails is retried every 30 seconds; after 10 failures in a row the record ends with the reason.
+- **At most once.** The record is advanced and saved before its text is delivered, so a restart or crash around a delivery can lose that one send but never makes it twice. If the list cannot be saved, nothing is delivered: the project's firing stops, is logged, and is retried every 30 seconds until a save works. `schedule-input list` then answers `store` (one project) or `storeErrors` (all projects) with `state` `unhealthy`. If a store file is unreadable and cannot be moved aside, the project's store is `read-only`: nothing is saved or delivered and the file is left as it is, until the file is fixed and the daemon restarted. Creating or deleting a record whose change cannot be saved is refused with `error`. If the list cannot be saved after a text was delivered, the record keeps its saved `sending` outcome and is not delivered again.
+- **The browser's limit.** At 5 armed records the clock button still opens the panel, where Send now and Cancel work; only Schedule is off, with the reason shown.
+
 ## Delivery semantics
 
 - **Push, not poll.** Input is pushed into the target session when the call is made. There is no inbox to poll and no queue the receiver must drain. The call returns after the session's query has actually started or accepted the input.
@@ -303,6 +440,8 @@ The `result` field of the JSON, and the process exit code:
 | `refused` | The request is invalid or not allowed; `reason` says why (unknown project, vendor, agent or visibility, bad initiator, bad name or address, a name already held, an empty prompt, an unsafe id, conflicting targets). Not a failure to deliver. | 1 |
 | `error` | Delivery was attempted and failed, or the daemon could not be reached. `retryable` says whether sending again can help. | 1 |
 
+`schedule-input` answers `scheduled`, `listed` or `deleted` (exit 0), and `refused` (an invalid request: a bad interval or time, no end on a repeat, the limit of 5, an unknown project), `not-found` (an unknown session or id), `busy` (a delete of a record that is being sent) or `error` (exit 1). See [Scheduled input](#scheduled-input).
+
 A CLI usage mistake (an unknown option, a missing value, a missing target or `--prompt`) prints the usage line to stderr and exits 1 without contacting the daemon.
 
 `refused` and `error` results carry `ok: false`, `result` and `reason`; some carry `retryable`. For a send whose turn failed to start, `retryable: true` is safe: the input was not delivered, so sending again cannot deliver it twice.
@@ -318,8 +457,8 @@ Injected input is not typed by the person at the browser, so the console records
 | Value | Meaning |
 |---|---|
 | `trigger` | Input from a script, a file drop or an agent. This is the default when `--initiator` is absent. |
-| `scheduled` | A message the console sent at the time it was scheduled. |
-| `scheduled-now` | A scheduled message sent now. |
+| `scheduled` | A scheduled input the console sent at its time (see [Scheduled input](#scheduled-input)). `send-input` accepts the value too, but only the console's own firing is recorded as the automation. |
+| `scheduled-now` | A scheduled input sent early with Send now. |
 | `loop` | One iteration of an automated loop. |
 
 `human` is refused: human turns come only from the authenticated browser. Any unknown value is refused too, with the accepted list in the reason. For an agent or a script, leave `--initiator` out.
@@ -367,19 +506,22 @@ This is a suggestion only. Clagentic: Console never reads or writes your Claude 
     "allow": [
       "Bash(clagentic-console list-sessions *)",
       "Bash(clagentic-console send-input *)",
-      "Bash(clagentic-console open-session *)"
+      "Bash(clagentic-console open-session *)",
+      "Bash(clagentic-console schedule-input create *)",
+      "Bash(clagentic-console schedule-input list *)",
+      "Bash(clagentic-console schedule-input delete *)"
     ]
   }
 }
 ```
 
-`list-sessions` only reads. `send-input` and `open-session` start work in other sessions, so allow them only where you want agents to be able to do that.
+`list-sessions` and `schedule-input list` only read. `send-input` and `open-session` start work in other sessions, so allow them only where you want agents to be able to do that. `schedule-input create` does too, later: the text it schedules is sent into the session you name, which can be any session of the project, so allow it only where you would allow `send-input`. `schedule-input delete` cancels a schedule, including one a person made in the browser.
 
 An allowed `send-input` or `open-session` lets the calling agent start work in another session, and that session may run with broader tool permissions than the caller (a different named agent, or a plain session). The rules therefore let an agent act at the target session's level. Allow them only for agents you trust to do that.
 
 Migration: the 1.10.x installer added the `list-sessions` rule to the Claude Code settings of the installing account. Later releases stop doing so. A rule already added is left in place and is yours to keep or remove.
 
-Passing long or multi-line prompt text inline in a Bash argument can still trigger Claude Code's own safety prompt, whatever the allow rules say. The verbs have no `--prompt-file` option. They do read the prompt from stdin when you give `--prompt -`, so put long text in a file and redirect it:
+Passing long or multi-line prompt text inline in a Bash argument can still trigger Claude Code's own safety prompt, whatever the allow rules say. `open-session` and `send-input` have no `--prompt-file` option. They do read the prompt from stdin when you give `--prompt -`, so put long text in a file and redirect it (`schedule-input create` also takes `--prompt-file <path>`):
 
 ```bash
 clagentic-console send-input --to reviewer@my-project --prompt - < message.txt

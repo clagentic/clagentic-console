@@ -19,6 +19,8 @@ var turnInitiator = require("../lib/turn-initiator");
 var claudeModule = require("../lib/yoke/adapters/claude");
 var { attachUserMessage } = require("../lib/project-user-message");
 var { attachExternalTrigger } = require("../lib/project-external-trigger");
+var { createScheduledInputService } = require("../lib/scheduled-input/service");
+var { createSessionInput } = require("../lib/session-input");
 var { INITIATORS } = turnInitiator;
 var APP_ID = "clagentic-console/" + require("../package.json").version;
 
@@ -264,21 +266,29 @@ test("a worker query for a typed turn carries the initiator too, and none when t
 function makeMessageHandler(calls) {
   var sessions = new Map();
   var session = {
-    localId: 7, vendor: "claude", history: [], title: "t", isProcessing: false,
-    scheduledMessage: null, sentToolResults: {},
+    localId: 7, cliSessionId: "vendor-7", vendor: "claude", history: [], title: "t", isProcessing: false,
+    sentToolResults: {},
   };
   sessions.set(session.localId, session);
   var noop = function () {};
   var sm = {
     sessions: sessions,
     saveSessionFile: noop, broadcastSessionList: noop, appendToSessionFile: noop,
-    sendAndRecord: noop,
+    sendAndRecord: noop, sendToSession: noop,
     recordHistoryEntry: function (s, entry) { s.history.push(entry); },
   };
   var sdk = {
     startQuery: function (s, text, images, user, initiator) { calls.push({ call: "startQuery", text: text, initiator: initiator }); },
     pushMessage: function (s, text, images, initiator) { calls.push({ call: "pushMessage", text: text, initiator: initiator }); },
   };
+  var project = { cwd: os.tmpdir(), sm: sm, sdk: sdk, onProcessingChanged: noop, getLinuxUserForSession: function () { return null; } };
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "console-turn-initiator-"));
+  var service = createScheduledInputService({
+    dir: dir,
+    getProject: function (slug) { return slug === "p" ? project : null; },
+    sessionInput: createSessionInput({ getProject: function (slug) { return slug === "p" ? project : null; } }),
+  });
+  service.attachProject("p");
   var handler = attachUserMessage({
     cwd: os.tmpdir(), slug: "p", osUsers: false, sm: sm, sdk: sdk, nm: {}, tm: {},
     send: noop, sendTo: noop, sendToSession: noop, sendToSessionOthers: noop, clients: new Set(),
@@ -290,11 +300,14 @@ function makeMessageHandler(calls) {
     onProcessingChanged: noop,
     _loop: { handleLoopMessage: function () { return false; } },
     browserState: { _browserTabList: {} },
-    scheduleMessage: noop, cancelScheduledMessage: noop,
+    scheduledInput: service,
     loadContextSources: function () { return []; }, saveContextSources: noop,
     adapter: { renameSession: function () { return Promise.resolve(); } },
   });
-  return { handler: handler, session: session };
+  return {
+    handler: handler, session: session,
+    cleanup: function () { service.stop(); fs.rmSync(dir, { recursive: true, force: true }); },
+  };
 }
 
 test("a typed message names the human as the initiator, both when it starts a turn and when it joins a running one", function () {
@@ -307,12 +320,15 @@ test("a typed message names the human as the initiator, both when it starts a tu
   assert.equal("humanOriginated" in h.session, false, "nothing about the initiator is kept on the session");
 });
 
-test("forcing a scheduled message to send now makes a scheduled-now turn, and a typed one after it is human again", function () {
+test("forcing a scheduled message to send now makes a scheduled-now turn, and a typed one after it is human again", async function () {
   var calls = [];
   var h = makeMessageHandler(calls);
-  h.session.scheduledMessage = { text: "scheduled text", timer: setTimeout(function () {}, 1) };
+  h.handler.handleUserMessage({}, { type: "schedule_message", text: "scheduled text", resetsAt: Date.now() + 3600000 });
   h.handler.handleUserMessage({}, { type: "send_scheduled_now" });
+  // The delivery is a promise chain behind the handler; wait for it to settle.
+  await new Promise(function (resolve) { setImmediate(resolve); });
   h.handler.handleUserMessage({}, { type: "message", text: "typed after" });
+  h.cleanup();
   assert.deepEqual(calls.map(function (c) { return c.text + ":" + c.initiator; }), ["scheduled text:scheduled-now", "typed after:human"]);
 });
 

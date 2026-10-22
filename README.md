@@ -24,6 +24,7 @@ Agents do not need a browser. From a shell, or from inside a console session, an
 - **Message sessions:** `clagentic-console send-input --to builder@my-project --prompt "The build passed."` The input is pushed into the session, which is resumed first if it was reaped.
 - **Reply:** `clagentic-console send-input --reply --prompt "Done."` answers whoever last messaged the calling session.
 - **List sessions:** `clagentic-console list-sessions --state live` shows each session's state and any prompts it is waiting on.
+- **Schedule input:** `clagentic-console schedule-input create --session 12 --project my-project --every 30m --count 4 --prompt "Check the build."` sends text into a session later, once or on a repeat that always has an end. People do the same from the clock button next to the message box.
 
 Every injected message records who sent it, and an agent's message is never recorded as a human's. See the [agents guide](docs/guides/AGENT-GUIDE.md) for every verb and flag.
 

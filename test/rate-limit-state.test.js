@@ -18,9 +18,12 @@ import {
   getRateLimitResetTimer,
   setRateLimitResetTimer,
   getRateLimitResetState,
-  getScheduledMsg,
-  setScheduledMsg,
-  clearScheduledMsg,
+  getScheduledInputs,
+  setScheduledInputs,
+  clearScheduledInputs,
+  canArmScheduledInput,
+  getArmedSchedule,
+  setArmedSchedule,
   hasArmedState,
   clearSession,
   _resetAllForTest,
@@ -46,18 +49,18 @@ test("arming a schedule delay in session A does not affect session B", () => {
 
 test("both sessions' armed state survives after arming a second, later session", () => {
   setScheduleDelayMs("proj-1-session", 300000);
-  setScheduledMsg("proj-1-session", "continue please", Date.now() + 300000);
+  setScheduledInputs("proj-1-session", [{ id: "si_1", text: "continue please", nextAt: Date.now() + 300000 }]);
 
   setScheduleDelayMs("proj-2-session", 120000);
-  setScheduledMsg("proj-2-session", "keep going", Date.now() + 120000);
+  setScheduledInputs("proj-2-session", [{ id: "si_2", text: "keep going", nextAt: Date.now() + 120000 }]);
 
   assert.equal(getScheduleDelayMs("proj-1-session"), 300000);
-  assert.ok(getScheduledMsg("proj-1-session"));
-  assert.equal(getScheduledMsg("proj-1-session").text, "continue please");
+  assert.equal(getScheduledInputs("proj-1-session").length, 1);
+  assert.equal(getScheduledInputs("proj-1-session")[0].text, "continue please");
 
   assert.equal(getScheduleDelayMs("proj-2-session"), 120000);
-  assert.ok(getScheduledMsg("proj-2-session"));
-  assert.equal(getScheduledMsg("proj-2-session").text, "keep going");
+  assert.equal(getScheduledInputs("proj-2-session").length, 1);
+  assert.equal(getScheduledInputs("proj-2-session")[0].text, "keep going");
 });
 
 test("rate limit reset bookkeeping (resetsAt, timer, per-type reset state) is isolated per session", () => {
@@ -93,7 +96,7 @@ test("clearSession removes a session's entry entirely and clears its background 
   var fired = false;
   var timer = setTimeout(function () { fired = true; }, 50);
   setScheduleDelayMs("dead-session", 60000);
-  setScheduledMsg("dead-session", "hello", Date.now() + 60000);
+  setScheduledInputs("dead-session", [{ id: "si_x", text: "hello", nextAt: Date.now() + 60000 }]);
   setRateLimitResetTimer("dead-session", timer);
 
   assert.ok(hasArmedState("dead-session"));
@@ -102,7 +105,7 @@ test("clearSession removes a session's entry entirely and clears its background 
 
   assert.equal(hasArmedState("dead-session"), false, "cleared session must report no armed state");
   assert.equal(getScheduleDelayMs("dead-session"), 0, "cleared session must read back as unarmed (fresh entry)");
-  assert.equal(getScheduledMsg("dead-session"), null);
+  assert.deepEqual(getScheduledInputs("dead-session"), []);
   assert.equal(getRateLimitResetTimer("dead-session"), null, "clearSession must reset the timer handle for a fresh entry");
 
   return new Promise(function (resolve) {
@@ -113,14 +116,37 @@ test("clearSession removes a session's entry entirely and clears its background 
   });
 });
 
-test("clearScheduledMsg only clears the bubble, leaving the schedule delay untouched", () => {
+test("clearScheduledInputs only clears the list, leaving the armed schedule untouched", () => {
   setScheduleDelayMs("s1", 600000);
-  setScheduledMsg("s1", "queued text", Date.now() + 600000);
+  setScheduledInputs("s1", [{ id: "si_1", text: "queued text", nextAt: Date.now() + 600000 }]);
 
-  clearScheduledMsg("s1");
+  clearScheduledInputs("s1");
 
-  assert.equal(getScheduledMsg("s1"), null);
-  assert.equal(getScheduleDelayMs("s1"), 600000, "clearing the bubble must not clear the armed delay");
+  assert.deepEqual(getScheduledInputs("s1"), []);
+  assert.equal(getScheduleDelayMs("s1"), 600000, "clearing the list must not clear the armed delay");
+});
+
+test("a session can take another scheduled input until its list reaches the cap the server sent", () => {
+  assert.equal(canArmScheduledInput("s2"), true);
+  var five = [1, 2, 3, 4, 5].map((n) => ({ id: "si_" + n }));
+  setScheduledInputs("s2", five.slice(0, 4), 5);
+  assert.equal(canArmScheduledInput("s2"), true);
+  setScheduledInputs("s2", five, 5);
+  assert.equal(canArmScheduledInput("s2"), false);
+  assert.equal(canArmScheduledInput("s3"), true, "another session is unaffected");
+  setScheduledInputs("s2", five, 8);
+  assert.equal(canArmScheduledInput("s2"), true, "the cap is the server's, not a constant of the client");
+});
+
+test("an armed schedule can be of any shape; the delay getter reads only an in-minutes delay", () => {
+  setArmedSchedule("s4", { kind: "once", atMs: 123456 });
+  assert.equal(getScheduleDelayMs("s4"), 0);
+  assert.deepEqual(getArmedSchedule("s4"), { kind: "once", atMs: 123456 });
+  setArmedSchedule("s4", { kind: "recurring", everyMs: 60000, count: 3 });
+  assert.equal(getScheduleDelayMs("s4"), 0);
+  assert.equal(hasArmedState("s4"), true);
+  setScheduleDelayMs("s4", 0);
+  assert.equal(getArmedSchedule("s4"), null);
 });
 
 // ============================================================

@@ -3,9 +3,8 @@
 // per-session, so arming it in a second project silently overwrote/lost
 // the first project's armed state.
 //
-// Server-side session.scheduledMessage (lib/project.js) was already
-// correctly per-session — these tests cover the two other pieces of the
-// fix:
+// The server's scheduled inputs (lib/scheduled-input/) are bound to one
+// session each — these tests cover the two other pieces of the fix:
 //
 //   1. Server-side WS payloads (rate_limit, rate_limit_usage,
 //      scheduled_message_queued/sent/cancelled) are stamped with the
@@ -38,7 +37,6 @@ function readMod(rel) {
   return fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
 }
 
-var PROJECT_JS = readMod("lib/project.js");
 var SDK_MESSAGE_PROCESSOR_JS = readMod("lib/sdk-message-processor.js");
 var APP_MESSAGES_JS = readMod("lib/public/modules/app-messages.js");
 var APP_RATE_LIMIT_JS = readMod("lib/public/modules/app-rate-limit.js");
@@ -47,25 +45,47 @@ var APP_RATE_LIMIT_JS = readMod("lib/public/modules/app-rate-limit.js");
 // Server-side: WS payloads stamped with session localId
 // ---------------------------------------------------------------------------
 
-test("lib/project.js: scheduled_message_queued is stamped with localId: session.localId", function () {
-  var idx = PROJECT_JS.indexOf('type: "scheduled_message_queued"');
-  assert.ok(idx !== -1, "expected the scheduled_message_queued entry to still exist");
-  var block = PROJECT_JS.slice(idx, idx + 200);
-  assert.match(block, /localId:\s*session\.localId/, "scheduled_message_queued must carry localId: session.localId so the client can route it to the right session");
+// The scheduled-message events are now sent by lib/scheduled-input/ws.js;
+// these run it rather than reading its source.
+function publishedBy(eventType, recordExtra) {
+  var { createPublisher } = require("../lib/scheduled-input/ws");
+  var session = { localId: 41, cliSessionId: "vendor-41" };
+  var recorded = [];
+  var live = [];
+  var publish = createPublisher({
+    getProject: function () { return { sm: { sessions: new Map([[41, session]]), sendAndRecord: function (s, o) { recorded.push(o); }, sendToSession: function (s, o) { live.push(o); } } }; },
+    listFor: function () { return []; },
+  });
+  publish({
+    type: eventType, slug: "p", session: session,
+    record: Object.assign({ id: "si_1", kind: "once", text: "go", nextAt: 5, createdAt: 1, state: "armed", sessionId: "vendor-41", sessionIdKind: "vendor" }, recordExtra),
+  });
+  return { recorded: recorded, live: live };
+}
+
+test("scheduled-input publisher: scheduled_message_queued is stamped with localId: session.localId", function () {
+  var out = publishedBy("queued");
+  assert.equal(out.recorded[0].type, "scheduled_message_queued");
+  assert.equal(out.recorded[0].localId, 41, "scheduled_message_queued must carry localId so the client can route it to the right session");
 });
 
-test("lib/project.js: scheduled_message_sent is stamped with localId: session.localId", function () {
-  var idx = PROJECT_JS.indexOf('sm.sendAndRecord(session, { type: "scheduled_message_sent"');
-  assert.ok(idx !== -1, "expected the scheduled_message_sent send to still exist");
-  var block = PROJECT_JS.slice(idx, idx + 120);
-  assert.match(block, /localId:\s*session\.localId/, "scheduled_message_sent must carry localId: session.localId");
+test("scheduled-input publisher: scheduled_message_sent is stamped with localId: session.localId", function () {
+  var out = publishedBy("sent");
+  assert.equal(out.recorded[0].type, "scheduled_message_sent");
+  assert.equal(out.recorded[0].localId, 41);
 });
 
-test("lib/project.js: scheduled_message_cancelled is stamped with localId: session.localId", function () {
-  var idx = PROJECT_JS.indexOf('sm.sendAndRecord(session, { type: "scheduled_message_cancelled"');
-  assert.ok(idx !== -1, "expected the scheduled_message_cancelled send to still exist");
-  var block = PROJECT_JS.slice(idx, idx + 120);
-  assert.match(block, /localId:\s*session\.localId/, "scheduled_message_cancelled must carry localId: session.localId");
+test("scheduled-input publisher: scheduled_message_cancelled is stamped with localId: session.localId", function () {
+  var out = publishedBy("cancelled", { state: "ended", endReason: "gone" });
+  assert.equal(out.recorded[0].type, "scheduled_message_cancelled");
+  assert.equal(out.recorded[0].localId, 41);
+});
+
+test("scheduled-input publisher: the session's list is stamped with localId too, for its viewers only", function () {
+  var out = publishedBy("queued");
+  assert.equal(out.live[0].type, "scheduled_input_list");
+  assert.equal(out.live[0].localId, 41);
+  assert.equal(out.live[0].limit, 5);
 });
 
 test("lib/sdk-message-processor.js: rate_limit_usage broadcast is stamped with localId: session.localId", function () {
@@ -86,23 +106,32 @@ test("lib/sdk-message-processor.js: rate_limit event is stamped with localId: se
 // Client-side: dispatch routes on msg.localId rather than assuming focus
 // ---------------------------------------------------------------------------
 
-test("app-messages.js: scheduled_message_queued passes msg.localId through to addScheduledMessageBubble", function () {
-  var idx = APP_MESSAGES_JS.indexOf("scheduled_message_queued:");
+test("app-messages.js: scheduled_input_list goes to applyScheduledInputList, which keys the list on msg.localId", function () {
+  assert.match(APP_MESSAGES_JS, /scheduled_input_list:\s*applyScheduledInputList/,
+    "the session's list must be routed by the handler that stores it under msg.localId, so a background session's list doesn't render into the focused session's message list");
+  var idx = APP_RATE_LIMIT_JS.indexOf("export function applyScheduledInputList(msg)");
   assert.ok(idx !== -1);
-  var block = APP_MESSAGES_JS.slice(idx, idx + 300);
-  assert.match(
-    block,
-    /addScheduledMessageBubble\(msg\.text,\s*msg\.resetsAt,\s*msg\.localId\)/,
-    "scheduled_message_queued must forward msg.localId so a background session's scheduled message doesn't render into the focused session's message list"
-  );
+  var block = APP_RATE_LIMIT_JS.slice(idx, idx + 600);
+  assert.match(block, /msg\.localId\s*!=\s*null\s*\?\s*msg\.localId\s*:\s*currentSessionId\(\)/);
+  assert.match(block, /if \(targetSessionId === currentSessionId\(\)\) renderScheduledBubbles\(/,
+    "only the session on screen is drawn");
 });
 
-test("app-messages.js: scheduled_message_sent/cancelled route through clearScheduledMessage(msg.localId)", function () {
-  var sentIdx = APP_MESSAGES_JS.indexOf("scheduled_message_sent:");
+test("app-messages.js: the older scheduled-message events take no state; the list is the only source", function () {
+  var queuedIdx = APP_MESSAGES_JS.indexOf("scheduled_message_queued:");
   var cancelIdx = APP_MESSAGES_JS.indexOf("scheduled_message_cancelled:");
-  assert.ok(sentIdx !== -1 && cancelIdx !== -1);
-  assert.match(APP_MESSAGES_JS.slice(sentIdx, sentIdx + 250), /clearScheduledMessage\(msg\.localId\)/);
-  assert.match(APP_MESSAGES_JS.slice(cancelIdx, cancelIdx + 200), /clearScheduledMessage\(msg\.localId\)/);
+  assert.ok(queuedIdx !== -1 && cancelIdx !== -1);
+  assert.match(APP_MESSAGES_JS.slice(queuedIdx, queuedIdx + 60), /scheduled_message_queued:\s*function \(\) \{\}/);
+  assert.match(APP_MESSAGES_JS.slice(cancelIdx, cancelIdx + 60), /scheduled_message_cancelled:\s*function \(\) \{\}/);
+  // scheduled_message_sent is not a no-op: it only shows the session as
+  // processing, and only for the session on screen. It must not touch the list.
+  var sentIdx = APP_MESSAGES_JS.indexOf("scheduled_message_sent:");
+  assert.ok(sentIdx !== -1);
+  var sentEnd = APP_MESSAGES_JS.indexOf("\n  },", sentIdx);
+  var sentBlock = APP_MESSAGES_JS.slice(sentIdx, sentEnd);
+  assert.match(sentBlock, /msg\.localId == null \|\| msg\.localId === store\.get\('activeSessionId'\)/);
+  assert.match(sentBlock, /setStatus\("processing"\)/);
+  assert.doesNotMatch(sentBlock, /setScheduledInputs|applyScheduledInputList/);
 });
 
 test("app-messages.js: session_switched calls restoreRateLimitStateForSession after resetClientState (redraw-on-switch-in hook)", function () {
