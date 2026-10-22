@@ -76,6 +76,7 @@ var PROMPTS = [
   "csplit f 3",
   "tail -f log",
   "tail -F log",
+  "tail -n 5 log",
   "rg --pre rm x",
   "man ls",
   "top",
@@ -116,7 +117,7 @@ PROMPTS.forEach(function (cmd) {
 });
 
 ["ls -la", "git status", "cat README.md | grep x", "ls && pwd", "date", "date +%Y", "hostname",
-  "ip addr", "ip route", "ifconfig", "tail -n 5 log", "rg foo", "git log --oneline", "git diff",
+  "ip addr", "ip route", "ifconfig", "rg foo", "git log --oneline", "git diff",
   "git log -5", "ls -la src/", "cat README.md | grep foo"].forEach(function (cmd) {
   test("bash auto-approve still allows read-only: " + cmd, function () {
     var result = bash(cmd);
