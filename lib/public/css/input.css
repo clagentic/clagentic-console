@@ -1202,6 +1202,84 @@
   color: inherit;
 }
 
+/* Schedule panel: opened by the clock button */
+.schedule-panel {
+  position: fixed;
+  z-index: 60;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-size: 13px;
+}
+.schedule-panel.hidden { display: none; }
+.schedule-tabs { display: flex; gap: 4px; }
+.schedule-tab {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-dimmer);
+  font: inherit;
+  cursor: pointer;
+}
+.schedule-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.schedule-section { display: flex; flex-direction: column; gap: 6px; }
+.schedule-section.hidden { display: none; }
+.schedule-row { display: flex; align-items: center; gap: 6px; }
+.schedule-row-label { min-width: 40px; color: var(--text-dimmer); }
+.schedule-row-unit { color: var(--text-dimmer); }
+.schedule-time-input {
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.schedule-time-input:focus { border-color: var(--accent); }
+.schedule-note { color: var(--text-dimmer); font-size: 12px; }
+.schedule-preview { min-height: 1.4em; color: var(--accent); }
+.schedule-preview.error { color: var(--error); }
+.schedule-actions { display: flex; align-items: center; gap: 8px; }
+.schedule-arm {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.schedule-arm:disabled { opacity: 0.4; cursor: default; }
+.schedule-hint { color: var(--text-dimmer); font-size: 12px; }
+.schedule-list-title { color: var(--text-dimmer); font-size: 12px; }
+.schedule-list { display: flex; flex-direction: column; gap: 6px; }
+.schedule-list-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.schedule-list-text { word-break: break-word; }
+
 /* Scheduled message bubble: accent-tinted user bubble */
 .scheduled-msg-wrap .bubble {
   background: color-mix(in srgb, var(--accent) 18%, var(--user-bubble, var(--bg-alt)));

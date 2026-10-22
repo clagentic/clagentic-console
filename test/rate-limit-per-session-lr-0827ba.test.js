@@ -106,23 +106,23 @@ test("lib/sdk-message-processor.js: rate_limit event is stamped with localId: se
 // Client-side: dispatch routes on msg.localId rather than assuming focus
 // ---------------------------------------------------------------------------
 
-test("app-messages.js: scheduled_message_queued passes msg.localId through to addScheduledMessageBubble", function () {
-  var idx = APP_MESSAGES_JS.indexOf("scheduled_message_queued:");
+test("app-messages.js: scheduled_input_list goes to applyScheduledInputList, which keys the list on msg.localId", function () {
+  assert.match(APP_MESSAGES_JS, /scheduled_input_list:\s*applyScheduledInputList/,
+    "the session's list must be routed by the handler that stores it under msg.localId, so a background session's list doesn't render into the focused session's message list");
+  var idx = APP_RATE_LIMIT_JS.indexOf("export function applyScheduledInputList(msg)");
   assert.ok(idx !== -1);
-  var block = APP_MESSAGES_JS.slice(idx, idx + 300);
-  assert.match(
-    block,
-    /addScheduledMessageBubble\(msg\.text,\s*msg\.resetsAt,\s*msg\.localId\)/,
-    "scheduled_message_queued must forward msg.localId so a background session's scheduled message doesn't render into the focused session's message list"
-  );
+  var block = APP_RATE_LIMIT_JS.slice(idx, idx + 600);
+  assert.match(block, /msg\.localId\s*!=\s*null\s*\?\s*msg\.localId\s*:\s*currentSessionId\(\)/);
+  assert.match(block, /if \(targetSessionId === currentSessionId\(\)\) renderScheduledBubbles\(/,
+    "only the session on screen is drawn");
 });
 
-test("app-messages.js: scheduled_message_sent/cancelled route through clearScheduledMessage(msg.localId)", function () {
-  var sentIdx = APP_MESSAGES_JS.indexOf("scheduled_message_sent:");
+test("app-messages.js: the older scheduled-message events take no state; the list is the only source", function () {
+  var queuedIdx = APP_MESSAGES_JS.indexOf("scheduled_message_queued:");
   var cancelIdx = APP_MESSAGES_JS.indexOf("scheduled_message_cancelled:");
-  assert.ok(sentIdx !== -1 && cancelIdx !== -1);
-  assert.match(APP_MESSAGES_JS.slice(sentIdx, sentIdx + 250), /clearScheduledMessage\(msg\.localId\)/);
-  assert.match(APP_MESSAGES_JS.slice(cancelIdx, cancelIdx + 200), /clearScheduledMessage\(msg\.localId\)/);
+  assert.ok(queuedIdx !== -1 && cancelIdx !== -1);
+  assert.match(APP_MESSAGES_JS.slice(queuedIdx, queuedIdx + 60), /scheduled_message_queued:\s*function \(\) \{\}/);
+  assert.match(APP_MESSAGES_JS.slice(cancelIdx, cancelIdx + 60), /scheduled_message_cancelled:\s*function \(\) \{\}/);
 });
 
 test("app-messages.js: session_switched calls restoreRateLimitStateForSession after resetClientState (redraw-on-switch-in hook)", function () {

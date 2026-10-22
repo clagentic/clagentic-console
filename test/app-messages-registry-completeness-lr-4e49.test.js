@@ -99,6 +99,8 @@ var ORIGINAL_CASE_LABELS = [
   "diagnostic_retract",
   // The daemon's answer to a build-update restart click; frees the dimmed buttons.
   "restart_for_build_update_result",
+  // A session's armed scheduled inputs, in full, after every change.
+  "scheduled_input_list",
 ];
 
 var REGISTRY_FILES = [
