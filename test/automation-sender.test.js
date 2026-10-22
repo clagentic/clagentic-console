@@ -13,7 +13,9 @@ var execFileSync = require("child_process").execFileSync;
 
 var turnInitiator = require("../lib/turn-initiator");
 var sender = require("../lib/injected-sender");
-var { createScheduledTurn, RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-turn");
+var { RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-input/rate-limit-resume");
+var { createScheduledInputService } = require("../lib/scheduled-input/service");
+var { createSessionInput } = require("../lib/session-input");
 var { attachUserMessage } = require("../lib/project-user-message");
 var dom = require("./fake-dom-prompt-cards");
 var { INITIATORS } = turnInitiator;
@@ -72,21 +74,30 @@ test("a forged automation entry naming no known automation is attributed as unre
 
 // --- scheduled message and run-now ---
 
+// The scheduled firing over the real session-input, with a fake session
+// manager and sdk: what the chat records and what the query is told.
 function makeFire() {
   var calls = [];
-  var session = { localId: 3, history: [], isProcessing: false };
+  var session = { localId: 3, cliSessionId: "vendor-3", history: [], isProcessing: false };
   var live = [];
-  var fire = createScheduledTurn({
+  var project = {
+    cwd: os.tmpdir(),
     sm: {
+      sessions: new Map([[3, session]]),
       recordHistoryEntry: function (s, e) { s.history.push(e); },
       appendToSessionFile: function () {},
+      sendToSession: function (s, obj) { live.push(obj); },
       broadcastSessionList: function () {},
     },
     sdk: { startQuery: function (s, text, images, user, initiator) { calls.push({ text: text, initiator: initiator }); } },
-    sendToSession: function (id, obj) { live.push(obj); },
     onProcessingChanged: function () {},
+    getLinuxUserForSession: function () { return null; },
     ensureProjectAccessForSession: function () { return null; },
-  });
+  };
+  var input = createSessionInput({ getProject: function (slug) { return slug === "p" ? project : null; } });
+  var fire = function (s, scheduled, initiator) {
+    return input.fireScheduled({ projectSlug: "p", sessionId: s.cliSessionId, prompt: scheduled.text, note: scheduled.note, initiator: initiator });
+  };
   return { fire: fire, session: session, calls: calls, live: live };
 }
 
@@ -119,10 +130,10 @@ test("a rate limit resume carries its own note and is not the operator", async f
 function makeMessageHandler() {
   var calls = [];
   var noop = function () {};
-  var session = { localId: 7, vendor: "claude", history: [], title: "t", isProcessing: false, scheduledMessage: null, sentToolResults: {} };
+  var session = { localId: 7, cliSessionId: "vendor-7", vendor: "claude", history: [], title: "t", isProcessing: false, sentToolResults: {} };
   var sm = {
     sessions: new Map([[7, session]]),
-    saveSessionFile: noop, broadcastSessionList: noop, appendToSessionFile: noop, sendAndRecord: noop,
+    saveSessionFile: noop, broadcastSessionList: noop, appendToSessionFile: noop, sendAndRecord: noop, sendToSession: noop,
     recordHistoryEntry: function (s, entry) { s.history.push(entry); },
   };
   var sdk = {
@@ -130,6 +141,17 @@ function makeMessageHandler() {
     // A turn is already running after the run-now, so the typed message joins it.
     pushMessage: function (s, text, images, initiator) { calls.push({ text: text, initiator: initiator }); },
   };
+  var project = {
+    cwd: os.tmpdir(), sm: sm, sdk: sdk, onProcessingChanged: noop,
+    getLinuxUserForSession: function () { return null; },
+  };
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "console-automation-sender-"));
+  var service = createScheduledInputService({
+    dir: dir,
+    getProject: function (slug) { return slug === "p" ? project : null; },
+    sessionInput: createSessionInput({ getProject: function (slug) { return slug === "p" ? project : null; } }),
+  });
+  service.attachProject("p");
   var handler = attachUserMessage({
     cwd: os.tmpdir(), slug: "p", osUsers: false, sm: sm, sdk: sdk, nm: {}, tm: {},
     send: noop, sendTo: noop, sendToSession: noop, sendToSessionOthers: noop, clients: new Set(),
@@ -141,21 +163,26 @@ function makeMessageHandler() {
     onProcessingChanged: noop,
     _loop: { handleLoopMessage: function () { return false; } },
     browserState: { _browserTabList: {} },
-    scheduleMessage: noop, cancelScheduledMessage: noop,
+    scheduledInput: service,
     loadContextSources: function () { return []; }, saveContextSources: noop,
     adapter: { renameSession: function () { return Promise.resolve(); } },
   });
-  return { handler: handler, session: session, calls: calls };
+  return {
+    handler: handler, session: session, calls: calls, service: service,
+    cleanup: function () { service.stop(); fs.rmSync(dir, { recursive: true, force: true }); },
+  };
 }
 
-test("run-now records the scheduled-now initiator and the schedule's note, then a typed message is the operator", async function () {
+test("run-now records the scheduled-now initiator and the schedule's own label, then a typed message is the operator", async function () {
   var h = makeMessageHandler();
-  h.session.scheduledMessage = { text: "scheduled text", note: "job-hunter daily", timer: setTimeout(function () {}, 1) };
+  h.handler.handleUserMessage({}, { type: "schedule_message", text: "scheduled text", resetsAt: Date.now() + 3600000 });
   h.handler.handleUserMessage({}, { type: "send_scheduled_now" });
   h.handler.handleUserMessage({}, { type: "message", text: "typed after" });
+  h.cleanup();
   var runNow = h.session.history[0];
   var typed = h.session.history[1];
   assert.equal(runNow.initiator, INITIATORS.SCHEDULED_NOW);
+  assert.equal(runNow.contextNote, "scheduled message");
   assert.equal(h.calls[0].initiator, runNow.initiator);
   assert.equal((await shownFor(runNow)).operator, false);
   assert.equal(typed.text, "typed after");

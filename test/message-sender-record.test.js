@@ -2,7 +2,7 @@
 // The per-message sender record: for every user message the console sends into a
 // vendor session, one caller shape each, on both vendors, the record an outside
 // tool reads says who sent it. The real session manager, session-input, the
-// scheduled-turn and loop writers, the browser message handler, the file-drop
+// scheduled-input firing and loop writers, the browser message handler, the file-drop
 // watcher and the message processor run over a fake sdk; the reader below uses
 // only the documented format (docs/guides/architecture.md, "Integrating other
 // tools") and none of the console's code.
@@ -15,7 +15,8 @@ var path = require("path");
 var execFileSync = require("child_process").execFileSync;
 
 var { INITIATORS } = require("../lib/turn-initiator");
-var { RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-turn");
+var { RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-input/rate-limit-resume");
+var { createScheduledInputService } = require("../lib/scheduled-input/service");
 var claudeAdapter = require("../lib/yoke/adapters/claude");
 var codexAdapter = require("../lib/yoke/adapters/codex");
 
@@ -127,7 +128,7 @@ async function inWorld(vendor, fn, opts) {
 }
 
 // The browser composer's message handler over the real session manager.
-function makeTypedHandler(w, session) {
+function makeTypedHandler(w, session, scheduledInput) {
   var { attachUserMessage } = require("../lib/project-user-message");
   var noop = function () {};
   return attachUserMessage({
@@ -141,18 +142,30 @@ function makeTypedHandler(w, session) {
     onProcessingChanged: noop,
     _loop: { handleLoopMessage: function () { return false; } },
     browserState: { _browserTabList: {} },
-    scheduleMessage: noop, cancelScheduledMessage: noop,
+    scheduledInput: scheduledInput || null,
     loadContextSources: function () { return []; }, saveContextSources: noop,
     adapter: { renameSession: function () { return Promise.resolve(); } },
   });
 }
 
+// A scheduled firing over the real session-input and session manager.
 function makeFire(w) {
-  var { createScheduledTurn } = require("../lib/scheduled-turn");
-  return createScheduledTurn({
-    sm: w.sm, sdk: w.sdk, sendToSession: function () {}, onProcessingChanged: function () {},
-    ensureProjectAccessForSession: function () { return null; },
+  var input = w.sessionInput();
+  return function (session, scheduled, initiator) {
+    return input.fireScheduled({
+      projectSlug: "p", sessionId: session.cliSessionId, prompt: scheduled.text, note: scheduled.note, initiator: initiator,
+    });
+  };
+}
+
+function makeScheduledInputService(w) {
+  var service = createScheduledInputService({
+    dir: path.join(w.home, "scheduled-input"),
+    getProject: function (slug) { return slug === "p" ? w.project : null; },
+    sessionInput: w.sessionInput(),
   });
+  service.attachProject("p");
+  return service;
 }
 
 function only(list) {
@@ -373,10 +386,12 @@ VENDORS.forEach(function (vendor) {
   test(vendor + ": run-now from the browser is automation, and a typed message after it is human", function () {
     return inWorld(vendor, function (w) {
       var session = w.newSession({ cliSessionId: "sess-runnow" });
-      session.scheduledMessage = { text: "scheduled text", note: "daily", timer: setTimeout(function () {}, 1) };
-      var handler = makeTypedHandler(w, session);
+      var service = makeScheduledInputService(w);
+      var handler = makeTypedHandler(w, session, service);
+      handler.handleUserMessage({}, { type: "schedule_message", text: "scheduled text", resetsAt: Date.now() + 3600000 });
       handler.handleUserMessage({}, { type: "send_scheduled_now" });
       handler.handleUserMessage({}, { type: "message", text: "typed after" });
+      service.stop();
       var recs = w.messages("sess-runnow");
       assert.deepEqual(recs.map(function (x) { return x.initiator; }), ["scheduled-now", "human"]);
       assert.equal(recs[0].senderKind, "automation");
