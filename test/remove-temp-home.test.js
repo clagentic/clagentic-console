@@ -10,7 +10,7 @@ var os = require("os");
 var path = require("path");
 var { spawn } = require("child_process");
 
-var { removeTempHome, pidAlive } = require("./helpers/remove-temp-home");
+var { removeTempHome, pidAlive, startTimeOf, stillOwned } = require("./helpers/remove-temp-home");
 var { TOKEN_ENV, newHarnessToken } = require("./fixtures/process-ownership");
 
 // lib/store loads lib/config, which reads and may migrate files under the
@@ -134,4 +134,95 @@ test("removeTempHome lets an in-flight store write finish instead of racing it",
   // Give any chain step that escaped the wait a turn to recreate the home.
   await new Promise(function (resolve) { setTimeout(resolve, 100); });
   assert.equal(fs.existsSync(home), false);
+});
+
+// --- writers that start their write from a timer ---
+
+// The drain sees fs requests that exist; a timer that has not fired has none.
+function timerWriter(home, delayMs) {
+  var timer = setTimeout(function () {
+    writeJsonAt(path.join(home, "console", "late.json"), { a: 1 }).catch(function () {});
+  }, delayMs);
+  return { cancel: function () { clearTimeout(timer); } };
+}
+
+test("removeTempHome cannot see a timer-scheduled write: the caller must quiesce it (the contract's limit)", async function () {
+  var home = makeHome();
+  var writer = timerWriter(home, 150);
+  try {
+    await removeTempHome(home);
+    assert.equal(fs.existsSync(home), false, "gone when the helper returns");
+    await new Promise(function (resolve) { setTimeout(resolve, 400); });
+    assert.equal(fs.existsSync(home), true, "the unquiesced timer wrote after the helper returned");
+  } finally {
+    writer.cancel();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("removeTempHome runs the caller's quiesce first, so a timer-scheduled write never recreates the home", async function () {
+  var home = makeHome();
+  var writer = timerWriter(home, 150);
+  var order = [];
+  await removeTempHome(home, {
+    quiesce: function () { order.push("quiesce"); writer.cancel(); },
+  });
+  order.push("returned");
+  await new Promise(function (resolve) { setTimeout(resolve, 400); });
+  assert.deepEqual(order, ["quiesce", "returned"]);
+  assert.equal(fs.existsSync(home), false, "nothing recreated the home");
+});
+
+test("removeTempHome awaits an async quiesce and reports one that throws", async function () {
+  var home = makeHome();
+  var done = false;
+  await removeTempHome(home, {
+    quiesce: async function () { await new Promise(function (resolve) { setTimeout(resolve, 50); }); done = true; },
+  });
+  assert.equal(done, true);
+  var home2 = makeHome();
+  await assert.rejects(removeTempHome(home2, { quiesce: function () { throw new Error("close failed"); } }), /quiesce failed: close failed/);
+  assert.equal(fs.existsSync(home2), false, "the home is still removed");
+});
+
+// --- a recycled pid is never signalled ---
+
+test("stillOwned accepts the process it found and refuses a pid whose start time differs", async function () {
+  var token = newHarnessToken();
+  var env = Object.assign({}, process.env);
+  env[TOKEN_ENV] = token;
+  var child = spawn(process.execPath, ["-e", "setInterval(function () {}, 1000)"], { env: env, stdio: "ignore" });
+  try {
+    var start = startTimeOf(child.pid);
+    assert.ok(start, "the start time is readable from /proc");
+    assert.equal(stillOwned({ pid: child.pid, start: start }, token), true);
+    assert.equal(stillOwned({ pid: child.pid, start: String(Number(start) + 1) }, token), false, "a different start time is another process");
+    assert.equal(stillOwned({ pid: child.pid, start: null }, token), false, "an unverified start time is not owned");
+    assert.equal(stillOwned({ pid: child.pid, start: start }, newHarnessToken()), false, "another token is not owned");
+  } finally {
+    child.kill("SIGKILL");
+    await new Promise(function (resolve) { child.once("exit", resolve); });
+  }
+});
+
+// --- no /proc ---
+
+test("without /proc the helper still waits for listed children, skips the token scan and says so once", async function () {
+  var home = makeHome();
+  var child = lateWriter(home);
+  var realReaddir = fs.readdirSync;
+  var notices = [];
+  fs.readdirSync = function (dir) {
+    if (dir === "/proc") { var e = new Error("ENOENT: no such file or directory, scandir '/proc'"); e.code = "ENOENT"; throw e; }
+    return realReaddir.apply(this, arguments);
+  };
+  try {
+    await removeTempHome(home, { children: [child], token: newHarnessToken(), log: function (m) { notices.push(m); } });
+  } finally {
+    fs.readdirSync = realReaddir;
+  }
+  assert.equal(child.exitCode, 0, "the listed child was still waited for");
+  assert.equal(fs.existsSync(home), false);
+  assert.equal(notices.length, 1, "one notice: " + JSON.stringify(notices));
+  assert.match(notices[0], /token scan skipped/);
 });
