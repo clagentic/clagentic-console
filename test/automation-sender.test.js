@@ -306,13 +306,14 @@ test("a loop iteration is recorded as the loop, with its name and iteration, and
     assert.deepEqual(turnInitiator.claudeOrigin(entry.initiator), { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "loop" });
   } finally {
     global.setTimeout = origSetTimeout;
-    armed.forEach(function (t) { clearTimeout(t); });
     if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME;
     else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
-    // The loop persists through lib/store in several async steps; the helper
-    // lets them finish before it removes either directory.
-    await removeTempHome(cwd);
-    await removeTempHome(home);
+    // The loop persists through lib/store in several async steps, which the
+    // helper lets finish. Its retry and watchdog timers (lib/project-loop) can
+    // still start a save later, so every timer it armed is cancelled first.
+    var cancelLoopTimers = function () { armed.forEach(function (t) { clearTimeout(t); }); };
+    await removeTempHome(cwd, { quiesce: cancelLoopTimers });
+    await removeTempHome(home, { quiesce: cancelLoopTimers });
   }
 });
 

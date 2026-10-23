@@ -97,6 +97,7 @@ function makeWorld(vendor, opts) {
   });
   var world = {
     vendor: vendor, home: home, recordsDir: recordsDir, sm: sm, sdk: sdk, calls: calls, project: project, processor: processor,
+    services: [],
     newSession: function (extra) {
       var s = sm.createSessionRaw({ vendor: vendor });
       return Object.assign(s, extra || {});
@@ -117,8 +118,16 @@ function makeWorld(vendor, opts) {
       ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
       // A loop saves its state asynchronously into this directory (lib/store
       // writes in several fs.promises steps); the helper lets those finish
-      // before removing, which a synchronous removal cannot.
-      await removeTempHome(home);
+      // before removing, which a synchronous removal cannot. Two writers start
+      // work from a timer instead: the session manager batches appends behind a
+      // 50 ms timer, and the scheduled-input service re-arms its own. Each is
+      // stopped through its existing API before the helper drains.
+      await removeTempHome(home, {
+        quiesce: function () {
+          world.services.forEach(function (service) { service.stop(); });
+          sm.sessions.forEach(function (session) { sm.flushSessionBuffer(session); });
+        },
+      });
     },
   };
   return world;
@@ -167,6 +176,7 @@ function makeScheduledInputService(w) {
     sessionInput: w.sessionInput(),
   });
   service.attachProject("p");
+  w.services.push(service);
   return service;
 }
 
