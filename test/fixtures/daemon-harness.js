@@ -13,6 +13,7 @@ var http = require("http");
 var { spawn } = require("child_process");
 var WebSocket = require("ws");
 var { TOKEN_ENV, newHarnessToken, verifyOwnedPid } = require("./process-ownership");
+var { removeTempHome } = require("../helpers/remove-temp-home");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "..", "lib", "daemon.js");
 var SETUP_CODE = "HARNESSCODE";
@@ -61,7 +62,7 @@ async function waitForServer(port, ms) {
 
 function waitForExit(proc, ms) {
   return new Promise(function (resolve, reject) {
-    if (proc.exitCode !== null) return resolve(proc.exitCode);
+    if (proc.exitCode !== null || proc.signalCode !== null) return resolve(proc.exitCode);
     var timer = setTimeout(function () { reject(new Error("daemon did not exit within " + ms + " ms")); }, ms);
     proc.once("exit", function (code) { clearTimeout(timer); resolve(code); });
   });
@@ -217,12 +218,21 @@ async function bootDaemon(o) {
           successor = null;
         }
       }
+      var children = [proc];
       if (successor) {
+        children.push(successor);
         signalPid(successor, "SIGTERM");
         await new Promise(function (r) { setTimeout(r, 1500); });
         signalPid(successor, "SIGKILL");
       }
-      fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      // A claude process the daemon started can outlive it and keep writing
+      // under the home; the helper stops what carries the token and waits for
+      // every child before removing.
+      try {
+        await removeTempHome(home, { children: children, token: token });
+      } catch (e) {
+        problems.push(e.message);
+      }
       if (problems.length > 0) throw new Error(problems.join("; "));
     },
   };

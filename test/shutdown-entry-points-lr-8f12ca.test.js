@@ -35,6 +35,7 @@ var { unsupervisedEnv } = require("../lib/supervisor");
 var { bootDaemon: bootHarness } = require("./fixtures/daemon-harness");
 var { TOKEN_ENV, newHarnessToken, verifyOwnedPid } = require("./fixtures/process-ownership");
 var { makeInstall } = require("./fixtures/install-fixture");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var SETUP_CODE = "SHUTDOWNENTRY";
@@ -84,7 +85,9 @@ async function waitForServer(port, ms) {
 
 function waitForExit(proc, ms) {
   return new Promise(function (resolve, reject) {
-    if (proc.exitCode !== null) return resolve(proc.exitCode);
+    // A process killed by a signal has exitCode null and signalCode set, and its
+    // "exit" event has already fired by the time a cleanup that awaited it returns.
+    if (proc.exitCode !== null || proc.signalCode !== null) return resolve(proc.exitCode);
     var timer = setTimeout(function () { reject(new Error("daemon did not exit within " + ms + " ms")); }, ms);
     proc.once("exit", function (code) { clearTimeout(timer); resolve(code); });
   });
@@ -181,9 +184,11 @@ async function reapDaemon(proc, home, configPath, token) {
   // daemon.json is data the test does not control: signal only a pid that is
   // verifiably this test's daemon.
   var unverified = null;
+  var children = [proc];
   if (successor) {
     var verdict = verifyOwnedPid(successor, token);
     if (verdict.ok) {
+      children.push(successor);
       signalPid(successor, "SIGTERM");
       await new Promise(function (r) { setTimeout(r, 1500); });
       signalPid(successor, "SIGKILL");
@@ -191,12 +196,21 @@ async function reapDaemon(proc, home, configPath, token) {
       unverified = "pid " + successor + " recorded in " + configPath + " was not signalled: " + verdict.reason;
     }
   }
-  fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  if (unverified) throw new Error(unverified);
+  // The daemon starts a claude process that can outlive it (re-parented, so
+  // proc has no handle to it) and keeps writing ~/.claude.json under the home;
+  // the helper stops what carries the token and waits for it before removing.
+  var problems = [];
+  try {
+    await removeTempHome(home, { children: children, token: token });
+  } catch (e) {
+    problems.push(e.message);
+  }
+  if (unverified) problems.push(unverified);
   if (unreadable) {
-    throw new Error("could not establish the restart successor from " + configPath
+    problems.push("could not establish the restart successor from " + configPath
       + " (a detached daemon may still be running): " + unreadable.message);
   }
+  if (problems.length > 0) throw new Error(problems.join("; "));
 }
 
 function sendWs(d, cookie, message) {

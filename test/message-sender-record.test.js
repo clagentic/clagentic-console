@@ -14,6 +14,7 @@ var os = require("os");
 var path = require("path");
 var execFileSync = require("child_process").execFileSync;
 
+var { removeTempHome } = require("./helpers/remove-temp-home");
 var { INITIATORS } = require("../lib/turn-initiator");
 var { RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-input/rate-limit-resume");
 var { createScheduledInputService } = require("../lib/scheduled-input/service");
@@ -96,6 +97,7 @@ function makeWorld(vendor, opts) {
   });
   var world = {
     vendor: vendor, home: home, recordsDir: recordsDir, sm: sm, sdk: sdk, calls: calls, project: project, processor: processor,
+    services: [],
     newSession: function (extra) {
       var s = sm.createSessionRaw({ vendor: vendor });
       return Object.assign(s, extra || {});
@@ -110,13 +112,22 @@ function makeWorld(vendor, opts) {
         agentCatalog: function () { return []; },
       }, extra || {}));
     },
-    cleanup: function () {
+    cleanup: async function () {
       if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME; else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
       if (origLegacyHome === undefined) delete process.env.CLAGENTIC_HOME; else process.env.CLAGENTIC_HOME = origLegacyHome;
       ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
-      // A loop saves its state asynchronously into this directory, so removal
-      // can meet a file written meanwhile: retry.
-      fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      // A loop saves its state asynchronously into this directory (lib/store
+      // writes in several fs.promises steps); the helper lets those finish
+      // before removing, which a synchronous removal cannot. Two writers start
+      // work from a timer instead: the session manager batches appends behind a
+      // 50 ms timer, and the scheduled-input service re-arms its own. Each is
+      // stopped through its existing API before the helper drains.
+      await removeTempHome(home, {
+        quiesce: function () {
+          world.services.forEach(function (service) { service.stop(); });
+          sm.sessions.forEach(function (session) { sm.flushSessionBuffer(session); });
+        },
+      });
     },
   };
   return world;
@@ -124,7 +135,7 @@ function makeWorld(vendor, opts) {
 
 async function inWorld(vendor, fn, opts) {
   var w = makeWorld(vendor, opts);
-  try { await fn(w); } finally { w.cleanup(); }
+  try { await fn(w); } finally { await w.cleanup(); }
 }
 
 // The browser composer's message handler over the real session manager.
@@ -165,6 +176,7 @@ function makeScheduledInputService(w) {
     sessionInput: w.sessionInput(),
   });
   service.attachProject("p");
+  w.services.push(service);
   return service;
 }
 

@@ -11,6 +11,7 @@ var os = require("os");
 var path = require("path");
 var execFileSync = require("child_process").execFileSync;
 
+var { removeTempHome } = require("./helpers/remove-temp-home");
 var turnInitiator = require("../lib/turn-initiator");
 var sender = require("../lib/injected-sender");
 var { RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-input/rate-limit-resume");
@@ -305,11 +306,14 @@ test("a loop iteration is recorded as the loop, with its name and iteration, and
     assert.deepEqual(turnInitiator.claudeOrigin(entry.initiator), { kind: "task-notification", subkind: "scheduled-trigger", fireReason: "loop" });
   } finally {
     global.setTimeout = origSetTimeout;
-    armed.forEach(function (t) { clearTimeout(t); });
     if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME;
     else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(home, { recursive: true, force: true });
+    // The loop persists through lib/store in several async steps, which the
+    // helper lets finish. Its retry and watchdog timers (lib/project-loop) can
+    // still start a save later, so every timer it armed is cancelled first.
+    var cancelLoopTimers = function () { armed.forEach(function (t) { clearTimeout(t); }); };
+    await removeTempHome(cwd, { quiesce: cancelLoopTimers });
+    await removeTempHome(home, { quiesce: cancelLoopTimers });
   }
 });
 

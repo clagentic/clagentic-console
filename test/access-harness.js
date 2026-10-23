@@ -15,6 +15,7 @@ var path = require("path");
 var crypto = require("crypto");
 var http = require("http");
 var WebSocket = require("ws");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 var COOKIE_NAME = "relay_auth_user";
 var TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -202,19 +203,12 @@ async function start(spec) {
     }
     await new Promise(function (resolve) { relay.server.close(function () { resolve(); }); });
     if (typeof relay.server.closeAllConnections === "function") relay.server.closeAllConnections();
-    // An adapter may still be writing under HOME as the server shuts down:
-    // give those writes time to land, and retry the removal while one races it.
-    await settle(300);
-    var removed = false;
-    for (var attempt = 0; attempt < 5 && !removed; attempt++) {
-      try {
-        fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-        removed = true;
-      } catch (e) {
-        if (e.code !== "ENOTEMPTY" || attempt === 4) failures.push(e);
-        if (e.code !== "ENOTEMPTY") break;
-        await settle(300);
-      }
+    // An adapter may still be writing under HOME as the server shuts down: the
+    // helper lets its in-flight writes finish before it removes the home.
+    try {
+      await removeTempHome(home);
+    } catch (e) {
+      failures.push(e);
     }
     if (failures.length) throw failures[0];
   }
