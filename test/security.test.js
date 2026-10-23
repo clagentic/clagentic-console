@@ -450,41 +450,44 @@ test("push routing: falls back to sendPush when no ownerId in multi-user mode", 
 });
 
 // ============================================================
-// 10. dangerouslySkipPermissions scope gate (lr-4d6a)
+// 10. The removed skip-permissions flag and key have no effect
 // ============================================================
 
-test("dangerouslySkipPermissions is always disabled — single-user mode removed (lr-ec2d)", function () {
-  // isMultiUser() always returns true; the flag is always suppressed.
-  // Mirrors the gate in project.js:
-  //   var dangerouslySkipPermissions = dangerouslySkipPermissionsConfigured && !usersModule.isMultiUser();
-  function computeFlag(configured) {
-    var isMultiUser = true; // always, lr-ec2d
-    return configured && !isMultiUser;
-  }
-
-  assert.strictEqual(computeFlag(true), false,  "flag suppressed even when configured (always multi-user)");
-  assert.strictEqual(computeFlag(false), false, "flag inactive when not configured");
+test("the removed CLI flag is refused with a removal message, not ignored", function () {
+  var cp = require("child_process");
+  var r = cp.spawnSync(process.execPath, [path.join(__dirname, "..", "bin", "cli.js"), "--dangerously-skip-permissions"], { encoding: "utf8", timeout: 20000 });
+  assert.strictEqual(r.status, 1, "exits non-zero");
+  assert.match(r.stderr, /--dangerously-skip-permissions has been removed/);
 });
 
-test("dangerouslySkipPermissionsBlocked is always set when configured (lr-ec2d)", function () {
-  // isMultiUser() always returns true after lr-ec2d; blocked is always true when configured.
-  function buildInfoFields(configured) {
-    var isMultiUser = true; // always, lr-ec2d
-    var active = configured && !isMultiUser;
-    var fields = { dangerouslySkipPermissions: active };
-    if (configured && !active) {
-      fields.dangerouslySkipPermissionsBlocked = true;
-    }
-    return fields;
-  }
+test("bypassPermissions stays refused with no skip-permissions input", function () {
+  var policy = require("../lib/permission-mode-policy");
+  assert.strictEqual(policy.checkPermissionMode("bypassPermissions").ok, false);
+  assert.strictEqual(policy.checkPermissionMode("bypassPermissions", {}).ok, false);
+  var saved = policy.savedModeOrDefault("bypassPermissions");
+  assert.strictEqual(saved.mode, "default");
+  assert.ok(saved.error);
+});
 
-  var configured = buildInfoFields(true);
-  assert.strictEqual(configured.dangerouslySkipPermissions, false, "configured: active=false (multi-user always on)");
-  assert.strictEqual(configured.dangerouslySkipPermissionsBlocked, true, "configured: blocked=true");
-
-  var notConfigured = buildInfoFields(false);
-  assert.strictEqual(notConfigured.dangerouslySkipPermissions, false, "not configured: active=false");
-  assert.ok(!notConfigured.dangerouslySkipPermissionsBlocked, "not configured: blocked field absent");
+test("no server module reads a skip-permissions key from config or options", function () {
+  var roots = [path.join(__dirname, "..", "lib"), path.join(__dirname, "..", "bin")];
+  var offenders = [];
+  (function walk(dir) {
+    fs.readdirSync(dir, { withFileTypes: true }).forEach(function (e) {
+      var p = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(p); return; }
+      if (!/\.(js|html)$/.test(e.name)) return;
+      var src = fs.readFileSync(p, "utf8");
+      // The config writers delete a stale key and the CLI names the flag in its
+      // removal message; nothing else may mention either.
+      src = src.replace(/delete \w+\.dangerouslySkipPermissions;/g, "").replace(/--dangerously-skip-permissions/g, "");
+      if (/dangerouslySkipPermissions|allowDangerouslySkipPermissions/.test(src)) offenders.push(p);
+    });
+  })(roots[0]);
+  // bin/cli.js is a single file
+  var cliSrc = fs.readFileSync(path.join(roots[1], "cli.js"), "utf8").replace(/--dangerously-skip-permissions/g, "");
+  if (/dangerouslySkipPermissions/.test(cliSrc)) offenders.push("bin/cli.js");
+  assert.deepStrictEqual(offenders, []);
 });
 
 // ============================================================

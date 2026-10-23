@@ -518,9 +518,6 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .popover-copy:hover { color: var(--text); border-color: var(--text-dimmer); }
 .popover-copy.copied { color: var(--success); border-color: var(--success); }
 
-/* Skip permissions pill */
-#skip-perms-pill .lucide { width: 12px; height: 12px; flex-shrink: 0; }
-
 /* --- Confirm modal --- */
 #confirm-modal {
   position: fixed;

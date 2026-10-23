@@ -107,7 +107,6 @@ npx @clagentic/console --add .      # Add current directory to running daemon
 npx @clagentic/console --remove .   # Remove project
 npx @clagentic/console --list       # List registered projects
 npx @clagentic/console --shutdown   # Stop daemon
-npx @clagentic/console --dangerously-skip-permissions
 ```
 
 Also available as `clagentic-console` if installed globally.
