@@ -26,7 +26,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [Named-agent sessions and tools](#named-agent-sessions-and-tools)
 - [External triggers (file drop)](#external-triggers-file-drop)
 - [Suggested allow rules](#suggested-allow-rules)
-- [Permission settings](./PERMISSION-SETTINGS.md): the settings that decide when the console asks and which mode a session starts in
+- [Permission settings](./PERMISSION-SETTINGS.md): the settings that decide when the console asks and which mode a session starts in, what an "Allow for session" answer covers, a loop that turns hooks off, and the browser tools the extension adds
 
 ## Addressing a session
 

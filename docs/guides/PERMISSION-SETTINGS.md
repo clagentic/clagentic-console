@@ -12,6 +12,9 @@ The console never adds or removes what an agent may do: an agent brings its own 
 - [Mode for sessions opened by the CLI or a trigger](#mode-for-sessions-opened-by-the-cli-or-a-trigger)
 - [A session keeps its own mode](#a-session-keeps-its-own-mode)
 - [Changing a default mode](#changing-a-default-mode)
+- [What an "Allow for session" answer covers](#what-an-allow-for-session-answer-covers)
+- [A loop that turns hooks off](#a-loop-that-turns-hooks-off)
+- [The browser extension adds tools](#the-browser-extension-adds-tools)
 - [What is not changed by these settings](#what-is-not-changed-by-these-settings)
 
 ## The settings at a glance
@@ -65,7 +68,7 @@ The mode names are the console's: `default`, `plan`, `acceptEdits`, `dontAsk` an
 
 - A `--permission-mode` that fails the check makes the `open-session` call fail with `result: "refused"` and a reason, and no session is created.
 - A stored server setting that fails it (an agent that cannot run the mode, or a setting edited by hand) is not used: the session opens in Accept edits and the daemon logs why.
-- `bypassPermissions` is refused everywhere unless the server's skip-permissions option is on, which it is not by default.
+- `bypassPermissions` is refused everywhere: the console has no setting, flag or file key that turns it on. The old `--dangerously-skip-permissions` flag was removed and now exits with a message saying so; a `dangerouslySkipPermissions` key left in `daemon.json` by an older release is ignored and dropped the next time the console rewrites the file.
 
 A trigger file cannot name a mode; it takes the server setting.
 
@@ -85,7 +88,7 @@ Each session has its own permission mode. It is saved with the session, so a res
 
 - A new session takes the project's default mode when it is created, and that is saved.
 - A session saved before modes were kept takes the project's default when the project starts, and keeps it from then on.
-- A saved mode is checked when it is read. One the server does not allow (for example `bypassPermissions` written while the option was on) loads as `default`, and the daemon logs why. A mode the session's agent cannot run is replaced by `default` when the session's next turn starts.
+- A saved mode is checked when it is read. One the server does not allow (for example `bypassPermissions` written by an older release or by hand) loads as `default`, and the daemon logs why. A mode the session's agent cannot run is replaced by `default` when the session's next turn starts.
 - What you see in the mode chip, on a reconnect and after a session switch is the mode of the session you are viewing, never the project's default.
 
 ## Changing a default mode
@@ -95,6 +98,22 @@ The default-mode picker (Server settings and Project settings) sets the mode **n
 Beside the picker is **Apply to running sessions**, off every time. Turn it on before you pick a mode and that one change also moves the sessions the project holds. Each session is checked for its own agent; one that cannot run the mode (Don't ask or Auto on a Codex session, say) is left as it was and the result lists it with the reason. The choice is not remembered: the next change starts with it off.
 
 The picker offers Don't ask and Auto only when the project's default agent declares them. Whoever may change the default may use Apply: an admin or the project owner for a project default; an admin for the server default.
+
+## What an "Allow for session" answer covers
+
+"Allow for session" on a permission prompt stores a grant for the whole tool, not for the one call. A grant on `Bash` covers every later `Bash` call in that session, whatever the command. The grant is kept across a daemon restart and a resume.
+
+The way back is the list-and-revoke dialog for the session's grants: remove the tool there and the next call asks again. If you want to approve one command at a time, answer "Allow" rather than "Allow for session".
+
+## A loop that turns hooks off
+
+A loop's `LOOP.json` may carry `settings.disableAllHooks`. When it is on, the loop's agent runs with hooks off, and that is not limited to hooks the loop brought: it also turns off your own hooks, including `PreToolUse` guard hooks that block or confirm tool calls. A guard you rely on does not run for that loop's tool calls.
+
+The console keeps the setting as the loop's author wrote it. Wherever a loop's settings are shown with `disableAllHooks` on (the Model tab of a task in the scheduler, and the loop preview), a notice says so. Nothing else changes.
+
+## The browser extension adds tools
+
+The console's browser tools are offered to Claude sessions only while the browser extension is connected. Connecting the extension is the opt-in: it adds those tools to the Claude sessions the console runs, and there is no separate setting for it. The two watch tools are on the read-only list (see "Auto-approve read-only tools"). The grants described above apply to these tools like any other.
 
 ## What is not changed by these settings
 
