@@ -207,7 +207,7 @@ test("open: default is today's default vendor and no agent; the initiator defaul
   var project = makeProject({});
   var r = makeInput(project).openSession({ projectSlug: "p", prompt: "go" });
   assert.equal(r.result, "opened");
-  assert.deepEqual(project.calls.created, [{}]);
+  assert.deepEqual(project.calls.created, [{ permissionMode: "acceptEdits" }]);
   assert.equal(r.vendor, "claude");
   assert.equal(r.agent, null);
   assert.deepEqual(project.calls.start.map(function (c) { return c.text + ":" + c.initiator; }), ["go:trigger"]);
@@ -217,7 +217,7 @@ test("open: vendor, agent and visibility reach createSession as the browser path
   var project = makeProject({});
   var r = makeInput(project).openSession({ projectSlug: "p", prompt: "go", vendor: "codex", agentName: "holden", sessionVisibility: "private", initiator: "scheduled-now" });
   assert.equal(r.result, "opened");
-  assert.deepEqual(project.calls.created, [{ vendor: "codex", agentName: "holden", sessionVisibility: "private" }]);
+  assert.deepEqual(project.calls.created, [{ vendor: "codex", agentName: "holden", sessionVisibility: "private", permissionMode: "acceptEdits" }]);
   assert.equal(r.vendor, "codex");
   assert.equal(r.agent, "holden");
   assert.equal(project.calls.start[0].initiator, "scheduled-now");
