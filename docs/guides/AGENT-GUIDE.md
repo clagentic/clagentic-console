@@ -26,6 +26,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [Named-agent sessions and tools](#named-agent-sessions-and-tools)
 - [External triggers (file drop)](#external-triggers-file-drop)
 - [Suggested allow rules](#suggested-allow-rules)
+- [Permission settings](./PERMISSION-SETTINGS.md): the settings that decide when the console asks and which mode a session starts in
 
 ## Addressing a session
 
@@ -85,7 +86,7 @@ Opens a new session in a project and starts its first turn with the prompt. The 
 ```
 clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|->
     [--vendor <id>] [--agent <name>] [--name <session-name>] [--visibility shared|private]
-    [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]
+    [--permission-mode <mode>] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]
 ```
 
 | Flag | Required | Meaning |
@@ -97,6 +98,7 @@ clagentic-console open-session (--project <slug> | --to <address>) --prompt <tex
 | `--agent <name>` | no | A named agent from the picker's catalog (`.claude/agents/` in the project or `~/.claude/agents/`). Absent: a plain session. An unknown agent is `refused`. |
 | `--name <session-name>` | no | The session name; see [Session names](#session-names-name). |
 | `--visibility shared\|private` | no | Absent: `shared`. Any other value is `refused`. |
+| `--permission-mode <mode>` | no | The mode the session starts in: `default`, `plan`, `acceptEdits`, `dontAsk` or `auto`. Absent: the server setting "Mode for sessions opened by the CLI or a trigger", which is `acceptEdits` unless an admin changed it. A mode the server or the session's agent does not allow (`bypassPermissions`, an unknown name, `auto` on an agent without it) is `refused` and no session is created. See [Session mode](#session-mode). |
 | `--initiator <kind>` | no | Who started the turn. See [Initiator](#initiator). |
 | `--context-note <text>` | no | A label. It becomes the session title (absent: `External trigger`) and is stored on the recorded message. |
 | `--from <name>` | no | Declares the caller's name. See [The sender record](#the-sender-record). |
@@ -128,6 +130,24 @@ Result:
 `consoleSessionId` is the console's own id and is always present. `sessionId` is the vendor-assigned id and is `null` until the vendor has assigned one. Either id is what `send-input --session` takes. The session stays open for follow-up from a person.
 
 If the first turn fails to start, the session the call created is removed and the result is `error` with `retryable: false`; open again if you want to.
+
+### Session mode
+
+A session opened here starts in a permission mode, chosen in this order: the call's `--permission-mode`, then the server setting "Mode for sessions opened by the CLI or a trigger", then `acceptEdits`. Defaults are unchanged by this: a caller that gives no flag, on a server whose setting has not been touched, opens in `acceptEdits` as it always did. The mode is saved with the session, so a follow-up, a resume and a daemon restart keep it.
+
+```bash
+clagentic-console open-session --project my-project --agent reviewer \
+  --permission-mode plan \
+  --prompt "Review the open change and propose fixes. Do not edit files."
+```
+
+A mode the console does not allow for that session fails the call before anything is created:
+
+```json
+{ "ok": false, "result": "refused", "reason": "permissionMode \"bypassPermissions\" refused: The bypassPermissions mode is not enabled on this server" }
+```
+
+A file-drop trigger cannot name a mode; it takes the server setting. The settings, who may change them and what turning each off does are in [PERMISSION-SETTINGS.md](./PERMISSION-SETTINGS.md).
 
 ## send-input
 
