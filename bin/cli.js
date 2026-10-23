@@ -43,6 +43,12 @@ var args = process.argv.slice(2);
 // start exits 78 (EX_CONFIG), which the unit lists in RestartPreventExitStatus
 // so a mis-installed package is not restart-looped.
 if (args[0] === "daemon") {
+  // The documented form takes no further tokens. 78, not 1: the unit lists 78 in
+  // RestartPreventExitStatus, so a mis-edited ExecStart is refused once, not looped.
+  if (args.length > 1) {
+    console.error(require("../lib/cli/arg-validation").unrecognisedArgMessage(args[1]));
+    process.exit(78);
+  }
   var { findLinkTrap, linkTrapMessage, LinkTrapProbeError } = require("../lib/link-trap");
   var linkTrap = null;
   try {
@@ -65,7 +71,10 @@ if (args[0] === "daemon") {
 // Positional subcommand, handled before flag parsing: `clagentic-console release list-betas`.
 if (args[0] === "release") {
   var releaseSub = args[1];
-  if (releaseSub === "list-betas") {
+  if (releaseSub === "list-betas" && args.length > 2) {
+    console.error(require("../lib/cli/arg-validation").unrecognisedArgMessage(args[2]));
+    process.exit(1);
+  } else if (releaseSub === "list-betas") {
     var releaseList = require("../lib/release-list");
     var betasResult = releaseList.readBetasFile(process.cwd());
     var betasLines = releaseList.formatBetasOutput(betasResult);

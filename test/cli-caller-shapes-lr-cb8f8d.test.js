@@ -83,12 +83,17 @@ test("caller shape 1: ExecStart argv reaches the daemon branch, not the guard (l
     fs.symlinkSync(CLI, path.join(binDir, "cli.js"));
     fs.symlinkSync(ROOT, path.join(nodeModules, "clagentic-console"));
 
-    [captured, captured.concat(["--bogus-cb8f8d"])].forEach(function (argv) {
-      var res = runCli(argv, { script: path.join(binDir, "cli.js") });
-      assert.strictEqual(res.status, 78, JSON.stringify(argv) + ": " + res.stderr);
-      assert.match(res.stderr, /npm link trap/, JSON.stringify(argv));
-      assert.doesNotMatch(res.stderr, /unrecognised argument/, JSON.stringify(argv));
-    });
+    // The documented form alone reaches the daemon branch (link-trap probe).
+    var ok = runCli(captured, { script: path.join(binDir, "cli.js") });
+    assert.strictEqual(ok.status, 78, ok.stderr);
+    assert.match(ok.stderr, /npm link trap/);
+    assert.doesNotMatch(ok.stderr, /unrecognised argument/);
+
+    // Any extra token is refused with exit 78 before the probe or the daemon.
+    var extra = runCli(captured.concat(["--bogus-cb8f8d"]), { script: path.join(binDir, "cli.js") });
+    assert.strictEqual(extra.status, 78, extra.stderr);
+    assert.match(extra.stderr, /unrecognised argument '--bogus-cb8f8d'/);
+    assert.doesNotMatch(extra.stderr, /npm link trap/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -100,6 +100,28 @@ test("cli: removed --dangerously-skip-permissions keeps its dedicated message", 
   assert.match(res.stderr, /has been removed/);
 });
 
+test("cli: release list-betas with a stray token is a usage error", function () {
+  var res = runCli(["release", "list-betas", "extra"]);
+  assert.strictEqual(res.status, 1);
+  assert.match(res.stderr, /unrecognised argument 'extra'/);
+  assert.match(res.stderr, /clagentic-console --help/);
+});
+
+// Session verbs and schedule-input have their own parsers; a stray positional
+// token is rejected there (exit 1) before any daemon call.
+[
+  ["list-sessions", "stray"],
+  ["open-session", "stray", "--project", "p", "--prompt", "x"],
+  ["send-input", "--project", "p", "--session", "s", "--prompt", "x", "stray"],
+  ["schedule-input", "list", "stray"],
+].forEach(function (args) {
+  test("cli: stray positional token is rejected by the verb parser: " + args.join(" "), function () {
+    var res = runCli(args);
+    assert.strictEqual(res.status, 1);
+    assert.match(res.stderr, /Unknown option for .*: stray/);
+  });
+});
+
 test("cli: release verb is still routed ahead of flag validation", function () {
   var res = runCli(["release", "nope"]);
   assert.strictEqual(res.status, 1);
