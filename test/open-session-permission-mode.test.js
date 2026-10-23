@@ -27,13 +27,17 @@ test.before(function () { return require("../lib/prompt-kinds/codecs").load(); }
 function makeProject(modesByVendor) {
   var created = [];
   var started = [];
+  var firstEmitted = [];
   var sm = {
     sessions: new Map(),
     defaultVendor: "claude",
     createSession: function (options) {
       created.push(options);
-      // As the real manager does, the new session starts in the project default.
-      var s = { localId: created.length, history: [], vendor: options.vendor || null, permissionMode: "default" };
+      // As the real manager does, the new session starts in the mode the creator
+      // names, else the project default, and the first session_switched is sent
+      // from createSession itself: record the mode it would carry.
+      var s = { localId: created.length, history: [], vendor: options.vendor || null, permissionMode: options.permissionMode || "default" };
+      firstEmitted.push(s.permissionMode);
       sm.sessions.set(s.localId, s);
       return s;
     },
@@ -45,6 +49,7 @@ function makeProject(modesByVendor) {
   };
   return {
     created: created,
+    firstEmitted: firstEmitted,
     started: started,
     cwd: "/unused",
     sm: sm,
@@ -87,6 +92,15 @@ test("the server setting is the mode when the request names none", function () {
   var project = makeProject(CLAUDE);
   assert.equal(open(project, { openedSessionMode: "plan" }, {}).result, "opened");
   assert.equal(openedMode(project), "plan");
+});
+
+test("the first session_switched of an opened session already carries the requested mode", function () {
+  var project = makeProject(CLAUDE);
+  assert.equal(open(project, null, { permissionMode: "plan" }).result, "opened");
+  assert.deepEqual(project.firstEmitted, ["plan"]);
+  var stored = makeProject(CLAUDE);
+  assert.equal(open(stored, { openedSessionMode: "default" }, {}).result, "opened");
+  assert.deepEqual(stored.firstEmitted, ["default"]);
 });
 
 test("the flag wins over the server setting", function () {
