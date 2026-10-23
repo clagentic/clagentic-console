@@ -90,24 +90,27 @@ function signalAll(pids, signal) {
 // process that carries this instance's token is signalled, and it is checked
 // again right before SIGKILL. Returns the pids that survived, so the caller
 // fails loudly rather than skipping them.
-async function stopOwned(token, ms, log) {
-  var found = ownedProcesses(token);
+async function stopOwned(token, ms, log, io) {
+  // `io` lets a test observe the signals and fake the identity check; callers
+  // outside this file's tests pass nothing.
+  var deps = Object.assign({ scan: ownedProcesses, owned: stillOwned, signal: signalAll }, io);
+  var found = deps.scan(token);
   if (!found.scanned) {
     log("token scan skipped: /proc cannot be listed on this platform");
     return [];
   }
   var procs = found.procs;
   if (procs.length === 0) return [];
-  function owned(p) { return stillOwned(p, token); }
+  function owned(p) { return deps.owned(p, token); }
   function pidOf(p) { return p.pid; }
-  signalAll(procs.map(pidOf), "SIGTERM");
+  deps.signal(procs.map(pidOf), "SIGTERM");
   var end = Date.now() + ms;
   var killedAt = Date.now() + ms / 2;
   var killed = false;
   while (Date.now() < end) {
     procs = procs.filter(owned);
     if (procs.length === 0) return [];
-    if (!killed && Date.now() >= killedAt) { signalAll(procs.map(pidOf), "SIGKILL"); killed = true; }
+    if (!killed && Date.now() >= killedAt) { deps.signal(procs.map(pidOf), "SIGKILL"); killed = true; }
     await sleep(POLL_MS);
   }
   return procs.filter(owned).map(pidOf);
@@ -204,4 +207,4 @@ async function removeTempHome(home, o) {
   if (problems.length > 0) throw new Error(problems.join("; "));
 }
 
-module.exports = { removeTempHome, pidAlive, startTimeOf, stillOwned, REMOVE_OPTIONS };
+module.exports = { removeTempHome, pidAlive, startTimeOf, stillOwned, stopOwned, REMOVE_OPTIONS };

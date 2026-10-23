@@ -10,8 +10,20 @@ var os = require("os");
 var path = require("path");
 var { spawn } = require("child_process");
 
-var { removeTempHome, pidAlive, startTimeOf, stillOwned } = require("./helpers/remove-temp-home");
+var { removeTempHome, pidAlive, startTimeOf, stillOwned, stopOwned } = require("./helpers/remove-temp-home");
 var { TOKEN_ENV, newHarnessToken } = require("./fixtures/process-ownership");
+
+// Decided once at load: tests that read another process's /proc entries cannot
+// run where /proc is absent or unreadable (macOS).
+var NO_PROC = (function () {
+  try {
+    fs.readdirSync("/proc");
+    fs.readFileSync("/proc/self/environ");
+    return false;
+  } catch (e) {
+    return "/proc is not readable on this platform";
+  }
+})();
 
 // lib/store loads lib/config, which reads and may migrate files under the
 // console home; keep that off the operator's real one.
@@ -100,7 +112,7 @@ var ORPHAN_LAUNCHER = [
   "process.stdout.write(String(w.pid));",
 ].join("\n");
 
-test("removeTempHome stops an orphaned writer that carries the harness token", async function () {
+test("removeTempHome stops an orphaned writer that carries the harness token", { skip: NO_PROC }, async function () {
   var home = makeHome();
   var token = newHarnessToken();
   var env = Object.assign({}, process.env);
@@ -187,7 +199,7 @@ test("removeTempHome awaits an async quiesce and reports one that throws", async
 
 // --- a recycled pid is never signalled ---
 
-test("stillOwned accepts the process it found and refuses a pid whose start time differs", async function () {
+test("stillOwned accepts the process it found and refuses a pid whose start time differs", { skip: NO_PROC }, async function () {
   var token = newHarnessToken();
   var env = Object.assign({}, process.env);
   env[TOKEN_ENV] = token;
@@ -203,6 +215,34 @@ test("stillOwned accepts the process it found and refuses a pid whose start time
     child.kill("SIGKILL");
     await new Promise(function (resolve) { child.once("exit", resolve); });
   }
+});
+
+// The stop path itself, with the scan, identity check and signals faked so no
+// real process is touched: a pid whose identity fails between SIGTERM and the
+// SIGKILL step must never receive the SIGKILL.
+function fakeStop(ownedFn) {
+  var signals = [];
+  var t0 = Date.now();
+  var io = {
+    scan: function () { return { scanned: true, procs: [{ pid: 4242, start: "1" }] }; },
+    owned: function () { return ownedFn(Date.now() - t0); },
+    signal: function (pids, sig) { signals.push(sig + ":" + pids.join(",")); },
+  };
+  return { io: io, signals: signals };
+}
+
+test("stopOwned sends no SIGKILL to a pid that stopped being the owned process after SIGTERM", async function () {
+  var fake = fakeStop(function (elapsed) { return elapsed < 30; });
+  var survivors = await stopOwned("tok", 200, function () {}, fake.io);
+  assert.deepEqual(survivors, []);
+  assert.deepEqual(fake.signals, ["SIGTERM:4242"], "only SIGTERM; the recycled pid was not killed");
+});
+
+test("stopOwned escalates to SIGKILL for a pid that is still the owned process, and reports it if it survives", async function () {
+  var fake = fakeStop(function () { return true; });
+  var survivors = await stopOwned("tok", 100, function () {}, fake.io);
+  assert.deepEqual(survivors, [4242]);
+  assert.deepEqual(fake.signals, ["SIGTERM:4242", "SIGKILL:4242"]);
 });
 
 // --- no /proc ---
