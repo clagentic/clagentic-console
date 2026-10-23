@@ -114,6 +114,14 @@ var host = null;
 var multiUserMode = false;
 var osUsersMode = false;
 
+// Reject unknown words/flags before any action runs (no IPC, no daemon fork).
+var { findUnrecognisedArg, unrecognisedArgMessage } = require("../lib/cli/arg-validation");
+var _badArg = findUnrecognisedArg(args);
+if (_badArg !== null) {
+  console.error(unrecognisedArgMessage(_badArg));
+  process.exit(1);
+}
+
 for (var i = 0; i < args.length; i++) {
   if (args[i] === "-p" || args[i] === "--port") {
     port = parseInt(args[i + 1], 10);
