@@ -40,7 +40,10 @@
 // test:prompt-history` runs them against the commits before and after each
 // fix.
 
-var test = require("node:test");
+var nodeTest = require("node:test");
+var test = nodeTest.test;
+var describe = nodeTest.describe;
+var after = nodeTest.after;
 var assert = require("node:assert/strict");
 var world = require("./prompt-harness-world");
 var dom = require("./fake-dom-prompt-cards");
@@ -666,13 +669,16 @@ function tallyEndings(h, tally) {
   });
 }
 
-async function randomRun(seed, steps, tally) {
+// `signal` is the owning test's: node:test aborts it on timeout or
+// cancellation, and a run that keeps stepping after that would go on mutating
+// the process-wide env, module cache and fake DOM under the next test.
+async function randomRun(seed, steps, tally, signal) {
   var rnd = mulberry32(seed);
   function pick(arr) { return arr[Math.floor(rnd() * arr.length)]; }
   var h = new Harness("seed " + seed);
   await h.init(3);
   try {
-    for (var s = 0; s < steps && h.violations.length === 0; s++) {
+    for (var s = 0; s < steps && h.violations.length === 0 && !signal.aborted; s++) {
       var roll = rnd();
       var pending = h.pending();
       var live = h.liveTasks();
@@ -715,6 +721,7 @@ async function randomRun(seed, steps, tally) {
         await h.step(function () { return h.restart(); });
       }
     }
+    if (signal.aborted) return;
     h.assertClean();
     tallyEndings(h, tally);
   } finally {
@@ -722,39 +729,76 @@ async function randomRun(seed, steps, tally) {
   }
 }
 
-if (RENDER) {
-  test.before(async function () {
-    dom.setupGlobals();
-    var storeMod = await import(dom.moduleUrl("store.js"));
-    storeMod.createStore({ connected: true });
-  });
+// A fresh fake DOM and store for the calling test, so no test inherits the
+// document, storage or store state another one left behind.
+async function freshDom() {
+  if (!RENDER) return;
+  dom.setupGlobals();
+  var storeMod = await import(dom.moduleUrl("store.js"));
+  storeMod.createStore({ connected: true });
 }
 
+// The 150 seeds are split across PARTS tests so that no single test sits near
+// its timeout. Seeds keep their values (1..SEEDS), so the runs are the same
+// ones the single loop made.
 var SEEDS = 150;
 var STEPS = 40;
+var PARTS = 10;
+var PART_TIMEOUT_MS = 120000;
 
-test("random interleavings keep every prompt invariant, for every kind", { timeout: 300000 }, async function (t) {
-  // Card ack timers must not fire in wall-clock time mid-run.
-  if (RENDER) t.mock.timers.enable({ apis: ["setTimeout"] });
-  var tally = {
+function newTally() {
+  return {
     opened: 0, subagent: 0, open: 0, dead: 0, operator: 0, turn: 0, query: 0, restart: 0, aborted: 0,
     "kind:permission": 0, "kind:plan": 0, "kind:ask_user": 0, "kind:elicitation": 0,
   };
-  for (var seed = 1; seed <= SEEDS; seed++) {
-    await randomRun(seed, STEPS, tally);
-  }
-  t.diagnostic("prompt endings across " + SEEDS + " runs: " + JSON.stringify(tally));
-  Object.keys(tally).forEach(function (k) {
-    if (k === "dead") return;
-    assert.ok(tally[k] > 0, "the random runs never produced a prompt that is '" + k + "': " + JSON.stringify(tally));
+}
+
+// The tally guarantee is about the whole seed range, not any slice of it
+// (a slice of 30 runs may legitimately never hit a rare ending such as a
+// restart), so each part adds to one shared tally and the suite's `after`
+// asserts it once every part has completed.
+var randomTally = newTally();
+var randomPartsDone = 0;
+var SEEDS_PER_PART = SEEDS / PARTS;
+
+describe("random interleavings keep every prompt invariant, for every kind", function () {
+  after(function () {
+    // A part that failed or timed out is already reported; the tally of a
+    // partial range proves nothing, so it is judged only when all parts ran.
+    if (randomPartsDone !== PARTS) return;
+    Object.keys(randomTally).forEach(function (k) {
+      if (k === "dead") return;
+      assert.ok(randomTally[k] > 0, "the random runs never produced a prompt that is '" + k + "': " + JSON.stringify(randomTally));
+    });
+    assert.equal(randomTally.dead, 0, "every prompt open at a restart was ended by it");
   });
-  assert.equal(tally.dead, 0, "every prompt open at a restart was ended by it");
+
+  for (var part = 0; part < PARTS; part++) {
+    (function (part) {
+      var first = part * SEEDS_PER_PART + 1;
+      var last = (part + 1) * SEEDS_PER_PART;
+      test("seeds " + first + " to " + last, { timeout: PART_TIMEOUT_MS }, async function (t) {
+        // Card ack timers must not fire in wall-clock time mid-run.
+        if (RENDER) t.mock.timers.enable({ apis: ["setTimeout"] });
+        await freshDom();
+        var tally = newTally();
+        for (var seed = first; seed <= last && !t.signal.aborted; seed++) {
+          await randomRun(seed, STEPS, tally, t.signal);
+        }
+        if (t.signal.aborted) return;
+        Object.keys(tally).forEach(function (k) { randomTally[k] += tally[k]; });
+        randomPartsDone++;
+        t.diagnostic("prompt endings across seeds " + first + " to " + last + ": " + JSON.stringify(tally));
+      });
+    })(part);
+  }
 });
 
 // --- named interleavings: the shapes behind past regressions -------------
 
 async function scenario(t, label, clientCount, body) {
   if (RENDER) t.mock.timers.enable({ apis: ["setTimeout"] });
+  await freshDom();
   var h = new Harness(label);
   await h.init(clientCount);
   try {
@@ -771,6 +815,7 @@ async function scenario(t, label, clientCount, body) {
 test("a run against this checkout fails when a step it chose could not be sent", async function (t) {
   if (world.overridesLib) { t.skip("only meaningful against this checkout"); return; }
   if (RENDER) t.mock.timers.enable({ apis: ["setTimeout"] });
+  await freshDom();
   var h = new Harness("unexpressible-guard");
   await h.init(1);
   try {
