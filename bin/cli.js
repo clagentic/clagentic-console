@@ -108,7 +108,6 @@ var removePath = null;
 var listMode = false;
 var activityDiagnosticsMode = false;
 var processBuildStatusMode = false;
-var dangerouslySkipPermissions = false;
 var headlessMode = false;
 var watchMode = false;
 var host = null;
@@ -165,7 +164,8 @@ for (var i = 0; i < args.length; i++) {
     headlessMode = true;
     autoYes = true;
   } else if (args[i] === "--dangerously-skip-permissions") {
-    dangerouslySkipPermissions = true;
+    console.error("clagentic-console: --dangerously-skip-permissions has been removed. Tool approval follows each agent's own permission settings; Clagentic: Console does not bypass it.");
+    process.exit(1);
   } else if (args[i] === "--multi-user") {
     multiUserMode = true;
   } else if (args[i] === "--os-users") {
@@ -209,8 +209,6 @@ for (var i = 0; i < args.length; i++) {
     console.log("  --headless         Start daemon and exit immediately (implies --yes)");
     console.log("  --multi-user       Start in multi-user mode (use with --yes for headless)");
     console.log("  --os-users         Enable OS-level user isolation (Linux, requires root + --multi-user)");
-    console.log("  --dangerously-skip-permissions");
-    console.log("                     Bypass all permission prompts");
     process.exit(0);
   }
 }
@@ -280,7 +278,6 @@ function currentCliOpts() {
     forceMkcert: forceMkcert,
     debugMode: debugMode,
     headlessMode: headlessMode,
-    dangerouslySkipPermissions: dangerouslySkipPermissions,
     osUsersMode: osUsersMode,
     cliPin: cliPin,
     watchMode: watchMode,
@@ -330,7 +327,7 @@ var currentVersion = require("../package.json").version;
       setup(function (mode, keepAwake, wantOsUsers, chosenPort) {
         port = chosenPort;
         devMode(mode, keepAwake, null, wantOsUsers, currentCliOpts());
-      }, port, { host: host, dangerouslySkipPermissions: dangerouslySkipPermissions });
+      }, port, { host: host });
     } else {
       // Reuse existing config (repeat run)
       await devMode(devConfig.mode || "single", devConfig.keepAwake || false, devConfig.pinHash || null, devConfig.osUsers || false, currentCliOpts());
@@ -460,8 +457,7 @@ var currentVersion = require("../package.json").version;
 
       if (savedConfig && savedConfig.port) port = savedConfig.port;
       if (savedConfig && savedConfig.host) host = savedConfig.host;
-      if (savedConfig && savedConfig.dangerouslySkipPermissions) dangerouslySkipPermissions = true;
-      // Re-sync: port/host/dangerouslySkipPermissions above may have just
+      // Re-sync: port/host above may have just
       // changed after the initial setDaemonWatcherOpts() call at module
       // load — keep the crash-watcher/getCliOpts() snapshot current so a
       // later crash-restart or "re-run setup" re-fork doesn't use stale values.
@@ -470,9 +466,6 @@ var currentVersion = require("../package.json").version;
       if (autoYes) {
         console.log("  " + sym.done + "  Auto-accepted disclaimer");
         console.log("  " + sym.done + "  Mode: " + savedMode);
-        if (dangerouslySkipPermissions) {
-          console.log("  " + sym.warn + "  " + a.yellow + "Skip permissions mode enabled" + a.reset);
-        }
       }
 
       var autoRc = loadClayrc();
@@ -511,7 +504,7 @@ var currentVersion = require("../package.json").version;
           log("");
           forkDaemon(mode, keepAwake, undefined, true, wantOsUsers, currentCliOpts());
         }
-      }, port, { host: host, dangerouslySkipPermissions: dangerouslySkipPermissions });
+      }, port, { host: host });
     }
   }
 })();

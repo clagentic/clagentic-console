@@ -81,7 +81,6 @@
     <button id="cmd-palette-btn" class="cmd-palette-searchbar" title="Command palette"><i data-lucide="search"></i><span class="cmd-palette-searchbar-text">Search sessions, projects, and commands</span><kbd class="cmd-palette-searchbar-kbd"></kbd></button>
     <div class="top-bar-actions">
       <!-- Pill badges -->
-      <div id="skip-perms-pill" class="top-bar-pill pill-error hidden"><i data-lucide="shield-off"></i> <span>Skip perms</span></div>
       <div id="client-count" class="top-bar-pill pill-accent hidden"><i data-lucide="users"></i> <span id="client-count-text"></span></div>
       <button id="share-pill" title="Share"><i data-lucide="share-2"></i></button>
       <button id="diagnostics-panel-btn" title="Diagnostics" aria-label="Diagnostics" aria-expanded="false"><i data-lucide="activity"></i><span id="diagnostics-panel-badge" class="diagnostics-panel-badge hidden" aria-hidden="true">0</span></button>
@@ -1108,13 +1107,6 @@
             <div class="settings-field-row">
               <label class="settings-label">HTTPS</label>
               <span class="settings-value settings-badge" id="settings-tls">-</span>
-            </div>
-            <div class="settings-field-row">
-              <div>
-                <label class="settings-label">Skip Permissions</label>
-                <div class="settings-hint">Auto-approves all tool executions. Restart with <code style="font-size:12px">--dangerously-skip-permissions</code> to enable.</div>
-              </div>
-              <span class="settings-value settings-badge" id="settings-skip-perms">Disabled</span>
             </div>
             <div class="settings-field-row">
               <label class="settings-label">Debug</label>
