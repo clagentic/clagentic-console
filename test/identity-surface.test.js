@@ -613,11 +613,31 @@ test("a provider claiming a human origin for a turn nobody typed is refused and 
 
 // --- A provider that settles after the console stopped waiting ---
 
-function lateIdentityFor(raw, cfgDir, warnings) {
+// The late-settle tests fix the order of events instead of racing a provider
+// against a wall-clock limit: the identity surface is given a clock that only the
+// test advances, so the limit fires exactly when the test says and a provider that
+// is still working then is late by construction, however fast or loaded the host.
+function manualTimers() {
+  var pending = null;
+  return {
+    setTimeout: function (fn) { pending = fn; return fn; },
+    clearTimeout: function (handle) { if (pending === handle) pending = null; },
+    // Fires the provider limit; it throws if no limit is armed, so a test cannot
+    // silently skip the timeout it is about.
+    fire: function () {
+      assert.ok(pending, "the provider limit is armed");
+      var fn = pending;
+      pending = null;
+      fn();
+    },
+  };
+}
+
+function lateIdentityFor(raw, cfgDir, warnings, timers) {
   return createIdentity({
     getConfig: function () { return raw; },
     configDir: cfgDir,
-    providerTimeoutMs: 100,
+    timers: timers,
     warn: function (message) { warnings.push(message); },
   });
 }
@@ -626,23 +646,54 @@ function pause(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
 }
 
+// Waits for something a late settlement does, without assuming how long it takes.
+// The bound only turns a hang into a failure; it is never what the test waits for.
+async function until(condition, what) {
+  for (var i = 0; i < 2000; i++) {
+    if (condition()) return;
+    await pause(5);
+  }
+  assert.fail("never happened: " + what);
+}
+
+// A gate a module provider parks on: `reached` resolves when the provider arrives
+// at it, `open` lets it go on.
+function installGate() {
+  var open;
+  var reached;
+  var gate = {
+    reached: new Promise(function (resolve) { reached = resolve; }),
+    open: function () { open(); },
+  };
+  globalThis.__identityTestGate = new Promise(function (resolve) { open = resolve; });
+  globalThis.__identityTestReached = reached;
+  return gate;
+}
+
 var LATE_REQUEST = { definition: null, initiator: INITIATORS.LOOP, rt: "claude-code" };
 
 // Allocates its directory before the timeout, answers after it.
 var LATE_AFTER_ALLOCATE = MODULE_SIGNER
-  .replace("return { dir,", "await new Promise((r) => setTimeout(r, 400)); return { dir,");
+  .replace("return { dir,", "globalThis.__identityTestReached(); await globalThis.__identityTestGate; return { dir,");
 
 // Waits past the timeout, then asks for its directory.
 var LATE_BEFORE_ALLOCATE = MODULE_SIGNER
-  .replace("const dir = ctx.allocateDir();", "await new Promise((r) => setTimeout(r, 400)); const dir = ctx.allocateDir();");
+  .replace("const dir = ctx.allocateDir();", "globalThis.__identityTestReached(); await globalThis.__identityTestGate; const dir = ctx.allocateDir();");
 
 test("a module provider that answers after the timeout has its directory removed and its release called", async function () {
   var cfgDir = scratch();
   var warnings = [];
-  var lease = await lateIdentityFor({ provider_module: writeModule(LATE_AFTER_ALLOCATE) }, cfgDir, warnings).begin(LATE_REQUEST);
+  var timers = manualTimers();
+  var gate = installGate();
+  var asking = lateIdentityFor({ provider_module: writeModule(LATE_AFTER_ALLOCATE) }, cfgDir, warnings, timers).begin(LATE_REQUEST);
+  await gate.reached;
+  assert.equal(entries(path.join(cfgDir, "identity", "spawn")).length, 1, "the directory exists while the provider is still working");
+  timers.fire();
+  var lease = await asking;
   assert.equal(lease.dir, null, "the child is given no CLAGENTIC_IDENTITY_DIR");
   assert.equal(lease.record.unavailable, "provider_timeout");
-  await pause(700);
+  gate.open();
+  await until(function () { return globalThis.__identityTestLog.some(function (e) { return e.released; }); }, "the provider's release");
   assert.deepEqual(entries(path.join(cfgDir, "identity", "spawn")), [], "no directory remains under the spawn root");
   assert.deepEqual(globalThis.__identityTestLog.filter(function (e) { return e.released; }), [{ released: "spiffe-client" }]);
 });
@@ -650,25 +701,33 @@ test("a module provider that answers after the timeout has its directory removed
 test("a module provider that asks for a directory after the timeout is refused one", async function () {
   var cfgDir = scratch();
   var warnings = [];
-  var lease = await lateIdentityFor({ provider_module: writeModule(LATE_BEFORE_ALLOCATE) }, cfgDir, warnings).begin(LATE_REQUEST);
+  var timers = manualTimers();
+  var gate = installGate();
+  var asking = lateIdentityFor({ provider_module: writeModule(LATE_BEFORE_ALLOCATE) }, cfgDir, warnings, timers).begin(LATE_REQUEST);
+  await gate.reached;
+  timers.fire();
+  var lease = await asking;
   assert.equal(lease.dir, null);
-  await pause(700);
+  gate.open();
+  await until(function () { return warnings.some(function (w) { return /no longer waits/.test(w); }); }, "the refusal of the late directory request");
   assert.deepEqual(entries(path.join(cfgDir, "identity", "spawn")), [], "no directory was made for a session nobody waits for");
   assert.ok(warnings.some(function (w) { return /no longer waits/.test(w); }), warnings.join("|"));
 });
 
 test("the jwks-self signer settling after the timeout leaves no directory and gives the child none", async function () {
   var cfgDir = scratch();
-  var identity = createIdentity({
-    getConfig: function () { return { provider: "jwks-self" }; },
-    configDir: cfgDir,
-    providerTimeoutMs: 1,
-    warn: function () {},
-  });
-  var lease = await identity.begin(LATE_REQUEST);
+  var warnings = [];
+  var timers = manualTimers();
+  var identity = lateIdentityFor({ provider: "jwks-self" }, cfgDir, warnings, timers);
+  // begin() arms the limit and starts the real signer in its first synchronous
+  // step, and the signer cannot finish before the next microtask: firing the limit
+  // here makes the signer late, whatever the host's speed.
+  var asking = identity.begin(LATE_REQUEST);
+  timers.fire();
+  var lease = await asking;
   assert.equal(lease.dir, null);
   assert.equal(lease.record.unavailable, "provider_timeout");
-  await pause(500);
+  await until(function () { return warnings.some(function (w) { return /no longer waits/.test(w); }); }, "the signer's late request for a directory");
   assert.deepEqual(entries(path.join(cfgDir, "identity", "spawn")), [], "no directory remains under the spawn root");
 });
 
@@ -676,9 +735,17 @@ test("a gatekeeper session still pending at the timeout is cancelled: no issued 
   var issuer = installFakeIssuer();
   try {
     var warnings = [];
-    var lease = await lateIdentityFor(gatekeeperConfig(issuer, "late.sock"), scratch(), warnings).begin(LATE_REQUEST);
+    var timers = manualTimers();
+    var asking = lateIdentityFor(gatekeeperConfig(issuer, "late.sock"), scratch(), warnings, timers).begin(LATE_REQUEST);
+    // The limit fires only once the client is running, which it records first
+    // thing; under load it can otherwise be cancelled before it ever starts.
+    await until(function () { return issuer.inheritedDirs().length > 0; }, "the issuer's client to start");
+    timers.fire();
+    var lease = await asking;
     assert.equal(lease.dir, null);
     assert.equal(lease.record.unavailable, "provider_timeout");
+    // The client would issue its session 700 ms after it started; this is the
+    // window in which a client that was not cancelled would do so.
     await pause(1200);
     assert.deepEqual(issuer.issued(), [], "the issuer's late session never came into being or was removed");
     assert.deepEqual(issuer.inheritedDirs(), ["undefined"], "the client was not handed an identity directory");
