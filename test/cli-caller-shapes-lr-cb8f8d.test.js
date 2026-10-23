@@ -64,6 +64,36 @@ test("caller shape 1: unit ExecStart argv is `daemon`, routed ahead of the guard
   assert.ok(daemonRoute < guardCall, "daemon routing precedes the guard");
 });
 
+// Runs the captured ExecStart argv through the real CLI without starting a daemon:
+// the CLI is invoked through <prefix>/bin/ with an npm-link symlink at
+// <prefix>/lib/node_modules/clagentic-console, so the daemon branch refuses with
+// its own exit 78 before it would require lib/daemon.
+test("caller shape 1: ExecStart argv reaches the daemon branch, not the guard (link-trap refusal, no daemon)", function () {
+  var unit = fs.readFileSync(path.join(ROOT, "deploy", "clagentic-console.service"), "utf8");
+  var line = unit.split("\n").filter(function (l) { return /^ExecStart=/.test(l); })[0];
+  var captured = line.replace(/^ExecStart=/, "").trim().split(/\s+/).slice(1);
+  assert.deepStrictEqual(captured, ["daemon"]);
+
+  var dir = tmpDir();
+  try {
+    var binDir = path.join(dir, "bin");
+    var nodeModules = path.join(dir, "lib", "node_modules");
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.mkdirSync(nodeModules, { recursive: true });
+    fs.symlinkSync(CLI, path.join(binDir, "cli.js"));
+    fs.symlinkSync(ROOT, path.join(nodeModules, "clagentic-console"));
+
+    [captured, captured.concat(["--bogus-cb8f8d"])].forEach(function (argv) {
+      var res = runCli(argv, { script: path.join(binDir, "cli.js") });
+      assert.strictEqual(res.status, 78, JSON.stringify(argv) + ": " + res.stderr);
+      assert.match(res.stderr, /npm link trap/, JSON.stringify(argv));
+      assert.doesNotMatch(res.stderr, /unrecognised argument/, JSON.stringify(argv));
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // --- shape 2: in-app updater re-exec ---
 
 test("caller shape 2: updater re-exec argv is accepted for every documented form", function () {
