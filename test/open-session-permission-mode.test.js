@@ -71,7 +71,7 @@ function openedMode(project) {
 function open(project, settings, request) {
   var input = createSessionInput({
     getProject: function (slug) { return slug === "p" ? project : null; },
-    agentCatalog: function () { return [{ name: "holden" }]; },
+    agentCatalog: function () { return [{ name: "reviewer-agent" }]; },
     getPermissionSettings: function () { return settings; },
   });
   return input.openSession(Object.assign({ projectSlug: "p", prompt: "go" }, request || {}));
