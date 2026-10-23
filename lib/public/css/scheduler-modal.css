@@ -1117,6 +1117,11 @@
   margin-top: 4px;
 }
 
+.sched-approve-tools-row {
+  border-top: none;
+  margin-top: 0;
+}
+
 .sched-switch-label {
   display: flex;
   align-items: center;

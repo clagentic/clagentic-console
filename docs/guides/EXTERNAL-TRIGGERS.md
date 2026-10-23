@@ -69,6 +69,12 @@ above. Use the canonical path.
 | `fromSession` | optional | The sending session's id at its own vendor. Stored with the sender and published in the per-message sender record (see architecture.md, "Integrating other tools"). |
 | `createdAt` | optional | ISO timestamp. Informational only. |
 
+A spawned session starts in the server setting "Mode for sessions opened by the
+CLI or a trigger" (Accept edits unless an admin changed it). A trigger file
+cannot name a mode; a field `permissionMode` in it is ignored. The CLI's
+`open-session --permission-mode` can, see
+[PERMISSION-SETTINGS.md](./PERMISSION-SETTINGS.md).
+
 ## Critical: `projectSlug` is NOT a path encoding
 
 `projectSlug` must be the **registered slug** from the daemon's project list —

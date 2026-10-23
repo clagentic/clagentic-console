@@ -57,6 +57,9 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `prompt-registry.js` | Sole owner of every operator-prompt lifecycle (permission, plan, AskUserQuestion, MCP elicitation, browser-extension command): open/answer/cancel/expire, sub-agent ownership, session grants, notification dismissal, replay state |
 | `prompt-kinds/` | One adapter per prompt kind: payload fields, response parsing and validation against the request (answer bounds in `answer-limits.js`), the vendor callback's value for an answer and for an unanswered end; `codecs.js` loads the answer codecs and own-key lookups from the browser's own modules (`public/modules/prompt-kinds/`) |
 | `prompt-access.js` | Who may answer a prompt: the one session-visibility rule the WS and HTTP answer paths both apply |
+| `permission-mode-policy.js` | The one check every permission mode passes before it is applied: known mode, bypass only when the server allows it, Don't ask and Auto only for a vendor that declares them |
+| `permission-settings.js` | The server-wide permission settings (Auto-approve read-only tools, mode for sessions opened by the CLI or a trigger): defaults, which request fields are accepted, and the precedence that picks an opened session's mode |
+| `project-permission-settings.js` | The admin-only `set_permission_settings` message and the admin check shared with the server default mode |
 | `sdk-skill-discovery.js` | Skill directory scanning, shell segment splitting, SDK/filesystem skill merging |
 | `sdk-message-queue.js` | Async iterable message queue for streaming input to SDK |
 | `sdk-message-processor.js` | SDK stream event processing (message_start, content_block_*), sub-agent message routing |

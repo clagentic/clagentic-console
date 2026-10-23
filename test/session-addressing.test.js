@@ -322,10 +322,10 @@ test("open: --name names the session, shown in the result and passed to createSe
   var r = w.input.openSession({ projectSlug: "lore", agentName: "Holden", sessionName: "Lane-A", prompt: "go" });
   assert.equal(r.result, "opened");
   assert.equal(r.name, "lane-a");
-  assert.deepEqual(w.calls.created[0], { agentName: "Holden", sessionName: "lane-a" });
+  assert.deepEqual(w.calls.created[0], { agentName: "Holden", sessionName: "lane-a", permissionMode: "acceptEdits" });
   var viaAddress = w.input.openSession({ to: "naomi@lore/lane-b", prompt: "go" });
   assert.equal(viaAddress.result, "opened");
-  assert.deepEqual(w.calls.created[1], { agentName: "naomi", sessionName: "lane-b" });
+  assert.deepEqual(w.calls.created[1], { agentName: "naomi", sessionName: "lane-b", permissionMode: "acceptEdits" });
 });
 
 test("open: a name in use by a non-reaped session of the project is refused, a reaped holder is not", function () {
@@ -724,11 +724,11 @@ test("reply: a sender that no longer exists is not-found", async function () {
 test("open --to: an agent address opens that agent in the project, and a vendor address a plain session", function () {
   var w = world({ lore: [] });
   assert.equal(w.input.openSession({ to: "holden@lore", prompt: "go" }).result, "opened");
-  assert.deepEqual(w.calls.created[0], { agentName: "Holden" });
+  assert.deepEqual(w.calls.created[0], { agentName: "Holden", permissionMode: "acceptEdits" });
   assert.equal(w.input.openSession({ to: "codex@lore", prompt: "go" }).result, "opened");
-  assert.deepEqual(w.calls.created[1], { vendor: "codex" });
+  assert.deepEqual(w.calls.created[1], { vendor: "codex", permissionMode: "acceptEdits" });
   assert.equal(w.input.openSession({ to: "@lore", prompt: "go" }).result, "opened");
-  assert.deepEqual(w.calls.created[2], {});
+  assert.deepEqual(w.calls.created[2], { permissionMode: "acceptEdits" });
 });
 
 test("open --to: an unknown name, a clashing flag or a project mismatch is refused and opens nothing", function () {

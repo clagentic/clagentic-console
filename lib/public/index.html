@@ -668,6 +668,14 @@
                 <label class="settings-label">Mode</label>
                 <div class="settings-hint">Controls how Claude handles tool use and file edits.</div>
                 <div id="ps-mode-list" class="settings-model-list"></div>
+                <label class="settings-toggle-row">
+                  <div>
+                    <span class="settings-label">Apply to running sessions</span>
+                    <div class="settings-hint">Off: only new sessions start in the mode you pick. On: this project's open sessions switch to it too. Applies to your next pick only.</div>
+                  </div>
+                  <input type="checkbox" id="ps-mode-apply">
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                </label>
               </div>
             </div>
             <div class="settings-card" id="ps-effort-card">
@@ -1193,6 +1201,14 @@
               <label class="settings-label">Mode</label>
               <div class="settings-hint">Controls how Claude handles tool use and file edits.</div>
               <div id="ss-mode-list" class="settings-model-list"></div>
+              <label class="settings-toggle-row">
+                <div>
+                  <span class="settings-label">Apply to running sessions</span>
+                  <div class="settings-hint">Off: only new sessions start in the mode you pick. On: this project's open sessions switch to it too. Applies to your next pick only.</div>
+                </div>
+                <input type="checkbox" id="ss-mode-apply">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
             </div>
           </div>
           <div class="settings-card" id="ss-effort-card">
@@ -1216,6 +1232,25 @@
         </div>
         <div class="server-settings-section" data-section="security">
           <h2>Security</h2>
+          <div class="settings-card">
+            <div class="settings-field">
+              <label class="settings-toggle-row">
+                <div>
+                  <span class="settings-label">Auto-approve read-only tools</span>
+                  <div class="settings-hint">On (the default): read-only tools, safe shell commands, browser watch and unwatch, and the MCP servers you enabled run without a prompt. Off: each of them asks first. Only an admin can change this.</div>
+                </div>
+                <input type="checkbox" id="ss-auto-approve-readonly" checked>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-card">
+            <div class="settings-field">
+              <label class="settings-label">Mode for sessions opened by the CLI or a trigger</label>
+              <div class="settings-hint">The mode a session starts in when it is opened by <code>clagentic-console open-session</code> or a trigger file. The default is Accept edits. An open-session call can name its own mode with <code>--permission-mode</code>. Only an admin can change this.</div>
+              <div id="ss-opened-mode-list" class="settings-model-list"></div>
+            </div>
+          </div>
           <div class="settings-card">
             <div class="settings-field-row">
               <div>
@@ -2035,6 +2070,15 @@
             <span class="sched-switch-slider"></span>
           </div>
           <span class="sched-switch-text">Skip if previous run still active</span>
+        </label>
+      </div>
+      <div class="sched-skip-running-row sched-approve-tools-row" id="sched-approve-tools-row">
+        <label class="sched-switch-label" for="sched-approve-tools">
+          <div class="sched-switch">
+            <input type="checkbox" id="sched-approve-tools" checked>
+            <span class="sched-switch-slider"></span>
+          </div>
+          <span class="sched-switch-text">Approve tools automatically during this loop</span>
         </label>
       </div>
     </div>

@@ -101,6 +101,9 @@ var ORIGINAL_CASE_LABELS = [
   "restart_for_build_update_result",
   // A session's armed scheduled inputs, in full, after every change.
   "scheduled_input_list",
+  // The server-wide permission settings, and the result of applying a new
+  // default mode to the running sessions.
+  "permission_settings", "permission_mode_applied",
 ];
 
 var REGISTRY_FILES = [
