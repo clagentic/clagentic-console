@@ -1,3 +1,17 @@
+# [1.11.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.11.0-beta.1...v1.11.0-beta.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **cli:** reject unknown words and flags with a usage error (lr-cb8f8d) ([95b494a](https://github.com/clagentic/clagentic-console/commit/95b494a8024f8e055e6546f9d88b684f1e0678ea))
+* **identity:** fire the provider limit from the test so late-settle tests have a fixed order (lr-7da984) ([06b5660](https://github.com/clagentic/clagentic-console/commit/06b56605cc7661cf5c694be37f8738922c9f0ada))
+* **test:** wait for writers before removing temp homes to end ENOTEMPTY flakes (lr-c3e80a) ([a0a8d02](https://github.com/clagentic/clagentic-console/commit/a0a8d02840d0a2b787e1ccdb852717dd9d68e40c))
+
+
+### Features
+
+* **permissions:** user-adjustable permission settings (lr-9b03d3) ([1946443](https://github.com/clagentic/clagentic-console/commit/1946443168a0b6a9f58e4c7570e29236898b106c))
+
 # [1.11.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.10.0...v1.11.0-beta.1) (2026-10-23)
 
 
