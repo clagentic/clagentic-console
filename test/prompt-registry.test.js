@@ -773,7 +773,8 @@ test("every answer path runs the registry's resolution effects: a plan answered 
     var viaCard = sm.prompts.open(session, "plan", { toolName: "ExitPlanMode", toolInput: { plan: "p" } });
     sm.prompts.respond(viaCard.requestId, { decision: "allow_accept_edits" }, { responder: null });
     assert.deepEqual(modes, ["acceptEdits"], "a plan decision's side effect runs inside respond(), not in one caller");
-    assert.equal(sm.currentPermissionMode, "acceptEdits");
+    assert.equal(session.permissionMode, "acceptEdits", "the answering session's own mode changes");
+    assert.notEqual(sm.currentPermissionMode, "acceptEdits", "the project default does not");
 
     var seen = [];
     sm.prompts.onResolved(function (outcome, responder) { seen.push([outcome.kind, outcome.response.decision, responder]); });
