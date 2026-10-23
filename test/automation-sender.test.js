@@ -11,6 +11,7 @@ var os = require("os");
 var path = require("path");
 var execFileSync = require("child_process").execFileSync;
 
+var { removeTempHome } = require("./helpers/remove-temp-home");
 var turnInitiator = require("../lib/turn-initiator");
 var sender = require("../lib/injected-sender");
 var { RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-input/rate-limit-resume");
@@ -308,8 +309,10 @@ test("a loop iteration is recorded as the loop, with its name and iteration, and
     armed.forEach(function (t) { clearTimeout(t); });
     if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME;
     else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(home, { recursive: true, force: true });
+    // The loop persists through lib/store in several async steps; the helper
+    // lets them finish before it removes either directory.
+    await removeTempHome(cwd);
+    await removeTempHome(home);
   }
 });
 

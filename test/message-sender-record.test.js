@@ -14,6 +14,7 @@ var os = require("os");
 var path = require("path");
 var execFileSync = require("child_process").execFileSync;
 
+var { removeTempHome } = require("./helpers/remove-temp-home");
 var { INITIATORS } = require("../lib/turn-initiator");
 var { RATE_LIMIT_RESUME_NOTE } = require("../lib/scheduled-input/rate-limit-resume");
 var { createScheduledInputService } = require("../lib/scheduled-input/service");
@@ -110,13 +111,14 @@ function makeWorld(vendor, opts) {
         agentCatalog: function () { return []; },
       }, extra || {}));
     },
-    cleanup: function () {
+    cleanup: async function () {
       if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME; else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
       if (origLegacyHome === undefined) delete process.env.CLAGENTIC_HOME; else process.env.CLAGENTIC_HOME = origLegacyHome;
       ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
-      // A loop saves its state asynchronously into this directory, so removal
-      // can meet a file written meanwhile: retry.
-      fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      // A loop saves its state asynchronously into this directory (lib/store
+      // writes in several fs.promises steps); the helper lets those finish
+      // before removing, which a synchronous removal cannot.
+      await removeTempHome(home);
     },
   };
   return world;
@@ -124,7 +126,7 @@ function makeWorld(vendor, opts) {
 
 async function inWorld(vendor, fn, opts) {
   var w = makeWorld(vendor, opts);
-  try { await fn(w); } finally { w.cleanup(); }
+  try { await fn(w); } finally { await w.cleanup(); }
 }
 
 // The browser composer's message handler over the real session manager.
