@@ -2025,3 +2025,20 @@
   50% { opacity: 0.18; }
   100% { opacity: 0.1; }
 }
+
+/* Pin shown on a session the operator has kept alive past the idle reaper. */
+.session-item .session-keepalive-badge,
+.mobile-session-item .session-keepalive-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent, #63b3ed);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.session-item .session-keepalive-badge i,
+.mobile-session-item .session-keepalive-badge i {
+  width: 12px;
+  height: 12px;
+}
