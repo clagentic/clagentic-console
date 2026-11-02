@@ -160,3 +160,75 @@ test("record() with __proto__ or inherited-member names does not pollute", funct
   assert.equal(out.vendors.claude.buckets.five_hour.state, "unknown");
   assert.equal(out.vendors.toString.buckets.constructor.utilization, 0.5);
 });
+
+function failingFs(failures) {
+  var state = { failures: failures };
+  var wrapped = Object.assign({}, fs, {
+    writeFileSync: function (p, d, o) {
+      if (state.failures > 0) { state.failures--; var e = new Error("ENOSPC: no space left"); e.code = "ENOSPC"; throw e; }
+      return fs.writeFileSync(p, d, o);
+    },
+  });
+  return wrapped;
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function onDisk(file) { return JSON.parse(fs.readFileSync(file, "utf8")).vendors.claude.five_hour; }
+var REC = function (u) { return { rateLimitType: "five_hour", utilization: u, resetsAt: FUTURE, status: "allowed" }; };
+
+test("a write that fails once is retried and persists the latest record", async function () {
+  var t = tmpFile();
+  var logs = [];
+  var s = createUsageStore({ file: t.file, fs: failingFs(1), throttleMs: 20, log: function (m) { logs.push(m); } });
+  s.record("claude", REC(0.3), { now: NOW });
+  await wait(40);
+  assert.equal(fs.existsSync(t.file), false);
+  s.record("claude", REC(0.6), { now: NOW });
+  await wait(80);
+  assert.equal(onDisk(t.file).utilization, 0.6);
+  assert.equal(logs.length, 1);
+  assert.equal(fs.existsSync(t.file + ".tmp"), false);
+});
+
+test("a failed write retries on its own without a new record", async function () {
+  var t = tmpFile();
+  var s = createUsageStore({ file: t.file, fs: failingFs(1), throttleMs: 20, log: function () {} });
+  s.record("claude", REC(0.5), { now: NOW });
+  await wait(120);
+  assert.equal(onDisk(t.file).utilization, 0.5);
+});
+
+test("flush after a failed write still writes", async function () {
+  var t = tmpFile();
+  var s = createUsageStore({ file: t.file, fs: failingFs(1), throttleMs: 20, log: function () {} });
+  s.record("claude", REC(0.7), { now: NOW });
+  await wait(40);
+  assert.equal(fs.existsSync(t.file), false);
+  s.flush();
+  assert.equal(onDisk(t.file).utilization, 0.7);
+});
+
+test("a failed rename leaves no tmp file behind and keeps the change pending", function () {
+  var t = tmpFile();
+  var renameFails = true;
+  var wrapped = Object.assign({}, fs, {
+    renameSync: function (a, b) {
+      if (renameFails) { renameFails = false; throw new Error("EACCES: denied"); }
+      return fs.renameSync(a, b);
+    },
+  });
+  var s = createUsageStore({ file: t.file, fs: wrapped, throttleMs: 20, log: function () {} });
+  s.record("claude", REC(0.2), { now: NOW });
+  s.flush();
+  assert.equal(fs.existsSync(t.file + ".tmp"), false);
+  s.flush();
+  assert.equal(onDisk(t.file).utilization, 0.2);
+});
+
+test("daemon shutdown flush logs one line on failure and does not throw", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "daemon.js"), "utf8");
+  var i = src.indexOf('require("./usage-store").flush()');
+  assert.ok(i > 0);
+  var block = src.slice(i - 20, i + 260);
+  assert.match(block, /catch \(e\) \{\s*console\.error\(/);
+  assert.doesNotMatch(block, /catch \(e\) \{\}/);
+});
