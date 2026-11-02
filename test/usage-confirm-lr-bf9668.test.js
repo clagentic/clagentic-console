@@ -386,3 +386,11 @@ test("sdk-bridge: when the query stream ends, the process can no longer confirm"
     shared.reset();
   }
 });
+
+test("usageVendorFor: session vendor, then adapter vendor, then claude", function () {
+  var { usageVendorFor } = require("../lib/usage-store");
+  assert.equal(usageVendorFor({ vendor: "codex" }, { vendor: "claude" }), "codex");
+  assert.equal(usageVendorFor({}, { vendor: "codex" }), "codex");
+  assert.equal(usageVendorFor({}, null), "claude");
+  assert.equal(usageVendorFor({ vendor: "" }, undefined), "claude");
+});
