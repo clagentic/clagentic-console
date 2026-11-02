@@ -126,3 +126,37 @@ test("a store with no file does no I/O", function () {
   s.load();
   assert.equal(snap(s, NOW).vendors.claude.buckets.five_hour.utilization, 0.2);
 });
+
+test("__proto__ vendor and bucket keys in the file do not pollute and the store stays usable", function () {
+  var t = tmpFile();
+  var rec = { utilization: 0.1, utilizationObservedAt: new Date(NOW).toISOString(), resetsAt: null, status: "allowed", observedAt: new Date(NOW).toISOString(), source: null, sessionLocalId: null };
+  // JSON.parse makes "__proto__" an own key, as a hostile file would.
+  fs.writeFileSync(t.file, '{"version":1,"vendors":{"__proto__":{"five_hour":' + JSON.stringify(rec) +
+    '},"claude":{"__proto__":' + JSON.stringify(rec) + ',"seven_day":' + JSON.stringify(rec) + '}}}');
+  var logs = [];
+  var s = createUsageStore({ file: t.file, log: function (m) { logs.push(m); } });
+  s.load();
+  assert.equal(({}).utilization, undefined);
+  assert.equal(({}).five_hour, undefined);
+  assert.equal(Object.prototype.utilization, undefined);
+  var v = snap(s, NOW).vendors.claude.buckets;
+  assert.equal(v.seven_day.utilization, 0.1);
+  assert.equal(Object.keys(v).indexOf("__proto__"), -1);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /dropped 2 /);
+  s.record("claude", { rateLimitType: "five_hour", utilization: 0.3, status: "allowed" }, { now: NOW });
+  assert.equal(snap(s, NOW).vendors.claude.buckets.five_hour.utilization, 0.3);
+});
+
+test("record() with __proto__ or inherited-member names does not pollute", function () {
+  var s = createUsageStore();
+  s.record("claude", { rateLimitType: "__proto__", utilization: 0.9, status: "allowed" }, { now: NOW });
+  s.record("__proto__", { rateLimitType: "five_hour", utilization: 0.9, status: "allowed" }, { now: NOW });
+  s.record("toString", { rateLimitType: "constructor", utilization: 0.5, status: "allowed" }, { now: NOW });
+  assert.equal(({}).utilization, undefined);
+  assert.equal(({}).five_hour, undefined);
+  assert.equal(typeof Object.prototype.toString.utilization, "undefined");
+  var out = snap(s, NOW);
+  assert.equal(out.vendors.claude.buckets.five_hour.state, "unknown");
+  assert.equal(out.vendors.toString.buckets.constructor.utilization, 0.5);
+});
