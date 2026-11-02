@@ -606,6 +606,28 @@ On connect, session switch and every history page, the server sends the authorit
 
 `project-notifications.js` formats the alarm and may also fire push.
 
+### Reminders for unanswered prompts
+
+A permission prompt has no timeout, so a prompt nobody sees (the session's own, or a background agent's) waits for ever and pins its session. `lib/prompt-reminders.js` closes that side: it repeats a notification at growing intervals until the prompt is answered or cancelled. It adds no channel; a reminder is a notification of type `permission_reminder` made by `project-notifications.js` (the in-app banner and the notifications panel) and a push of the same type.
+
+**Derived, not timed.** Nothing is scheduled per prompt. A sweep (every `tickSeconds`, 30 by default) walks every project's sessions and reads their pending prompts from the prompt registry (`pendingInfo()`: request id, kind, tool, owning agent, opening time). The schedule is a function of the oldest pending prompt's age: the configured steps (5, 15 and 30 minutes by default), then one more every `repeatMinutes` (60). A session keeps how many reminders it has already sent; the next one is due when the age earns more. When the oldest prompt is answered and a newer one remains, the count follows the newer prompt's own age.
+
+**One live reminder per session.** Each reminder replaces the last one (the notification module dismisses the old and creates the new together), carries the count and the oldest age (`3 prompts waiting, oldest 47 min`) and names the waiting agents and tools. A prompt that settles (an answer, a cancel, a turn end, a session end) reaches the sweep through the notification module's reconcile hook at once, not at the next tick: the reminder is cleared when nothing is left and recounted, without a new push, when something is. The push carries the tag `prompt-reminder-<project>:<session>`, so a device replaces it too.
+
+**Restart.** The registry ends every prompt at shutdown, so no pending prompt, and no reminder, exists across a restart; reminder notifications are not restored from `notifications.json`, like the prompt notifications they accompany. A prompt that is pending again afterwards (the agent asked once more) is reminded on its own schedule from its own opening time. The sweep only reads: it never opens or settles a prompt, and the idle reaper does not consult it.
+
+**Configuration.** `daemon.json` `promptReminders` (read on every sweep; `tickSeconds` at start): `{ "enabled": true, "scheduleMinutes": [5, 15, 30], "repeatMinutes": 60, "tickSeconds": 30 }`. Anything malformed falls back to the default. A single session is switched off from its context menu (`set_session_prompt_reminders`, persisted in the session meta as `promptRemindersOff`; switching it off clears a live reminder).
+
+### Notification preferences
+
+`lib/notification-prefs.js` keeps, per user, a boolean for every (surface, category): the surfaces are the in-app banner, the sound and push; the categories are `turn_done` (a finished turn), `approval` (permission prompts, questions and elicitations), `approval_reminder`, `loop`, `messages` (DMs, mentions) and `system` (login notices). The defaults keep the behaviour from before the preferences existed: every banner and push on, the sound for a finished turn only.
+
+- **Store.** `~/.clagentic/console/notification-prefs.json` (`CONFIG_DIR`, mode 0600), keyed by user id; a daemon without accounts uses the key `_default`. The browser receives its user's copy as `notification_prefs` on connect and after every change, on every connection of that user, so the phone and the desktop agree. Changes arrive as `notification_prefs_set` (a preset name or a per-cell patch). The first load after the upgrade offers the browser's old `notif-sound` switch once (`notification_prefs_migrate`) and only for a user with no stored copy; the browser-alert and push switches describe this browser's permission and subscription, so they stay local.
+- **Presets.** "Everything", "Approval prompts only" (prompts, questions and reminders) and "Approval reminders only" (no first notice; from the first reminder on). A preset leaves `system` as it is: a lapsed login needs the operator whatever else is muted.
+- **Enforcement.** Push is filtered where it is sent: `push.js` classifies each payload (`categoryOfPush`) and checks the preferences of the user each subscription belongs to, so a muted type never reaches the phone whichever caller raised it; each decision is one journal line (`[push] sending|muted type=... category=... user=...`, no payload text). The banner and the sound are decided in the browser from the same copy (`modules/notification-prefs.js`).
+- **Muting never hides.** A notification carries its `category`; a muted banner is still added to the list and counted, so it is in the notifications panel, and a prompt's card is untouched. Only the alert, the sound and the push are suppressed.
+- **Not in the list.** Build-update offers do not flow through the notification system (they are `diagnostic` messages with an action), so they are not a type here.
+
 ## Session Storage
 
 Sessions live at `~/.clagentic/sessions/{encoded-cwd}/{cliSessionId}.jsonl`, one JSONL line per event:
@@ -652,8 +674,11 @@ For deeper MCP details, see [MCP-IMPLEMENTATION.md](./MCP-IMPLEMENTATION.md).
 
 Push fires on:
 - Permission requests
+- Reminders for prompts nobody has answered
 - Task completion / errors
 - @mentions of the user (only when the user has no live WS connection)
+
+A user's notification preferences filter every push at send time (see "Notification preferences").
 
 The service worker (`lib/public/sw.js`) handles incoming pushes and routes the user back to the right session on tap.
 
