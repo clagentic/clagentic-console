@@ -192,20 +192,30 @@ test("confirm updates are throttled into one write", function () {
   assert.equal(writes, 2);
 });
 
-test("a failed write after a confirm keeps it dirty and retries", async function () {
-  var fail = true;
-  var writes = 0;
+test("a failed write after a confirm keeps it dirty and retries the confirmedAt", async function () {
+  var fail = false;
+  var writes = [];
   var fake = {
     mkdirSync: function () {},
-    writeFileSync: function () { writes++; if (fail) throw new Error("disk full"); },
+    writeFileSync: function (f, data) {
+      if (fail) throw new Error("disk full");
+      writes.push(JSON.parse(data));
+    },
     renameSync: function () {},
   };
   var s = createUsageStore({ file: "/x/u.json", fs: fake, throttleMs: 5, log: function () {} });
   ev(s, {}, NOW);
   s.flush();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].vendors.claude.five_hour.confirmedAt, null);
+  fail = true;
+  assert.equal(s.confirm("claude", WHO, { now: NOW + MIN }), true);
+  s.flush();
+  assert.equal(writes.length, 1, "the failing write persisted nothing");
   fail = false;
-  await new Promise(function (r) { setTimeout(r, 40); });
-  assert.ok(writes >= 2);
+  await new Promise(function (r) { setTimeout(r, 60); });
+  assert.equal(writes.length, 2, "the retry wrote after the failure cleared");
+  assert.equal(writes[1].vendors.claude.five_hour.confirmedAt, new Date(NOW + MIN).toISOString());
 });
 
 test("__proto__ and inherited names are refused by confirm and endProcess", function () {
@@ -267,16 +277,16 @@ test("processor: rate_limit logs type and utilization; result confirms only an e
     var emitting = makeSession("claude", "a1", qi);
     var silent = makeSession("claude", "b1", {});
     proc.processSDKMessage(emitting, { yokeType: "rate_limit", rateLimitSource: "claude-cli:rate_limit_event", rateLimitInfo: { status: "allowed", rateLimitType: "seven_day", utilization: 0.31, resetsAt: FUTURE } });
-    proc.processSDKMessage(silent, { yokeType: "result", cost: 0.01 });
+    proc.processSDKMessage(silent, { yokeType: "result", subtype: "success", cost: 0.01 });
     var before = shared.snapshot({ vendorIds: ["claude"] }).vendors.claude.buckets.seven_day;
     assert.equal(before.confirmedAt, null);
-    proc.processSDKMessage(emitting, { yokeType: "result", cost: 0.01 });
+    proc.processSDKMessage(emitting, { yokeType: "result", subtype: "success", cost: 0.01 });
     var after = shared.snapshot({ vendorIds: ["claude"] }).vendors.claude.buckets.seven_day;
     assert.ok(after.confirmedAt);
     // a replaced process (new queryInstance) confirms nothing
     var restarted = makeSession("claude", "a1", {});
     var c0 = after.confirmedAt;
-    proc.processSDKMessage(restarted, { yokeType: "result", cost: 0.01 });
+    proc.processSDKMessage(restarted, { yokeType: "result", subtype: "success", cost: 0.01 });
     assert.equal(shared.snapshot({ vendorIds: ["claude"] }).vendors.claude.buckets.seven_day.confirmedAt, c0);
   } finally {
     console.log = orig;
@@ -285,6 +295,31 @@ test("processor: rate_limit logs type and utilization; result confirms only an e
   var l = lines.filter(function (x) { return x.indexOf("[sdk-bridge] rate_limit_event") === 0; });
   assert.equal(l.length, 1);
   assert.match(l[0], /rateLimitType=seven_day utilization=0\.31 /);
+});
+
+test("processor: error and interrupted results confirm nothing; a success from the same process does", function () {
+  var shared = require("../lib/usage-store");
+  shared.reset();
+  var orig = console.log;
+  var origErr = console.error;
+  console.log = function () {};
+  console.error = function () {};
+  try {
+    var proc = makeProcessor("claude");
+    var s = makeSession("claude", "e1", {});
+    var bucket = function () { return shared.snapshot({ vendorIds: ["claude"] }).vendors.claude.buckets.five_hour; };
+    proc.processSDKMessage(s, { yokeType: "rate_limit", rateLimitInfo: { status: "allowed", rateLimitType: "five_hour", utilization: 0.2, resetsAt: FUTURE } });
+    ["error_during_execution", "error_max_turns", "interrupted", undefined].forEach(function (sub) {
+      proc.processSDKMessage(s, { yokeType: "result", subtype: sub, cost: 0.01, errors: ["x"] });
+      assert.equal(bucket().confirmedAt, null, "subtype " + sub + " must not confirm");
+    });
+    proc.processSDKMessage(s, { yokeType: "result", subtype: "success", cost: 0.01 });
+    assert.ok(bucket().confirmedAt);
+  } finally {
+    console.log = orig;
+    console.error = origErr;
+    shared.reset();
+  }
 });
 
 test("processor: a non-Claude vendor is neither tracked nor confirmed by result", function () {
@@ -297,7 +332,7 @@ test("processor: a non-Claude vendor is neither tracked nor confirmed by result"
     var qi = {};
     var s = makeSession("codex", "c1", qi);
     proc.processSDKMessage(s, { yokeType: "rate_limit", rateLimitInfo: { status: "allowed", rateLimitType: "five_hour", utilization: 0.2, resetsAt: FUTURE } });
-    proc.processSDKMessage(s, { yokeType: "result", cost: 0.01 });
+    proc.processSDKMessage(s, { yokeType: "result", subtype: "success", cost: 0.01 });
     var v = shared.snapshot({ vendorIds: ["codex"] }).vendors.codex;
     assert.equal(v.buckets.five_hour.confirmedAt, null);
     assert.equal(v.freshness.activeSessions, 0);
@@ -307,7 +342,47 @@ test("processor: a non-Claude vendor is neither tracked nor confirmed by result"
   }
 });
 
-test("sdk-bridge ends the session's process entry when its query ends", function () {
-  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "sdk-bridge.js"), "utf8");
-  assert.match(src, /usageStore\.endProcess\(session\.vendor \|\| \(adapter && adapter\.vendor\) \|\| "claude", session\.localId, myQueryInstance\)/);
+test("sdk-bridge: when the query stream ends, the process can no longer confirm", async function () {
+  var shared = require("../lib/usage-store");
+  shared.reset();
+  var modPath = require.resolve("../lib/sdk-bridge");
+  delete require.cache[modPath];
+  var { createSDKBridge } = require("../lib/sdk-bridge");
+  var sm = {
+    sessions: new Map(), currentModel: null, currentPermissionMode: null, currentEffort: null,
+    currentBetas: [], modelsByVendor: {}, availableVendors: [], installedVendors: [], defaultVendor: "claude",
+    saveSessionFile: function () {}, broadcastSessionList: function () {},
+    getActiveSession: function () { return null; }, setSlashCommandsForVendor: function () {},
+    sendAndRecord: function () {}, sendToSession: function () {},
+  };
+  var bridge = createSDKBridge({
+    cwd: "/tmp", slug: "t", sessionManager: sm, send: function () {},
+    adapter: { vendor: "claude" }, adapters: {}, onProcessingChanged: function () {},
+  });
+  var event = { yokeType: "rate_limit", rateLimitInfo: { status: "allowed", rateLimitType: "five_hour", utilization: 0.2, resetsAt: FUTURE } };
+  var queryInstance = {};
+  queryInstance[Symbol.asyncIterator] = function () {
+    var sent = false;
+    return { next: function () {
+      if (sent) return Promise.resolve({ done: true, value: undefined });
+      sent = true;
+      return Promise.resolve({ done: false, value: event });
+    } };
+  };
+  var session = {
+    localId: "q1", vendor: "claude", queryInstance: queryInstance, messageQueue: null, abortController: null,
+    isProcessing: false, cliSessionId: null, history: [], blocks: {}, sentToolResults: {},
+    pendingPermissions: {}, pendingAskUser: {}, pendingElicitations: {}, activeTaskToolIds: {},
+    taskIdMap: {}, singleTurn: false, destroying: false, lastActivityAt: Date.now(),
+  };
+  var orig = console.log;
+  console.log = function () {};
+  try {
+    await bridge.processQueryStream(session);
+    assert.equal(shared.snapshot({ vendorIds: ["claude"] }).vendors.claude.buckets.five_hour.state !== "unknown", true, "the event was recorded");
+    assert.equal(shared.confirm("claude", { sessionLocalId: "q1", processKey: queryInstance }), false);
+  } finally {
+    console.log = orig;
+    shared.reset();
+  }
 });
