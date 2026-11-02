@@ -66,3 +66,33 @@ test("nothing is offered when the server already holds the user's preferences", 
   c.mod.handleNotificationPrefs(prefsMsg({ known: true }));
   assert.deepEqual(c.sent, []);
 });
+
+test("a notification chimes only while the tab is hidden and the type's sound preference is on", async function () {
+  var c = await load();
+  var reminder = { type: "permission_reminder", category: "approval_reminder" };
+  var turn = { type: "response_done", category: "turn_done" };
+  var request = { type: "permission_request", category: "approval" };
+  var soundOnForReminder = prefsMsg();
+  soundOnForReminder.prefs.sound.approval_reminder = true;
+  var defaults = prefsMsg();
+  ["turn_done", "approval", "approval_reminder", "loop", "messages", "system"].forEach(function (k) {
+    defaults.prefs.sound[k] = k === "turn_done";
+  });
+
+  c.mod.handleNotificationPrefs(defaults);
+  global.document.hidden = false;
+  assert.equal(c.mod.shouldChimeForNotification(reminder, true), false, "focused tab: no sound");
+  assert.equal(c.mod.shouldChimeForNotification(request, true), false, "focused tab: no sound");
+
+  global.document.hidden = true;
+  assert.equal(c.mod.shouldChimeForNotification(reminder, true), false, "hidden, defaults: a reminder is silent");
+  assert.equal(c.mod.shouldChimeForNotification(request, true), false, "hidden, defaults: a prompt is silent");
+  assert.equal(c.mod.shouldChimeForNotification(turn, true), false, "a finished turn plays its own chime, not this one");
+
+  c.mod.handleNotificationPrefs(soundOnForReminder);
+  assert.equal(c.mod.shouldChimeForNotification(reminder, true), true, "hidden, reminder sound on: a chime per reminder");
+  assert.equal(c.mod.shouldChimeForNotification(reminder, false), false, "the browser's own sound switch off: silent");
+  global.document.hidden = false;
+  assert.equal(c.mod.shouldChimeForNotification(reminder, true), false, "focused again: silent");
+  delete global.document.hidden;
+});
