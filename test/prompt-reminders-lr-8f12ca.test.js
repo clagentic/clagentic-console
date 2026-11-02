@@ -44,6 +44,7 @@ function world(opts) {
   var rem = reminders.createPromptReminders({
     notifications: nm,
     push: { sendPush: function (p) { pushes.push(p); }, sendPushToUser: function (u, p) { pushes.push(Object.assign({ toUser: u }, p)); } },
+    isMultiUser: opts.isMultiUser,
     getConfig: function () { return opts.config || null; },
     now: function () { return clock.t; },
     listSessions: function () {
@@ -279,4 +280,36 @@ test("a reminder is never kept across a restart and never touches the prompt", f
     assert.equal(state.notifications.filter(function (n) { return n.type === "permission_reminder"; }).length, 0);
     assert.ok(p.pending);
   } finally { w.done(); }
+});
+
+test("multi-user: a reminder for a session with no owner sends no push, and the banner and panel still carry it", function () {
+  var w = world({ isMultiUser: function () { return true; } });
+  try {
+    w.open(w.addSession(1), "Bash");
+    w.clock.t += 6 * MIN; w.rem.sweep(true);
+    assert.deepEqual(w.pushes, [], "a broadcast would reach every subscriber");
+    assert.equal(w.live().length, 1, "the in-app reminder is still raised");
+  } finally { w.done(); }
+});
+
+test("multi-user: an unreadable mode reads as multi-user, and an owned session still pushes to its owner", function () {
+  var w = world({ isMultiUser: function () { throw new Error("users file unreadable"); } });
+  try {
+    w.open(w.addSession(1), "Bash");
+    w.open(w.addSession(2, { ownerId: "alice" }), "Bash");
+    w.clock.t += 6 * MIN; w.rem.sweep(true);
+    assert.deepEqual(w.pushes.map(function (p) { return p.toUser; }), ["alice"]);
+  } finally { w.done(); }
+});
+
+test("single-user: a reminder for a session with no owner still pushes to every subscriber", function () {
+  [undefined, function () { return false; }].forEach(function (mode) {
+    var w = world({ isMultiUser: mode });
+    try {
+      w.open(w.addSession(1), "Bash");
+      w.clock.t += 6 * MIN; w.rem.sweep(true);
+      assert.equal(w.pushes.length, 1);
+      assert.equal(w.pushes[0].toUser, undefined, "a broadcast, not a push to one user");
+    } finally { w.done(); }
+  });
 });
