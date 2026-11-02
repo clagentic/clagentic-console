@@ -95,6 +95,8 @@ var ORIGINAL_CASE_LABELS = [
   "vendor_registry",
   // A session's Allow for session grants, for the revoke list.
   "session_grants",
+  // The user's per-type notification preferences, from the server.
+  "notification_prefs",
   // Withdraws a source's diagnostics once their condition has cleared.
   "diagnostic_retract",
   // The daemon's answer to a build-update restart click; frees the dimmed buttons.
