@@ -81,6 +81,20 @@ Everything console puts on a host is scoped to the product (see `CLAUDE.md` and 
 
 New projects go to the directory chosen by `lib/projects-dir.js`: `projectsDir` from `daemon.json` if set; else `~/clagentic-console-projects` if it exists; else a legacy directory (`~/clagentic-projects`, `~/clay-projects`) used in place; else `~/clagentic-console-projects`. In os-users mode: `/var/lib/clagentic-console/projects` if it exists, else a legacy `/var/clagentic/projects` used in place, else the former. Registered project paths, worktrees and session history are absolute-path keyed, so a project directory is never moved, renamed, copied or symlinked.
 
+### Session activity: one flag, one place that sets it per turn
+
+Whether a session is running a turn is the wire field `isProcessing`
+(`mapSessionForClient`, `lib/sessions.js`). Every surface reads that one
+value: the pickers, sidebar, mobile sheets and home hub through
+`sessionActivity` in `lib/public/modules/activity-state.js`, and the
+build-update confirm card through `collectInterruptions`
+(`lib/build-update-offer.js`). The flag is the registry's derived value
+(`lib/session-activity.js`) at turn boundaries: the SDK `result` handler first
+releases every token of the turn that is not a tracked background agent
+(`releaseTurnActivity`, `lib/sdk-message-processor.js`), so a tool call that
+never received its `tool_result` cannot hold an idle session "running" until
+the next query. A surface must not derive liveness from anything else.
+
 ### Agent-readable diagnostics over IPC
 
 Some server-side diagnostic probes (e.g. the activity-source divergence
