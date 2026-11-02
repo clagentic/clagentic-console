@@ -196,7 +196,7 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --remove <path>  Remove a project from the running daemon");
   console.log("       clagentic-console --list            List registered projects");
   console.log("       clagentic-console --activity-diagnostics  Print activity-divergence probe totals as JSON (agent-readable)");
-  console.log("       clagentic-console --usage  Print account usage per vendor and rate-limit bucket as JSON (agent-readable)");
+  console.log("       clagentic-console --usage  Print account usage per vendor and rate-limit bucket as JSON, with how fresh each reading is and why (agent-readable)");
   console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
   console.log("       clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|-> [--vendor <id>] [--agent <name>] [--name <session-name>] [--visibility shared|private] [--permission-mode <mode>] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Open a session and run a first prompt (prints JSON)");
   console.log("       clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) --prompt <text|-> [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Send input to a session, resuming it if needed (prints JSON; exit 3 ambiguous, 4 not found by address)");
@@ -226,7 +226,7 @@ for (var i = 0; i < args.length; i++) {
     console.log("  --remove <path>    Remove a project directory");
     console.log("  --list             List all registered projects");
     console.log("  --activity-diagnostics  Print activity-divergence probe totals as JSON");
-    console.log("  --usage            Print account usage per vendor and rate-limit bucket as JSON");
+    console.log("  --usage            Print account usage per vendor and rate-limit bucket as JSON, with freshness and why a reading is old");
     console.log("  --process-build-status  Print the running process's loaded build SHA as JSON");
     console.log("  --headless         Start daemon and exit immediately (implies --yes)");
     console.log("  --multi-user       Start in multi-user mode (use with --yes for headless)");
