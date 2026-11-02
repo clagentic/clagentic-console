@@ -67,7 +67,7 @@ graph TB
     P2 --- Sessions2
 ```
 
-The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`, `get_activity_diagnostics`, `open_session`, `send_session_input`, `list_sessions`, `schedule_input_create`, `schedule_input_list`, `schedule_input_delete`.
+The daemon is spawned with `detached: true` and survives CLI exit. Multiple CLI instances share one daemon. IPC commands include `add_project`, `remove_project`, `set_pin`, `set_keep_awake`, `shutdown`, `get_status`, `get_activity_diagnostics`, `get_usage`, `open_session`, `send_session_input`, `list_sessions`, `schedule_input_create`, `schedule_input_list`, `schedule_input_delete`.
 
 ### Supervised start: `clagentic-console daemon`
 
@@ -123,6 +123,10 @@ Samples carry no session-identifying field (`ts`, `rawIsProcessing`,
 path. See `lib/sdk-bridge.js`'s `buildActivityDiagnosticsResponse()` (the
 shared, unit-tested function both retrieval paths can call) and
 `lib/daemon.js`'s `get_activity_diagnostics` IPC case.
+
+### Account usage: `clagentic-console --usage`
+
+`lib/usage-store.js` keeps the last rate-limit event per `(vendor, bucket)` in daemon memory (bucket = the adapter's `rateLimitType`, verbatim). `lib/sdk-message-processor.js` records every `rate_limit` event; `--usage` reads it over the `get_usage` IPC command and prints JSON: per vendor and bucket `utilization` (null when the event carried none, never 0), `resetsAt`, `status`, `observedAt`, `ageSeconds`, `source` and `state` (`fresh`, `stale`, `expired`, `unknown`). `five_hour` and `seven_day` are always listed for each registered vendor, `unknown` until seen. Stale after 30 minutes by default; override with `CLAGENTIC_CONSOLE_USAGE_STALE_SECONDS`. Nothing is persisted: after a daemon restart every bucket reads `unknown` until the next event.
 
 ### Opening sessions and sending input from outside the browser
 
