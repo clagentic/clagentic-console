@@ -359,12 +359,14 @@ Only calls from a sender the console identified, an `extracted` sender (see [Who
 
 ### The prompt text is not always returned
 
-The ledger stores the full prompt (see below), and the same prompt is in the target session's history, so `list-outbound` returns it only to a caller who could read the target session. When it cannot, the call is listed with all its metadata, `prompt` is `null`, `promptWithheld` is `true` and `promptWithheldReason` says why.
+The ledger stores the full prompt (see below), and the same prompt is in the target session's own history. `list-outbound` returns the text to a caller who could already read that stored text, and withholds it otherwise. When it cannot, the call is listed with all its metadata, `prompt` is `null`, `promptWithheld` is `true` and `promptWithheldReason` says why.
+
+The socket is mode 0700 and the caller must be the daemon's own OS user. That user already owns, and can read, the history of every session that runs as it, so withholding the text from it would protect nothing.
 
 | Caller | Prompt text |
 |---|---|
-| Single-user mode: the daemon's OS user, on `daemon.sock` | Returned for every call. This caller is the owner and reads every session. |
-| Multi-user mode (and so os-users mode, which requires it): the daemon's OS user on `daemon.sock` | Withheld. That caller is an OS user, not one of the console's users, so no session access can be established for it. The metadata is still returned. |
+| The daemon's OS user on `daemon.sock`, in single-user or multi-user mode | Returned for every target whose session runs as the daemon's OS user, which is every target unless os-users mode is on. |
+| The daemon's OS user on `daemon.sock`, in os-users mode | Returned for a target that runs as the daemon's OS user. Withheld for a target that runs as another OS user, and for one the console no longer holds (its OS user cannot be established). The metadata is still returned. |
 | A console user (a future transport that authenticates one) | Returned for a target the user can read: they can access the project, and they own the session or it is shared. Withheld for another user's private session, for a project they cannot access, for a session the console no longer holds, and for a session that runs as another OS user. |
 
 ### Retention, location and privacy
@@ -374,8 +376,8 @@ The ledger is written by the daemon, one JSON line per request, when `send-input
 - **Where.** `~/.clagentic/console/outbound/` (the console data directory, mode 0700; files mode 0600). `sessions/<project>/<sender>.jsonl` holds identified senders, one file per sender, named by the vendor session id. `unattributed/` holds calls whose sender only named itself or nobody.
 - **What is stored.** For each request: time, verb, result and reason, message id, initiator, context note, the sender, the target and the **full prompt text**. The prompt is stored in the clear, as it is in the target session's history. Treat the directory like the session history: the same OS user can read it, and a backup of the console data directory contains it.
 - **How long.** 30 days by default. Older entries are deleted when the daemon starts and every six hours, and are never returned by `list-outbound` once expired.
-- **Configuration.** Set `outboundRetentionDays` in `~/.clagentic/console/daemon.json` to a whole number of days from 1 to 3650. `0` turns the ledger off: nothing is written and existing entries are deleted at the next prune. An invalid value is ignored (30 days apply) and a warning is logged. The value is read each time it is used, so a change needs no restart.
-- **Who may read it.** The files, by the daemon's OS user. `list-outbound`, over the daemon's owner-only socket, under the rule above.
+- **Configuration.** Set `outboundRetentionDays` in `~/.clagentic/console/daemon.json` to a whole number of days from 1 to 3650. `0` turns the ledger off: it stops recording and deletes the existing entries at the next prune, so the history already kept is lost. An invalid value is ignored (30 days apply) and a warning is logged. The value is read each time it is used, so a change needs no restart.
+- **Who may read it.** The files, by the daemon's OS user. `list-outbound`, over the daemon's owner-only socket, under the rule above: prompt text goes to a caller who can already read the stored text.
 
 ## Scheduled input
 

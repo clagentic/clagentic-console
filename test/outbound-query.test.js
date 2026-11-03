@@ -64,7 +64,7 @@ function build(opts) {
     onGetProjectAccess: function (slug) { return slug === "work" ? { visibility: "private", ownerId: "u-admin", allowedUsers: ["u-alice", "u-bob"] } : null; },
     isMultiUser: function () { return opts.multiUser === true; },
   });
-  var access = createOutboundAccess({ projectAccess: projectAccess, getProject: function (slug) { return slug === "work" ? project : null; } });
+  var access = createOutboundAccess({ projectAccess: projectAccess, getProject: function (slug) { return slug === "work" ? project : null; }, isOsUsers: function () { return opts.osUsers === true; } });
   var query = createOutboundQuery({ ledger: ledger, access: access, caller: opts.caller || { user: null, authenticated: true } });
   return { dir: dir, ledger: ledger, query: query, access: access };
 }
@@ -234,27 +234,36 @@ test("caller shape: the single-user owner also reads the prompt of a target the 
   assert.deepEqual(prompts(t.query.list({ sessionId: "cli-sender" })), ["to a removed project"]);
 });
 
-test("caller shape: in multi-user mode the daemon-owner socket is no console user, so metadata only, with the reason", function () {
+test("caller shape: in multi-user mode the daemon-owner socket reads the text of a target that runs as the daemon OS user", function () {
   var t = build({ multiUser: true });
   seedTargets(t);
   var res = t.query.list({ sessionId: "cli-sender" });
-  assert.equal(res.count, 3);
-  res.messages.forEach(function (m) {
-    assert.ok(withheld(m), JSON.stringify(m));
-    assert.match(m.promptWithheldReason, /multi-user/);
-    assert.equal(m.target.project, "work");
-    assert.equal(m.verb, "send_input");
-    assert.ok(m.ts);
-  });
-  assert.equal(JSON.stringify(res).indexOf("alice private"), -1);
-  assert.equal(JSON.stringify(res).indexOf("bob private"), -1);
+  assert.deepEqual(prompts(res).sort(), ["alice private", "bob private", "shared"]);
+  res.messages.forEach(function (m) { assert.equal("promptWithheld" in m, false); });
 });
 
-test("caller shape: os-users mode requires multi-user, so the socket caller sees metadata only there too", function () {
-  var project = workProject({ getLinuxUserForSession: function () { return "alice-os"; } });
-  var t = build({ multiUser: true, project: project });
+test("caller shape: in os-users mode the socket caller gets metadata only for a target that runs as another OS user", function () {
+  var project = workProject({ getLinuxUserForSession: function (s) { return s.localId === 100 ? "alice-os" : null; } });
+  var t = build({ multiUser: true, osUsers: true, project: project });
   seedTargets(t);
-  t.query.list({ sessionId: "cli-sender" }).messages.forEach(function (m) { assert.ok(withheld(m)); });
+  var res = t.query.list({ sessionId: "cli-sender" });
+  assert.equal(res.count, 3);
+  var byText = {};
+  res.messages.forEach(function (m) { byText[m.target.cliSessionId] = m; });
+  assert.ok(withheld(byText["cli-shared"]));
+  assert.match(byText["cli-shared"].promptWithheldReason, /another OS user/);
+  assert.equal(byText["cli-shared"].target.project, "work");
+  assert.equal(byText["cli-alice-private"].prompt, "alice private");
+  assert.equal(byText["cli-bob-private"].prompt, "bob private");
+  assert.equal(JSON.stringify(res).indexOf('"shared"'), -1);
+});
+
+test("caller shape: in os-users mode a target the console no longer holds is withheld from the socket caller", function () {
+  var t = build({ multiUser: true, osUsers: true });
+  t.ledger.record(entry({ target: { project: "gone", sessionId: "5" }, prompt: "to a removed project" }));
+  var m = t.query.list({ sessionId: "cli-sender" }).messages[0];
+  assert.ok(withheld(m));
+  assert.match(m.promptWithheldReason, /not held by the console/);
 });
 
 test("caller shape: a console user reads a prompt only for a target session canAccessSession lets them read", function () {
