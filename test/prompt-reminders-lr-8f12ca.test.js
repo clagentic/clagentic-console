@@ -92,10 +92,9 @@ test("schedule: 5, 15 and 30 minutes, then hourly", function () {
 });
 
 test("configuration: custom steps, off, and malformed values fall back to the defaults", function () {
-  var c = reminders.resolveSchedule({ scheduleMinutes: [1, 1.5], repeatMinutes: 2, tickSeconds: 1 });
+  var c = reminders.resolveSchedule({ scheduleMinutes: [1, 1.5], repeatMinutes: 2 });
   assert.deepEqual(c.offsetsMs, [60000, 90000]);
   assert.equal(c.repeatMs, 120000);
-  assert.equal(c.tickMs, 1000);
   assert.equal(reminders.resolveSchedule({ enabled: false }).enabled, false);
   assert.deepEqual(reminders.resolveSchedule({ scheduleMinutes: ["x", -1] }).offsetsMs, [5 * MIN, 15 * MIN, 30 * MIN]);
   assert.deepEqual(reminders.resolveSchedule({ scheduleMinutes: [] }).offsetsMs, [5 * MIN, 15 * MIN, 30 * MIN]);
@@ -338,4 +337,26 @@ test("single-user: a reminder for a session with no owner still pushes to every 
       assert.equal(w.pushes[0].toUser, undefined, "a broadcast, not a push to one user");
     } finally { w.done(); }
   });
+});
+
+test("the sweep tick is a constant: tickSeconds in config has no effect and no other numeric key exists", function () {
+  var delays = [];
+  var realSetInterval = global.setInterval;
+  global.setInterval = function (fn, ms) { delays.push(ms); return realSetInterval(fn, 1e9); };
+  var notes = { setReminderReconciler: function () {}, replaceReminder: function () {}, dismissReminder: function () {} };
+  var r = reminders.createPromptReminders({
+    notifications: notes,
+    listSessions: function () { return []; },
+    getConfig: function () { return { tickSeconds: 0.001 }; },
+  });
+  try {
+    r.start();
+  } finally {
+    r.stop();
+    global.setInterval = realSetInterval;
+  }
+  assert.deepEqual(delays, [reminders.SWEEP_TICK_MS]);
+  assert.equal(reminders.SWEEP_TICK_MS, 30000);
+  var keys = Object.keys(reminders.resolveSchedule({ tickSeconds: 0.001 })).sort();
+  assert.deepEqual(keys, ["enabled", "offsetsMs", "repeatMs"]);
 });
