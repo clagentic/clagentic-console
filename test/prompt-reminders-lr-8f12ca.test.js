@@ -92,13 +92,39 @@ test("schedule: 5, 15 and 30 minutes, then hourly", function () {
 });
 
 test("configuration: custom steps, off, and malformed values fall back to the defaults", function () {
-  var c = reminders.resolveSchedule({ scheduleMinutes: [0.5, 1], repeatMinutes: 2, tickSeconds: 1 });
-  assert.deepEqual(c.offsetsMs, [30000, 60000]);
+  var c = reminders.resolveSchedule({ scheduleMinutes: [1, 1.5], repeatMinutes: 2, tickSeconds: 1 });
+  assert.deepEqual(c.offsetsMs, [60000, 90000]);
   assert.equal(c.repeatMs, 120000);
   assert.equal(c.tickMs, 1000);
   assert.equal(reminders.resolveSchedule({ enabled: false }).enabled, false);
   assert.deepEqual(reminders.resolveSchedule({ scheduleMinutes: ["x", -1] }).offsetsMs, [5 * MIN, 15 * MIN, 30 * MIN]);
   assert.deepEqual(reminders.resolveSchedule({ scheduleMinutes: [] }).offsetsMs, [5 * MIN, 15 * MIN, 30 * MIN]);
+});
+
+test("configured intervals below one whole minute fall back to the default with one warning naming the key", function () {
+  var warnings = [];
+  var realWarn = console.warn;
+  console.warn = function (m) { warnings.push(String(m)); };
+  try {
+    [1e-6, 0.001, 0, -5, "5", null, NaN].forEach(function (bad) {
+      var r = reminders.resolveSchedule({ repeatMinutes: bad });
+      assert.equal(r.repeatMs, 60 * MIN, "repeat falls back for " + String(bad));
+      assert.ok(isFinite(reminders.dueCount(200 * MIN, r)), "count stays finite for " + String(bad));
+      var o = reminders.resolveSchedule({ scheduleMinutes: [bad, 10] });
+      assert.deepEqual(o.offsetsMs, [5 * MIN, 15 * MIN, 30 * MIN], "offsets fall back for " + String(bad));
+    });
+    assert.equal(reminders.dueCount(200 * MIN, reminders.resolveSchedule({ repeatMinutes: 1e-6 })), 5);
+    assert.ok(warnings.some(function (w) { return /repeatMinutes/.test(w); }));
+    assert.ok(warnings.some(function (w) { return /scheduleMinutes/.test(w); }));
+    var before = warnings.length;
+    reminders.resolveSchedule({ repeatMinutes: 1e-6 });
+    reminders.resolveSchedule({ repeatMinutes: 1e-6 });
+    assert.equal(warnings.length, before, "the same bad value warns once, not per sweep");
+    var good = reminders.resolveSchedule({ scheduleMinutes: [1, 2], repeatMinutes: 1 });
+    assert.deepEqual(good.offsetsMs, [MIN, 2 * MIN]);
+    assert.equal(good.repeatMs, MIN);
+    assert.equal(warnings.length, before, "a valid value warns nothing");
+  } finally { console.warn = realWarn; }
 });
 
 test("a background agent's prompt left unanswered gets reminders at the schedule, one replacing the last", function () {
