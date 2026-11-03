@@ -220,12 +220,16 @@ test("stillOwned accepts the process it found and refuses a pid whose start time
 // The stop path itself, with the scan, identity check and signals faked so no
 // real process is touched: a pid whose identity fails between SIGTERM and the
 // SIGKILL step must never receive the SIGKILL.
-function fakeStop(ownedFn) {
+// `aliveFn` defaults to the identity answer; a case passes its own to model a
+// process that is still alive while its identity check already fails.
+function fakeStop(ownedFn, aliveFn) {
   var signals = [];
   var t0 = Date.now();
   var io = {
     scan: function () { return { scanned: true, procs: [{ pid: 4242, start: "1" }] }; },
     owned: function () { return ownedFn(Date.now() - t0); },
+    alive: function () { return (aliveFn || ownedFn)(Date.now() - t0); },
+    startOf: function () { return "1"; },
     signal: function (pids, sig) { signals.push(sig + ":" + pids.join(",")); },
   };
   return { io: io, signals: signals };
@@ -243,6 +247,24 @@ test("stopOwned escalates to SIGKILL for a pid that is still the owned process, 
   var survivors = await stopOwned("tok", 100, function () {}, fake.io);
   assert.deepEqual(survivors, [4242]);
   assert.deepEqual(fake.signals, ["SIGTERM:4242", "SIGKILL:4242"]);
+});
+
+test("stopOwned keeps waiting while the pid is alive even though the identity check already fails", async function () {
+  // An exiting process has released its memory, so its environ reads empty
+  // (identity false) while kill(pid, 0) still succeeds.
+  var fake = fakeStop(function () { return false; }, function (elapsed) { return elapsed < 80; });
+  var t0 = Date.now();
+  var survivors = await stopOwned("tok", 400, function () {}, fake.io);
+  assert.deepEqual(survivors, []);
+  assert.ok(Date.now() - t0 >= 80, "the wait lasted until the pid was gone");
+  assert.deepEqual(fake.signals, ["SIGTERM:4242"], "no SIGKILL for a pid whose identity check fails");
+});
+
+test("stopOwned reports a pid that stays alive past the bound without ever SIGKILLing it when identity fails", async function () {
+  var fake = fakeStop(function () { return false; }, function () { return true; });
+  var survivors = await stopOwned("tok", 100, function () {}, fake.io);
+  assert.deepEqual(survivors, [4242]);
+  assert.deepEqual(fake.signals, ["SIGTERM:4242"]);
 });
 
 // --- no /proc ---
