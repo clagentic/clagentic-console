@@ -89,6 +89,8 @@ function heldPromptIds(session) {
  * @param {string} [opts.cliSessionId] - session to adopt from disk.
  * @param {object} [opts.pushModule] - receives the bridge's push sends.
  * @param {string} [opts.projectName] - the project's display name, for prompt labels.
+ * @param {boolean} [opts.multiUser] - the daemon's stored mode. Default false:
+ *   the harness wires a single-user daemon (see handlerContext.usersModule).
  */
 async function createServer(opts) {
   opts = opts || {};
@@ -96,6 +98,9 @@ async function createServer(opts) {
   // Older lib/ checkouts (CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB) read the un-scoped name.
   process.env.CLAGENTIC_HOME = home;
   process.env.CLAGENTIC_CONSOLE_HOME = home;
+  // The stored mode lib/push-audience.js reads; an absent file reads as multi-user.
+  fs.mkdirSync(path.join(home, "console"), { recursive: true });
+  fs.writeFileSync(path.join(home, "console", "users.json"), JSON.stringify({ multiUser: opts.multiUser === true, users: [], invites: [] }));
   purgeLib();
 
   // The project's connected sockets, one collection for the transport and
