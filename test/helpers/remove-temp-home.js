@@ -87,13 +87,19 @@ function signalAll(pids, signal) {
 }
 
 // Stops what the harness started and the test holds no handle to. Only a
-// process that carries this instance's token is signalled, and it is checked
-// again right before SIGKILL. Returns the pids that survived, so the caller
-// fails loudly rather than skipping them.
+// process that carries this instance's token is signalled. The wait ends when
+// each pid is gone (not alive, or its start time changed, meaning the pid was
+// reused), never when the identity check turns false: an exiting process has
+// already released its memory, so its environ reads empty while it is still
+// alive. The identity check is the guard immediately before SIGKILL only.
+// Returns the pids that survived, so the caller fails loudly rather than
+// skipping them.
 async function stopOwned(token, ms, log, io) {
-  // `io` lets a test observe the signals and fake the identity check; callers
-  // outside this file's tests pass nothing.
-  var deps = Object.assign({ scan: ownedProcesses, owned: stillOwned, signal: signalAll }, io);
+  // `io` lets a test observe the signals and fake liveness and identity;
+  // callers outside this file's tests pass nothing.
+  var deps = Object.assign({
+    scan: ownedProcesses, owned: stillOwned, signal: signalAll, alive: pidAlive, startOf: startTimeOf,
+  }, io);
   var found = deps.scan(token);
   if (!found.scanned) {
     log("token scan skipped: /proc cannot be listed on this platform");
@@ -103,17 +109,22 @@ async function stopOwned(token, ms, log, io) {
   if (procs.length === 0) return [];
   function owned(p) { return deps.owned(p, token); }
   function pidOf(p) { return p.pid; }
+  function present(p) { return deps.alive(p.pid) && deps.startOf(p.pid) === p.start; }
   deps.signal(procs.map(pidOf), "SIGTERM");
   var end = Date.now() + ms;
   var killedAt = Date.now() + ms / 2;
   var killed = false;
   while (Date.now() < end) {
-    procs = procs.filter(owned);
+    procs = procs.filter(present);
     if (procs.length === 0) return [];
-    if (!killed && Date.now() >= killedAt) { deps.signal(procs.map(pidOf), "SIGKILL"); killed = true; }
+    if (!killed && Date.now() >= killedAt) {
+      var killable = procs.filter(owned).map(pidOf);
+      if (killable.length > 0) deps.signal(killable, "SIGKILL");
+      killed = true;
+    }
     await sleep(POLL_MS);
   }
-  return procs.filter(owned).map(pidOf);
+  return procs.filter(present).map(pidOf);
 }
 
 // A child is a ChildProcess the test spawned, or a bare pid recorded elsewhere
