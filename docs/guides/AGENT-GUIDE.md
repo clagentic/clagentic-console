@@ -5,6 +5,7 @@ Agents are first-class users of Clagentic: Console. A script, a CI job or an AI 
 - `clagentic-console open-session` opens a new session and runs its first prompt.
 - `clagentic-console send-input` sends input to an existing session, and resumes it if its runtime was reaped.
 - `clagentic-console list-sessions` lists the console's sessions with their state and any prompts they are waiting on.
+- `clagentic-console list-outbound` lists what one session sent out with `send-input` and `open-session`: the target, the prompt, the time and the initiator. It only reads.
 - `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
 
 This guide is the canonical reference for these verbs. [architecture.md](./architecture.md) describes how they are built; where the two ever differ, fix the difference in the same change. Writers who cannot run the CLI can use the file drop, covered in [EXTERNAL-TRIGGERS.md](./EXTERNAL-TRIGGERS.md) and not repeated here.
@@ -19,6 +20,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [open-session](#open-session)
 - [send-input](#send-input)
 - [list-sessions](#list-sessions)
+- [list-outbound](#list-outbound)
 - [Scheduled input](#scheduled-input)
 - [Delivery semantics](#delivery-semantics)
 - [Results and exit codes](#results-and-exit-codes)
@@ -300,6 +302,81 @@ Result:
 
 `pendingPrompts` tells a session that is waiting on an answer from one that is working: a session blocked on a prompt is still `live`. Each element is `{ requestId, kind, tool, summary, ageSeconds }`. `kind` is the prompt kind (`permission`, `plan`, `ask_user`, `elicitation`), `tool` the tool name or `null`, `ageSeconds` the whole seconds since the prompt opened, and `summary` the one-line text the permission banner already shows for a tool call (empty for other kinds). Tool input beyond that line, a question's or form's text and a plan's content are never included. The list is read from the daemon's memory; an answered, expired or cancelled prompt is gone from the next call. An older daemon's entries lack the field: treat a missing `pendingPrompts` as "not reported", not as "nothing pending".
 
+## list-outbound
+
+Read-only. Lists the calls one session made with `send-input` and `open-session`, oldest first: where each went, what was said, when, and why it was sent. It answers "what did that session tell the others", which no other verb does: a delivered prompt is in the target's own history, but nothing there gathers one sender's calls, and a refused call leaves nothing there at all. It returns the outbound calls only, never any other part of a session's transcript.
+
+```
+clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>] [--kind sent|opens]
+```
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--session <id>` | yes | The sending session: its console session id or the id its vendor assigned. Prefer the vendor id: a console id is renumbered by a daemon restart, so an old call can carry a number a different session holds now. |
+| `--project <slug>` | no | Only the sender in this project. A console id is scoped to a project, so an id that senders in several projects hold is `ambiguous` (exit 3) until this is given. |
+| `--since <dur>` | no | Only calls from this long ago: `90` (minutes), `10m`, `2h`, `1h30m`, `3d`. |
+| `--kind sent\|opens` | no | `sent` for `send-input` calls, `opens` for `open-session` calls. Default: both. |
+
+```bash
+clagentic-console list-outbound --session 4f1c9d2e-7a3b-4c55-9e0a-1b2c3d4e5f60
+clagentic-console list-outbound --session 12 --project my-project --since 2h --kind sent
+```
+
+Result:
+
+```json
+{
+  "ok": true,
+  "result": "listed",
+  "retentionDays": 30,
+  "session": { "id": "12", "project": "my-project" },
+  "count": 1,
+  "messages": [
+    {
+      "ts": "2026-03-01T20:01:12.345Z",
+      "verb": "send_input",
+      "kind": "sent",
+      "result": "delivered",
+      "messageId": "0b7f0e0a-8f43-4c1e-9d55-2a6a0c4f7b11",
+      "initiator": "trigger",
+      "contextNote": "build passed",
+      "sender": { "kind": "extracted", "attribution": "extracted", "name": "builder@my-project", "project": "my-project", "sessionId": "12", "cliSessionId": "4f1c9d2e-7a3b-4c55-9e0a-1b2c3d4e5f60", "agent": "builder" },
+      "target": { "project": "my-project", "sessionId": "9", "cliSessionId": "a8d2...", "agent": "reviewer", "address": "reviewer@my-project" },
+      "prompt": "The build passed. Re-run your checks."
+    }
+  ],
+  "unattributedCount": 0,
+  "unattributed": [],
+  "unattributedNote": "..."
+}
+```
+
+Each message carries `ts`, `verb` (`send_input` or `open_session`), `kind` (`sent` or `opens`), `result` (the same vocabulary as the send itself: `delivered`, `resumed-and-delivered`, `opened`, `refused`, `not-found`, `ambiguous`, `error`) and `reason` when it did not go through, `messageId` for a delivery (the same id the target's history and the per-message sender record carry), `initiator`, `contextNote`, the `sender`, the `target` (project, console and vendor session ids, agent, the `address` or requested id the caller gave) and the `prompt`. A call that was refused or failed is listed too, with its reason.
+
+### Whose calls are listed
+
+Only calls from a sender the console identified, an `extracted` sender (see [Who sent it](#who-sent-it)), are filed under that session. A call that only named itself with `--from`, or named nobody, cannot be tied to a session reliably, so it is never listed as the session's own. If such a call gave `--from-session` with this session's vendor id, it appears in `unattributed` instead, with `attribution: "unverified"`. That list is a lead, not a record of this session. No sender is ever shown as verified.
+
+### The prompt text is not always returned
+
+The ledger stores the full prompt (see below), and the same prompt is in the target session's history, so `list-outbound` returns it only to a caller who could read the target session. When it cannot, the call is listed with all its metadata, `prompt` is `null`, `promptWithheld` is `true` and `promptWithheldReason` says why.
+
+| Caller | Prompt text |
+|---|---|
+| Single-user mode: the daemon's OS user, on `daemon.sock` | Returned for every call. This caller is the owner and reads every session. |
+| Multi-user mode (and so os-users mode, which requires it): the daemon's OS user on `daemon.sock` | Withheld. That caller is an OS user, not one of the console's users, so no session access can be established for it. The metadata is still returned. |
+| A console user (a future transport that authenticates one) | Returned for a target the user can read: they can access the project, and they own the session or it is shared. Withheld for another user's private session, for a project they cannot access, for a session the console no longer holds, and for a session that runs as another OS user. |
+
+### Retention, location and privacy
+
+The ledger is written by the daemon, one JSON line per request, when `send-input` or `open-session` is answered (by the CLI or the file drop): at the delivery, or when the request is refused, not found, ambiguous or fails. It is not written for the console's own scheduled firings, which are not a session's calls.
+
+- **Where.** `~/.clagentic/console/outbound/` (the console data directory, mode 0700; files mode 0600). `sessions/<project>/<sender>.jsonl` holds identified senders, one file per sender, named by the vendor session id. `unattributed/` holds calls whose sender only named itself or nobody.
+- **What is stored.** For each request: time, verb, result and reason, message id, initiator, context note, the sender, the target and the **full prompt text**. The prompt is stored in the clear, as it is in the target session's history. Treat the directory like the session history: the same OS user can read it, and a backup of the console data directory contains it.
+- **How long.** 30 days by default. Older entries are deleted when the daemon starts and every six hours, and are never returned by `list-outbound` once expired.
+- **Configuration.** Set `outboundRetentionDays` in `~/.clagentic/console/daemon.json` to a whole number of days from 1 to 3650. `0` turns the ledger off: nothing is written and existing entries are deleted at the next prune. An invalid value is ignored (30 days apply) and a warning is logged. The value is read each time it is used, so a change needs no restart.
+- **Who may read it.** The files, by the daemon's OS user. `list-outbound`, over the daemon's owner-only socket, under the rule above.
+
 ## Scheduled input
 
 Scheduled input is text the console sends into one session at a later time. It is a feature for people and agents alike: a person uses the clock button next to the message box, an agent or a script uses `clagentic-console schedule-input`. Both make the same record, show in the same list and use the same firing path, so a schedule made in the browser appears in the CLI's list and the reverse.
@@ -520,6 +597,7 @@ This is a suggestion only. Clagentic: Console never reads or writes your Claude 
   "permissions": {
     "allow": [
       "Bash(clagentic-console list-sessions *)",
+      "Bash(clagentic-console list-outbound *)",
       "Bash(clagentic-console send-input *)",
       "Bash(clagentic-console open-session *)",
       "Bash(clagentic-console schedule-input create *)",
@@ -530,7 +608,7 @@ This is a suggestion only. Clagentic: Console never reads or writes your Claude 
 }
 ```
 
-`list-sessions` and `schedule-input list` only read. `send-input` and `open-session` start work in other sessions, so allow them only where you want agents to be able to do that. `schedule-input create` does too, later: the text it schedules is sent into the session you name, which can be any session of the project, so allow it only where you would allow `send-input`. `schedule-input delete` cancels a schedule, including one a person made in the browser.
+`list-sessions`, `list-outbound` and `schedule-input list` only read. `list-outbound` returns prompt text other sessions were sent (see [list-outbound](#list-outbound)), so allow it only where an agent may see that. `send-input` and `open-session` start work in other sessions, so allow them only where you want agents to be able to do that. `schedule-input create` does too, later: the text it schedules is sent into the session you name, which can be any session of the project, so allow it only where you would allow `send-input`. `schedule-input delete` cancels a schedule, including one a person made in the browser.
 
 An allowed `send-input` or `open-session` lets the calling agent start work in another session, and that session may run with broader tool permissions than the caller (a different named agent, or a plain session). The rules therefore let an agent act at the target session's level. Allow them only for agents you trust to do that.
 
