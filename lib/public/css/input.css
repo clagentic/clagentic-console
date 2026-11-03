@@ -1388,3 +1388,96 @@ body.wide-view .scheduled-msg-wrap .scheduled-msg-countdown {
   font-size: inherit;
   color: inherit;
 }
+
+/* Collapsible text: a pending scheduled input and a long fired one. Collapsed
+   shows the first line only, cut by CSS so the text itself stays whole. */
+.collapsible-text.is-collapsed .collapsible-full { display: none; }
+.collapsible-text:not(.is-collapsed):not(.collapsible-single) .collapsible-preview { display: none; }
+.collapsible-text.is-collapsed .collapsible-preview {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.collapsible-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.collapsible-toggle:hover { text-decoration: underline; }
+.collapsible-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.collapsible-toggle-fired { align-self: flex-start; margin-top: 2px; }
+
+/* A collapsed pending card is one row: send time and actions, then the first
+   line taking the rest of the width. Bubble view and channel view. */
+.scheduled-msg-wrap.is-collapsed:not(.dm-bubble-content) {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.scheduled-msg-wrap.is-collapsed .scheduled-msg-meta { order: -1; flex: 0 1 auto; min-width: 0; padding-right: 0; }
+.scheduled-msg-wrap.is-collapsed .scheduled-msg-countdown {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scheduled-msg-wrap.is-collapsed .bubble {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  padding: 4px 12px;
+}
+.scheduled-msg-wrap.is-collapsed .dm-bubble-content {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.scheduled-msg-wrap.is-collapsed .dm-bubble-header { flex: 0 1 auto; min-width: 0; }
+
+.scheduled-msg-wrap.is-collapsed .scheduled-msg-send-now,
+.scheduled-msg-wrap.is-collapsed .scheduled-msg-cancel,
+.scheduled-msg-wrap.is-collapsed .scheduled-msg-sep { white-space: nowrap; flex: none; }
+.scheduled-msg-wrap.is-collapsed .scheduled-msg-actions { flex: none; margin-left: 0; }
+.scheduled-msg-wrap.is-collapsed .scheduled-msg-badge { min-width: 0; flex: 0 1 auto; padding: 3px 8px; }
+.scheduled-msg-wrap.is-collapsed .collapsible-toggle { flex: none; }
+
+/* Phone widths: index.html pins the narrow-screen column layout of user rows
+   with !important, so the collapsed card overrides it the same way, scoped to
+   itself. A 390px row cannot hold the send time, three actions and a readable
+   prompt, so the card is two compact rows: send time and actions, then the
+   prompt's first line across the full width. */
+@media (max-width: 768px) {
+  body.wide-view .msg-user.scheduled-msg-wrap.is-collapsed {
+    gap: 0 !important;
+    align-items: stretch !important;
+  }
+  body.wide-view .msg-user.scheduled-msg-wrap.is-collapsed > .dm-bubble-avatar { display: none !important; }
+  body.wide-view .msg-user.scheduled-msg-wrap.is-collapsed .dm-bubble-content {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 2px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  body.wide-view .msg-user.scheduled-msg-wrap.is-collapsed .dm-bubble-name { display: none; }
+  body.wide-view .msg-user.scheduled-msg-wrap.is-collapsed .dm-bubble-header { flex-wrap: nowrap; }
+  body.wide-view .msg-user.scheduled-msg-wrap.is-collapsed .bubble {
+    flex: none !important;
+    max-width: 100% !important;
+    width: auto !important;
+    padding: 0 !important;
+    background: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+}
