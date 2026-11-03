@@ -45,6 +45,7 @@ function world(opts) {
     notifications: nm,
     push: { sendPush: function (p) { pushes.push(p); }, sendPushToUser: function (u, p) { pushes.push(Object.assign({ toUser: u }, p)); } },
     isMultiUser: opts.isMultiUser,
+    listAdmins: opts.listAdmins,
     getConfig: function () { return opts.config || null; },
     now: function () { return clock.t; },
     listSessions: function () {
@@ -307,23 +308,42 @@ test("a reminder is never kept across a restart and never touches the prompt", f
   } finally { w.done(); }
 });
 
-test("multi-user: a reminder for a session with no owner sends no push, and the banner and panel still carry it", function () {
-  var w = world({ isMultiUser: function () { return true; } });
+test("multi-user: a reminder for a session with no owner goes to the admins only, push and banner", function () {
+  var w = world({ isMultiUser: function () { return true; }, listAdmins: function () { return ["admin-1"]; } });
   try {
     w.open(w.addSession(1), "Bash");
     w.clock.t += 6 * MIN; w.rem.sweep(true);
-    assert.deepEqual(w.pushes, [], "a broadcast would reach every subscriber");
+    assert.deepEqual(w.pushes.map(function (p) { return p.toUser; }), ["admin-1"]);
     assert.equal(w.live().length, 1, "the in-app reminder is still raised");
+    var banner = w.sent.filter(function (m) { return m.type === "notification_created" && m.notification.type === "permission_reminder"; });
+    assert.deepEqual(banner.map(function (m) { return m.toUser; }), ["admin-1"], "a non-admin is sent no title");
+    var seen = [];
+    w.nm.sendConnectionState({ _clagenticUser: { id: "bob" } }, function (ws, m) { seen.push(m); });
+    function reminders(m) { return m.notifications.filter(function (n) { return n.type === "permission_reminder"; }); }
+    assert.equal(reminders(seen[0]).length, 0, "nor on connect");
+    seen = [];
+    w.nm.sendConnectionState({ _clagenticUser: { id: "admin-1" } }, function (ws, m) { seen.push(m); });
+    assert.equal(reminders(seen[0]).length, 1);
+  } finally { w.done(); }
+});
+
+test("multi-user: a reminder for a session with no owner and no admin reaches no one", function () {
+  var w = world({ isMultiUser: function () { return true; }, listAdmins: function () { return []; } });
+  try {
+    w.open(w.addSession(1), "Bash");
+    w.clock.t += 6 * MIN; w.rem.sweep(true);
+    assert.deepEqual(w.pushes, []);
+    assert.deepEqual(w.sent.filter(function (m) { return m.type === "notification_created" && m.notification.type === "permission_reminder"; }), []);
   } finally { w.done(); }
 });
 
 test("multi-user: an unreadable mode reads as multi-user, and an owned session still pushes to its owner", function () {
-  var w = world({ isMultiUser: function () { throw new Error("users file unreadable"); } });
+  var w = world({ isMultiUser: function () { throw new Error("users file unreadable"); }, listAdmins: function () { return ["admin-1"]; } });
   try {
     w.open(w.addSession(1), "Bash");
     w.open(w.addSession(2, { ownerId: "alice" }), "Bash");
     w.clock.t += 6 * MIN; w.rem.sweep(true);
-    assert.deepEqual(w.pushes.map(function (p) { return p.toUser; }), ["alice"]);
+    assert.deepEqual(w.pushes.map(function (p) { return p.toUser; }).sort(), ["admin-1", "alice"]);
   } finally { w.done(); }
 });
 

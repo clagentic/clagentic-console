@@ -91,6 +91,7 @@ function heldPromptIds(session) {
  * @param {string} [opts.projectName] - the project's display name, for prompt labels.
  * @param {boolean} [opts.multiUser] - the daemon's stored mode. Default false:
  *   the harness wires a single-user daemon (see handlerContext.usersModule).
+ * @param {object[]} [opts.users] - the stored users ({ id, username, role }).
  */
 async function createServer(opts) {
   opts = opts || {};
@@ -100,7 +101,7 @@ async function createServer(opts) {
   process.env.CLAGENTIC_CONSOLE_HOME = home;
   // The stored mode lib/push-audience.js reads; an absent file reads as multi-user.
   fs.mkdirSync(path.join(home, "console"), { recursive: true });
-  fs.writeFileSync(path.join(home, "console", "users.json"), JSON.stringify({ multiUser: opts.multiUser === true, users: [], invites: [] }));
+  fs.writeFileSync(path.join(home, "console", "users.json"), JSON.stringify({ multiUser: opts.multiUser === true, users: opts.users || [], invites: [] }));
   purgeLib();
 
   // The project's connected sockets, one collection for the transport and
