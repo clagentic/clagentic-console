@@ -1,0 +1,71 @@
+{
+  "total_count": 6,
+  "check_runs": [
+    {
+      "id": 125559840562,
+      "name": "test-gate",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-02T21:22:39Z",
+      "completed_at": "2026-11-02T21:22:43Z",
+      "check_suite": {
+        "id": 112535081242
+      }
+    },
+    {
+      "id": 125558720407,
+      "name": "test-gate",
+      "status": "completed",
+      "conclusion": "skipped",
+      "started_at": "2026-11-02T21:20:28Z",
+      "completed_at": "2026-11-02T21:20:27Z",
+      "check_suite": {
+        "id": 112535081439
+      }
+    },
+    {
+      "id": 125558719659,
+      "name": "test",
+      "status": "completed",
+      "conclusion": "skipped",
+      "started_at": "2026-11-02T21:20:28Z",
+      "completed_at": "2026-11-02T21:20:27Z",
+      "check_suite": {
+        "id": 112535081439
+      }
+    },
+    {
+      "id": 125558716813,
+      "name": "checks",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-02T21:20:29Z",
+      "completed_at": "2026-11-02T21:20:42Z",
+      "check_suite": {
+        "id": 112535081439
+      }
+    },
+    {
+      "id": 125558714248,
+      "name": "test",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-02T21:20:29Z",
+      "completed_at": "2026-11-02T21:22:36Z",
+      "check_suite": {
+        "id": 112535081242
+      }
+    },
+    {
+      "id": 125558713632,
+      "name": "checks",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-02T21:20:29Z",
+      "completed_at": "2026-11-02T21:20:48Z",
+      "check_suite": {
+        "id": 112535081242
+      }
+    }
+  ]
+}
