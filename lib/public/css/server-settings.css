@@ -1253,3 +1253,27 @@
   margin-top: 4px;
 }
 
+
+/* Per-type notification preferences (modules/notification-prefs.js) */
+.settings-subheading {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.notif-prefs-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.notif-prefs-grid th,
+.notif-prefs-grid td {
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.notif-prefs-grid th:first-child,
+.notif-prefs-grid td:first-child {
+  text-align: left;
+}
