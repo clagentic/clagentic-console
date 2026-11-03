@@ -1,0 +1,19 @@
+# Tracked merge gate for this repo. loadout-merge reads it from the PR's BASE
+# commit, so a PR is judged by the gate that existed before it and a change to
+# this file takes effect from the next merge. Only keys loadout treats as gate
+# keys belong here (required_reviewer_roles, required_scanners, pre_checks,
+# required_ci_checks, ci_strict, evaluator); everything else stays in
+# config.yaml.
+merge:
+  # Both a clean reviewer verdict and a clean security verdict are required.
+  # Role names, not agent names: the deployment maps them to callers.
+  required_reviewer_roles:
+    - reviewer
+    - security
+
+  # pr-checks.yml runs `test` on pull_request and, for the same head, can also
+  # produce a skipped `test` under pull_request_target. Naming the check makes
+  # a skipped run fail the gate ("has no successful run") and an absent one
+  # fail it too; any successful attempt satisfies the name.
+  required_ci_checks:
+    - test

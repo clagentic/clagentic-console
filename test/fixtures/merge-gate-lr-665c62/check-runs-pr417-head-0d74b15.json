@@ -1,0 +1,27 @@
+{
+  "total_count": 2,
+  "check_runs": [
+    {
+      "id": 101162690641,
+      "name": "test",
+      "status": "completed",
+      "conclusion": "skipped",
+      "started_at": "2026-09-04T20:21:49Z",
+      "completed_at": "2026-09-04T20:21:49Z",
+      "check_suite": {
+        "id": 91918242857
+      }
+    },
+    {
+      "id": 101162688944,
+      "name": "checks",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-09-04T20:21:51Z",
+      "completed_at": "2026-09-04T20:22:02Z",
+      "check_suite": {
+        "id": 91918242857
+      }
+    }
+  ]
+}

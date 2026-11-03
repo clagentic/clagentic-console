@@ -1,0 +1,3 @@
+judge: clagentic_loadout.merge.ci_status.check_ci_status
+required_checks: ('test',)
+RESULT: PASS

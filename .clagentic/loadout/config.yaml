@@ -44,13 +44,9 @@ merge:
     ci_pass: true
     tests_pass: true
 
-  # required_reviewer_roles: BOTH a clean PEACHES (reviewer) verdict and a
-  # clean BOBBIE (security) verdict are required before a merge is
-  # authorized -- clagentic-console's live gate today per this task's
-  # dispatch brief.
-  required_reviewer_roles:
-    - reviewer
-    - security
+  # required_reviewer_roles and required_ci_checks are gate keys and live in
+  # the tracked gate.yaml, read from the PR base commit. authorized_roles and
+  # merge_requirements are not gate keys, so they are read from this file.
 
   authorized_roles:
     - merger

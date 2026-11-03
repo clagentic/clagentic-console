@@ -1,0 +1,4 @@
+judge: clagentic_loadout.merge.ci_status.check_ci_status
+required_checks: ('test',)
+RESULT: REFUSE
+CI-STATUS GATE FAILED — PR #417 in clagentic/clagentic-console at head 0d74b15c0168deceb4b4c89c122c344a5a9b0738, CI source: check-runs, 0 commit-status entries and 2 check/workflow run(s) at HEAD. check 'test' has no successful run (conclusions seen: ['skipped']). Refusing: only conclusive success on every required check authorizes a merge. Re-run or fix the failing check(s), then retry once CI reports success.
