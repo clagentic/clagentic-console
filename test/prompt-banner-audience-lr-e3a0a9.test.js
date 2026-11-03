@@ -63,3 +63,64 @@ test("single-user, ownerless: broadcast and shown to every connection, as before
   assert.deepEqual(w.recipients(), ["everyone"]);
   assert.equal(w.connect(null), 1);
 });
+
+// The badge counts what the viewer is shown, on connect and on every live send.
+function countWorld(multi) {
+  var sent = [];
+  // Notifications persist on disk and load at attach; start each world empty.
+  fs.rmSync(path.join(require("../lib/config").CONFIG_DIR, "notifications.json"), { force: true });
+  var nm = attachNotifications({
+    broadcastAll: function (m) { sent.push({ to: "everyone", msg: m }); },
+    sendToUser: function (u, m) { sent.push({ to: u, msg: m }); },
+    broadcastPerViewer: function (build) {
+      ["admin-1", "bob"].forEach(function (u) { sent.push({ to: u, msg: build(u) }); });
+    },
+    pushModule: null,
+    isMultiUser: function () { return multi; },
+    listAdmins: function () { return ["admin-1"]; },
+  });
+  function connectCount(userId) {
+    var count = null;
+    nm.sendConnectionState({ _clagenticUser: userId ? { id: userId } : undefined }, function (ws, m) {
+      if (m.type === "notifications_state") count = m.unreadCount;
+    });
+    return count;
+  }
+  return { nm: nm, sent: sent, connectCount: connectCount };
+}
+
+test("multi-user: an ownerless banner is withheld from a non-admin, so their count excludes it", function () {
+  var w = countWorld(true);
+  w.nm.notify("permission_request", { title: "Run", slug: "p", sessionId: "s", ownerId: null, requestId: "r1", toolName: "Bash", toolInput: {} });
+  w.nm.notify("mate_dm", { senderName: "x", preview: "hi" });
+  assert.equal(w.connectCount("admin-1"), 2);
+  assert.equal(w.connectCount("bob"), 1);
+  assert.equal(w.connectCount(null), 1);
+  var created = w.sent.filter(function (s) { return s.msg.type === "notification_created"; });
+  var toBob = created.filter(function (s) { return s.to === "bob"; });
+  assert.equal(toBob.length, 1);
+  assert.equal(toBob[0].msg.unreadCount, 1);
+  var adminLast = created.filter(function (s) { return s.to === "admin-1"; }).pop();
+  assert.equal(adminLast.msg.unreadCount, 2);
+});
+
+test("multi-user: dismissing sends each viewer their own count", function () {
+  var w = countWorld(true);
+  w.nm.notify("permission_request", { title: "Run", slug: "p", sessionId: "s", ownerId: null, requestId: "r1", toolName: "Bash", toolInput: {} });
+  w.nm.notify("mate_dm", { senderName: "x", preview: "hi" });
+  w.sent.length = 0;
+  w.nm.dismissByRequestId("r1");
+  var dismissed = w.sent.filter(function (s) { return s.msg.type === "notification_dismissed"; });
+  assert.equal(dismissed.length, 2);
+  dismissed.forEach(function (s) { assert.equal(s.msg.unreadCount, 1); });
+  assert.equal(w.connectCount("bob"), 1);
+  assert.equal(w.connectCount("admin-1"), 1);
+});
+
+test("single-user: counts are unchanged", function () {
+  var w = countWorld(false);
+  w.nm.notify("permission_request", { title: "Run", slug: "p", sessionId: "s", ownerId: null, requestId: "r1", toolName: "Bash", toolInput: {} });
+  w.nm.notify("mate_dm", { senderName: "x", preview: "hi" });
+  assert.equal(w.connectCount(null), 2);
+  assert.equal(w.connectCount("bob"), 2);
+});
