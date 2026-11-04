@@ -1,3 +1,54 @@
+# [1.11.0](https://github.com/clagentic/clagentic-console/compare/v1.10.0...v1.11.0) (2026-10-23)
+
+
+### Bug Fixes
+
+* **agents:** keep an explicit empty tools list empty end to end (lr-9e4a98) ([e9f82ca](https://github.com/clagentic/clagentic-console/commit/e9f82ca3f5ee1ec693d740593c6fa8ea1500d7ab))
+* **build:** a same-sha reinstall never offers a restart (lr-e85fec) ([594920d](https://github.com/clagentic/clagentic-console/commit/594920d30e4faa2cedfd01036d8490bb766cf9da))
+* **build:** same-sha reinstall no longer offers a restart (lr-e85fec) ([a3cca46](https://github.com/clagentic/clagentic-console/commit/a3cca46a12bc4142ee1c28c40ee0d79155ca296e))
+* **chat:** left-align another sender's bubble and unframe injected rows in channel view (lr-2ef9a9) ([bcfe153](https://github.com/clagentic/clagentic-console/commit/bcfe153353671065999fe7778b0abc6065ae5b46))
+* **client:** key client freshness on the build id so a restart delivers the new client (lr-3d1218) ([2494dcc](https://github.com/clagentic/clagentic-console/commit/2494dcc97b80d53ccd4f2347a1aa2b30f0db8062))
+* **cli:** reject unknown words and flags with a usage error (lr-cb8f8d) ([95b494a](https://github.com/clagentic/clagentic-console/commit/95b494a8024f8e055e6546f9d88b684f1e0678ea))
+* **diagnostics:** a confirmed Restart now restarts whatever the session set did since the offer (lr-01293b) ([3205ae2](https://github.com/clagentic/clagentic-console/commit/3205ae23285e70fc1ab56c32c84acaefc2ac90d3))
+* **diagnostics:** a confirmed Restart now restarts whatever the session set did since the offer (lr-01293b) ([a43216b](https://github.com/clagentic/clagentic-console/commit/a43216bd4770a601a918bfb2a6e7b30af99c2613))
+* **diagnostics:** correlate restart results to their request and keep toast buttons from dismissing the card (lr-01293b) ([4bcd831](https://github.com/clagentic/clagentic-console/commit/4bcd8311c1889e6ede37cf66c10c73d2f1a43591))
+* **diagnostics:** resolve the build-update restart buttons instead of dimming them for good (lr-01293b) ([a5dfc6b](https://github.com/clagentic/clagentic-console/commit/a5dfc6b22345e2f6303099d9ad55f5ae7eabf44e))
+* **diagnostics:** resolve the build-update restart buttons instead of dimming them for good (lr-01293b) ([4770fe4](https://github.com/clagentic/clagentic-console/commit/4770fe47925f7f216d840726122e7cafdca9ba92))
+* **history:** record console-composed turns as automation, never the operator (lr-2ef9a9) ([d889418](https://github.com/clagentic/clagentic-console/commit/d889418336b016e06d16becb6ca0ad789649f966))
+* **identity:** fire the provider limit from the test so late-settle tests have a fixed order (lr-7da984) ([06b5660](https://github.com/clagentic/clagentic-console/commit/06b56605cc7661cf5c694be37f8738922c9f0ada))
+* **input:** derive the schedule button disabled state per session (lr-fa53fe) ([ee90926](https://github.com/clagentic/clagentic-console/commit/ee90926534384822d9a069bee6b10ea2e4d9c992))
+* **install:** install:local-test skips when the build is already installed (lr-e85fec) ([6934203](https://github.com/clagentic/clagentic-console/commit/6934203208db5b1f1795390048ede313c657b0b8))
+* **install:** stop writing the Claude Code allow rule from postinstall (lr-ab93e0) ([b86881f](https://github.com/clagentic/clagentic-console/commit/b86881f56230289755bfc859f418da192b1878fa))
+* **permissions:** refuse unsafe auto-approve, unallowed modes and cross-session mode leaks (lr-06d7b1) ([221e2c7](https://github.com/clagentic/clagentic-console/commit/221e2c7e5b97c63eebd11bbb87c8ffa5d71c46b6))
+* **restart:** restart at once after the second confirm and drop the 60-second wait (lr-a07375) ([16e5dc3](https://github.com/clagentic/clagentic-console/commit/16e5dc35c4eff4b9d6caedcf2fa38b3923687fef))
+* **restart:** show one persistent restarting state and make a pending restart idempotent (lr-a07375) ([823a425](https://github.com/clagentic/clagentic-console/commit/823a425906aebdfb4927b45504ba51e1746a689b))
+* **sessions:** prove the --reply target by the sender's vendor session id, not its label (lr-3d1218) ([b3d7200](https://github.com/clagentic/clagentic-console/commit/b3d72005952be5008e2cb31fc167b341b875da35))
+* **sessions:** resolve --reply through the session directory by recorded vendor identity (lr-3d1218) ([5198a13](https://github.com/clagentic/clagentic-console/commit/5198a13f10ec0d58ddac50d5acaa9cddb5e1c6fe))
+* **sessions:** route --reply by recorded vendor and vendor session id, drop the console-id guard (lr-3d1218) ([d0a7e37](https://github.com/clagentic/clagentic-console/commit/d0a7e37ec81503a41e1c9e28f85aa0827f98cbf2))
+* **test:** wait for writers before removing temp homes to end ENOTEMPTY flakes (lr-c3e80a) ([a0a8d02](https://github.com/clagentic/clagentic-console/commit/a0a8d02840d0a2b787e1ccdb852717dd9d68e40c))
+* **ui:** distinguish injected messages from operator messages (lr-2ef9a9) ([33cbd61](https://github.com/clagentic/clagentic-console/commit/33cbd61b8dde0a60f9d184747da8982bc2fa5304))
+* **ui:** drop the unreachable same-build content branch from the update detail (lr-e85fec) ([a59f94b](https://github.com/clagentic/clagentic-console/commit/a59f94b55864685e610593ef8b81ef1eba7f9d02))
+* **yoke:** pass the named agent's tools list to the SDK tools option (lr-9e4a98) ([79a4845](https://github.com/clagentic/clagentic-console/commit/79a4845a9d89ee88106f601938e9915da7791a05))
+* **yoke:** pass the named agent's tools list to the SDK tools option (lr-9e4a98) ([53200f3](https://github.com/clagentic/clagentic-console/commit/53200f345eacec536a45ec4ff199deb3727eada5))
+* **yoke:** revert [#473](https://github.com/clagentic/clagentic-console/issues/473) named-agent tools option (lr-9e4a98) ([3e5573f](https://github.com/clagentic/clagentic-console/commit/3e5573f25b6085dcc065db304f9a224e1c839994))
+
+
+### Features
+
+* **chat:** show an extracted sender as agent@project with the session id on hover or tap (lr-2ef9a9) ([97c48b8](https://github.com/clagentic/clagentic-console/commit/97c48b828d257e313626c475de61df7f3531bba2))
+* **cli:** list-sessions, send-input --to and --reply, open-session --to (lr-3d1218) ([7a8051f](https://github.com/clagentic/clagentic-console/commit/7a8051f5eb4d0c32cdb08b340b07ef35c73d1224))
+* **history:** publish a versioned per-message sender record and --from-session (lr-f7c100) ([3a38841](https://github.com/clagentic/clagentic-console/commit/3a38841f994a6c99b9d75e3bb49318347bc7fc08))
+* **permissions:** user-adjustable permission settings (lr-9b03d3) ([1946443](https://github.com/clagentic/clagentic-console/commit/1946443168a0b6a9f58e4c7570e29236898b106c))
+* **scheduled-input:** scheduled input, once or recurring, for people and agents (lr-b6a476) ([46f38e8](https://github.com/clagentic/clagentic-console/commit/46f38e816a6ceafc6dc8d35bfbf23223100dd83b))
+* **sessions:** every Claude process carries a reference to its own console session (lr-2ef9a9) ([e8f1668](https://github.com/clagentic/clagentic-console/commit/e8f16682a8d949f137b13707ea7a367cac33ca72))
+* **sessions:** extracted sender rung, agent@project label, other-sender layout fix (lr-2ef9a9) ([bc45a9a](https://github.com/clagentic/clagentic-console/commit/bc45a9a8ca72ae80a61af4707ef84e2ef518f70d))
+* **sessions:** list-sessions reports pending operator prompts and installer adds its allow rule (lr-3b29dc) ([9c894d6](https://github.com/clagentic/clagentic-console/commit/9c894d679c83dca9e4b81c22e251c73da845e789))
+* **sessions:** list-sessions, --to address forms and --reply for send-input (lr-3d1218) ([aa28a98](https://github.com/clagentic/clagentic-console/commit/aa28a9870a54027c26cc0bf95c5667e80ad1f2a6))
+* **sessions:** record an extracted sender resolved from the daemon's own store (lr-2ef9a9) ([b147f0f](https://github.com/clagentic/clagentic-console/commit/b147f0f3665e3f86bbb4dc2d2341c49989e86664))
+* **sessions:** resolve --to live over idle over reaped and add per-session names (lr-5e84ae) ([cae61d5](https://github.com/clagentic/clagentic-console/commit/cae61d58a46f589b831501bd264cf59ea5618e14))
+* **sessions:** session directory, address resolution and reply target in the daemon (lr-3d1218) ([ae589f0](https://github.com/clagentic/clagentic-console/commit/ae589f08712cf8d1ac472868c591a2d1e6af363e))
+* **ui:** clearer permission-mode labels with a hint under each (lr-49fb55) ([26dbc2f](https://github.com/clagentic/clagentic-console/commit/26dbc2f36317174256b67c1f3db576aa4b744ea4))
+
 # [1.11.0-beta.2](https://github.com/clagentic/clagentic-console/compare/v1.11.0-beta.1...v1.11.0-beta.2) (2026-10-23)
 
 
