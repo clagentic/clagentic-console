@@ -42,7 +42,7 @@ function extracted(over) {
     ts: new Date(NOW).toISOString(),
     verb: "send_input",
     result: "delivered",
-    sender: { kind: "extracted", attribution: "extracted", project: "p", sessionId: "5", cliSessionId: "cli-5", name: "holden@p" },
+    sender: { kind: "extracted", attribution: "extracted", project: "p", sessionId: "5", cliSessionId: "cli-5", name: "agent-a@p" },
     target: { project: "q", sessionId: "9" },
     prompt: "hello",
   }, over || {});
