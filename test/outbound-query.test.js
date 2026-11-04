@@ -405,3 +405,62 @@ test("the IPC command passes only the four fields of the request", function () {
   handleOutboundCommand(fake, { cmd: "list_outbound", sessionId: "s", projectSlug: "p", sinceMs: 5, kind: "sent", prompt: "ignored", cwd: "/x" });
   assert.deepEqual(seen, { sessionId: "s", projectSlug: "p", sinceMs: 5, kind: "sent" });
 });
+
+test("an unreadable ledger is an error result naming the path and errno, never an empty listing", function () {
+  var cli = require("../lib/cli/session-subcommands");
+  var t = build();
+  fs.mkdirSync(path.join(t.dir, "outbound"), { recursive: true });
+  fs.writeFileSync(path.join(t.dir, "outbound", "sessions"), "not a directory");
+  var res = t.query.list({ sessionId: "cli-sender" });
+  assert.equal(res.ok, false);
+  assert.equal(res.result, "error");
+  assert.equal(res.code, "ENOTDIR");
+  assert.ok(res.reason.indexOf(path.join(t.dir, "outbound", "sessions")) !== -1, res.reason);
+  assert.equal("messages" in res, false);
+  assert.equal(cli.exitCodeFor(res, {}), 1);
+});
+
+test("an unreadable unattributed side is an error result too", function () {
+  var t = build();
+  t.ledger.record(entry());
+  fs.writeFileSync(path.join(t.dir, "outbound", "unattributed"), "not a directory");
+  var res = t.query.list({ sessionId: "cli-sender" });
+  assert.equal(res.result, "error");
+  assert.equal(res.code, "ENOTDIR");
+});
+
+test("a ledger directory that does not exist lists nothing, as a success", function () {
+  var t = build();
+  var res = t.query.list({ sessionId: "cli-sender" });
+  assert.equal(res.ok, true);
+  assert.equal(res.count, 0);
+});
+
+test("os-users: the implicit principal is withheld the text of a target that runs as another OS user", function () {
+  var { createOutboundAccess } = require("../lib/outbound-access");
+  // principalFor yields the implicit principal on main only for the single-user
+  // owner; the access rule must not rest on that mode combination staying so.
+  var access = createOutboundAccess({
+    projectAccess: { principalFor: function () { return { implicit: true }; } },
+    getProject: function () { return null; },
+    isOsUsers: function () { return true; },
+  });
+  var caller = { user: null, authenticated: true };
+  var other = access.canReadPrompt({ target: { project: "work", runsAs: "alice-os" } }, caller);
+  assert.equal(other.allowed, false);
+  assert.match(other.reason, /another OS user/);
+  var unrecorded = access.canReadPrompt({ target: { project: "work" } }, caller);
+  assert.equal(unrecorded.allowed, false);
+  assert.match(unrecorded.reason, /not recorded/);
+  assert.equal(access.canReadPrompt({ target: { project: "work", runsAs: "daemon" } }, caller).allowed, true);
+});
+
+test("the implicit principal outside os-users still reads every target", function () {
+  var { createOutboundAccess } = require("../lib/outbound-access");
+  var access = createOutboundAccess({
+    projectAccess: { principalFor: function () { return { implicit: true }; } },
+    getProject: function () { return null; },
+    isOsUsers: function () { return false; },
+  });
+  assert.equal(access.canReadPrompt({ target: { project: "work", runsAs: "alice-os" } }, { user: null, authenticated: true }).allowed, true);
+});

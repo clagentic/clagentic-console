@@ -351,7 +351,9 @@ Result:
 }
 ```
 
-Each message carries `ts`, `verb` (`send_input` or `open_session`), `kind` (`sent` or `opens`), `result` (the same vocabulary as the send itself: `delivered`, `resumed-and-delivered`, `opened`, `refused`, `not-found`, `ambiguous`, `error`) and `reason` when it did not go through, `messageId` for a delivery (the same id the target's history and the per-message sender record carry), `initiator`, `contextNote`, the `sender`, the `target` (project, console and vendor session ids, agent, the `address` or requested id the caller gave) and the `prompt`. A call that was refused or failed is listed too, with its reason.
+Each message carries `ts`, `verb` (`send_input` or `open_session`), `kind` (`sent` or `opens`), `result` (the same vocabulary as the send itself, except that a delivery is always `delivered`, even when the session had to be resumed first: `delivered`, `opened`, `refused`, `not-found`, `ambiguous`, `error`) and `reason` when it did not go through, `messageId` for a delivery (the same id the target's history and the per-message sender record carry), `initiator`, `contextNote`, the `sender`, the `target` (project, console and vendor session ids, agent, the `address` or requested id the caller gave) and the `prompt`. A call that was refused or failed is listed too, with its reason.
+
+If the ledger itself cannot be read (for example a permission error on its directory), `list-outbound` does not answer with an empty list: it exits 1 with `"result": "error"`, a `reason` naming the path and the errno, and a `code`. Only a ledger that was never written, or has no entry in range, lists as empty.
 
 ### Whose calls are listed
 

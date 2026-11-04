@@ -203,3 +203,67 @@ test("reads are limited to a project and to the time asked for", function () {
   assert.deepEqual(ledger.readAttributed({ project: "p", sinceMs: NOW - 2 * DAY }).map(function (e) { return e.prompt; }), ["p-new"]);
   assert.equal(ledger.readAttributed().length, 3);
 });
+
+test("a ledger that was never written has no entries: absent is empty, not an error", function () {
+  var ledger = ledgerIn(path.join(tmp(), "never-created"));
+  assert.deepEqual(ledger.readAttributed(), []);
+  assert.deepEqual(ledger.readUnattributed(), []);
+});
+
+test("a ledger directory that cannot be listed is an error naming the path and errno, never an empty list", function () {
+  var dir = tmp();
+  // A file where the sessions directory belongs: readdir fails with ENOTDIR.
+  fs.mkdirSync(path.join(dir, "outbound"));
+  fs.writeFileSync(path.join(dir, "outbound", "sessions"), "not a directory");
+  var ledger = ledgerIn(dir);
+  assert.throws(function () { ledger.readAttributed(); }, function (e) {
+    assert.equal(e.code, "ENOTDIR");
+    assert.ok(e.message.indexOf(path.join(dir, "outbound", "sessions")) !== -1, e.message);
+    assert.match(e.message, /ENOTDIR/);
+    return true;
+  });
+  // The other side is untouched by the damage to this one.
+  assert.deepEqual(ledger.readUnattributed(), []);
+});
+
+test("a project directory that cannot be listed is an error too", function () {
+  var dir = tmp();
+  fs.mkdirSync(path.join(dir, "outbound", "sessions"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "outbound", "sessions", "p"), "not a directory");
+  assert.throws(function () { ledgerIn(dir).readAttributed(); }, /ENOTDIR/);
+});
+
+test("a ledger file that exists but cannot be read is an error naming the file", function () {
+  var dir = tmp();
+  var ledger = ledgerIn(dir);
+  ledger.record(extracted());
+  var file = path.join(dir, "outbound", "sessions", "p", "cli-5.jsonl");
+  fs.rmSync(file);
+  // A directory named like a ledger file: stat succeeds, the read fails with EISDIR.
+  fs.mkdirSync(file);
+  assert.throws(function () { ledger.readAttributed(); }, function (e) {
+    assert.equal(e.code, "EISDIR");
+    assert.ok(e.message.indexOf(file) !== -1, e.message);
+    return true;
+  });
+});
+
+test("a project directory that vanishes between the listing and the read is empty, not an error", function () {
+  var dir = tmp();
+  var ledger = ledgerIn(dir);
+  ledger.record(extracted());
+  var original = fs.readdirSync;
+  fs.readdirSync = function (p) {
+    if (String(p).endsWith(path.join("sessions", "p"))) {
+      var e = new Error("gone");
+      e.code = "ENOENT";
+      throw e;
+    }
+    return original.apply(fs, arguments);
+  };
+  try {
+    assert.deepEqual(ledger.readAttributed(), []);
+  } finally {
+    fs.readdirSync = original;
+  }
+});
