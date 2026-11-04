@@ -359,14 +359,14 @@ Only calls from a sender the console identified, an `extracted` sender (see [Who
 
 ### The prompt text is not always returned
 
-The ledger stores the full prompt (see below), and the same prompt is in the target session's own history. `list-outbound` returns the text to a caller who could already read that stored text, and withholds it otherwise. When it cannot, the call is listed with all its metadata, `prompt` is `null`, `promptWithheld` is `true` and `promptWithheldReason` says why.
+The ledger stores the full prompt (see below), and the same prompt is in the target session's own history. `list-outbound` returns the text to a caller who could already read that stored text, and withholds it otherwise. When it cannot, the call is listed with all its metadata, `prompt` is `null`, `promptWithheld` is `true` and `promptWithheldReason` says why. The `contextNote` is withheld with it (`contextNoteWithheld` is `true`), because it is message content too.
 
 The socket is mode 0700 and the caller must be the daemon's own OS user. That user already owns, and can read, the history of every session that runs as it, so withholding the text from it would protect nothing.
 
 | Caller | Prompt text |
 |---|---|
 | The daemon's OS user on `daemon.sock`, in single-user or multi-user mode | Returned for every target whose session runs as the daemon's OS user, which is every target unless os-users mode is on. |
-| The daemon's OS user on `daemon.sock`, in os-users mode | Returned for a target that runs as the daemon's OS user. Withheld for a target that runs as another OS user, and for one the console no longer holds (its OS user cannot be established). The metadata is still returned. |
+| The daemon's OS user on `daemon.sock`, in os-users mode | Returned for a target that runs as the daemon's OS user. Withheld for a target that runs as another OS user, and for an entry that did not record the OS user of its target. The OS user is recorded in the entry when it is written (`target.runsAs`) and the decision rests on that, never on a console session id, which a restart renumbers. The metadata is still returned. |
 | A console user (a future transport that authenticates one) | Returned for a target the user can read: they can access the project, and they own the session or it is shared. Withheld for another user's private session, for a project they cannot access, for a session the console no longer holds, and for a session that runs as another OS user. |
 
 ### Retention, location and privacy

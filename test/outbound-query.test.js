@@ -79,7 +79,7 @@ function entry(over) {
     result: "delivered",
     messageId: "m" + counter,
     initiator: "trigger",
-    sender: { kind: "extracted", attribution: "extracted", project: "alpha", sessionId: "7", cliSessionId: "cli-sender", name: "holden@alpha", agent: "holden" },
+    sender: { kind: "extracted", attribution: "extracted", project: "alpha", sessionId: "7", cliSessionId: "cli-sender", name: "agent-a@alpha", agent: "agent-a" },
     target: { project: "work", sessionId: "100", cliSessionId: "cli-shared", agent: "reviewer" },
     prompt: "text " + counter,
   };
@@ -214,9 +214,13 @@ function withheld(m) {
   return m.prompt === null && m.promptWithheld === true && typeof m.promptWithheldReason === "string";
 }
 
-function seedTargets(t) {
+// Records the targets the way the writer does: with the OS user each one ran as.
+function seedTargets(t, project) {
+  project = project || workProject();
   [["100", "cli-shared", "shared"], ["101", "cli-alice-private", "alice private"], ["102", "cli-bob-private", "bob private"]].forEach(function (x) {
-    t.ledger.record(entry({ target: { project: "work", sessionId: x[0], cliSessionId: x[1] }, prompt: x[2] }));
+    var session = project.sm.sessions.get(Number(x[0]));
+    var runsAs = project.getLinuxUserForSession(session) || "daemon";
+    t.ledger.record(entry({ target: { project: "work", sessionId: x[0], cliSessionId: x[1], runsAs: runsAs }, prompt: x[2] }));
   });
 }
 
@@ -245,7 +249,7 @@ test("caller shape: in multi-user mode the daemon-owner socket reads the text of
 test("caller shape: in os-users mode the socket caller gets metadata only for a target that runs as another OS user", function () {
   var project = workProject({ getLinuxUserForSession: function (s) { return s.localId === 100 ? "alice-os" : null; } });
   var t = build({ multiUser: true, osUsers: true, project: project });
-  seedTargets(t);
+  seedTargets(t, project);
   var res = t.query.list({ sessionId: "cli-sender" });
   assert.equal(res.count, 3);
   var byText = {};
@@ -258,12 +262,57 @@ test("caller shape: in os-users mode the socket caller gets metadata only for a 
   assert.equal(JSON.stringify(res).indexOf('"shared"'), -1);
 });
 
-test("caller shape: in os-users mode a target the console no longer holds is withheld from the socket caller", function () {
+test("caller shape: in os-users mode an entry that did not record its target's OS user is withheld from the socket caller", function () {
   var t = build({ multiUser: true, osUsers: true });
   t.ledger.record(entry({ target: { project: "gone", sessionId: "5" }, prompt: "to a removed project" }));
   var m = t.query.list({ sessionId: "cli-sender" }).messages[0];
   assert.ok(withheld(m));
-  assert.match(m.promptWithheldReason, /not held by the console/);
+  assert.match(m.promptWithheldReason, /not recorded/);
+});
+
+test("caller shape: in os-users mode a daemon-user target stays readable after the console no longer holds it", function () {
+  var t = build({ multiUser: true, osUsers: true });
+  t.ledger.record(entry({ target: { project: "gone", sessionId: "5", cliSessionId: "cli-gone", runsAs: "daemon" }, prompt: "to a removed session" }));
+  assert.deepEqual(prompts(t.query.list({ sessionId: "cli-sender" })), ["to a removed session"]);
+});
+
+test("restart renumbering: an other-OS-user target whose console id is later taken by a daemon-user session stays withheld", function () {
+  // At write time 100 was alice's session, running as alice-os. After a restart
+  // the console id 100 belongs to an older session that runs as the daemon user.
+  var project = workProject({ getLinuxUserForSession: function () { return null; } });
+  project.sm.sessions.get(100).cliSessionId = "cli-someone-else";
+  project.sm.sessions.get(100).createdAt = NOW - 48 * HOUR;
+  var asSocket = build({ multiUser: true, osUsers: true, project: project });
+  var asAdmin = build({ multiUser: true, osUsers: true, project: project, caller: { user: USERS.admin, authenticated: true } });
+  [asSocket, asAdmin].forEach(function (t) {
+    t.ledger.record(entry({ target: { project: "work", sessionId: "100", runsAs: "alice-os" }, prompt: "for alice-os" }));
+    t.ledger.record(entry({ target: { project: "work", sessionId: "100", cliSessionId: "cli-shared-before", runsAs: "alice-os" }, prompt: "for alice-os, by vendor id" }));
+    var res = t.query.list({ sessionId: "cli-sender" });
+    assert.equal(res.count, 2);
+    res.messages.forEach(function (m) {
+      assert.ok(withheld(m));
+      assert.equal(JSON.stringify(res).indexOf("for alice-os"), -1);
+    });
+  });
+});
+
+test("a context note is withheld whenever the prompt is, and shown whenever it is shown", function () {
+  var project = workProject({ getLinuxUserForSession: function (s) { return s.localId === 100 ? "alice-os" : null; } });
+  var t = build({ multiUser: true, osUsers: true, project: project });
+  t.ledger.record(entry({ target: { project: "work", sessionId: "100", cliSessionId: "cli-shared", runsAs: "alice-os" }, prompt: "p-hidden", contextNote: "note-hidden" }));
+  t.ledger.record(entry({ target: { project: "work", sessionId: "101", cliSessionId: "cli-alice-private", runsAs: "daemon" }, prompt: "p-shown", contextNote: "note-shown" }));
+  t.ledger.record(entry({ target: { project: "work", sessionId: "100", cliSessionId: "cli-shared", runsAs: "alice-os" }, result: "refused", reason: "nope", contextNote: "note-on-refusal", prompt: undefined }));
+  var res = t.query.list({ sessionId: "cli-sender" });
+  var text = JSON.stringify(res);
+  assert.equal(text.indexOf("note-hidden"), -1);
+  assert.equal(text.indexOf("note-on-refusal"), -1);
+  assert.equal(text.indexOf("p-hidden"), -1);
+  var shown = res.messages.filter(function (m) { return m.prompt === "p-shown"; })[0];
+  assert.equal(shown.contextNote, "note-shown");
+  assert.equal("contextNoteWithheld" in shown, false);
+  var hidden = res.messages.filter(function (m) { return m.contextNoteWithheld === true; });
+  assert.equal(hidden.length, 2);
+  hidden.forEach(function (m) { assert.equal("contextNote" in m, false); });
 });
 
 test("caller shape: a console user reads a prompt only for a target session canAccessSession lets them read", function () {
@@ -308,7 +357,7 @@ test("caller shape: a user outside the target project, or with the target gone, 
 test("caller shape: a target that runs as another OS user is withheld even from a user who owns the project", function () {
   var project = workProject({ getLinuxUserForSession: function () { return "alice-os"; } });
   var t = build({ multiUser: true, project: project, caller: { user: USERS.admin, authenticated: true } });
-  seedTargets(t);
+  seedTargets(t, project);
   t.query.list({ sessionId: "cli-sender" }).messages.forEach(function (m) {
     assert.ok(withheld(m));
     assert.match(m.promptWithheldReason, /another OS user/);

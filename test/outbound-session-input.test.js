@@ -51,13 +51,13 @@ function makeProject(opts) {
 }
 
 // The target: a live session in project "p". The sender: a live session of the
-// agent "holden" in project "q", which the console can resolve from the
+// agent "agent-a" in project "q", which the console can resolve from the
 // reference its environment carries.
 function target() {
   return { localId: 100, cliSessionId: "cli-target", agentName: "reviewer", history: [], isProcessing: false, queryInstance: {} };
 }
 function senderSession() {
-  return { localId: 7, cliSessionId: "cli-sender", agentName: "holden", history: [], isProcessing: true, queryInstance: {} };
+  return { localId: 7, cliSessionId: "cli-sender", agentName: "agent-a", history: [], isProcessing: true, queryInstance: {} };
 }
 
 function setup(over) {
@@ -79,11 +79,11 @@ function all(ledger) {
   return ledger.readAttributed().concat(ledger.readUnattributed());
 }
 
-var FROM_HOLDEN = { senderProject: "q", senderSessionId: "7" };
+var FROM_AGENT_A = { senderProject: "q", senderSessionId: "7" };
 
 test("a delivered send-input is recorded with prompt, target, initiator and the same message id as the history entry", function () {
   var t = setup();
-  var out = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "please review", contextNote: "pr 12" }, FROM_HOLDEN));
+  var out = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "please review", contextNote: "pr 12" }, FROM_AGENT_A));
   assert.equal(out.result, "delivered");
 
   var entries = all(t.ledger);
@@ -101,7 +101,7 @@ test("a delivered send-input is recorded with prompt, target, initiator and the 
   assert.equal(e.target.agent, "reviewer");
   assert.deepEqual(
     { kind: e.sender.kind, attribution: e.sender.attribution, project: e.sender.project, sessionId: e.sender.sessionId, cliSessionId: e.sender.cliSessionId, agent: e.sender.agent },
-    { kind: "extracted", attribution: "extracted", project: "q", sessionId: "7", cliSessionId: "cli-sender", agent: "holden" }
+    { kind: "extracted", attribution: "extracted", project: "q", sessionId: "7", cliSessionId: "cli-sender", agent: "agent-a" }
   );
   assert.equal(t.p.recorded.length, 1);
   assert.equal(e.messageId, t.p.recorded[0].messageId);
@@ -111,7 +111,7 @@ test("a delivered send-input is recorded with prompt, target, initiator and the 
 
 test("an address and a reply are recorded as the caller gave them, with the session they resolved to", function () {
   var t = setup();
-  t.input.sendInput(Object.assign({ to: "reviewer@p", prompt: "by address" }, FROM_HOLDEN));
+  t.input.sendInput(Object.assign({ to: "reviewer@p", prompt: "by address" }, FROM_AGENT_A));
   var e = all(t.ledger)[0];
   assert.equal(e.target.address, "reviewer@p");
   assert.equal(e.target.sessionId, "100");
@@ -120,7 +120,7 @@ test("an address and a reply are recorded as the caller gave them, with the sess
 
 test("a delivered open-session is recorded once, as an open", function () {
   var t = setup();
-  var out = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "start here" }, FROM_HOLDEN));
+  var out = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "start here" }, FROM_AGENT_A));
   assert.equal(out.result, "opened");
   var entries = all(t.ledger);
   assert.equal(entries.length, 1);
@@ -133,9 +133,9 @@ test("a delivered open-session is recorded once, as an open", function () {
 
 test("a refused send-input is recorded with the reason, and so is a not-found one", function () {
   var t = setup();
-  var refused = t.input.sendInput(Object.assign({ projectSlug: "nowhere", sessionId: "x1", prompt: "lost" }, FROM_HOLDEN));
+  var refused = t.input.sendInput(Object.assign({ projectSlug: "nowhere", sessionId: "x1", prompt: "lost" }, FROM_AGENT_A));
   assert.equal(refused.result, "refused");
-  var badInitiator = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "as a person", initiator: "human" }, FROM_HOLDEN));
+  var badInitiator = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "as a person", initiator: "human" }, FROM_AGENT_A));
   assert.equal(badInitiator.result, "refused");
 
   var entries = all(t.ledger);
@@ -152,7 +152,7 @@ test("a refused send-input is recorded with the reason, and so is a not-found on
 
 test("a refused open-session is recorded", function () {
   var t = setup();
-  var out = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "x", agentName: "nobody" }, FROM_HOLDEN));
+  var out = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "x", agentName: "nobody" }, FROM_AGENT_A));
   assert.equal(out.result, "refused");
   var entries = all(t.ledger);
   assert.equal(entries.length, 1);
@@ -162,7 +162,7 @@ test("a refused open-session is recorded", function () {
 
 test("a request with no prompt is recorded without one", function () {
   var t = setup();
-  t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "" }, FROM_HOLDEN));
+  t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "" }, FROM_AGENT_A));
   var e = all(t.ledger)[0];
   assert.equal(e.result, "refused");
   assert.equal("prompt" in e, false);
@@ -170,7 +170,7 @@ test("a request with no prompt is recorded without one", function () {
 
 test("an open whose first turn fails to start is recorded as an error, with no message id", function () {
   var t = setup({ startThrows: true });
-  var opened = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "never starts" }, FROM_HOLDEN));
+  var opened = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "never starts" }, FROM_AGENT_A));
   assert.equal(opened.result, "error");
   var entries = all(t.ledger);
   assert.equal(entries.length, 1);
@@ -186,7 +186,7 @@ test("a send that hits a failing start is recorded as an error with retryable se
   // An idle session with no runtime: delivery has to start a query, which fails.
   var idle = { localId: 101, cliSessionId: "cli-idle", history: [], isProcessing: false };
   t.p.sm.sessions.set(101, idle);
-  var out = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-idle", prompt: "needs a start" }, FROM_HOLDEN));
+  var out = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-idle", prompt: "needs a start" }, FROM_AGENT_A));
   assert.equal(out.result, "error");
   var e = all(t.ledger)[0];
   assert.equal(e.result, "error");
@@ -220,7 +220,7 @@ test("an undeclared sender is kept apart, labelled unverified", function () {
 
 test("a reference the console does not hold is not an identified sender, whatever it claims", function () {
   var t = setup();
-  t.input.sendInput({ projectSlug: "p", sessionId: "cli-target", prompt: "forged", senderProject: "q", senderSessionId: "999", from: "holden@q" });
+  t.input.sendInput({ projectSlug: "p", sessionId: "cli-target", prompt: "forged", senderProject: "q", senderSessionId: "999", from: "agent-a@q" });
   assert.deepEqual(t.ledger.readAttributed(), []);
   assert.equal(t.ledger.readUnattributed()[0].sender.attribution, "unverified");
 });
@@ -241,13 +241,38 @@ test("listing sessions writes nothing", function () {
 test("a ledger that throws does not fail the send or the open", function () {
   var throwing = { record: function () { throw new Error("disk full"); } };
   var t = setup({ ledger: throwing });
-  var sent = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "still delivered" }, FROM_HOLDEN));
+  var sent = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "still delivered" }, FROM_AGENT_A));
   assert.equal(sent.result, "delivered");
   assert.equal(t.p.recorded.length, 1);
-  var opened = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "still opened" }, FROM_HOLDEN));
+  var opened = t.input.openSession(Object.assign({ projectSlug: "p", prompt: "still opened" }, FROM_AGENT_A));
   assert.equal(opened.result, "opened");
   var refused = t.input.sendInput({ projectSlug: "nowhere", sessionId: "x", prompt: "still refused" });
   assert.equal(refused.result, "refused");
+});
+
+test("an entry that cannot be built does not fail the send, and the failure is logged", function () {
+  var t = setup();
+  var logged = [];
+  var original = console.error;
+  console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+  try {
+    // A project whose OS-user lookup throws makes the entry impossible to build.
+    t.p.getLinuxUserForSession = function () { throw new Error("lookup broke"); };
+    var sent = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "still delivered" }, FROM_AGENT_A));
+    assert.equal(sent.result, "delivered");
+    assert.equal(t.p.recorded.length, 1);
+  } finally {
+    console.error = original;
+  }
+  assert.ok(logged.some(function (l) { return /outbound ledger entry failed: lookup broke/.test(l); }));
+});
+
+test("a delivery records the OS user the target runs as", function () {
+  var t = setup();
+  t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "a" }, FROM_AGENT_A));
+  t.p.getLinuxUserForSession = function () { return "alice-os"; };
+  t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "b" }, FROM_AGENT_A));
+  assert.deepEqual(all(t.ledger).map(function (e) { return e.target.runsAs; }).sort(), ["alice-os", "daemon"]);
 });
 
 test("a ledger directory that cannot be written does not fail the send", function () {
@@ -255,7 +280,7 @@ test("a ledger directory that cannot be written does not fail the send", functio
   fs.writeFileSync(path.join(dir, "outbound"), "a file where the directory should be");
   var bad = createOutboundLedger({ getBaseDir: function () { return dir; }, now: function () { return NOW; }, log: quiet() });
   var t = setup({ ledger: bad });
-  var sent = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "delivered anyway" }, FROM_HOLDEN));
+  var sent = t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "delivered anyway" }, FROM_AGENT_A));
   assert.equal(sent.result, "delivered");
   assert.equal(t.p.recorded[0].text, "delivered anyway");
 });
