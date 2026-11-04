@@ -147,6 +147,32 @@ test("prune drops expired lines, keeps current ones, and removes a file left emp
   assert.deepEqual(fs.readdirSync(path.join(dir, "outbound", "sessions", "p")), ["cli-5.jsonl"]);
 });
 
+test("prune ignores ENOTEMPTY and ENOENT from rmdir and logs any other failure once, with path and errno", function () {
+  var dir = tmp();
+  var log = quietLog();
+  var ledger = createOutboundLedger({ getBaseDir: function () { return dir; }, now: function () { return NOW; }, getRetentionDays: function () { return 30; }, log: log });
+  ledger.record(extracted({ ts: new Date(NOW - 40 * DAY).toISOString(), prompt: "old" }));
+  var real = fs.rmdirSync;
+  var code = "EACCES";
+  fs.rmdirSync = function () { var e = new Error("denied"); e.code = code; throw e; };
+  try {
+    ledger.prune();
+    assert.equal(log.calls.error.length, 1);
+    assert.match(log.calls.error[0], /could not remove the directory .*sessions.*EACCES/);
+    ledger.record(extracted({ ts: new Date(NOW - 40 * DAY).toISOString(), prompt: "old again" }));
+    ledger.prune();
+    assert.equal(log.calls.error.length, 1, "the same path and errno is logged once");
+    ["ENOTEMPTY", "ENOENT"].forEach(function (c) {
+      code = c;
+      ledger.record(extracted({ ts: new Date(NOW - 40 * DAY).toISOString(), prompt: "old " + c }));
+      ledger.prune();
+    });
+    assert.equal(log.calls.error.length, 1, "ENOTEMPTY and ENOENT are not logged");
+  } finally {
+    fs.rmdirSync = real;
+  }
+});
+
 test("prune honours a configured retention, and 0 removes everything and turns the ledger off", function () {
   var dir = tmp();
   var days = 7;
