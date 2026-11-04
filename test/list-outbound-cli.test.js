@@ -110,10 +110,95 @@ test("over a real Unix socket: the daemon-owner socket answers list_outbound fro
   }
 });
 
-test("daemon.js routes list_outbound to the outbound query beside the other session commands", function () {
-  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "daemon.js"), "utf8");
-  assert.match(src, /case "list_outbound":\s*return require\("\.\/session-input-ipc"\)\.handleOutboundCommand\(relay\.outboundQuery, msg\);/);
-  var server = fs.readFileSync(path.join(__dirname, "..", "lib", "server.js"), "utf8");
-  assert.match(server, /outboundQuery: _outboundQuery,/);
-  assert.match(server, /outboundLedger: _outboundLedger,/);
+// The daemon's own IPC routing: the real lib/daemon.js, in a temporary home,
+// answering list_outbound on its real socket (the harness of
+// daemon-ipc-memory-setter-parity-lr-553d27.test.js). The handler under test is
+// the one the daemon registers, not one the test installs.
+function sleep(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+function freePort() {
+  return new Promise(function (resolve, reject) {
+    var srv = require("net").createServer();
+    srv.listen(0, "127.0.0.1", function () {
+      var p = srv.address().port;
+      srv.close(function () { resolve(p); });
+    });
+    srv.on("error", reject);
+  });
+}
+
+function stopProcess(proc) {
+  return new Promise(function (resolve) {
+    if (proc.exitCode !== null) { resolve(); return; }
+    proc.once("exit", resolve);
+    try { proc.kill("SIGTERM"); } catch (e) { /* already gone */ }
+    setTimeout(function () {
+      try { proc.kill("SIGKILL"); } catch (e) { /* already gone */ }
+      resolve();
+    }, 4000);
+  });
+}
+
+test("daemon routing: list_outbound reaches the outbound query through the daemon's own IPC handler", { timeout: 60000 }, async function (t) {
+  if (process.platform === "win32") return;
+  var home = fs.mkdtempSync(path.join(os.tmpdir(), "lo-daemon-"));
+  var consoleDir = path.join(home, "console");
+  fs.mkdirSync(consoleDir, { recursive: true });
+  var sock = path.join(consoleDir, "daemon.sock");
+  var configFile = path.join(consoleDir, "daemon.json");
+  fs.writeFileSync(configFile, JSON.stringify({ port: await freePort(), host: "127.0.0.1", tls: false, debug: false, projects: [] }), { mode: 0o600 });
+
+  var now = Date.now();
+  var seeded = createOutboundLedger({ getBaseDir: function () { return consoleDir; }, log: { error() {}, warn() {}, log() {} } });
+  seeded.record({
+    ts: new Date(now - 1000).toISOString(), verb: "send_input", result: "delivered", initiator: "trigger",
+    sender: { kind: "extracted", attribution: "extracted", project: "p", sessionId: "3", cliSessionId: "cli-3" },
+    target: { project: "q", sessionId: "4", runsAs: "daemon" }, prompt: "through the daemon",
+  });
+
+  var log = [];
+  var proc = require("child_process").spawn(process.execPath, [path.resolve(__dirname, "..", "lib", "daemon.js")], {
+    env: Object.assign({}, process.env, { CLAGENTIC_HOME: home, CLAGENTIC_CONFIG: configFile }),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  proc.stdout.on("data", function (d) { log.push(d.toString()); });
+  proc.stderr.on("data", function (d) { log.push("[err] " + d.toString()); });
+  t.after(function () {
+    return stopProcess(proc).then(function () { fs.rmSync(home, { recursive: true, force: true }); });
+  });
+
+  var started = Date.now();
+  for (;;) {
+    if (Date.now() - started > 20000) throw new Error("daemon IPC did not answer\n" + log.slice(-20).join(""));
+    if (fs.existsSync(sock)) {
+      var status = await sendIPCCommand(sock, { cmd: "get_status" }, 1000).catch(function () { return null; });
+      if (status && status.ok) break;
+    }
+    await sleep(100);
+  }
+
+  var listed = await sendIPCCommand(sock, { cmd: "list_outbound", sessionId: "cli-3", kind: "sent" }, 3000);
+  assert.equal(listed.ok, true, JSON.stringify(listed));
+  assert.equal(listed.result, "listed");
+  assert.equal(listed.count, 1);
+  assert.equal(listed.messages[0].prompt, "through the daemon");
+  assert.equal(listed.messages[0].kind, "sent");
+  assert.equal(listed.messages[0].target.project, "q");
+  assert.equal(listed.retentionDays, 30);
+
+  var refusedRes = await sendIPCCommand(sock, { cmd: "list_outbound", sessionId: "../x" }, 3000);
+  assert.equal(refusedRes.result, "refused");
+  assert.equal(cli.exitCodeFor(refusedRes, {}), 1);
+
+  // A ledger the daemon cannot read comes back as an error, not an empty list.
+  fs.rmSync(path.join(consoleDir, "outbound"), { recursive: true });
+  fs.mkdirSync(path.join(consoleDir, "outbound"));
+  fs.writeFileSync(path.join(consoleDir, "outbound", "sessions"), "not a directory");
+  var broken = await sendIPCCommand(sock, { cmd: "list_outbound", sessionId: "cli-3" }, 3000);
+  assert.equal(broken.ok, false);
+  assert.equal(broken.result, "error");
+  assert.match(broken.reason, /ENOTDIR/);
+  assert.equal(cli.exitCodeFor(broken, {}), 1);
 });
