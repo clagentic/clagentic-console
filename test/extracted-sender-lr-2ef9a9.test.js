@@ -251,3 +251,39 @@ test("avatar: a vendor-named sender gets a stable seeded avatar", () => {
   assert.equal(a.name, "claude@alpha");
   assert.equal(a.avatarUrl, resolveInjectedIdentity(inj, "injected:trigger", [], 36).avatarUrl);
 });
+
+// --- owner inheritance at open-session ---
+
+function openFrom(w, extra) {
+  const created = liveSession(30, { vendor: "claude" });
+  let options = null;
+  w.beta.sm.createSession = (o) => { options = o; created.ownerId = o.ownerId || null; w.beta.sm.sessions.set(30, created); return created; };
+  w.beta.sm.saveSessionFile = () => {};
+  w.beta.sm.broadcastSessionList = () => {};
+  w.beta.getLinuxUserForSession = () => null;
+  const out = w.input.openSession(Object.assign({ projectSlug: "beta", prompt: "p" }, extra));
+  assert.equal(out.result, "opened");
+  return options;
+}
+
+test("open-session from an extracted sender whose session is owned inherits the owner", () => {
+  const w = world();
+  w.alpha.sm.sessions.get(7).ownerId = "alice";
+  const options = openFrom(w, { senderProject: "alpha", senderSessionId: "7" });
+  assert.equal(options.ownerId, "alice");
+});
+
+test("open-session from an extracted sender whose session is ownerless stays ownerless", () => {
+  const w = world();
+  const options = openFrom(w, { senderProject: "alpha", senderSessionId: "8" });
+  assert.equal(options.ownerId, undefined);
+});
+
+test("open-session from a declared sender does not inherit, even naming an owned session", () => {
+  const w = world();
+  w.alpha.sm.sessions.get(7).ownerId = "alice";
+  const options = openFrom(w, { from: "Lane A@alpha" });
+  assert.equal(options.ownerId, undefined);
+  const unresolved = openFrom(w, { from: "Lane A@alpha", senderProject: "alpha", senderSessionId: "404" });
+  assert.equal(unresolved.ownerId, undefined, "a reference the daemon does not hold is a claim");
+});

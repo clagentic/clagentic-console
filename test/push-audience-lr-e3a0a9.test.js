@@ -2,8 +2,8 @@
 
 // Who a session's push reaches (lib/push-audience.js), on the real SDK bridge and
 // message processor for the first-notice types. In multi-user mode a session
-// with no owner pushes to no one: a broadcast would hand a non-owner subscriber
-// the tool input.
+// with no owner pushes to the admins only: a broadcast would hand a non-owner
+// subscriber the tool input.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -22,6 +22,10 @@ function spy() {
   };
 }
 
+var USERS = [
+  { id: "admin-1", username: "root", role: "admin" },
+  { id: "bob", username: "bob", role: "user" },
+];
 var SCHEMA = { type: "object", properties: { token: { type: "string" } } };
 var ASK = { questions: [{ question: "Which target?", options: [{ label: "staging" }] }] };
 
@@ -45,7 +49,7 @@ var TYPES = {
 
 async function run(type, opts) {
   var push = spy();
-  var server = await world.createServer({ pushModule: push, multiUser: opts.multiUser });
+  var server = await world.createServer({ pushModule: push, multiUser: opts.multiUser, users: opts.users });
   try {
     await server.startQuery();
     if (opts.ownerId) server.session.ownerId = opts.ownerId;
@@ -59,7 +63,12 @@ async function run(type, opts) {
 }
 
 Object.keys(TYPES).forEach(function (type) {
-  test(type + ": multi-user, ownerless session: no push reaches any subscriber", async function () {
+  test(type + ": multi-user, ownerless session: the admin alone is pushed, never a non-admin", async function () {
+    var calls = await run(type, { multiUser: true, users: USERS });
+    assert.deepEqual(calls.map(function (c) { return c.to; }), ["admin-1"]);
+  });
+
+  test(type + ": multi-user, ownerless session, no admin on record: no push", async function () {
     assert.deepEqual(await run(type, { multiUser: true }), []);
   });
 
@@ -85,9 +94,19 @@ test("pushForSession: the rule, with every mode a caller can be in", function ()
   }
   assert.equal(go("alice", function () { return true; }).calls[0].to, "alice");
   assert.equal(go("alice", function () { return false; }).calls[0].to, "alice");
-  assert.deepEqual(go(null, function () { return true; }), { where: "none", calls: [] });
-  assert.deepEqual(go(undefined, function () { return true; }), { where: "none", calls: [] });
-  assert.deepEqual(go(null, function () { throw new Error("unreadable"); }), { where: "none", calls: [] });
+  function admins() { return ["admin-1", "admin-2"]; }
+  function goAdmins(owner, mode, list) {
+    var s = spy();
+    return { where: pushForSession(s, owner, p, mode, list), calls: s.calls };
+  }
+  var multi = goAdmins(null, function () { return true; }, admins);
+  assert.equal(multi.where, "admins");
+  assert.deepEqual(multi.calls.map(function (c) { return c.to; }), ["admin-1", "admin-2"]);
+  var unreadable = goAdmins(undefined, function () { throw new Error("unreadable"); }, admins);
+  assert.equal(unreadable.where, "admins", "an unreadable mode counts as multi-user");
+  assert.deepEqual(goAdmins(null, function () { return true; }, function () { return []; }), { where: "none", calls: [] });
+  assert.deepEqual(goAdmins(null, function () { return true; }, function () { throw new Error("no store"); }), { where: "none", calls: [] });
+  assert.equal(goAdmins("alice", function () { return true; }, admins).calls.length, 1, "an owned session never reaches the admins");
   var single = go(null, function () { return false; });
   assert.equal(single.where, "broadcast");
   assert.equal(single.calls[0].to, "everyone");
@@ -105,8 +124,11 @@ test("pushForSession: with no mode given it reads the stored users file, and an 
   try {
     var audience = require("../lib/push-audience");
     var s = spy();
-    assert.equal(audience.pushForSession(s, null, { type: "x" }), "none");
+    assert.equal(audience.pushForSession(s, null, { type: "x" }), "none", "no admin on record");
     fs.mkdirSync(path.join(home, "console"), { recursive: true });
+    fs.writeFileSync(path.join(home, "console", "users.json"), JSON.stringify({ users: [{ id: "a1", username: "a", role: "admin" }, { id: "u1", username: "u", role: "user" }] }));
+    assert.equal(audience.pushForSession(s, null, { type: "x" }), "admins");
+    assert.deepEqual(s.calls.map(function (c) { return c.to; }), ["a1"]);
     fs.writeFileSync(path.join(home, "console", "users.json"), JSON.stringify({ multiUser: false }));
     assert.equal(audience.pushForSession(s, null, { type: "x" }), "broadcast");
   } finally {
