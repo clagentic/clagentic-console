@@ -153,7 +153,10 @@ test("a refused send-input is recorded with the reason, and so is a not-found on
   assert.equal(entries.length, 2);
   assert.equal(entries[0].result, "refused");
   assert.match(entries[0].reason, /unknown project/);
-  assert.equal(entries[0].prompt, "lost");
+  // No target was resolved, so its OS user is not recorded: no text is stored.
+  assert.equal("prompt" in entries[0], false);
+  assert.equal(entries[0].promptWithheld, true);
+  assert.match(entries[0].promptWithheldReason, /not recorded/);
   assert.equal(entries[0].sender.project, "q");
   assert.equal(entries[1].result, "refused");
   assert.match(entries[1].reason, /human/);
@@ -188,7 +191,8 @@ test("an open whose first turn fails to start is recorded as an error, with no m
   assert.equal(entries[0].verb, "open_session");
   assert.equal(entries[0].result, "error");
   assert.match(entries[0].reason, /open failed/);
-  assert.equal(entries[0].prompt, "never starts");
+  assert.equal("prompt" in entries[0], false);
+  assert.equal(entries[0].promptWithheld, true);
   assert.equal("messageId" in entries[0], false);
 });
 
@@ -284,6 +288,29 @@ test("a delivery records the OS user the target runs as", function () {
   t.p.getLinuxUserForSession = function () { return "alice-os"; };
   t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "b" }, FROM_AGENT_A));
   assert.deepEqual(all(t.ledger).map(function (e) { return e.target.runsAs; }).sort(), ["alice-os", "daemon"]);
+});
+
+test("write time: an other-OS-user send stores no prompt and no context note, only metadata and the reason", function () {
+  var t = setup();
+  t.p.getLinuxUserForSession = function () { return "alice-os"; };
+  t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "secret-prompt", contextNote: "secret-note" }, FROM_AGENT_A));
+  var e = all(t.ledger)[0];
+  assert.equal(e.target.runsAs, "alice-os");
+  assert.equal(e.promptWithheld, true);
+  assert.equal(e.contextNoteWithheld, true);
+  assert.match(e.promptWithheldReason, /another OS user/);
+  var raw = fs.readFileSync(path.join(t.dir, "outbound", "sessions", "q", "cli-sender.jsonl"), "utf8");
+  assert.equal(raw.indexOf("secret-prompt"), -1);
+  assert.equal(raw.indexOf("secret-note"), -1);
+});
+
+test("write time: a same-user send keeps its prompt and context note", function () {
+  var t = setup();
+  t.input.sendInput(Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "kept-prompt", contextNote: "kept-note" }, FROM_AGENT_A));
+  var e = all(t.ledger)[0];
+  assert.equal(e.prompt, "kept-prompt");
+  assert.equal(e.contextNote, "kept-note");
+  assert.equal("promptWithheld" in e, false);
 });
 
 test("a ledger directory that cannot be written does not fail the send", function () {

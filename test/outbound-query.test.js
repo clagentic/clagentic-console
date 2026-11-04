@@ -11,6 +11,7 @@ var os = require("os");
 var { createOutboundLedger } = require("../lib/outbound-ledger");
 var { createOutboundQuery } = require("../lib/outbound-query");
 var { createOutboundAccess } = require("../lib/outbound-access");
+var outboundEntry = require("../lib/outbound-entry");
 var { createProjectAccess } = require("../lib/project-access");
 var { attachPermissions } = require("../lib/users-permissions");
 var { handleOutboundCommand } = require("../lib/session-input-ipc");
@@ -64,7 +65,7 @@ function build(opts) {
     onGetProjectAccess: function (slug) { return slug === "work" ? { visibility: "private", ownerId: "u-admin", allowedUsers: ["u-alice", "u-bob"] } : null; },
     isMultiUser: function () { return opts.multiUser === true; },
   });
-  var access = createOutboundAccess({ projectAccess: projectAccess, getProject: function (slug) { return slug === "work" ? project : null; }, isOsUsers: function () { return opts.osUsers === true; } });
+  var access = createOutboundAccess({ projectAccess: projectAccess, getProject: function (slug) { return slug === "work" ? project : null; } });
   var query = createOutboundQuery({ ledger: ledger, access: access, caller: opts.caller || { user: null, authenticated: true } });
   return { dir: dir, ledger: ledger, query: query, access: access };
 }
@@ -85,6 +86,22 @@ function entry(over) {
   };
   var e = Object.assign(base, over || {});
   return e;
+}
+
+// An entry as the writer builds it (lib/outbound-entry.js), so the write-time
+// decision on message text applies. args: { target, req, verb?, out? }
+function written(args) {
+  counter++;
+  return outboundEntry.buildEntry({
+    verb: args.verb || outboundEntry.VERB.SEND_INPUT,
+    ts: new Date(NOW - counter * 1000).toISOString(),
+    req: args.req || {},
+    out: args.out || null,
+    initiator: "trigger",
+    messageId: "w" + counter,
+    sender: { senderKind: "extracted", senderProject: "alpha", senderSessionId: "7", senderCliSessionId: "cli-sender" },
+    target: args.target,
+  });
 }
 
 function prompts(res) {
@@ -220,7 +237,7 @@ function seedTargets(t, project) {
   [["100", "cli-shared", "shared"], ["101", "cli-alice-private", "alice private"], ["102", "cli-bob-private", "bob private"]].forEach(function (x) {
     var session = project.sm.sessions.get(Number(x[0]));
     var runsAs = project.getLinuxUserForSession(session) || "daemon";
-    t.ledger.record(entry({ target: { project: "work", sessionId: x[0], cliSessionId: x[1], runsAs: runsAs }, prompt: x[2] }));
+    t.ledger.record(written({ target: { project: "work", consoleSessionId: x[0], sessionId: x[1], runsAs: runsAs }, req: { prompt: x[2] } }));
   });
 }
 
@@ -248,7 +265,7 @@ test("caller shape: in multi-user mode the daemon-owner socket reads the text of
 
 test("caller shape: in os-users mode the socket caller gets metadata only for a target that runs as another OS user", function () {
   var project = workProject({ getLinuxUserForSession: function (s) { return s.localId === 100 ? "alice-os" : null; } });
-  var t = build({ multiUser: true, osUsers: true, project: project });
+  var t = build({ multiUser: true, project: project });
   seedTargets(t, project);
   var res = t.query.list({ sessionId: "cli-sender" });
   assert.equal(res.count, 3);
@@ -262,12 +279,35 @@ test("caller shape: in os-users mode the socket caller gets metadata only for a 
   assert.equal(JSON.stringify(res).indexOf('"shared"'), -1);
 });
 
-test("caller shape: in os-users mode an entry that did not record its target's OS user is withheld from the socket caller", function () {
-  var t = build({ multiUser: true, osUsers: true });
-  t.ledger.record(entry({ target: { project: "gone", sessionId: "5" }, prompt: "to a removed project" }));
+test("write time: an entry that did not record its target's OS user stores no text", function () {
+  var t = build({ multiUser: true });
+  var e = written({ target: { project: "gone", sessionId: "5" }, req: { prompt: "to a removed project", contextNote: "a note" } });
+  assert.equal("prompt" in e, false);
+  assert.equal("contextNote" in e, false);
+  t.ledger.record(e);
   var m = t.query.list({ sessionId: "cli-sender" }).messages[0];
   assert.ok(withheld(m));
   assert.match(m.promptWithheldReason, /not recorded/);
+  assert.equal(m.contextNoteWithheld, true);
+});
+
+test("write time: text for an other-OS-user target is never stored, so switching os-users off does not return it", function () {
+  var project = workProject({ getLinuxUserForSession: function () { return "alice-os"; } });
+  var writer = build({ multiUser: true, project: project });
+  var e = written({ target: { project: "work", consoleSessionId: "100", sessionId: "cli-shared", runsAs: "alice-os" }, req: { prompt: "for alice-os", contextNote: "note for alice-os" } });
+  writer.ledger.record(e);
+  // The same ledger directory read in every mode and by every caller shape.
+  [{ multiUser: true }, { multiUser: false }, { multiUser: true, caller: { user: USERS.admin, authenticated: true } }].forEach(function (mode) {
+    var reader = build(Object.assign({ project: workProject() }, mode));
+    reader.ledger = createOutboundLedger({ getBaseDir: function () { return writer.dir; }, now: function () { return NOW; }, log: quiet() });
+    reader.query = createOutboundQuery({ ledger: reader.ledger, access: reader.access, caller: mode.caller || { user: null, authenticated: true } });
+    var res = reader.query.list({ sessionId: "cli-sender" });
+    assert.equal(res.count, 1);
+    assert.ok(withheld(res.messages[0]));
+    assert.equal(JSON.stringify(res).indexOf("for alice-os"), -1);
+  });
+  var raw = JSON.stringify(writer.ledger.readAttributed());
+  assert.equal(raw.indexOf("for alice-os"), -1);
 });
 
 test("caller shape: in os-users mode a daemon-user target stays readable after the console no longer holds it", function () {
@@ -282,11 +322,11 @@ test("restart renumbering: an other-OS-user target whose console id is later tak
   var project = workProject({ getLinuxUserForSession: function () { return null; } });
   project.sm.sessions.get(100).cliSessionId = "cli-someone-else";
   project.sm.sessions.get(100).createdAt = NOW - 48 * HOUR;
-  var asSocket = build({ multiUser: true, osUsers: true, project: project });
-  var asAdmin = build({ multiUser: true, osUsers: true, project: project, caller: { user: USERS.admin, authenticated: true } });
+  var asSocket = build({ multiUser: true, project: project });
+  var asAdmin = build({ multiUser: true, project: project, caller: { user: USERS.admin, authenticated: true } });
   [asSocket, asAdmin].forEach(function (t) {
-    t.ledger.record(entry({ target: { project: "work", sessionId: "100", runsAs: "alice-os" }, prompt: "for alice-os" }));
-    t.ledger.record(entry({ target: { project: "work", sessionId: "100", cliSessionId: "cli-shared-before", runsAs: "alice-os" }, prompt: "for alice-os, by vendor id" }));
+    t.ledger.record(written({ target: { project: "work", consoleSessionId: "100", runsAs: "alice-os" }, req: { prompt: "for alice-os" } }));
+    t.ledger.record(written({ target: { project: "work", consoleSessionId: "100", sessionId: "cli-shared-before", runsAs: "alice-os" }, req: { prompt: "for alice-os, by vendor id" } }));
     var res = t.query.list({ sessionId: "cli-sender" });
     assert.equal(res.count, 2);
     res.messages.forEach(function (m) {
@@ -298,10 +338,10 @@ test("restart renumbering: an other-OS-user target whose console id is later tak
 
 test("a context note is withheld whenever the prompt is, and shown whenever it is shown", function () {
   var project = workProject({ getLinuxUserForSession: function (s) { return s.localId === 100 ? "alice-os" : null; } });
-  var t = build({ multiUser: true, osUsers: true, project: project });
-  t.ledger.record(entry({ target: { project: "work", sessionId: "100", cliSessionId: "cli-shared", runsAs: "alice-os" }, prompt: "p-hidden", contextNote: "note-hidden" }));
-  t.ledger.record(entry({ target: { project: "work", sessionId: "101", cliSessionId: "cli-alice-private", runsAs: "daemon" }, prompt: "p-shown", contextNote: "note-shown" }));
-  t.ledger.record(entry({ target: { project: "work", sessionId: "100", cliSessionId: "cli-shared", runsAs: "alice-os" }, result: "refused", reason: "nope", contextNote: "note-on-refusal", prompt: undefined }));
+  var t = build({ multiUser: true, project: project });
+  t.ledger.record(written({ target: { project: "work", consoleSessionId: "100", sessionId: "cli-shared", runsAs: "alice-os" }, req: { prompt: "p-hidden", contextNote: "note-hidden" } }));
+  t.ledger.record(written({ target: { project: "work", consoleSessionId: "101", sessionId: "cli-alice-private", runsAs: "daemon" }, req: { prompt: "p-shown", contextNote: "note-shown" } }));
+  t.ledger.record(written({ target: { project: "work", consoleSessionId: "100", sessionId: "cli-shared", runsAs: "alice-os" }, out: { result: "refused", reason: "nope" }, req: { contextNote: "note-on-refusal" } }));
   var res = t.query.list({ sessionId: "cli-sender" });
   var text = JSON.stringify(res);
   assert.equal(text.indexOf("note-hidden"), -1);
@@ -436,31 +476,21 @@ test("a ledger directory that does not exist lists nothing, as a success", funct
   assert.equal(res.count, 0);
 });
 
-test("os-users: the implicit principal is withheld the text of a target that runs as another OS user", function () {
-  var { createOutboundAccess } = require("../lib/outbound-access");
-  // principalFor yields the implicit principal on main only for the single-user
-  // owner; the access rule must not rest on that mode combination staying so.
+test("access has no os-users branch: the implicit principal gets the entry as stored", function () {
   var access = createOutboundAccess({
     projectAccess: { principalFor: function () { return { implicit: true }; } },
     getProject: function () { return null; },
     isOsUsers: function () { return true; },
   });
   var caller = { user: null, authenticated: true };
-  var other = access.canReadPrompt({ target: { project: "work", runsAs: "alice-os" } }, caller);
-  assert.equal(other.allowed, false);
-  assert.match(other.reason, /another OS user/);
-  var unrecorded = access.canReadPrompt({ target: { project: "work" } }, caller);
-  assert.equal(unrecorded.allowed, false);
-  assert.match(unrecorded.reason, /not recorded/);
-  assert.equal(access.canReadPrompt({ target: { project: "work", runsAs: "daemon" } }, caller).allowed, true);
+  assert.equal(access.canReadPrompt({ target: { project: "work", runsAs: "alice-os" } }, caller).allowed, true);
+  assert.equal(access.canReadPrompt({ target: { project: "work" } }, caller).allowed, true);
 });
 
 test("the implicit principal outside os-users still reads every target", function () {
-  var { createOutboundAccess } = require("../lib/outbound-access");
   var access = createOutboundAccess({
     projectAccess: { principalFor: function () { return { implicit: true }; } },
     getProject: function () { return null; },
-    isOsUsers: function () { return false; },
   });
   assert.equal(access.canReadPrompt({ target: { project: "work", runsAs: "alice-os" } }, { user: null, authenticated: true }).allowed, true);
 });
