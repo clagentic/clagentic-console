@@ -11,6 +11,7 @@ var os = require("os");
 
 var { createSessionInput } = require("../lib/session-input");
 var { createOutboundLedger } = require("../lib/outbound-ledger");
+var { setNewWorkGate } = require("../lib/new-work-gate");
 
 var NOW = Date.now();
 
@@ -35,6 +36,7 @@ function makeProject(opts) {
     recordHistoryEntry: function (s, e) { s.history.push(e); recorded.push(e); },
     appendToSessionFile: function () {},
     deleteSession: function (id) { sm.sessions.delete(id); },
+    sessionsDir: opts.sessionsDir,
   };
   (opts.existing || []).forEach(function (s) { sm.sessions.set(s.localId, s); });
   return {
@@ -42,7 +44,12 @@ function makeProject(opts) {
     cwd: "/unused",
     sm: sm,
     sdk: {
-      startQuery: function () { if (opts.startThrows) throw new Error("no runtime"); },
+      startQuery: function () {
+        if (opts.startThrows) throw new Error("no runtime");
+        if (opts.startAsync === "ok") return Promise.resolve();
+        if (opts.startAsync === "fail") return Promise.reject(new Error("async no runtime"));
+        return undefined;
+      },
       pushMessage: function () {},
     },
     onProcessingChanged: function () {},
@@ -63,13 +70,17 @@ function senderSession() {
 function setup(over) {
   over = over || {};
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "outbound-si-"));
-  var p = makeProject({ existing: [target()], startThrows: over.startThrows });
+  var p = makeProject({ existing: [target()], startThrows: over.startThrows, startAsync: over.startAsync, sessionsDir: over.sessionsDir });
   var q = makeProject({ existing: [senderSession()] });
   var ledger = createOutboundLedger({ getBaseDir: function () { return dir; }, now: function () { return NOW; }, log: quiet() });
   var input = createSessionInput({
-    getProject: function (slug) { return slug === "p" ? p : slug === "q" ? q : null; },
+    getProject: function (slug) {
+      if (slug === "boom") throw new Error("store exploded");
+      if (slug === "bare") return {};
+      return slug === "p" ? p : slug === "q" ? q : null;
+    },
     agentCatalog: function () { return [{ name: "reviewer" }]; },
-    outboundLedger: over.ledger || ledger,
+    outboundLedger: over.noLedger ? undefined : (over.ledger || ledger),
     now: function () { return NOW; },
   });
   return { dir: dir, p: p, input: input, ledger: ledger };
@@ -289,4 +300,160 @@ test("with no ledger configured nothing changes", function () {
   var p = makeProject({ existing: [target()] });
   var input = createSessionInput({ getProject: function (slug) { return slug === "p" ? p : null; } });
   assert.equal(input.sendInput({ projectSlug: "p", sessionId: "cli-target", prompt: "x" }).result, "delivered");
+});
+
+// CREW_SOP section 6: every caller shape the after-result wrapper on
+// send_session_input and open_session sees. Each scenario runs twice, with the
+// ledger and without, and the two answers must be identical: the wrapper never
+// changes a handler's result, whatever the result is.
+
+function idleSession() {
+  return { localId: 101, cliSessionId: "cli-idle", history: [], isProcessing: false };
+}
+
+var SHAPES = [
+  // send-input: delivered, by each kind of sender
+  { name: "send, identified sender", verb: "sendInput", req: Object.assign({ projectSlug: "p", sessionId: "cli-target", prompt: "a" }, FROM_AGENT_A), result: "delivered", sender: "extracted" },
+  { name: "send, declared sender", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", from: "nightly", fromSession: "claimed-1" }, result: "delivered", sender: "declared" },
+  { name: "send, undeclared sender", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a" }, result: "delivered", sender: "undeclared" },
+  // send-input and open-session: each accepted initiator, and none
+  { name: "send, initiator trigger", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", initiator: "trigger" }, result: "delivered", initiator: "trigger" },
+  { name: "send, initiator scheduled", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", initiator: "scheduled" }, result: "delivered", initiator: "scheduled" },
+  { name: "send, initiator scheduled-now", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", initiator: "scheduled-now" }, result: "delivered", initiator: "scheduled-now" },
+  { name: "send, initiator loop", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", initiator: "loop" }, result: "delivered", initiator: "loop" },
+  { name: "open, identified sender", verb: "openSession", req: Object.assign({ projectSlug: "p", prompt: "a" }, FROM_AGENT_A), result: "opened", sender: "extracted" },
+  { name: "open, declared sender", verb: "openSession", req: { projectSlug: "p", prompt: "a", from: "nightly" }, result: "opened", sender: "declared" },
+  { name: "open, undeclared sender", verb: "openSession", req: { projectSlug: "p", prompt: "a" }, result: "opened", sender: "undeclared" },
+  { name: "open, initiator trigger", verb: "openSession", req: { projectSlug: "p", prompt: "a", initiator: "trigger" }, result: "opened", initiator: "trigger" },
+  { name: "open, initiator scheduled", verb: "openSession", req: { projectSlug: "p", prompt: "a", initiator: "scheduled" }, result: "opened", initiator: "scheduled" },
+  { name: "open, initiator scheduled-now", verb: "openSession", req: { projectSlug: "p", prompt: "a", initiator: "scheduled-now" }, result: "opened", initiator: "scheduled-now" },
+  { name: "open, initiator loop", verb: "openSession", req: { projectSlug: "p", prompt: "a", initiator: "loop" }, result: "opened", initiator: "loop" },
+  // refusals, one per reason class
+  { name: "send refused: human initiator", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", initiator: "human" }, result: "refused", reason: /human/ },
+  { name: "send refused: unknown initiator", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", initiator: "bogus" }, result: "refused", reason: /unknown initiator/ },
+  { name: "send refused: no prompt", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target" }, result: "refused", reason: /prompt/ },
+  { name: "send refused: bad --from", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", prompt: "a", from: 5 }, result: "refused", reason: /from must be a string/ },
+  { name: "send refused: unsafe session id", verb: "sendInput", req: { projectSlug: "p", sessionId: "../x", prompt: "a" }, result: "refused", reason: /unsafe session id/ },
+  { name: "send refused: unknown project", verb: "sendInput", req: { projectSlug: "nowhere", sessionId: "x1", prompt: "a" }, result: "refused", reason: /unknown project/ },
+  { name: "send refused: target named two ways", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-target", to: "reviewer@p", prompt: "a" }, result: "refused", reason: /one way only/ },
+  { name: "send refused: reply from outside a session", verb: "sendInput", req: { projectSlug: "p", reply: true, prompt: "a" }, result: "refused", reason: /reply/ },
+  { name: "send error: project not ready", verb: "sendInput", req: { projectSlug: "bare", sessionId: "cli-target", prompt: "a" }, result: "error", reason: /not ready/ },
+  { name: "send not-found: no such session", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-missing", prompt: "a" }, result: "not-found", reason: /no session/, sessionsDir: true },
+  { name: "send refused: shedding load", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-idle", prompt: "a" }, result: "refused", reason: /memory pressure/, idle: true, shed: true },
+  { name: "open refused: human initiator", verb: "openSession", req: { projectSlug: "p", prompt: "a", initiator: "human" }, result: "refused", reason: /human/ },
+  { name: "open refused: no prompt", verb: "openSession", req: { projectSlug: "p" }, result: "refused", reason: /prompt/ },
+  { name: "open refused: unknown agent", verb: "openSession", req: { projectSlug: "p", prompt: "a", agentName: "nobody" }, result: "refused", reason: /unknown agent/ },
+  { name: "open refused: unknown project", verb: "openSession", req: { projectSlug: "nowhere", prompt: "a" }, result: "refused", reason: /unknown project/ },
+  { name: "open refused: unknown visibility", verb: "openSession", req: { projectSlug: "p", prompt: "a", sessionVisibility: "secret" }, result: "refused", reason: /sessionVisibility/ },
+  { name: "open refused: permissionMode not a string", verb: "openSession", req: { projectSlug: "p", prompt: "a", permissionMode: 7 }, result: "refused", reason: /permissionMode/ },
+  { name: "open refused: shedding load", verb: "openSession", req: { projectSlug: "p", prompt: "a" }, result: "refused", reason: /memory pressure/, shed: true },
+  { name: "open error: project not ready", verb: "openSession", req: { projectSlug: "bare", prompt: "a" }, result: "error", reason: /not ready/ },
+  // failures
+  { name: "send error: the turn fails to start", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-idle", prompt: "a" }, result: "error", reason: /turn start failed/, idle: true, startThrows: true },
+  { name: "send error: the turn fails to start asynchronously", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-idle", prompt: "a" }, result: "error", reason: /turn start failed/, idle: true, startAsync: "fail" },
+  { name: "send delivered after an asynchronous start", verb: "sendInput", req: { projectSlug: "p", sessionId: "cli-idle", prompt: "a" }, result: "resumed-and-delivered", entryResult: "delivered", idle: true, startAsync: "ok" },
+  { name: "open error: the first turn fails to start asynchronously", verb: "openSession", req: { projectSlug: "p", prompt: "a" }, result: "error", reason: /open failed/, startAsync: "fail" },
+  { name: "open opened after an asynchronous start", verb: "openSession", req: { projectSlug: "p", prompt: "a" }, result: "opened", startAsync: "ok" },
+  // a handler throw
+  { name: "send, the handler throws", verb: "sendInput", req: { projectSlug: "boom", sessionId: "x1", prompt: "a" }, result: "error", reason: /unexpected failure: store exploded/ },
+  { name: "open, the handler throws", verb: "openSession", req: { projectSlug: "boom", prompt: "a" }, result: "error", reason: /unexpected failure: store exploded/ },
+];
+
+function runShape(shape, withLedger) {
+  var over = { noLedger: !withLedger, startThrows: shape.startThrows, startAsync: shape.startAsync };
+  if (shape.sessionsDir) over.sessionsDir = fs.mkdtempSync(path.join(os.tmpdir(), "outbound-si-store-"));
+  var t = setup(over);
+  if (shape.idle) t.p.sm.sessions.set(101, idleSession());
+  if (shape.shed) setNewWorkGate(function () { return true; });
+  var settled;
+  var originalError = console.error;
+  var originalLog = console.log;
+  console.error = function () {};
+  console.log = function () {};
+  try {
+    settled = Promise.resolve(t.input[shape.verb](Object.assign({}, shape.req)));
+  } finally {
+    console.error = originalError;
+    console.log = originalLog;
+  }
+  return settled.then(function (result) {
+    return { t: t, result: result };
+  }).finally(function () {
+    if (shape.shed) setNewWorkGate(null);
+  });
+}
+
+SHAPES.forEach(function (shape) {
+  test("caller shape: " + shape.name + ": the answer is the same with and without the ledger, and one entry is kept", async function () {
+    var withIt = await runShape(shape, true);
+    var without = await runShape(shape, false);
+    assert.equal(withIt.result.result, shape.result);
+    if (shape.reason) assert.match(withIt.result.reason, shape.reason);
+    assert.deepEqual(withIt.result, without.result);
+
+    var entries = all(withIt.t.ledger);
+    assert.equal(entries.length, 1, JSON.stringify(entries));
+    var e = entries[0];
+    assert.equal(e.verb, shape.verb === "sendInput" ? "send_input" : "open_session");
+    // A delivery is recorded as delivered whether or not the session had to be resumed first.
+    assert.equal(e.result, shape.entryResult || shape.result);
+    if (shape.sender) assert.equal(e.sender.kind, shape.sender);
+    if (shape.initiator) assert.equal(e.initiator, shape.initiator);
+    if (shape.reason) assert.match(e.reason, shape.reason);
+    assert.deepEqual(all(without.t.ledger), []);
+  });
+});
+
+test("caller shape: a result that is a Promise stays a Promise with the ledger on, and a synchronous one stays synchronous", async function () {
+  var t = setup({ startAsync: "ok" });
+  t.p.sm.sessions.set(101, idleSession());
+  var pending = t.input.sendInput({ projectSlug: "p", sessionId: "cli-idle", prompt: "a" });
+  assert.equal(typeof pending.then, "function");
+  assert.equal((await pending).result, "resumed-and-delivered");
+  var sync = t.input.sendInput({ projectSlug: "p", sessionId: "cli-target", prompt: "b" });
+  assert.equal(typeof sync.then, "undefined");
+});
+
+test("caller shape: the console's own scheduled firing and a loop turn leave no entry, by design: the console is the sender, not a session", function () {
+  var t = setup();
+  var fired = t.input.fireScheduled({ projectSlug: "p", sessionId: "cli-target", prompt: "tick", initiator: "scheduled-now", force: true });
+  assert.equal(fired.result, "delivered");
+  // The first firing left the session mid-turn, so an ordinary one is skipped.
+  var skipped = t.input.fireScheduled({ projectSlug: "p", sessionId: "cli-target", prompt: "tick again" });
+  assert.equal(skipped.result, "busy");
+  var refusedFire = t.input.fireScheduled({ projectSlug: "p", sessionId: "cli-target", prompt: "tick", initiator: "trigger" });
+  assert.equal(refusedFire.result, "refused");
+  assert.deepEqual(all(t.ledger), []);
+  // Loops start their turns on the SDK directly (lib/project-loop.js), never
+  // through these handlers, so there is nothing to record.
+  var loopSrc = fs.readFileSync(path.join(__dirname, "..", "lib", "project-loop.js"), "utf8");
+  assert.equal(/session-input|sessionInput\.(sendInput|openSession)/.test(loopSrc), false);
+});
+
+test("caller shape: an external trigger file reaches the wrapped handlers and its sender fields are recorded", async function () {
+  var { attachExternalTrigger } = require("../lib/project-external-trigger");
+  var t = setup();
+  var triggersDir = fs.mkdtempSync(path.join(os.tmpdir(), "outbound-si-trig-"));
+  var trigger = attachExternalTrigger({
+    triggersDir: triggersDir,
+    getProject: function (slug) { return slug === "p" ? t.p : null; },
+    sessionInput: t.input,
+  });
+  try {
+    var drop = {
+      version: 2, id: "trig-1", projectSlug: "p", sessionId: "cli-target", initialPrompt: "from a file",
+      from: "cron-job", initiator: "trigger",
+    };
+    fs.writeFileSync(path.join(triggersDir, "trig-1.json"), JSON.stringify(drop));
+    trigger.startWatcher();
+    for (var i = 0; i < 100 && all(t.ledger).length === 0; i++) await new Promise(function (r) { setTimeout(r, 20); });
+  } finally {
+    trigger.stopWatcher();
+  }
+  var entries = all(t.ledger);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].verb, "send_input");
+  assert.equal(entries[0].prompt, "from a file");
+  assert.equal(entries[0].sender.kind, "declared");
+  assert.equal(entries[0].sender.name, "cron-job");
 });
