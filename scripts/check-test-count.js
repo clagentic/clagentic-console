@@ -392,8 +392,16 @@ if (require.main === module) {
 
   var REPORTER_PATH = path.join(__dirname, "test-file-completion-reporter.js");
 
+  // --test-timeout bounds each test and also each file as a whole, so a file
+  // that hangs (an open handle, a child that never connects) fails by name
+  // instead of stalling the buffered run. 300 s is over twice the CI full-suite
+  // wall time (about 130 s with every file running), so no healthy file reaches
+  // it even on a loaded host.
+  var testTimeoutMs = Number(process.env.CHECK_TEST_COUNT_TEST_TIMEOUT_MS) || 300000;
+
   var result = spawnSync(process.execPath, [
     "--test",
+    "--test-timeout=" + testTimeoutMs,
     "--test-reporter=tap", "--test-reporter-destination=stdout",
     "--test-reporter=" + REPORTER_PATH, "--test-reporter-destination=stderr",
   ].concat(files), {

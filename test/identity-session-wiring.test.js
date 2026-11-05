@@ -10,12 +10,11 @@ var test = require("node:test");
 var assert = require("node:assert/strict");
 var crypto = require("crypto");
 var fs = require("fs");
-var net = require("net");
 var os = require("os");
 var path = require("path");
 var nodeModule = require("node:module");
-var { spawn } = require("child_process");
 var { pathToFileURL } = require("url");
+var { startWorkerProcess } = require("./helpers/worker-process");
 
 nodeModule.register(pathToFileURL(path.join(__dirname, "fixtures", "fake-agent-sdk", "resolve-hook.mjs")).href);
 
@@ -36,14 +35,6 @@ function lastFakeQuery() {
   var all = globalThis.__fakeAgentSdkQueries || [];
   return all[all.length - 1];
 }
-async function until(predicate, label) {
-  for (var i = 0; i < 100; i++) {
-    if (predicate()) return;
-    await sleep(20);
-  }
-  assert.fail("timed out waiting for " + label);
-}
-
 // The environment a plain Claude process gets: the daemon's own, plus the two
 // variables the console always adds and its reference to the session (project
 // slug and session id, set whatever the provider). Written out, not computed by
@@ -405,44 +396,15 @@ test("the adapter sends a worker the identity directory only when there is a pro
   assert.equal("identity" in plain.sent.find(function (m) { return m.type === "query_start"; }).options, false);
 });
 
-var WORKER = path.join(__dirname, "..", "lib", "yoke", "adapters", "claude-worker.js");
-var REGISTER = pathToFileURL(path.join(__dirname, "fixtures", "fake-agent-sdk", "register.mjs")).href;
-
 // A real worker process; resolves with the environment its Claude process was given.
 async function workerEnvFor(workerEnv, queryOptions) {
-  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-worker-id-"));
-  var socketPath = path.join(dir, "w.sock");
-  var received = [];
-  var connection = null;
-  var buffer = "";
-  var server = net.createServer(function (conn) {
-    connection = conn;
-    conn.on("data", function (chunk) {
-      buffer += chunk.toString();
-      var lines = buffer.split("\n");
-      buffer = lines.pop();
-      lines.filter(Boolean).forEach(function (line) { received.push(JSON.parse(line)); });
-    });
-    conn.on("error", function () {});
-  });
-  await new Promise(function (resolve) { server.listen(socketPath, resolve); });
-  var child = spawn(process.execPath, ["--import", REGISTER, WORKER, socketPath], {
-    env: Object.assign({ PATH: process.env.PATH, HOME: dir }, workerEnv), cwd: dir, stdio: ["ignore", "ignore", "ignore"],
-  });
+  var worker = await startWorkerProcess({ prefix: "clagentic-worker-id-", env: workerEnv });
   try {
-    await until(function () { return received.some(function (m) { return m.type === "ready"; }); }, "worker ready");
-    connection.write(JSON.stringify({ type: "query_start", prompt: null, options: Object.assign({ cwd: os.tmpdir() }, queryOptions), singleTurn: false }) + "\n");
-    await until(function () { return received.some(function (m) { return m.type === "sdk_event" && m.event.call === "env"; }); }, "the env probe");
-    var probe = received.find(function (m) { return m.type === "sdk_event" && m.event.call === "env"; });
+    worker.send({ type: "query_start", prompt: null, options: Object.assign({ cwd: os.tmpdir() }, queryOptions), singleTurn: false });
+    var probe = await worker.next(function (m) { return m.type === "sdk_event" && m.event.call === "env"; }, "the env probe");
     return { env: probe.event.env, optionKeys: probe.event.optionKeys };
   } finally {
-    try {
-      child.kill("SIGKILL");
-    } catch (e) {
-      if (e.code !== "ESRCH") throw e;
-    }
-    await new Promise(function (resolve) { server.close(resolve); if (connection) connection.destroy(); });
-    fs.rmSync(dir, { recursive: true, force: true });
+    await worker.stop();
   }
 }
 

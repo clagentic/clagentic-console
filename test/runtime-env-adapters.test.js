@@ -7,13 +7,11 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
-var fs = require("fs");
-var net = require("net");
 var os = require("os");
 var path = require("path");
 var nodeModule = require("node:module");
-var { spawn } = require("child_process");
 var { pathToFileURL } = require("url");
+var { startWorkerProcess } = require("./helpers/worker-process");
 
 var FIXTURE_DIR = path.join(__dirname, "fixtures", "fake-agent-sdk");
 nodeModule.register(pathToFileURL(path.join(FIXTURE_DIR, "resolve-hook.mjs")).href);
@@ -165,67 +163,9 @@ test("a Claude query for an OS user with no Settings variables sends none", asyn
 
 // --- Claude, in the OS user's worker: the worker process ---
 
-async function startWorker() {
-  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-worker-env-"));
-  var socketPath = path.join(dir, "w.sock");
-  var received = [];
-  var waiters = [];
-  var connection = null;
-  var buffer = "";
-
-  function deliver() {
-    waiters = waiters.filter(function (w) {
-      var index = received.findIndex(w.predicate);
-      if (index === -1) return true;
-      w.resolve(received.splice(index, 1)[0]);
-      return false;
-    });
-  }
-
-  var server = net.createServer(function (conn) {
-    connection = conn;
-    conn.on("data", function (chunk) {
-      buffer += chunk.toString();
-      var lines = buffer.split("\n");
-      buffer = lines.pop();
-      lines.filter(Boolean).forEach(function (line) { received.push(JSON.parse(line)); });
-      deliver();
-    });
-    conn.on("error", function () {});
-  });
-  await new Promise(function (resolve) { server.listen(socketPath, resolve); });
-
+function startWorker() {
   // The worker's own environment, as buildUserEnv gives an OS user's.
-  var child = spawn(process.execPath, ["--import", pathToFileURL(path.join(FIXTURE_DIR, "register.mjs")).href,
-    path.join(__dirname, "..", "lib", "yoke", "adapters", "claude-worker.js"), socketPath], {
-    env: { PATH: process.env.PATH, HOME: dir, USER: "alice", LANG: "C.UTF-8" },
-    cwd: dir,
-    stdio: ["ignore", "ignore", "ignore"],
-  });
-
-  var worker = {
-    dir: dir,
-    next: function (predicate, label) {
-      return new Promise(function (resolve, reject) {
-        var timer = setTimeout(function () { reject(new Error("timed out waiting for " + label)); }, 20000);
-        waiters.push({ predicate: predicate, resolve: function (m) { clearTimeout(timer); resolve(m); } });
-        deliver();
-      });
-    },
-    send: function (msg) { connection.write(JSON.stringify(msg) + "\n"); },
-    stop: async function () {
-      try {
-        child.kill("SIGKILL");
-      } catch (e) {
-        // Only a child that has already exited is expected here.
-        if (e.code !== "ESRCH") throw e;
-      }
-      await new Promise(function (resolve) { server.close(resolve); if (connection) connection.destroy(); });
-      fs.rmSync(dir, { recursive: true, force: true });
-    },
-  };
-  await worker.next(function (m) { return m.type === "ready"; }, "ready");
-  return worker;
+  return startWorkerProcess({ prefix: "clagentic-worker-env-", env: { USER: "alice", LANG: "C.UTF-8" } });
 }
 
 async function envReportedByWorker(options) {

@@ -7,74 +7,14 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
-var fs = require("fs");
 var os = require("os");
-var net = require("net");
-var path = require("path");
-var { spawn } = require("child_process");
-var { pathToFileURL } = require("url");
+var { startWorkerProcess } = require("./helpers/worker-process");
 
-var WORKER = path.join(__dirname, "..", "lib", "yoke", "adapters", "claude-worker.js");
-var REGISTER = pathToFileURL(path.join(__dirname, "fixtures", "fake-agent-sdk", "register.mjs")).href;
 var WAIT_MS = 20000;
 
 // Starts the worker against a fresh socket; returns helpers to talk to it.
-async function startWorker() {
-  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-worker-test-"));
-  var socketPath = path.join(dir, "w.sock");
-  var received = [];
-  var waiters = [];
-  var connection = null;
-  var buffer = "";
-
-  function deliver() {
-    waiters = waiters.filter(function (w) {
-      var index = received.findIndex(w.predicate);
-      if (index === -1) return true;
-      w.resolve(received.splice(index, 1)[0]);
-      return false;
-    });
-  }
-
-  var server = net.createServer(function (conn) {
-    connection = conn;
-    conn.on("data", function (chunk) {
-      buffer += chunk.toString();
-      var lines = buffer.split("\n");
-      buffer = lines.pop();
-      lines.filter(Boolean).forEach(function (line) { received.push(JSON.parse(line)); });
-      deliver();
-    });
-    conn.on("error", function () {});
-  });
-  await new Promise(function (resolve) { server.listen(socketPath, resolve); });
-
-  var child = spawn(process.execPath, ["--import", REGISTER, WORKER, socketPath], {
-    env: { PATH: process.env.PATH, HOME: dir },
-    cwd: dir,
-    stdio: ["ignore", "ignore", "ignore"],
-  });
-
-  var worker = {
-    next: function (predicate, label) {
-      return new Promise(function (resolve, reject) {
-        var timer = setTimeout(function () { reject(new Error("timed out waiting for " + label)); }, WAIT_MS);
-        waiters.push({ predicate: predicate, resolve: function (m) { clearTimeout(timer); resolve(m); } });
-        deliver();
-      });
-    },
-    probe: function (call, label) {
-      return worker.next(function (m) { return m.type === "sdk_event" && m.event.type === "fake_probe" && m.event.call === call; }, label || call);
-    },
-    send: function (msg) { connection.write(JSON.stringify(msg) + "\n"); },
-    stop: async function () {
-      try { child.kill("SIGKILL"); } catch (e) { /* already gone */ }
-      await new Promise(function (resolve) { server.close(resolve); if (connection) connection.destroy(); });
-      fs.rmSync(dir, { recursive: true, force: true });
-    },
-  };
-  await worker.next(function (m) { return m.type === "ready"; }, "ready");
-  return worker;
+function startWorker() {
+  return startWorkerProcess({ prefix: "clagentic-worker-test-", waitMs: WAIT_MS });
 }
 
 async function withQuery(fn) {
