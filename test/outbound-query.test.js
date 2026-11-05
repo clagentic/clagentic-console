@@ -213,8 +213,27 @@ test("a vendor id that two projects hold is ambiguous until the project is named
     assert.deepEqual(res.projects, [name, "beta"].sort());
   });
 
-  // __proto__ is not a plain id, so it can never be the requested sender.
-  test("an unattributed call naming the vendor session id " + name + " is listed", { skip: name === "__proto__" }, function () {
+  if (name === "__proto__") {
+    // __proto__ is not a plain id, so it can never be the requested sender: the
+    // request is refused, and a call that declared it is never listed for another id.
+    test("an unattributed call declaring __proto__ is refused as a request and never listed under another id", function () {
+      var t = build();
+      t.ledger.record(entry({ sender: { kind: "declared", attribution: "unverified", name: "job", fromSession: name }, prompt: "claims " + name }));
+      var refused = t.query.list({ sessionId: name });
+      assert.equal(refused.ok, false);
+      assert.equal(refused.result, "refused");
+      ["cli-sender", "someone-else", "constructor"].forEach(function (id) {
+        var res = t.query.list({ sessionId: id });
+        assert.equal(res.ok, true, id);
+        assert.equal(res.unattributedCount, 0, id);
+        assert.deepEqual(res.unattributed, [], id);
+        assert.equal(JSON.stringify(res).indexOf("claims " + name), -1, id);
+      });
+    });
+    return;
+  }
+
+  test("an unattributed call naming the vendor session id " + name + " is listed", function () {
     var t = build();
     t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "work", sessionId: "7", cliSessionId: name }, prompt: "mine" }));
     t.ledger.record(entry({ sender: { kind: "declared", attribution: "unverified", name: "job", fromSession: name }, prompt: "claims " + name }));
