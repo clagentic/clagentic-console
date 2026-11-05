@@ -30,3 +30,26 @@ test("a test file that never finishes fails by name within the configured timeou
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// The bound is per file as a whole, not per test: a file of short tests that
+// add up to more than it is failed by name. Healthy files must therefore stay
+// well under the default, which is why a slow file is split instead.
+test("the timeout also bounds a file whose tests are each under it", function () {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "check-count-file-bound-"));
+  try {
+    var slow = path.join(dir, "many-short-tests.test.js");
+    fs.writeFileSync(slow,
+      "var t = require('node:test');\n" +
+      "for (var i = 0; i < 4; i++) t('short ' + i, function () { return new Promise(function (r) { setTimeout(r, 1000); }); });\n");
+    var run = spawnSync(process.execPath, [SCRIPT, slow], {
+      encoding: "utf8",
+      timeout: 30000,
+      env: Object.assign({}, process.env, { CHECK_TEST_COUNT_TEST_TIMEOUT_MS: "2500" }),
+    });
+    assert.equal(run.error, undefined);
+    assert.notEqual(run.status, 0);
+    assert.match(run.stdout + run.stderr, /FAIL[\s\S]*many-short-tests\.test\.js/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

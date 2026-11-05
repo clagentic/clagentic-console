@@ -392,11 +392,17 @@ if (require.main === module) {
 
   var REPORTER_PATH = path.join(__dirname, "test-file-completion-reporter.js");
 
-  // --test-timeout bounds each test and also each file as a whole, so a file
-  // that hangs (an open handle, a child that never connects) fails by name
-  // instead of stalling the buffered run. 300 s is over twice the CI full-suite
-  // wall time (about 130 s with every file running), so no healthy file reaches
-  // it even on a loaded host.
+  // --test-timeout bounds each test and also each file as a whole (measured on
+  // Node 22: a file of four 1 s tests is cancelled at --test-timeout=2500, as
+  // a file, though no test in it ran past 1 s). There is no separate per-file
+  // flag, so this one value is the per-file bound: a file that hangs (an open
+  // handle, a child that never connects) fails by name instead of stalling the
+  // buffered run, and a file whose tests legitimately add up to more than it
+  // is cancelled too. A slow file is therefore split, not given a higher
+  // bound (prompt-invariants was one file of 10 slow parts, about 12 minutes
+  // alone; split into one file per slice each takes about 15 s). 300 s is
+  // about 20 times the slowest file measured on a loaded host. A test that
+  // needs its own tighter bound sets the `timeout` option on itself.
   var testTimeoutMs = Number(process.env.CHECK_TEST_COUNT_TEST_TIMEOUT_MS) || 300000;
 
   var result = spawnSync(process.execPath, [
