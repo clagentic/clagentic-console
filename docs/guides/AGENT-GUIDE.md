@@ -56,8 +56,8 @@ An address is at most 192 characters. `--project` may be given beside `--to`, an
 
 An address names a class of sessions, and the console never guesses within one. Among the sessions an address matches, the highest state tier that has any match decides:
 
-1. `live`: a turn is running.
-2. `idle`: a runtime is attached and no turn is running.
+1. `live`: a turn is running, or the session is blocked on a pending prompt.
+2. `idle`: a runtime is attached, nothing is running and nothing is pending.
 3. `reaped`: no runtime (the idle reaper, a daemon restart). Input resumes it.
 
 Exactly one match in the deciding tier: the input goes to it. Several in that tier: nothing is delivered and the result is `ambiguous`, with the tied sessions as `candidates` (the exit code is 3). Lower tiers are not consulted once a higher tier matched. No match at all is `not-found` (exit code 4). An address that does not parse, or names an unknown project, is `refused`.
@@ -243,7 +243,7 @@ clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <i
 | `--project <slug>` | Only this project. An unknown project is `refused`. |
 | `--agent <name>` | Only sessions running this named agent. Compared by slug, so `Reviewer` and `reviewer` are one agent. |
 | `--vendor <id>` | Only sessions on this vendor (case-insensitive). |
-| `--state live\|idle\|reaped\|any` | Only sessions in this state. Default `any`. Another value is `refused`. |
+| `--state live\|idle\|reaped\|any` | Only sessions in this state. Default `any`. Another value is `refused`. `live` is a running turn or a session blocked on a pending prompt, so it includes sessions waiting on the operator; read `pendingPrompts` to tell them apart. Every row carries `pendingPrompts` whatever the filter. |
 
 The filters combine. Examples:
 
@@ -296,7 +296,7 @@ Result:
 | `label` | `<agent>@<project>`, or `<vendor>@<project>` for a plain session: the same string `--to` accepts. |
 | `name` | The session name set at open, or `null`. |
 | `title` | The session title (empty string if none). |
-| `state` | `live` (a turn is running), `idle` (a runtime is attached, no turn is running) or `reaped` (no runtime; input resumes it). |
+| `state` | `live` (a turn is running, or the session is blocked on a pending prompt), `idle` (a runtime is attached, nothing is running, nothing is pending) or `reaped` (no runtime; input resumes it). A non-empty `pendingPrompts` on a `live` row means it is waiting on the operator, not running. |
 | `lastActivity` | ISO 8601 time of the last activity (falling back to creation time), or `null`. |
 | `pendingPrompts` | The operator prompts the session is blocked on, oldest first; an empty array when it waits on nothing. |
 

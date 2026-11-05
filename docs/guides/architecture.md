@@ -95,6 +95,45 @@ releases every token of the turn that is not a tracked background agent
 never received its `tool_result` cannot hold an idle session "running" until
 the next query. A surface must not derive liveness from anything else.
 
+**Waiting on a prompt.** A session blocked on an operator prompt (a
+permission, `ask_user`, plan or elicitation prompt) is not "running a turn"
+and not idle. The daemon derives one four-valued activity per session in
+`lib/session-liveness.js`, from three facts: a runtime is attached
+(`lib/sender-ref.js` `isLive`), a turn is running (`isProcessing`), and the
+operator prompts pending in the prompt registry (`lib/pending-prompts.js`,
+the same data `list-sessions` serves as `pendingPrompts`):
+
+| Activity | When |
+|---|---|
+| `reaped` | no runtime attached |
+| `waiting` | a runtime is attached and at least one operator prompt is pending (outranks a running turn) |
+| `running` | a runtime is attached, a turn is running, nothing pending |
+| `idle` | a runtime is attached, nothing running, nothing pending |
+
+Every surface reads that one function. The confirm card
+(`collectInterruptions`) labels a session `running a turn`, `waiting on a
+prompt` or `idle` and adds `#waiting` to the confirmation keys; the session
+list carries `waiting` beside `isProcessing` (`mapSessionForClient`, the
+project status in `lib/project.js`, the hub's recent sessions), and
+`activity-state.js` turns it into the `waiting` tone and class (a dashed ring
+on each dot family; it outranks `alert`, because a blocked session is the one
+to act on). The transcript footer ignores it: it shows whether a turn is
+running. `list-sessions` projects the activity onto its three `state` values,
+with `waiting` and `running` both `live`. A prompt opening or settling
+re-broadcasts the session list (coalesced to one per tick) so the indicator
+follows it.
+
+Why a blocked session once read idle: `isProcessing` is set to true only by
+the input paths (a typed or injected message, a plan answer, a loop start) and cleared at the
+turn's `result`. A turn the CLI starts itself, with no such input, never sets
+it, so a permission prompt raised there left the flag false while the turn
+waited on the operator. A pending operator prompt is owned by the turn or
+query that opened it and is cancelled when that turn ends (`endTurn`) or the
+query ends (`endQuery`); only a prompt raised by a tracked background agent
+survives its parent's query. A prompt on a session with no runtime is
+therefore the only orphaned shape: nothing awaits it, so the session is
+`reaped`, and the prompt still shows in `pendingPrompts`.
+
 ### Agent-readable diagnostics over IPC
 
 Some server-side diagnostic probes (e.g. the activity-source divergence
@@ -151,7 +190,7 @@ Any caller (an operator script, an agent, a person at a shell) can open a sessio
 
 **Send.** The input becomes the session's next turn. A session with a running query takes it into that query (`delivered`). A session whose runtime has ended (the idle reaper, a daemon restart) is resumed on its own vendor and agent, from the stored meta record, by the same resume the browser's `resume_session` uses (`lib/session-resume.js`), and the input starts its next turn (`resumed-and-delivered`). A resume for injected input does not move any connected client off the session it is viewing. `--session` takes the console session id (`consoleSessionId` in an open result) or the vendor-assigned id. Only the console's own session store is asked about a session that is not in memory: an id it does not hold is `not-found`, and the file moves to `processed/` with that result and is never retried. Sessions started outside the console (a vendor CLI run by hand) are not addressable. A store record that cannot be read, or whose history has any blank, malformed or non-object line (the error names the session and the line; each line must parse to a JSON object, and the single newline ending the file is the only blank allowed) is an `error` instead, and the session is not resumed. A session id is checked against the safe-id allowlist (`lib/session-id.js`: letters, digits, `_` and `-`) before it reaches any file path, on the browser's `resume_session` and on injected input alike, and every path built from an id is checked to stay inside its directory. An unsafe id (`../x`, an absolute path) is `refused` on injected input and an error on the browser path; it is never read as absent.
 
-**Discovery: `list-sessions`.** Read-only. Prints `{ "ok": true, "result": "listed", "count": N, "sessions": [...] }`, newest activity first, from the console's own store (`lib/session-directory.js`; every recorded session is loaded at start, so a reaped one is listed like a running one, and a session started outside the console is not). Each session carries `consoleSessionId`, `sessionId` (the vendor's, or `null`), `project`, `agent` (or `null` for a plain session), `vendor`, `label` (`<agent>@<project>`, or `<vendor>@<project>` for a plain session: the label the chat shows for an extracted sender), `name` (the session name set at open, or `null`), `title`, `state` and `lastActivity` (ISO 8601). `state` is `live` (a turn is running), `idle` (a runtime is attached, no turn is running) or `reaped` (no runtime; input resumes it). The filters `--project`, `--agent` (compared by slug, so `Reviewer` and `reviewer` are one agent), `--vendor` and `--state` (default `any`) combine; an unknown state or project is `refused`. Each entry also carries `pendingPrompts`, an array (empty when the session waits on nothing) of the operator prompts the session is blocked on, oldest first. An element is `{ "requestId", "kind", "tool", "summary", "ageSeconds" }`: `kind` is the prompt kind (`permission`, `plan`, `ask_user`, `elicitation`), `tool` the tool name or `null`, `ageSeconds` whole seconds since the prompt opened, and `summary` a single line of at most 120 characters (ellipsis included) with every control character and line separator replaced by a space. The source is the daemon's in-memory prompt registry (`lib/prompt-registry.js`), the same state the banner is raised from, read through `lib/pending-prompts.js`; the caller reads no file, and `notifications.json` is not consulted. A prompt that is answered, expired or cancelled is gone from the next call. The `summary` is the one-line text the permission banner already shows for a tool call (`lib/permission-summary.js`), so it carries no more of the call than the banner; for `ask_user`, `elicitation` and every other kind it is empty. Never included: tool input beyond that line, the decision reason, a question's or form's text, a plan's content. A busy session with an unanswered prompt is `live` in `state`; `pendingPrompts` is what tells it from one that is running. Background helper sessions are not listed. It is reachable only over `daemon.sock`, by the daemon's own OS user, like `send-input`.
+**Discovery: `list-sessions`.** Read-only. Prints `{ "ok": true, "result": "listed", "count": N, "sessions": [...] }`, newest activity first, from the console's own store (`lib/session-directory.js`; every recorded session is loaded at start, so a reaped one is listed like a running one, and a session started outside the console is not). Each session carries `consoleSessionId`, `sessionId` (the vendor's, or `null`), `project`, `agent` (or `null` for a plain session), `vendor`, `label` (`<agent>@<project>`, or `<vendor>@<project>` for a plain session: the label the chat shows for an extracted sender), `name` (the session name set at open, or `null`), `title`, `state` and `lastActivity` (ISO 8601). `state` is `live` (a turn is running, or the session is blocked on a pending prompt), `idle` (a runtime is attached, nothing is running and nothing is pending) or `reaped` (no runtime; input resumes it). The state comes from the shared activity derivation in `lib/session-liveness.js` (see "Waiting on a prompt"); `waiting` and `running` are both `live`, so a `--state live` query returns every session that is busy or blocked on the operator, and the existing three values are unchanged. The filters `--project`, `--agent` (compared by slug, so `Reviewer` and `reviewer` are one agent), `--vendor` and `--state` (default `any`) combine; an unknown state or project is `refused`. Each entry also carries `pendingPrompts`, an array (empty when the session waits on nothing) of the operator prompts the session is blocked on, oldest first. An element is `{ "requestId", "kind", "tool", "summary", "ageSeconds" }`: `kind` is the prompt kind (`permission`, `plan`, `ask_user`, `elicitation`), `tool` the tool name or `null`, `ageSeconds` whole seconds since the prompt opened, and `summary` a single line of at most 120 characters (ellipsis included) with every control character and line separator replaced by a space. The source is the daemon's in-memory prompt registry (`lib/prompt-registry.js`), the same state the banner is raised from, read through `lib/pending-prompts.js`; the caller reads no file, and `notifications.json` is not consulted. A prompt that is answered, expired or cancelled is gone from the next call. The `summary` is the one-line text the permission banner already shows for a tool call (`lib/permission-summary.js`), so it carries no more of the call than the banner; for `ask_user`, `elicitation` and every other kind it is empty. Never included: tool input beyond that line, the decision reason, a question's or form's text, a plan's content. A session blocked on an unanswered prompt is `live` in `state` whether or not a turn flag is set; `pendingPrompts` is what tells it from one that is running. Every row carries `pendingPrompts`, whatever the `--state` filter. Background helper sessions are not listed. It is reachable only over `daemon.sock`, by the daemon's own OS user, like `send-input`.
 
 **Addressing: `--to`.** `send-input --to <address>` names the target by who it is, with no id. Forms: `<agent>@<project>` (a session running that named agent), `<vendor>@<project>` (a PLAIN session, one with no named agent, on that vendor: `claude@lore`, `codex@lore`) and `@<project>` (any session in the project). `--project` may be given beside `--to` and must be the address's project. The address is resolved in the console's own store, and never guessed:
 
