@@ -1050,6 +1050,14 @@ detector:**
    none stands (`onGetBuildUpdateDiagnostic`). The offer carries no session
    content, because it goes to every client.
 
+   A package install (`npm install -g`, including `install:local-test`) has no
+   `.git` in its package directory, so the change list stays unavailable until
+   `buildSourceRepo` names the checkout; the card says so. The confirmation card
+   shows the sessions a restart ends as a count line with an expand control
+   (`lib/public/modules/build-update-sessions.js`): expanded, the list scrolls in
+   a height-bounded region, and the action buttons are siblings of that region,
+   never inside it, so they stay reachable at any session count.
+
    The offer is an ordinary diagnostic: it is listed in the Diagnostics panel,
    cleared by its clear-all, and toasted in the shared
    `#diagnostic-toast-container` stack with the other toasts. Because the

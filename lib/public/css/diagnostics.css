@@ -259,6 +259,31 @@
   margin-left: 6px;
 }
 
+/* The sessions a restart would end: a count line and an expand control above the
+   card's actions. Collapsed by default; expanded, the list scrolls in a bounded
+   region, so the card's height does not depend on the session count. */
+.build-update-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.build-update-sessions-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.build-update-sessions.is-collapsed .build-update-session-list { display: none; }
+.build-update-session-list {
+  margin: 0;
+  padding-left: 16px;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
 /* Shown beside a restart button whose click could not be sent. */
 .build-update-send-failed {
   margin-top: 4px;
@@ -479,6 +504,9 @@
   }
   .toast-diagnostic.visible {
     transform: translateY(0);
+  }
+  .build-update-session-list {
+    max-height: 25vh;
   }
   .toast-diagnostic-msg {
     /* Long unbreakable identifiers (e.g. "PostToolUse", absolute paths)
