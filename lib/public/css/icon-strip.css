@@ -248,6 +248,15 @@
   border-color: var(--activity-other, #B77BF3);
 }
 
+/* Waiting on a prompt (lr-75901b): dashed ring, warning hue. */
+.icon-strip-status.waiting {
+  opacity: 1;
+  background: transparent;
+  border-width: 2px;
+  border-style: dashed;
+  border-color: var(--warning);
+}
+
 /* Alert tone (lr-66c118): unread activity wins over processing green. */
 .icon-strip-status.alert {
   opacity: 1;
