@@ -9,7 +9,7 @@ var path = require("path");
 var os = require("os");
 
 var {
-  createOutboundLedger, retentionDaysFrom, segment, relativePathFor, DEFAULT_RETENTION_DAYS,
+  createOutboundLedger, retentionDaysFrom, DEFAULT_RETENTION_DAYS,
 } = require("../lib/outbound-ledger");
 
 var DAY = 24 * 60 * 60 * 1000;
@@ -67,8 +67,10 @@ test("an identified sender gets its own file under its project, keyed by the ven
 });
 
 test("a sender with no vendor session id yet is keyed by the console id", function () {
-  var rel = relativePathFor(extracted({ sender: { kind: "extracted", attribution: "extracted", project: "p", sessionId: "5" } }));
-  assert.equal(rel, path.join("sessions", "p", "console-5.jsonl"));
+  var dir = tmp();
+  var ledger = ledgerIn(dir);
+  ledger.record(extracted({ sender: { kind: "extracted", attribution: "extracted", project: "p", sessionId: "5" } }));
+  assert.ok(fs.existsSync(path.join(dir, "outbound", "sessions", "p", "console-5.jsonl")));
 });
 
 test("declared and undeclared senders are kept apart from identified ones", function () {
@@ -81,14 +83,33 @@ test("declared and undeclared senders are kept apart from identified ones", func
   assert.equal(fs.existsSync(path.join(dir, "outbound", "sessions")), false);
 });
 
+function filesBelow(dir) {
+  var out = [];
+  fs.readdirSync(dir, { withFileTypes: true }).forEach(function (e) {
+    var full = path.join(dir, e.name);
+    if (e.isDirectory()) out = out.concat(filesBelow(full));
+    else out.push(full);
+  });
+  return out;
+}
+
 test("a declared sender cannot name a path", function () {
-  assert.match(segment("../../etc"), /^x-[0-9a-f]{16}$/);
-  assert.match(segment("a/b"), /^x-/);
-  assert.notEqual(segment("A B"), segment("A  B"));
-  var rel = relativePathFor(declared("../../x"));
-  assert.equal(rel.indexOf(".."), -1);
-  var proj = relativePathFor(extracted({ sender: { kind: "extracted", attribution: "extracted", project: "../p", sessionId: "1" } }));
-  assert.equal(proj.indexOf(".."), -1);
+  var dir = tmp();
+  var ledger = ledgerIn(dir);
+  assert.equal(ledger.record(declared("../../etc")), true);
+  assert.equal(ledger.record(declared("a/b")), true);
+  assert.equal(ledger.record(declared("A B")), true);
+  assert.equal(ledger.record(declared("A  B")), true);
+  assert.equal(ledger.record(extracted({ sender: { kind: "extracted", attribution: "extracted", project: "../p", sessionId: "1" } })), true);
+  var root = path.join(dir, "outbound");
+  var rels = filesBelow(root).map(function (f) { return path.relative(root, f); });
+  // Every write landed inside the ledger root, and distinct names kept distinct files.
+  assert.equal(rels.length, 5);
+  rels.forEach(function (r) { assert.equal(r.indexOf(".."), -1); });
+  var declaredFiles = rels.filter(function (r) { return r.indexOf("unattributed") === 0; });
+  assert.equal(declaredFiles.length, 4);
+  declaredFiles.forEach(function (r) { assert.match(path.basename(r), /^(x-[0-9a-f]{16}|[A-Za-z0-9_-]+)\.jsonl$/); });
+  assert.equal(fs.existsSync(path.join(dir, "etc.jsonl")), false);
 });
 
 test("directories are 0700 and files 0600", function () {
