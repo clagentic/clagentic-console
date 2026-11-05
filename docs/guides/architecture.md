@@ -695,6 +695,10 @@ A browser must run the client code of the daemon it is connected to, including a
 - `GET /sw.js` stamps the service-worker cache name with the build id, so a restart onto a new build changes the worker's bytes and the browser installs it.
 - The WebSocket `info` message and the authenticated `GET /info` carry `buildId`. The client remembers the id its page booted with; a different id on any connect, including a reconnect while the tab stayed open, reloads the page, or shows a banner when there is unsent input a reload would drop (`lib/public/modules/build-guard.js`).
 
+## Client Connection Lifecycle
+
+The browser keeps one WebSocket per tab (`lib/public/modules/app-connection.js`, tracked through `ws-ref.js`). `connect()` is single-flight: each call takes a new generation, cancels a pending reconnect timer and detaches the tracked socket, and an attempt still waiting for its ticket when a newer call starts neither opens nor registers a socket. Every handler of a socket checks that it is still the tracked one and returns otherwise, so a replaced socket never feeds `processMessage`. `resetClientState()` (reconnect, session switch, project switch) also calls `resetStreamState()` (`app-rendering.js`), so text buffered for drawing is dropped before the history replays and is never drawn in front of it.
+
 ## Key Design Decisions
 
 | Decision | Rationale |
