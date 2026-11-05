@@ -66,38 +66,84 @@ function liveSockets() {
   return sockets.filter(function (s) { return typeof s.onmessage === "function"; });
 }
 
-test("overlapping connect() calls leave exactly one live socket", async function () {
-  // app.js boot already started one connect(); start another before any ticket resolves.
+// Opens socket A through the real ticket path and returns it with its handlers
+// captured before anything supersedes it.
+async function openSocketA() {
+  sockets.length = 0;
   mods.conn.connect();
   await resolveAllTickets();
-  assert.equal(liveSockets().length, 1, "only the latest attempt may own a live socket");
+  var a = mods.wsRef.getWs();
+  assert.equal(sockets.length >= 1, true, "ticket resolution must construct a socket");
+  assert.equal(a, sockets[sockets.length - 1]);
+  assert.equal(typeof a.onmessage, "function");
+  a.onopen();
+  return { sock: a, onmessage: a.onmessage, onclose: a.onclose };
+}
+
+function frame(obj) { return { data: JSON.stringify(obj) }; }
+
+// Delivers a session_list and a delta through the captured handler of a
+// superseded socket and asserts neither reached the sidebar or the pane.
+function assertStaleFramesIgnored(captured) {
+  var sidebarBefore = JSON.stringify(mods.sidebar.getCachedSessions());
+  parsed.length = 0;
+  rafCallbacks.length = 0;
+  captured.onmessage(frame({ type: "session_list", sessions: [{ id: 1, title: "other project" }] }));
+  captured.onmessage(frame({ type: "delta", text: "STALE-SOCKET-TEXT" }));
+  captured.onclose({});
+  assert.equal(JSON.stringify(mods.sidebar.getCachedSessions()), sidebarBefore, "sidebar unchanged");
+  mods.rendering.appendDelta("current text");
+  mods.rendering.finalizeAssistantBlock();
+  assert.equal(parsed[parsed.length - 1], "current text", "pane holds only the current socket's text");
+}
+
+test("two connect() calls before the ticket resolves construct a single socket", async function () {
+  sockets.length = 0;
+  mods.conn.connect();
+  mods.conn.connect();
+  await resolveAllTickets();
   assert.equal(sockets.length, 1, "a superseded attempt must not construct a socket");
+  assert.equal(liveSockets().length, 1);
   assert.equal(mods.wsRef.getWs(), liveSockets()[0]);
 });
 
 test("a reconnect timer firing during switchProject does not leave an orphan socket", async function () {
-  sockets.length = 0;
+  var a = await openSocketA();
   mods.conn.scheduleReconnect();
   mods.projects.switchProject("other-project");
   await tick(250); // past the reconnect delay: an uncancelled timer would call connect() here
   await resolveAllTickets();
+  var b = mods.wsRef.getWs();
+  assert.notEqual(b, a.sock);
+  assert.equal(sockets.length, 2, "A plus exactly one replacement");
   assert.equal(liveSockets().length, 1, "exactly one socket stays live");
-  assert.equal(mods.wsRef.getWs(), liveSockets()[0]);
+  assert.equal(liveSockets()[0], b);
+  assert.equal(a.sock.closed, true);
 });
 
-test("a session_list on a superseded socket leaves the sidebar unchanged", async function () {
-  sockets.length = 0;
-  mods.conn.connect();
+test("frames from a socket superseded by connect() are ignored", async function () {
+  var a = await openSocketA();
   mods.conn.connect();
   await resolveAllTickets();
-  var before = JSON.stringify(mods.sidebar.getCachedSessions());
-  var current = mods.wsRef.getWs();
-  sockets.filter(function (s) { return s !== current; }).forEach(function (stale) {
-    if (typeof stale.onmessage === "function") {
-      stale.onmessage({ data: JSON.stringify({ type: "session_list", sessions: [{ id: 1, title: "other project" }] }) });
-    }
-  });
-  assert.equal(JSON.stringify(mods.sidebar.getCachedSessions()), before);
+  var b = mods.wsRef.getWs();
+  assert.notEqual(b, a.sock, "socket B is now current");
+  assert.equal(a.sock.closed, true, "A was closed");
+  assert.equal(a.sock.onmessage, null, "A's handlers were detached");
+  assert.equal(liveSockets().length, 1);
+  assertStaleFramesIgnored(a);
+});
+
+test("frames from a socket superseded by switchProject during a pending reconnect are ignored", async function () {
+  var a = await openSocketA();
+  mods.conn.scheduleReconnect();
+  mods.projects.switchProject("another-project");
+  await resolveAllTickets();
+  var b = mods.wsRef.getWs();
+  assert.notEqual(b, a.sock, "socket B is now current");
+  assert.equal(a.sock.closed, true, "A was closed");
+  assert.equal(a.sock.onmessage, null, "A's handlers were detached");
+  assert.equal(liveSockets().length, 1);
+  assertStaleFramesIgnored(a);
 });
 
 test("resetClientState drops undrawn stream text so replay renders each chunk once", function () {
