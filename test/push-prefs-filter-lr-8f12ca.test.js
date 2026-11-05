@@ -62,7 +62,7 @@ test("with 'Approval prompts only' prompts are pushed and finished turns are not
 test("a subscription with no account follows the default user's preferences", function () {
   sent.length = 0;
   var prefs = createPrefsStore({ file: path.join(home, "prefs-default.json"), persist: function () { return Promise.resolve(); } });
-  var push = initPush({ prefs: prefs });
+  var push = initPush({ prefs: prefs, isMultiUser: function () { return false; } });
   push.addSubscription({ endpoint: "https://push.invalid/only-phone" }, null, null);
   sent.length = 0;
   prefs.set(null, { surfaces: { push: { turn_done: false } } });
