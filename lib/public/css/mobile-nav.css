@@ -223,7 +223,7 @@
     border: 1.5px solid var(--activity-other, #B77BF3);
     box-sizing: border-box;
   }
-  /* Waiting on a prompt (lr-75901b): dashed ring, warning hue. */
+  /* Waiting on a prompt: dashed ring, warning hue. */
   .mobile-project-processing.waiting {
     background: transparent;
     border: 1.5px dashed var(--warning);

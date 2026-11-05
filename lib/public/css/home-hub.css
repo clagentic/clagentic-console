@@ -303,7 +303,7 @@
   border: 1.5px solid var(--activity-other, #B77BF3);
   box-shadow: 0 0 4px rgba(183, 123, 243, 0.4);
 }
-/* Waiting on a prompt (lr-75901b): dashed ring in the warning hue, so it is
+/* Waiting on a prompt: dashed ring in the warning hue, so it is
    told from running (filled) and another user's activity (solid ring) by
    shape as well as color. */
 .hub-project-dot.waiting {

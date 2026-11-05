@@ -248,7 +248,7 @@
   border-color: var(--activity-other, #B77BF3);
 }
 
-/* Waiting on a prompt (lr-75901b): dashed ring, warning hue. */
+/* Waiting on a prompt: dashed ring, warning hue. */
 .icon-strip-status.waiting {
   opacity: 1;
   background: transparent;
