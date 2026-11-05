@@ -195,3 +195,73 @@ test("the open-socket count rises and falls per project", function () {
   captureLog(function () { conn.handleDisconnection(b); });
   assert.equal(buildActivityDiagnosticsResponse().openSockets["ws-log-d"], undefined);
 });
+
+// The two tests below drive the real project context, so the session field
+// comes from the real session manager rather than a stand-in.
+var fs = require("fs");
+var os = require("os");
+var path = require("path");
+
+function withRealProject(t, slug) {
+  var home = fs.mkdtempSync(path.join(os.tmpdir(), "ccon-wslog-home-"));
+  var cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ccon-wslog-cwd-"));
+  var prevHome = process.env.CLAGENTIC_CONSOLE_HOME;
+  process.env.CLAGENTIC_CONSOLE_HOME = home;
+  ["../lib/config", "../lib/sessions", "../lib/utils", "../lib/project"].forEach(function (m) {
+    delete require.cache[require.resolve(m)];
+  });
+  var ctx = require("../lib/project").createProjectContext({
+    cwd: cwd, slug: slug, title: slug, debug: false, currentVersion: "0.0.0",
+  });
+  t.after(function () {
+    try { ctx.destroy({ reason: "test" }); } catch (e) { /* already destroyed by the test */ }
+    if (prevHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME;
+    else process.env.CLAGENTIC_CONSOLE_HOME = prevHome;
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+  return ctx;
+}
+
+test("a fresh connect that auto-creates a session logs the same session on connect and disconnect", function (t) {
+  var ctx = withRealProject(t, "ws-log-e");
+  var ws = makeFakeWs();
+  var lines = captureLog(function () {
+    ctx.handleConnection(ws, null);
+    ctx.handleDisconnection(ws);
+  });
+  assert.equal(lines.length, 2);
+  assert.notEqual(field(lines[0], "session"), "-");
+  assert.equal(field(lines[1], "session"), field(lines[0], "session"));
+  assert.equal(field(lines[1], "session"), String(ws._clagenticActiveSession));
+});
+
+test("when the session bind is refused, connect and disconnect log the same value", function () {
+  var ctx = makeCtx({ slug: "ws-log-f" });
+  // The stand-in session manager creates a session without binding it to the
+  // socket, as the real one does when its access check refuses.
+  var conn = attachConnection(ctx);
+  var ws = makeFakeWs();
+  var lines = captureLog(function () {
+    connect(conn, ws, null);
+    conn.handleDisconnection(ws);
+  });
+  assert.equal(lines.length, 2);
+  assert.equal(field(lines[1], "session"), field(lines[0], "session"));
+});
+
+test("destroying a project drops its sockets from the open-socket count", function (t) {
+  var ctx = withRealProject(t, "ws-log-g");
+  var a = makeFakeWs();
+  var b = makeFakeWs();
+  var lines = captureLog(function () { ctx.handleConnection(a, null); ctx.handleConnection(b, null); });
+  assert.equal(lines.length, 2);
+  assert.equal(buildActivityDiagnosticsResponse().openSockets["ws-log-g"], 2);
+  var out = captureLog(function () { ctx.destroy({ reason: "test" }); });
+  assert.equal(buildActivityDiagnosticsResponse().openSockets["ws-log-g"], undefined);
+  assert.equal(out.filter(function (l) { return l.indexOf("[connection] disconnect:") === 0; }).length, 2);
+  // The close events arriving after the destroy change nothing.
+  var late = captureLog(function () { a.emit("close"); b.emit("close"); });
+  assert.equal(late.length, 0);
+  assert.equal(buildActivityDiagnosticsResponse().openSockets["ws-log-g"], undefined);
+});
