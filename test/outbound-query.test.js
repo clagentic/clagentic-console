@@ -184,6 +184,27 @@ test("a console id that two projects hold is ambiguous until the project is name
   assert.deepEqual(prompts(t.query.list({ sessionId: "cli-a" })), ["in alpha"]);
 });
 
+["__proto__", "constructor", "hasOwnProperty"].forEach(function (name) {
+  test("the project ambiguity guard holds for the slug " + name, function () {
+    var t = build();
+    t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: name, sessionId: "7", cliSessionId: "cli-a" }, prompt: "in odd" }));
+    t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "beta", sessionId: "7", cliSessionId: "cli-b" }, prompt: "in beta" }));
+    var res = t.query.list({ sessionId: "7" });
+    assert.equal(res.result, "ambiguous");
+    assert.deepEqual(res.projects, [name, "beta"].sort());
+  });
+
+  test("an unattributed call naming the vendor session id " + name + " is listed", function () {
+    var t = build();
+    t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "work", sessionId: "7", cliSessionId: name }, prompt: "mine" }));
+    t.ledger.record(entry({ sender: { kind: "declared", attribution: "unverified", name: "job", fromSession: name }, prompt: "claims " + name }));
+    t.ledger.record(entry({ sender: { kind: "declared", attribution: "unverified", name: "other", fromSession: "someone-else" }, prompt: "not related" }));
+    var res = t.query.list({ sessionId: "7" });
+    assert.equal(res.ok, true);
+    assert.deepEqual(res.unattributed.map(function (m) { return m.prompt; }), ["claims " + name]);
+  });
+});
+
 test("a session id that is not a plain id is refused, and nothing is read", function () {
   var t = build();
   ["", "../x", "a/b", undefined, 7].forEach(function (id) {
