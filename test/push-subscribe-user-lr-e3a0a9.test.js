@@ -137,3 +137,106 @@ test("a push aimed at a user with no subscription logs one no-subscription line,
   }
   assert.deepEqual(logs, ["[push] no-subscription user=u2 type=permission_reminder"]);
 });
+
+// Callers that reach sendPushToUser through the audience rule or directly. Each
+// runs over the real push module with a stored subscription, so the delivery
+// and the log line are what the device and the operator would see.
+
+var { createPromptRegistry } = require("../lib/prompt-registry");
+var { attachNotifications } = require("../lib/project-notifications");
+var { createPromptReminders } = require("../lib/prompt-reminders");
+var { pushForSession } = require("../lib/push-audience");
+var { attachUserMention } = require("../lib/project-user-mention");
+
+var MIN = 60000;
+
+function reminderWorld(push, ownerId) {
+  var clock = { t: 1000000 };
+  var session = { localId: 1, title: "Session 1", ownerId: ownerId };
+  var nm = attachNotifications({ broadcastAll: function () {}, sendToUser: function () {}, pushModule: null });
+  var registry = createPromptRegistry({
+    index: Object.create(null),
+    getSession: function () { return session; },
+    sendAndRecord: function () {},
+    saveSessionFile: function () {},
+    getNotificationsModule: function () { return nm; },
+    getProjectName: function () { return "proj"; },
+  });
+  var realNow = Date.now;
+  Date.now = function () { return clock.t; };
+  var rem = createPromptReminders({
+    notifications: nm,
+    push: push,
+    isMultiUser: function () { return true; },
+    listAdmins: function () { return []; },
+    getConfig: function () { return null; },
+    now: function () { return clock.t; },
+    listSessions: function () { return [{ slug: "p", project: "Proj", session: session, prompts: registry }]; },
+  });
+  rem.start();
+  registry.open(session, "permission", { toolName: "Bash", toolInput: { command: "ls" } },
+    { toolUseId: "t1", notification: { title: "t", slug: "p", sessionId: 1 } });
+  return {
+    fire: function (minutes) { clock.t += minutes * MIN; rem.sweep(true); },
+    done: function () { rem.stop(); Date.now = realNow; },
+  };
+}
+
+test("a reminder push to an owner whose subscription was claimed is delivered; an unclaimed one is not", async function () {
+  await seedStored([{ endpoint: "https://push.invalid/old-phone", keys: { p256dh: "x", auth: "y" } }]);
+  var push = initPush({ isMultiUser: function () { return true; } });
+  var w = reminderWorld(push, "u1");
+  try {
+    sent.length = 0;
+    w.fire(6);
+    assert.deepEqual(sent, [], "stored without a user, it belongs to nobody");
+    push.addSubscription({ endpoint: "https://push.invalid/old-phone", keys: { p256dh: "x", auth: "y" } }, null, "u1");
+    w.fire(10);
+    assert.deepEqual(sent.map(function (s) { return s.endpoint + " " + s.type; }), ["https://push.invalid/old-phone permission_reminder"]);
+  } finally { w.done(); }
+});
+
+test("a loop-complete push follows the session audience: the owner's claimed subscription gets it, other users' do not", function () {
+  var push = setup(true);
+  push.addSubscription({ endpoint: "https://push.invalid/u1", keys: { p256dh: "x", auth: "y" } }, null, "u1");
+  push.addSubscription({ endpoint: "https://push.invalid/u2", keys: { p256dh: "x", auth: "y" } }, null, "u2");
+  var payload = { type: "done", slug: "p", title: "Loop Complete", body: "Completed after 3 iteration(s)", tag: "ralph-loop-done" };
+  var where = pushForSession(push, "u1", payload, function () { return true; }, function () { return []; });
+  assert.equal(where, "owner");
+  assert.deepEqual(sent.map(function (s) { return s.endpoint; }), ["https://push.invalid/u1"]);
+});
+
+test("a user mention push to a user with no subscription logs the no-subscription line once", function () {
+  var push = setup(true);
+  var mention = attachUserMention({
+    slug: "p",
+    sm: { recordHistoryEntry: function () {}, appendToSessionFile: function () {} },
+    send: function () {},
+    sendTo: function () {},
+    sendToSession: function () {},
+    sendToSessionOthers: function () {},
+    getSessionForWs: function () { return { localId: 1 }; },
+    getLinuxUserForSession: function () { return null; },
+    saveImageFile: function () { return null; },
+    usersModule: { findUserById: function (id) { return { id: id, username: id }; } },
+    pushModule: push,
+  });
+  capture();
+  try {
+    mention.handleUserMention({ _clagenticUser: { id: "u1", username: "u1" } }, { targetUserId: "u2", text: "look" });
+  } finally {
+    release();
+  }
+  assert.deepEqual(logs, ["[push] no-subscription user=u2 type=user_mention"]);
+});
+
+test("a direct-message push to a user with no subscription logs the no-subscription line once", function () {
+  var push = setup(true);
+  capture();
+  try {
+    push.sendPushToUser("u2", { type: "dm", title: "u1", body: "hi", tag: "dm-k", dmKey: "k" });
+  } finally {
+    release();
+  }
+  assert.deepEqual(logs, ["[push] no-subscription user=u2 type=dm"]);
+});
