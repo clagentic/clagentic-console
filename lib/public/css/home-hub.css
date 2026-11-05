@@ -303,6 +303,13 @@
   border: 1.5px solid var(--activity-other, #B77BF3);
   box-shadow: 0 0 4px rgba(183, 123, 243, 0.4);
 }
+/* Waiting on a prompt: dashed ring in the warning hue, so it is
+   told from running (filled) and another user's activity (solid ring) by
+   shape as well as color. */
+.hub-project-dot.waiting {
+  background: transparent;
+  border: 1.5px dashed var(--warning);
+}
 .hub-project-icon {
   font-size: 14px;
   width: 20px;
@@ -522,6 +529,11 @@
   opacity: 1;
   border: 1.5px solid var(--activity-other, #B77BF3);
   box-shadow: 0 0 4px rgba(183, 123, 243, 0.4);
+}
+.hub-recent-dot.waiting {
+  background: transparent;
+  opacity: 1;
+  border: 1.5px dashed var(--warning);
 }
 .hub-recent-project-icon {
   font-size: 14px;

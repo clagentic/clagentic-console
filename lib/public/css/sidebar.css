@@ -901,6 +901,13 @@
   border: 1.5px solid var(--activity-other, #B77BF3);
   box-sizing: border-box;
 }
+/* Waiting on a prompt: dashed ring, warning hue. */
+.session-item .session-processing.waiting,
+.mate-session-item .session-processing.waiting {
+  background: transparent;
+  border: 1.5px dashed var(--warning);
+  box-sizing: border-box;
+}
 /* Alert tone (lr-66c118): unread activity wins over processing green. */
 .session-item .session-processing.alert,
 .mate-session-item .session-processing.alert {
