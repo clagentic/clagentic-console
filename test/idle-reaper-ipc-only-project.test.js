@@ -34,8 +34,9 @@ function makeProject(t) {
   var ctx = require("../lib/project").createProjectContext({
     cwd: cwd, slug: "ipc-only", title: "ipc-only", debug: false, currentVersion: "0.0.0",
   });
+  var handle = { ctx: ctx, intervals: intervals, destroyed: false };
   t.after(function () {
-    try { ctx.destroy({ reason: "test" }); } catch (e) { /* already destroyed */ }
+    if (!handle.destroyed) ctx.destroy({ reason: "test" });
     global.setInterval = realSetInterval;
     t.mock.timers.reset();
     if (prevHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME;
@@ -43,7 +44,7 @@ function makeProject(t) {
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });
   });
-  return { ctx: ctx, intervals: intervals };
+  return handle;
 }
 
 function idleSession(ctx, id, extra) {
@@ -98,12 +99,14 @@ test("AC4: repeated starts and a later WebSocket connection leave exactly one re
   h.ctx.sdk.startIdleReaper();
   assert.equal(reaperTicks(h), before, "a second start is a no-op");
 
+  var warmup = t.mock.method(h.ctx.sdk, "warmup");
   var ws = {
     readyState: 1, send: function () {}, close: function () {}, on: function () {},
     _clagenticUser: null,
   };
   try { h.ctx.handleConnection(ws, null, h.ctx.handleMessage, h.ctx.handleDisconnection); }
-  catch (e) { /* a bare socket may fail later in the handshake; warmup ran first */ }
+  catch (e) { /* a bare socket may fail later in the handshake, after warmup */ }
+  assert.equal(warmup.mock.callCount(), 1, "the WebSocket path ran warmup before the reaper count is checked");
   assert.equal(reaperTicks(h), before, "the WebSocket warmup does not start a second reaper");
   assert.equal(before, 1);
 });
@@ -111,6 +114,7 @@ test("AC4: repeated starts and a later WebSocket connection leave exactly one re
 test("destroy stops the reaper", function (t) {
   var h = makeProject(t);
   h.ctx.destroy({ reason: "test" });
+  h.destroyed = true;
   var s = idleSession(h.ctx, 9003);
   t.mock.timers.tick(TICK_MS * 2);
   assert.equal(s._closed.value, false, "a destroyed project's timer no longer sweeps");
