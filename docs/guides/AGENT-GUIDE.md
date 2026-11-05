@@ -312,14 +312,14 @@ clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>
 
 | Flag | Required | Meaning |
 |---|---|---|
-| `--session <id>` | yes | The sending session: its console session id or the id its vendor assigned. Prefer the vendor id: a console id is renumbered by a daemon restart, so an old call can carry a number a different session holds now. |
-| `--project <slug>` | no | Only the sender in this project. A console id is scoped to a project, so an id that senders in several projects hold is `ambiguous` (exit 3) until this is given. |
+| `--session <id>` | yes | The sending session's vendor session id (`sessionId` in `list-sessions`). A console id is refused: a daemon restart renumbers console ids, so one number can name different sessions over the ledger's retention. An all-digit value is refused with that reason. |
+| `--project <slug>` | no | Only the sender in this project. A vendor id that senders in several projects hold is `ambiguous` (exit 3) until this is given. |
 | `--since <dur>` | no | Only calls from this long ago: `90` (minutes), `10m`, `2h`, `1h30m`, `3d`. |
 | `--kind sent\|opens` | no | `sent` for `send-input` calls, `opens` for `open-session` calls. Default: both. |
 
 ```bash
 clagentic-console list-outbound --session 4f1c9d2e-7a3b-4c55-9e0a-1b2c3d4e5f60
-clagentic-console list-outbound --session 12 --project my-project --since 2h --kind sent
+clagentic-console list-outbound --session 9b2e4c1a-5d3f-4a68-8c70-2e1f3a4b5c6d --project my-project --since 2h --kind sent
 ```
 
 Result:

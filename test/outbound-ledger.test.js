@@ -1,6 +1,7 @@
 "use strict";
-// The sender-side outbound ledger store: where an entry goes, its file modes,
-// retention pruning, and that a write that fails never throws.
+// The ledger holds message-adjacent data on disk and sits on the send path, so
+// it must keep its files private, expire old entries, and never let a failed
+// write break the send that triggered it.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");

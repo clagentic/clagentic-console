@@ -108,7 +108,7 @@ function prompts(res) {
   return res.messages.map(function (m) { return m.prompt; });
 }
 
-test("lists a session's outbound calls by the vendor id or the console id, oldest first", function () {
+test("lists a session's outbound calls by its vendor id, oldest first", function () {
   var t = build();
   t.ledger.record(entry({ ts: new Date(NOW - 2 * HOUR).toISOString(), prompt: "first" }));
   t.ledger.record(entry({ ts: new Date(NOW - 1 * HOUR).toISOString(), prompt: "second", verb: "open_session", result: "opened" }));
@@ -120,9 +120,8 @@ test("lists a session's outbound calls by the vendor id or the console id, oldes
   assert.equal(byVendor.count, 2);
   assert.deepEqual(prompts(byVendor), ["first", "second"]);
   assert.equal(byVendor.retentionDays, 30);
-  assert.deepEqual(prompts(t.query.list({ sessionId: "7" })), ["first", "second"]);
-  assert.deepEqual(prompts(t.query.list({ sessionId: "7", projectSlug: "alpha" })), ["first", "second"]);
-  assert.equal(t.query.list({ sessionId: "7", projectSlug: "elsewhere" }).count, 0);
+  assert.deepEqual(prompts(t.query.list({ sessionId: "cli-sender", projectSlug: "alpha" })), ["first", "second"]);
+  assert.equal(t.query.list({ sessionId: "cli-sender", projectSlug: "elsewhere" }).count, 0);
   assert.equal(t.query.list({ sessionId: "nobody" }).count, 0);
 });
 
@@ -172,34 +171,55 @@ test("a refused or failed call is listed with its reason", function () {
   assert.match(m.reason, /unknown project/);
 });
 
-test("a console id that two projects hold is ambiguous until the project is named", function () {
+test("an all-digit session id is refused: console ids are renumbered at a restart", function () {
   var t = build();
-  t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "alpha", sessionId: "7", cliSessionId: "cli-a" }, prompt: "in alpha" }));
-  t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "beta", sessionId: "7", cliSessionId: "cli-b" }, prompt: "in beta" }));
-  var res = t.query.list({ sessionId: "7" });
+  t.ledger.record(entry({ prompt: "from console id 7" }));
+  ["7", "0", "100"].forEach(function (id) {
+    var res = t.query.list({ sessionId: id });
+    assert.equal(res.ok, false, id);
+    assert.equal(res.result, "refused", id);
+    assert.match(res.reason, /renumbered/);
+    assert.match(res.reason, /list-sessions/);
+  });
+});
+
+test("two sessions that held the same console id across a restart are never merged", function () {
+  var t = build();
+  t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "alpha", sessionId: "7", cliSessionId: "cli-before" }, prompt: "before the restart" }));
+  t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "alpha", sessionId: "7", cliSessionId: "cli-after" }, prompt: "after the restart" }));
+  assert.deepEqual(prompts(t.query.list({ sessionId: "cli-before" })), ["before the restart"]);
+  assert.deepEqual(prompts(t.query.list({ sessionId: "cli-after" })), ["after the restart"]);
+  assert.equal(t.query.list({ sessionId: "7" }).result, "refused");
+});
+
+test("a vendor id that two projects hold is ambiguous until the project is named", function () {
+  var t = build();
+  t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "alpha", sessionId: "7", cliSessionId: "cli-dup" }, prompt: "in alpha" }));
+  t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "beta", sessionId: "7", cliSessionId: "cli-dup" }, prompt: "in beta" }));
+  var res = t.query.list({ sessionId: "cli-dup" });
   assert.equal(res.ok, false);
   assert.equal(res.result, "ambiguous");
   assert.deepEqual(res.projects, ["alpha", "beta"]);
-  assert.deepEqual(prompts(t.query.list({ sessionId: "7", projectSlug: "beta" })), ["in beta"]);
-  assert.deepEqual(prompts(t.query.list({ sessionId: "cli-a" })), ["in alpha"]);
+  assert.deepEqual(prompts(t.query.list({ sessionId: "cli-dup", projectSlug: "beta" })), ["in beta"]);
 });
 
 ["__proto__", "constructor", "hasOwnProperty"].forEach(function (name) {
   test("the project ambiguity guard holds for the slug " + name, function () {
     var t = build();
-    t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: name, sessionId: "7", cliSessionId: "cli-a" }, prompt: "in odd" }));
-    t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "beta", sessionId: "7", cliSessionId: "cli-b" }, prompt: "in beta" }));
-    var res = t.query.list({ sessionId: "7" });
+    t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: name, sessionId: "7", cliSessionId: "cli-dup" }, prompt: "in odd" }));
+    t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "beta", sessionId: "7", cliSessionId: "cli-dup" }, prompt: "in beta" }));
+    var res = t.query.list({ sessionId: "cli-dup" });
     assert.equal(res.result, "ambiguous");
     assert.deepEqual(res.projects, [name, "beta"].sort());
   });
 
-  test("an unattributed call naming the vendor session id " + name + " is listed", function () {
+  // __proto__ is not a plain id, so it can never be the requested sender.
+  test("an unattributed call naming the vendor session id " + name + " is listed", { skip: name === "__proto__" }, function () {
     var t = build();
     t.ledger.record(entry({ sender: { kind: "extracted", attribution: "extracted", project: "work", sessionId: "7", cliSessionId: name }, prompt: "mine" }));
     t.ledger.record(entry({ sender: { kind: "declared", attribution: "unverified", name: "job", fromSession: name }, prompt: "claims " + name }));
     t.ledger.record(entry({ sender: { kind: "declared", attribution: "unverified", name: "other", fromSession: "someone-else" }, prompt: "not related" }));
-    var res = t.query.list({ sessionId: "7" });
+    var res = t.query.list({ sessionId: name });
     assert.equal(res.ok, true);
     assert.deepEqual(res.unattributed.map(function (m) { return m.prompt; }), ["claims " + name]);
   });
@@ -210,7 +230,7 @@ test("a session id that is not a plain id is refused, and nothing is read", func
   ["", "../x", "a/b", undefined, 7].forEach(function (id) {
     assert.equal(t.query.list({ sessionId: id }).result, "refused", String(id));
   });
-  assert.equal(t.query.list({ sessionId: "7", projectSlug: "" }).result, "refused");
+  assert.equal(t.query.list({ sessionId: "cli-sender", projectSlug: "" }).result, "refused");
 });
 
 test("calls whose sender only named itself are listed apart, labelled unverified, never as the session's own", function () {
