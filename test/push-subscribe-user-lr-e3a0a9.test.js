@@ -17,6 +17,7 @@ process.env.CLAGENTIC_CONSOLE_HOME = home;
 var webpush = require("web-push");
 var config = require("../lib/config");
 var { initPush } = require("../lib/push");
+var store = require("../lib/store");
 var subsFile = path.join(config.CONFIG_DIR, "push-subs.json");
 var { attachHTTP } = require("../lib/project-http");
 
@@ -36,12 +37,11 @@ function capture() {
 }
 function release() { console.log = realLog; }
 
-// Earlier tests leave queued writes of push-subs.json; let them land before a
-// test seeds the file itself.
+// Earlier tests leave queued writes of push-subs.json. The seed goes through
+// the same per-file write queue, so it lands after every one of them and the
+// returned promise settles when it has.
 function seedStored(subs) {
-  return new Promise(function (resolve) { setTimeout(resolve, 100); }).then(function () {
-    fs.writeFileSync(subsFile, JSON.stringify({ subs: subs }));
-  });
+  return store.writeJson("push-subs.json", { subs: subs });
 }
 
 function setup(multi) {
