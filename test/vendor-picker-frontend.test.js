@@ -118,7 +118,7 @@ test("a Claude session in a Codex-default project is gated on Claude's capabilit
 
 test("the login command comes from the registry, and an unknown agent has none", async function () {
   await withRegistryApplied(["claude", "fake"], async function (VR) {
-    assert.equal(VR.loginCommandFor("claude"), "claude login");
+    assert.equal(VR.loginCommandFor("claude"), "claude auth login");
     assert.equal(VR.loginCommandFor("codex"), "codex login --device-auth");
     assert.equal(VR.loginCommandFor("fake"), "fake-agent signin");
     assert.equal(VR.loginCommandFor("ghost"), "");
