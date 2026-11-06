@@ -12,6 +12,12 @@ var authChecks = require("../lib/yoke/auth-checks");
 var providerCredentials = require("../lib/yoke/provider-credentials");
 var runtimeEnv = require("../lib/runtime-env");
 var vendorAuth = require("../lib/vendor-auth");
+var claudeSettingsEnv = require("../lib/claude-settings-env");
+
+// An actor whose environment text may choose the settings directory.
+function trusting(env) {
+  return claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: env, trustComposed: true });
+}
 
 var NAMES = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
   "AWS_PROFILE", "AWS_REGION", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "PATH"];
@@ -123,17 +129,28 @@ function withSettingsFile(env, run) {
   test("a settings file setting CLAUDE_CODE_USE_BEDROCK to '" + off + "' over a Settings Bedrock flag is not authenticated or attributed", function () {
     withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function (cfg) {
       var overlay = Object.assign({}, BEDROCK, cfg);
-      assert.equal(authChecks.checkClaudeAuth(overlay), false);
+      assert.equal(authChecks.checkClaudeAuth(overlay, trusting(overlay)), false);
       var composed = runtimeEnv.composeRuntimeEnv(process.env, overlay);
-      assert.equal(vendorAuth.providerAuthFailure("claude", composed), null);
+      assert.equal(vendorAuth.providerAuthFailure("claude", composed, trusting(composed)), null);
     });
   });
 });
 
 test("a settings file selecting Bedrock with a credential source is authenticated although Settings does not", function () {
   withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "host" }, function (cfg) {
-    assert.equal(authChecks.checkClaudeAuth(cfg), true);
+    assert.equal(authChecks.checkClaudeAuth(cfg, trusting(cfg)), true);
     var composed = runtimeEnv.composeRuntimeEnv(process.env, cfg);
-    assert.equal(vendorAuth.providerAuthFailure("claude", composed).provider, "bedrock");
+    assert.equal(vendorAuth.providerAuthFailure("claude", composed, trusting(composed)).provider, "bedrock");
+  });
+});
+
+test("a settings directory chosen by untrusted text is not read for the provider decision", function () {
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "host" }, function (cfg) {
+    var untrusted = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: false });
+    assert.equal(authChecks.checkClaudeAuth(cfg, untrusted), false);
+    var osUsers = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: true, osUsers: true });
+    assert.equal(authChecks.checkClaudeAuth(cfg, osUsers), false);
+    var composed = runtimeEnv.composeRuntimeEnv(process.env, cfg);
+    assert.equal(vendorAuth.providerAuthFailure("claude", composed, untrusted), null);
   });
 });

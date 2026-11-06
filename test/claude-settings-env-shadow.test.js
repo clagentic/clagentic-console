@@ -67,7 +67,7 @@ test("CLAUDE_CONFIG_DIR set in the edited text, not the base, picks the settings
   try {
     fs.writeFileSync(path.join(other, "settings.json"), JSON.stringify({ env: { A: "1" } }));
     fs.writeFileSync(path.join(base, "settings.json"), JSON.stringify({ env: { B: "1" } }));
-    var keys = claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + other + "\nA=2\nB=2", { homeDir: home, env: { CLAUDE_CONFIG_DIR: base } });
+    var keys = claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + other + "\nA=2\nB=2", { homeDir: home, env: { CLAUDE_CONFIG_DIR: base }, trustEdited: true });
     assert.deepEqual(keys, ["A"]);
   } finally {
     fs.rmSync(other, { recursive: true });
@@ -83,4 +83,84 @@ test("applyUserSettingsEnv puts the settings file's env block over the given env
   assert.equal(out.N, "0");
   assert.equal(out.T, "true");
   assert.equal("SKIP" in out, false);
+});
+
+// The daemon reads the settings file on its own account, so the path must not
+// come from text a non-admin owner edited (CWE-22: probing key names in another
+// account's file).
+function spyReads(fn) {
+  var real = fs.readFileSync;
+  var read = [];
+  fs.readFileSync = function (file) {
+    read.push(String(file));
+    return real.apply(fs, arguments);
+  };
+  try { fn(); } finally { fs.readFileSync = real; }
+  return read;
+}
+
+test("a non-admin owner's CLAUDE_CONFIG_DIR line does not choose the file read", function () {
+  var elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-elsewhere-"));
+  try {
+    fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { A: "1" } }));
+    var keys;
+    var read = spyReads(function () {
+      keys = claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + elsewhere + "\nA=2", { homeDir: home, env: {}, trustEdited: false });
+    });
+    assert.deepEqual(keys, []);
+    assert.equal(read.some(function (f) { return f.indexOf(elsewhere) === 0; }), false, "the edited path is never opened");
+  } finally {
+    fs.rmSync(elsewhere, { recursive: true });
+  }
+});
+
+test("an administrator's CLAUDE_CONFIG_DIR line is honoured", function () {
+  var elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-admin-"));
+  try {
+    fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { A: "1" } }));
+    assert.deepEqual(
+      claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + elsewhere + "\nA=2", { homeDir: home, env: {}, trustEdited: true }),
+      ["A"]);
+  } finally {
+    fs.rmSync(elsewhere, { recursive: true });
+  }
+});
+
+test("os-users mode reads no settings file, for the warning or for the environment", function () {
+  writeSettings({ env: { A: "1", CLAUDE_CODE_USE_BEDROCK: "1" } });
+  var out;
+  var keys;
+  var read = spyReads(function () {
+    keys = claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home, env: {}, trustEdited: true, osUsers: true });
+    out = claudeSettingsEnv.applyUserSettingsEnv({ B: "x" }, {
+      homeDir: home,
+      readPolicy: claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, osUsers: true }),
+    });
+  });
+  assert.deepEqual(keys, []);
+  assert.deepEqual(out, { B: "x" });
+  assert.deepEqual(read.filter(function (f) { return /settings\.json$/.test(f); }), []);
+});
+
+test("a settings directory outside the expected shape is not followed", function () {
+  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "relative/dir" } }, home), null);
+  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "/a/../etc" } }, home), null);
+  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "/a/b\0c" } }, home), null);
+  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "/a/b" } }, home), path.join("/a/b", "settings.json"));
+});
+
+test("single-user and no-policy defaults: the home directory file is read", function () {
+  writeSettings({ env: { A: "1" } });
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home, env: {} }), ["A"]);
+});
+
+test("applyUserSettingsEnv without a policy trusts only the daemon's own environment", function () {
+  var elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-apply-"));
+  try {
+    fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { A: "file" } }));
+    var out = claudeSettingsEnv.applyUserSettingsEnv({ CLAUDE_CONFIG_DIR: elsewhere }, { homeDir: home });
+    assert.equal("A" in out, false);
+  } finally {
+    fs.rmSync(elsewhere, { recursive: true });
+  }
 });

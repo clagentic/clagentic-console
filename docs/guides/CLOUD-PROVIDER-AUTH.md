@@ -32,6 +32,14 @@ Claude Code applies the `env` block of its own settings file (`settings.json` in
 
 The editors check the settings file of the account the daemon runs as. With per-user OS isolation a runtime reads its own user's settings file, which the editors cannot see.
 
+### Which settings file the console reads
+
+The console reads the settings file itself only to decide the sign-in status, the provider name and the capability limits, and to warn about overlapping names (key names only; no value leaves the process). `CLAUDE_CONFIG_DIR` picks the directory, as it does for Claude Code. The directory must be an absolute path with no `..` segment.
+
+- A `CLAUDE_CONFIG_DIR` in the daemon's own environment or in the administrator-shared Settings environment is always used.
+- A `CLAUDE_CONFIG_DIR` in a project's environment text is used only on a single-user host, or for a session an administrator owns. For anyone else the console ignores it for these decisions and reads the file from the directory the daemon and the shared Settings name (Claude Code itself still honours it in the session).
+- With per-user OS accounts (`os-users` mode), the session runs as another account and the console never reads a settings file for it. The overlap warning is off, and the sign-in status and capability limits are decided from the composed environment without the file. A provider selected only in a user's own settings file is therefore not seen by the console there; select it in the shared Settings environment instead.
+
 ## Isolation: who can read what you save
 
 - The shared text is stored as plaintext in the daemon's configuration. Treat every value in it as readable by anyone who can read that file.

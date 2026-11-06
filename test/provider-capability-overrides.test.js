@@ -14,10 +14,15 @@ var yoke = require("../lib/yoke");
 var providerCapabilities = require("../lib/yoke/provider-capabilities");
 var sessionCapabilities = require("../lib/session-capabilities");
 var vendorRegistryMessage = require("../lib/vendor-registry-message");
+var claudeSettingsEnv = require("../lib/claude-settings-env");
 
-function record(env, vendor) {
+function trusting(env) {
+  return claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: env, trustComposed: true });
+}
+
+function record(env, vendor, readPolicy) {
   var sm = {};
-  var caps = sessionCapabilities.recordCapabilities(sm, vendor || "claude", null, env);
+  var caps = sessionCapabilities.recordCapabilities(sm, vendor || "claude", null, env, readPolicy);
   return { sm: sm, caps: caps };
 }
 
@@ -109,7 +114,8 @@ function withSettingsFile(env, run) {
 ["0", ""].forEach(function (off) {
   test("a settings file setting CLAUDE_CODE_USE_BEDROCK to '" + off + "' keeps web search on over a Bedrock flag", function () {
     withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function (cfg) {
-      var r = record(Object.assign({ CLAUDE_CODE_USE_BEDROCK: "1" }, cfg));
+      var env = Object.assign({ CLAUDE_CODE_USE_BEDROCK: "1" }, cfg);
+      var r = record(env, null, trusting(env));
       assert.equal(r.caps.webSearch, true);
       assert.deepEqual(r.sm.capabilityReasonsByVendor.claude, {});
     });
@@ -118,6 +124,15 @@ function withSettingsFile(env, run) {
 
 test("a settings file selecting Bedrock turns web search off though the composed environment does not", function () {
   withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1" }, function (cfg) {
-    assert.equal(record(cfg).caps.webSearch, false);
+    assert.equal(record(cfg, null, trusting(cfg)).caps.webSearch, false);
+  });
+});
+
+test("a settings directory chosen by untrusted text does not narrow capabilities", function () {
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1" }, function (cfg) {
+    var untrusted = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: false });
+    assert.equal(record(cfg, null, untrusted).caps.webSearch, true);
+    var osUsers = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: true, osUsers: true });
+    assert.equal(record(cfg, null, osUsers).caps.webSearch, true);
   });
 });
