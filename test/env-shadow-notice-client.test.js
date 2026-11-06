@@ -39,3 +39,21 @@ test("the notice names the shadowed variables and shows, and hides when there ar
     delete globalThis.document;
   }
 });
+
+test("the CLAUDE_CONFIG_DIR scope note is shown on its own when no variable overlaps", async function () {
+  var el = fakeElement();
+  globalThis.document = { getElementById: function (id) { return id === "n" ? el : null; } };
+  try {
+    var { renderShadowNotice } = await import("../lib/public/modules/env-shadow-notice.js");
+    renderShadowNotice("n", [], true);
+    assert.equal(el.classList.contains("hidden"), false);
+    assert.match(el.textContent, /CLAUDE_CONFIG_DIR/);
+    assert.doesNotMatch(el.textContent, /also set in the Claude settings file/);
+    renderShadowNotice("n", undefined, true);
+    assert.equal(el.classList.contains("hidden"), false);
+    renderShadowNotice("n", [], false);
+    assert.equal(el.classList.contains("hidden"), true);
+  } finally {
+    delete globalThis.document;
+  }
+});
