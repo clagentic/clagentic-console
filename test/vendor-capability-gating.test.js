@@ -136,7 +136,7 @@ test("the shipped agents keep their titles and login commands", async function (
       server.bridge.processSDKMessage(session, { yokeType: "result", cost: 0, duration: 1, usage: null, sessionId: "s" });
       var auth = historyOf(session, "auth_required")[0];
       assert.equal(auth.text, vendor === "claude" ? "Claude Code is not logged in." : "Codex is not logged in.");
-      assert.equal(auth.loginCommand, vendor === "claude" ? "claude login" : "codex login --device-auth");
+      assert.equal(auth.loginCommand, vendor === "claude" ? "claude auth login" : "codex login --device-auth");
     });
   });
 });
