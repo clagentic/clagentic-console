@@ -106,3 +106,34 @@ test("providerAuthFailure is null with no provider, and for an agent that does n
   assert.equal(vendorAuth.providerAuthFailure("claude", {}), null);
   assert.equal(vendorAuth.providerAuthFailure("codex", { CLAUDE_CODE_USE_BEDROCK: "1" }), null);
 });
+
+// The Claude CLI applies the user settings file's env block over what it is
+// handed, so the provider it talks to is decided from that.
+function withSettingsFile(env, run) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "provider-auth-cfg-"));
+  try {
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ env: env }));
+    return run({ CLAUDE_CONFIG_DIR: dir });
+  } finally {
+    fs.rmSync(dir, { recursive: true });
+  }
+}
+
+["0", ""].forEach(function (off) {
+  test("a settings file setting CLAUDE_CODE_USE_BEDROCK to '" + off + "' over a Settings Bedrock flag is not authenticated or attributed", function () {
+    withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function (cfg) {
+      var overlay = Object.assign({}, BEDROCK, cfg);
+      assert.equal(authChecks.checkClaudeAuth(overlay), false);
+      var composed = runtimeEnv.composeRuntimeEnv(process.env, overlay);
+      assert.equal(vendorAuth.providerAuthFailure("claude", composed), null);
+    });
+  });
+});
+
+test("a settings file selecting Bedrock with a credential source is authenticated although Settings does not", function () {
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "host" }, function (cfg) {
+    assert.equal(authChecks.checkClaudeAuth(cfg), true);
+    var composed = runtimeEnv.composeRuntimeEnv(process.env, cfg);
+    assert.equal(vendorAuth.providerAuthFailure("claude", composed).provider, "bedrock");
+  });
+});

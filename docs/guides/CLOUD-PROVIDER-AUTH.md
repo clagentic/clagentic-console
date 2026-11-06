@@ -28,7 +28,7 @@ The console does not need a Claude sign-in for these sessions and does not offer
 
 ## A variable in the Claude settings file wins
 
-Claude Code applies the `env` block of its own settings file (`settings.json` in the Claude configuration directory) to its environment after it receives the environment the console built. For a name set in both places, the settings file's value is the one the session sees, and the value saved in Settings has no effect. The environment editors list any variable that you save and that the settings file also sets. Remove it from one of the two places.
+Claude Code applies the `env` block of its own settings file (`settings.json` in the Claude configuration directory) to its environment after it receives the environment the console built. For a name set in both places, the settings file's value is the one the session sees, and the value saved in Settings has no effect. The environment editors list any variable that you save and that the settings file also sets. Remove it from one of the two places. The sign-in status and the capability limits (for example no web search on Bedrock) are decided from the same result, so a provider flag the settings file turns off or on counts as the settings file says.
 
 The editors check the settings file of the account the daemon runs as. With per-user OS isolation a runtime reads its own user's settings file, which the editors cannot see.
 

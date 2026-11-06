@@ -6,7 +6,11 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var fs = require("fs");
+var os = require("os");
+var path = require("path");
 
+var yoke = require("../lib/yoke");
 var providerCapabilities = require("../lib/yoke/provider-capabilities");
 var sessionCapabilities = require("../lib/session-capabilities");
 var vendorRegistryMessage = require("../lib/vendor-registry-message");
@@ -64,6 +68,24 @@ test("an agent that never declared a capability is not changed by the narrowing"
   assert.deepEqual(r.sm.capabilityReasonsByVendor.codex, {});
 });
 
+test("an agent that is not Claude is not narrowed by Claude's provider variables, even for a capability it declares", function () {
+  var base = yoke.registry.get("codex");
+  var id = "other-agent-for-narrowing-test";
+  yoke.registry.register(Object.assign({}, base, {
+    id: id,
+    capabilities: Object.assign({}, base.capabilities, { webSearch: true, mcpToolSearch: true, remoteControl: true }),
+  }));
+  try {
+    var r = record({ CLAUDE_CODE_USE_BEDROCK: "1", ANTHROPIC_BASE_URL: "https://gateway.example.invalid" }, id);
+    assert.equal(r.caps.webSearch, true);
+    assert.equal(r.caps.mcpToolSearch, true);
+    assert.equal(r.caps.remoteControl, true);
+    assert.deepEqual(r.sm.capabilityReasonsByVendor[id], {});
+  } finally {
+    yoke.registry.unregister(id);
+  }
+});
+
 test("the registry message carries the narrowed capability and its reason to the client", function () {
   var r = record({ CLAUDE_CODE_USE_BEDROCK: "1" });
   var msg = vendorRegistryMessage.buildVendorRegistryMessage(r.sm, null);
@@ -72,4 +94,30 @@ test("the registry message carries the narrowed capability and its reason to the
   assert.match(claude.capabilityReasons.webSearch, /Amazon Bedrock/);
   var codex = msg.vendors.filter(function (v) { return v.id === "codex"; })[0];
   assert.equal(codex.capabilities.webSearch, false);
+});
+
+function withSettingsFile(env, run) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "provider-cap-cfg-"));
+  try {
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ env: env }));
+    return run({ CLAUDE_CONFIG_DIR: dir });
+  } finally {
+    fs.rmSync(dir, { recursive: true });
+  }
+}
+
+["0", ""].forEach(function (off) {
+  test("a settings file setting CLAUDE_CODE_USE_BEDROCK to '" + off + "' keeps web search on over a Bedrock flag", function () {
+    withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function (cfg) {
+      var r = record(Object.assign({ CLAUDE_CODE_USE_BEDROCK: "1" }, cfg));
+      assert.equal(r.caps.webSearch, true);
+      assert.deepEqual(r.sm.capabilityReasonsByVendor.claude, {});
+    });
+  });
+});
+
+test("a settings file selecting Bedrock turns web search off though the composed environment does not", function () {
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1" }, function (cfg) {
+    assert.equal(record(cfg).caps.webSearch, false);
+  });
 });

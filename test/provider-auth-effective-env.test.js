@@ -119,7 +119,22 @@ test("provider set in both places: named once, no sign-in", async function () {
   config.sharedEnv = "CLAUDE_CODE_USE_BEDROCK=1\nAWS_REGION=us-east-1";
   var shown = await shownForAuthError();
   assert.equal(shown.some(function (m) { return m.type === "auth_required"; }), false);
-  assert.equal(shown.filter(function (m) { return m.type === "error"; }).length, 1);
+  var errors = shown.filter(function (m) { return m.type === "error"; });
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].text.split("Amazon Bedrock").length - 1, 1, "the provider is named once in the message");
+});
+
+test("a provider failure on the canned login reply resets the CLI session, with no sign-in offered", async function () {
+  clearProviders();
+  config.sharedEnv = "CLAUDE_CODE_USE_BEDROCK=1\nAWS_REGION=us-east-1\nAWS_PROFILE=host";
+  var session = alpha.sm.createSessionRaw({ ownerId: server.people.admin.id });
+  session.vendor = "claude";
+  session.cliSessionId = "cli-before";
+  session.responsePreview = "Not logged in · Please run /login";
+  alpha.sdk.processSDKMessage(session, { yokeType: "result", cost: 0, duration: 1, usage: null, sessionId: "cli-before" });
+  assert.equal(session.history.some(function (m) { return m.type === "auth_required"; }), false);
+  assert.ok(session.history.some(function (m) { return m.type === "error" && /Amazon Bedrock/.test(m.text); }));
+  assert.equal(session.cliSessionId, null, "the next turn must not resume the broken session");
 });
 
 test("no provider: the message does not claim a provider's credentials failed", async function () {
