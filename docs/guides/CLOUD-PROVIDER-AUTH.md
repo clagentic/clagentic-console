@@ -30,15 +30,14 @@ The console does not need a Claude sign-in for these sessions and does not offer
 
 Claude Code applies the `env` block of its own settings file (`settings.json` in the Claude configuration directory) to its environment after it receives the environment the console built. For a name set in both places, the settings file's value is the one the session sees, and the value saved in Settings has no effect. The environment editors list any variable that you save and that the settings file also sets. Remove it from one of the two places. The sign-in status and the capability limits (for example no web search on Bedrock) are decided from the same result, so a provider flag the settings file turns off or on counts as the settings file says.
 
-The editors check the settings file of the account the daemon runs as. With per-user OS isolation a runtime reads its own user's settings file, which the editors cannot see.
+The overlap check reads the Claude settings of the account the daemon runs as, and only that file.
 
 ### Which settings file the console reads
 
-The console reads the settings file itself only to decide the sign-in status, the provider name and the capability limits, and to warn about overlapping names (key names only; no value leaves the process). `CLAUDE_CONFIG_DIR` picks the directory, as it does for Claude Code. The directory must be an absolute path with no `..` segment.
+The console reads one settings file, only to decide the sign-in status, the provider name and the capability limits, and to warn about overlapping names (key names only; no value leaves the process). It locates the file from the daemon's own environment: the `CLAUDE_CONFIG_DIR` the daemon process was started with, or else the daemon user's home (`~/.claude/settings.json`).
 
-- A `CLAUDE_CONFIG_DIR` in the daemon's own environment or in the administrator-shared Settings environment is always used.
-- A `CLAUDE_CONFIG_DIR` in a project's environment text is used only on a single-user host, or for a session an administrator owns. For anyone else the console ignores it for these decisions and reads the file from the directory the daemon and the shared Settings name (Claude Code itself still honours it in the session).
-- With per-user OS accounts (`os-users` mode), the session runs as another account and the console never reads a settings file for it. The overlap warning is off, and the sign-in status and capability limits are decided from the composed environment without the file. A provider selected only in a user's own settings file is therefore not seen by the console there; select it in the shared Settings environment instead.
+- An edited `CLAUDE_CONFIG_DIR`, in the shared Settings environment or in a project's, is not consulted by the console, whoever saved it. Claude Code itself still honours it in the session. When an edited text sets it, the overlap warning says the check covers the daemon user's Claude settings only.
+- With per-user OS accounts (`os-users` mode), the session runs as another account and the console reads no settings file. There is no overlap check, and the sign-in status and capability limits are decided from the composed environment without the file. A provider selected only in a user's own settings file is therefore not seen by the console there; select it in the shared Settings environment instead.
 
 ## Isolation: who can read what you save
 

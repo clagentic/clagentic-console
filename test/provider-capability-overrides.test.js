@@ -14,15 +14,10 @@ var yoke = require("../lib/yoke");
 var providerCapabilities = require("../lib/yoke/provider-capabilities");
 var sessionCapabilities = require("../lib/session-capabilities");
 var vendorRegistryMessage = require("../lib/vendor-registry-message");
-var claudeSettingsEnv = require("../lib/claude-settings-env");
 
-function trusting(env) {
-  return claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: env, trustComposed: true });
-}
-
-function record(env, vendor, readPolicy) {
+function record(env, vendor, osUsers) {
   var sm = {};
-  var caps = sessionCapabilities.recordCapabilities(sm, vendor || "claude", null, env, readPolicy);
+  var caps = sessionCapabilities.recordCapabilities(sm, vendor || "claude", null, env, osUsers);
   return { sm: sm, caps: caps };
 }
 
@@ -103,19 +98,22 @@ test("the registry message carries the narrowed capability and its reason to the
 
 function withSettingsFile(env, run) {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "provider-cap-cfg-"));
+  var saved = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = dir;
   try {
     fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ env: env }));
-    return run({ CLAUDE_CONFIG_DIR: dir });
+    return run();
   } finally {
+    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = saved;
     fs.rmSync(dir, { recursive: true });
   }
 }
 
 ["0", ""].forEach(function (off) {
   test("a settings file setting CLAUDE_CODE_USE_BEDROCK to '" + off + "' keeps web search on over a Bedrock flag", function () {
-    withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function (cfg) {
-      var env = Object.assign({ CLAUDE_CODE_USE_BEDROCK: "1" }, cfg);
-      var r = record(env, null, trusting(env));
+    withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function () {
+      var r = record({ CLAUDE_CODE_USE_BEDROCK: "1" });
       assert.equal(r.caps.webSearch, true);
       assert.deepEqual(r.sm.capabilityReasonsByVendor.claude, {});
     });
@@ -123,16 +121,13 @@ function withSettingsFile(env, run) {
 });
 
 test("a settings file selecting Bedrock turns web search off though the composed environment does not", function () {
-  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1" }, function (cfg) {
-    assert.equal(record(cfg, null, trusting(cfg)).caps.webSearch, false);
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1" }, function () {
+    assert.equal(record({}).caps.webSearch, false);
   });
 });
 
-test("a settings directory chosen by untrusted text does not narrow capabilities", function () {
-  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1" }, function (cfg) {
-    var untrusted = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: false });
-    assert.equal(record(cfg, null, untrusted).caps.webSearch, true);
-    var osUsers = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: true, osUsers: true });
-    assert.equal(record(cfg, null, osUsers).caps.webSearch, true);
+test("os-users mode reads no settings file, so it does not narrow capabilities", function () {
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1" }, function () {
+    assert.equal(record({}, null, true).caps.webSearch, true);
   });
 });

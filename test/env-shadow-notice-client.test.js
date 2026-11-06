@@ -26,6 +26,9 @@ test("the notice names the shadowed variables and shows, and hides when there ar
     assert.match(el.textContent, /AWS_REGION, CLAUDE_CODE_USE_BEDROCK/);
     assert.match(el.textContent, /Claude settings file/);
     assert.match(el.textContent, /no effect/);
+    assert.doesNotMatch(el.textContent, /CLAUDE_CONFIG_DIR/);
+    renderShadowNotice("n", ["A"], true);
+    assert.match(el.textContent, /covers that user's Claude settings only/);
     renderShadowNotice("n", []);
     assert.equal(el.classList.contains("hidden"), true);
     assert.equal(el.textContent, "");

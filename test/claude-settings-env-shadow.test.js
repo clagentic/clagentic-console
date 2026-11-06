@@ -11,6 +11,7 @@ var path = require("path");
 var claudeSettingsEnv = require("../lib/claude-settings-env");
 
 var home = null;
+var savedConfigDir;
 
 function writeSettings(obj) {
   fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
@@ -18,37 +19,42 @@ function writeSettings(obj) {
 }
 
 test.beforeEach(function () {
+  savedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
   home = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-"));
 });
 
 test.afterEach(function () {
+  if (savedConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = savedConfigDir;
   fs.rmSync(home, { recursive: true });
 });
 
 test("names set in both the Settings text and the settings file are reported", function () {
   writeSettings({ env: { CLAUDE_CODE_USE_BEDROCK: "1", OTHER: "x" } });
-  var keys = claudeSettingsEnv.shadowedKeys("export CLAUDE_CODE_USE_BEDROCK=0\nexport AWS_REGION=us-east-1", { homeDir: home, env: {} });
+  var keys = claudeSettingsEnv.shadowedKeys("export CLAUDE_CODE_USE_BEDROCK=0\nexport AWS_REGION=us-east-1", { homeDir: home });
   assert.deepEqual(keys, ["CLAUDE_CODE_USE_BEDROCK"]);
 });
 
 test("a name only in the Settings text is not reported", function () {
   writeSettings({ env: { OTHER: "x" } });
-  assert.deepEqual(claudeSettingsEnv.shadowedKeys("AWS_REGION=us-east-1", { homeDir: home, env: {} }), []);
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys("AWS_REGION=us-east-1", { homeDir: home }), []);
 });
 
 test("no settings file, an unreadable one, or one without an env block reports nothing", function () {
-  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=1", { homeDir: home, env: {} }), []);
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=1", { homeDir: home }), []);
   writeSettings("{ not json");
-  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=1", { homeDir: home, env: {} }), []);
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=1", { homeDir: home }), []);
   writeSettings({ model: "x" });
-  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=1", { homeDir: home, env: {} }), []);
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=1", { homeDir: home }), []);
 });
 
-test("CLAUDE_CONFIG_DIR names the directory the settings file is read from", function () {
+test("the daemon's own CLAUDE_CONFIG_DIR names the directory the settings file is read from", function () {
   var other = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-cfg-"));
   try {
     fs.writeFileSync(path.join(other, "settings.json"), JSON.stringify({ env: { A: "1" } }));
-    assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home, env: { CLAUDE_CONFIG_DIR: other } }), ["A"]);
+    process.env.CLAUDE_CONFIG_DIR = other;
+    assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home }), ["A"]);
   } finally {
     fs.rmSync(other, { recursive: true });
   }
@@ -56,23 +62,9 @@ test("CLAUDE_CONFIG_DIR names the directory the settings file is read from", fun
 
 test("a name repeated in the text is reported once, and no value is returned", function () {
   writeSettings({ env: { A: "secret-file-value" } });
-  var keys = claudeSettingsEnv.shadowedKeys("A=1\nA=2", { homeDir: home, env: {} });
+  var keys = claudeSettingsEnv.shadowedKeys("A=1\nA=2", { homeDir: home });
   assert.deepEqual(keys, ["A"]);
   assert.equal(JSON.stringify(keys).indexOf("secret"), -1);
-});
-
-test("CLAUDE_CONFIG_DIR set in the edited text, not the base, picks the settings file read", function () {
-  var other = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-edited-"));
-  var base = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-base-"));
-  try {
-    fs.writeFileSync(path.join(other, "settings.json"), JSON.stringify({ env: { A: "1" } }));
-    fs.writeFileSync(path.join(base, "settings.json"), JSON.stringify({ env: { B: "1" } }));
-    var keys = claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + other + "\nA=2\nB=2", { homeDir: home, env: { CLAUDE_CONFIG_DIR: base }, trustEdited: true });
-    assert.deepEqual(keys, ["A"]);
-  } finally {
-    fs.rmSync(other, { recursive: true });
-    fs.rmSync(base, { recursive: true });
-  }
 });
 
 test("applyUserSettingsEnv puts the settings file's env block over the given environment", function () {
@@ -85,9 +77,9 @@ test("applyUserSettingsEnv puts the settings file's env block over the given env
   assert.equal("SKIP" in out, false);
 });
 
-// The daemon reads the settings file on its own account, so the path must not
-// come from text a non-admin owner edited (CWE-22: probing key names in another
-// account's file).
+// The daemon reads the settings file on its own account, so the path must never
+// come from text someone edited (CWE-22: probing key names in another account's
+// file).
 function spyReads(fn) {
   var real = fs.readFileSync;
   var read = [];
@@ -99,28 +91,19 @@ function spyReads(fn) {
   return read;
 }
 
-test("a non-admin owner's CLAUDE_CONFIG_DIR line does not choose the file read", function () {
+test("an edited CLAUDE_CONFIG_DIR is never read, whoever edited it", function () {
   var elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-elsewhere-"));
   try {
-    fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { A: "1" } }));
+    fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { A: "1", B: "1" } }));
+    writeSettings({ env: { B: "1" } });
     var keys;
     var read = spyReads(function () {
-      keys = claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + elsewhere + "\nA=2", { homeDir: home, env: {}, trustEdited: false });
+      keys = claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + elsewhere + "\nA=2\nB=2", { homeDir: home });
     });
-    assert.deepEqual(keys, []);
+    assert.deepEqual(keys, ["B"], "only the daemon user's file is consulted");
     assert.equal(read.some(function (f) { return f.indexOf(elsewhere) === 0; }), false, "the edited path is never opened");
-  } finally {
-    fs.rmSync(elsewhere, { recursive: true });
-  }
-});
-
-test("an administrator's CLAUDE_CONFIG_DIR line is honoured", function () {
-  var elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-admin-"));
-  try {
-    fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { A: "1" } }));
-    assert.deepEqual(
-      claudeSettingsEnv.shadowedKeys("CLAUDE_CONFIG_DIR=" + elsewhere + "\nA=2", { homeDir: home, env: {}, trustEdited: true }),
-      ["A"]);
+    assert.equal(claudeSettingsEnv.setsConfigDir("A=1\nexport CLAUDE_CONFIG_DIR=/x"), true);
+    assert.equal(claudeSettingsEnv.setsConfigDir("A=1"), false);
   } finally {
     fs.rmSync(elsewhere, { recursive: true });
   }
@@ -131,36 +114,33 @@ test("os-users mode reads no settings file, for the warning or for the environme
   var out;
   var keys;
   var read = spyReads(function () {
-    keys = claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home, env: {}, trustEdited: true, osUsers: true });
-    out = claudeSettingsEnv.applyUserSettingsEnv({ B: "x" }, {
-      homeDir: home,
-      readPolicy: claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, osUsers: true }),
-    });
+    keys = claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home, osUsers: true });
+    out = claudeSettingsEnv.applyUserSettingsEnv({ B: "x" }, { homeDir: home, osUsers: true });
   });
   assert.deepEqual(keys, []);
   assert.deepEqual(out, { B: "x" });
   assert.deepEqual(read.filter(function (f) { return /settings\.json$/.test(f); }), []);
 });
 
-test("a settings directory outside the expected shape is not followed", function () {
-  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "relative/dir" } }, home), null);
-  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "/a/../etc" } }, home), null);
-  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "/a/b\0c" } }, home), null);
-  assert.equal(claudeSettingsEnv.resolveSettingsFile({ trustedEnv: { CLAUDE_CONFIG_DIR: "/a/b" } }, home), path.join("/a/b", "settings.json"));
-});
-
-test("single-user and no-policy defaults: the home directory file is read", function () {
+test("the home directory file is read when the daemon has no CLAUDE_CONFIG_DIR", function () {
   writeSettings({ env: { A: "1" } });
-  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home, env: {} }), ["A"]);
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys("A=2", { homeDir: home }), ["A"]);
 });
 
-test("applyUserSettingsEnv without a policy trusts only the daemon's own environment", function () {
-  var elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "settings-shadow-apply-"));
-  try {
-    fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { A: "file" } }));
-    var out = claudeSettingsEnv.applyUserSettingsEnv({ CLAUDE_CONFIG_DIR: elsewhere }, { homeDir: home });
-    assert.equal("A" in out, false);
-  } finally {
-    fs.rmSync(elsewhere, { recursive: true });
-  }
+// Names such as constructor and toString exist on every plain object; they are
+// ordinary variable names here and must be reported like any other.
+var OBJECT_PROTOTYPE_NAMES = ["constructor", "toString", "hasOwnProperty", "valueOf"];
+
+test("names that exist on Object.prototype are reported when both the text and the file set them", function () {
+  var fileEnv = JSON.parse("{" + OBJECT_PROTOTYPE_NAMES.map(function (n) { return JSON.stringify(n) + ':"1"'; }).join(",") + "}");
+  writeSettings({ env: fileEnv });
+  var text = OBJECT_PROTOTYPE_NAMES.map(function (n) { return n + "=2"; }).join("\n");
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys(text, { homeDir: home }), OBJECT_PROTOTYPE_NAMES);
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys(text + "\n" + text, { homeDir: home }), OBJECT_PROTOTYPE_NAMES, "each once");
+});
+
+test("names on Object.prototype are not reported when the file does not set them", function () {
+  writeSettings({ env: { OTHER: "1" } });
+  var text = OBJECT_PROTOTYPE_NAMES.map(function (n) { return n + "=2"; }).join("\n");
+  assert.deepEqual(claudeSettingsEnv.shadowedKeys(text, { homeDir: home }), []);
 });

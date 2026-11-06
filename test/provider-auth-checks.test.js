@@ -12,14 +12,8 @@ var authChecks = require("../lib/yoke/auth-checks");
 var providerCredentials = require("../lib/yoke/provider-credentials");
 var runtimeEnv = require("../lib/runtime-env");
 var vendorAuth = require("../lib/vendor-auth");
-var claudeSettingsEnv = require("../lib/claude-settings-env");
 
-// An actor whose environment text may choose the settings directory.
-function trusting(env) {
-  return claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: env, trustComposed: true });
-}
-
-var NAMES = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+var NAMES = ["CLAUDE_CONFIG_DIR", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
   "AWS_PROFILE", "AWS_REGION", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "PATH"];
 var saved = {};
 var emptyBin = null;
@@ -114,43 +108,61 @@ test("providerAuthFailure is null with no provider, and for an agent that does n
 });
 
 // The Claude CLI applies the user settings file's env block over what it is
-// handed, so the provider it talks to is decided from that.
+// handed, so the provider it talks to is decided from that. The daemon locates
+// the one file from its own environment.
 function withSettingsFile(env, run) {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "provider-auth-cfg-"));
+  process.env.CLAUDE_CONFIG_DIR = dir;
   try {
     fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ env: env }));
-    return run({ CLAUDE_CONFIG_DIR: dir });
+    return run();
   } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(dir, { recursive: true });
   }
 }
 
 ["0", ""].forEach(function (off) {
   test("a settings file setting CLAUDE_CODE_USE_BEDROCK to '" + off + "' over a Settings Bedrock flag is not authenticated or attributed", function () {
-    withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function (cfg) {
-      var overlay = Object.assign({}, BEDROCK, cfg);
-      assert.equal(authChecks.checkClaudeAuth(overlay, trusting(overlay)), false);
-      var composed = runtimeEnv.composeRuntimeEnv(process.env, overlay);
-      assert.equal(vendorAuth.providerAuthFailure("claude", composed, trusting(composed)), null);
+    withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: off }, function () {
+      assert.equal(authChecks.checkClaudeAuth(BEDROCK), false);
+      var composed = runtimeEnv.composeRuntimeEnv(process.env, BEDROCK);
+      assert.equal(vendorAuth.providerAuthFailure("claude", composed), null);
     });
   });
 });
 
 test("a settings file selecting Bedrock with a credential source is authenticated although Settings does not", function () {
-  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "host" }, function (cfg) {
-    assert.equal(authChecks.checkClaudeAuth(cfg, trusting(cfg)), true);
-    var composed = runtimeEnv.composeRuntimeEnv(process.env, cfg);
-    assert.equal(vendorAuth.providerAuthFailure("claude", composed, trusting(composed)).provider, "bedrock");
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "host" }, function () {
+    assert.equal(authChecks.checkClaudeAuth(null), true);
+    var composed = runtimeEnv.composeRuntimeEnv(process.env, null);
+    assert.equal(vendorAuth.providerAuthFailure("claude", composed).provider, "bedrock");
   });
 });
 
-test("a settings directory chosen by untrusted text is not read for the provider decision", function () {
-  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "host" }, function (cfg) {
-    var untrusted = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: false });
-    assert.equal(authChecks.checkClaudeAuth(cfg, untrusted), false);
-    var osUsers = claudeSettingsEnv.settingsReadPolicy({ baseEnv: {}, composedEnv: cfg, trustComposed: true, osUsers: true });
-    assert.equal(authChecks.checkClaudeAuth(cfg, osUsers), false);
-    var composed = runtimeEnv.composeRuntimeEnv(process.env, cfg);
-    assert.equal(vendorAuth.providerAuthFailure("claude", composed, untrusted), null);
+test("os-users mode reads no settings file for the provider decision", function () {
+  withSettingsFile({ CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "host" }, function () {
+    assert.equal(authChecks.checkClaudeAuth(null, true), false);
+    var composed = runtimeEnv.composeRuntimeEnv(process.env, null);
+    assert.equal(vendorAuth.providerAuthFailure("claude", composed, true), null);
   });
+});
+
+// The sign-in probe reports on the daemon user's own login, so it runs with the
+// daemon's environment: text saved in Settings must not reach it.
+test("the sign-in probe receives neither project nor shared Settings variables", function () {
+  var binDir = fs.mkdtempSync(path.join(os.tmpdir(), "provider-auth-probe-"));
+  var record = path.join(binDir, "seen-env");
+  fs.writeFileSync(path.join(binDir, "claude"), "#!/bin/sh\nenv > '" + record + "'\nexit 1\n", { mode: 0o755 });
+  var savedPath = process.env.PATH;
+  process.env.PATH = binDir + path.delimiter + savedPath;
+  try {
+    authChecks.checkClaudeAuth({ SETTINGS_ONLY_MARKER: "from-settings", CLAUDE_CONFIG_DIR: "/elsewhere" });
+    var seen = fs.readFileSync(record, "utf8");
+    assert.doesNotMatch(seen, /SETTINGS_ONLY_MARKER/);
+    assert.doesNotMatch(seen, /\/elsewhere/);
+  } finally {
+    process.env.PATH = savedPath;
+    fs.rmSync(binDir, { recursive: true });
+  }
 });

@@ -1,10 +1,9 @@
 "use strict";
 // Which Claude settings file the daemon reads for a session's provider and
-// capability decisions. A project's environment text is written by its owner,
-// so in multi-user mode only an administrator's session may let it choose the
-// directory; the daemon never reads a file on behalf of a session that runs as
-// another OS user. Real server and SDK bridge; the Claude Agent SDK is the
-// stand-in (test/fixtures/fake-agent-sdk).
+// capability decisions: exactly one, located from the daemon's own environment.
+// Environment text saved in Settings never chooses the path, whoever wrote it,
+// and under os-users mode no file is read. Real server and SDK bridge; the
+// Claude Agent SDK is the stand-in (test/fixtures/fake-agent-sdk).
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -22,6 +21,8 @@ var { createEnvSettings } = require("../lib/daemon-env-settings");
 var PROVIDER_VARS = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CONFIG_DIR"];
 var savedEnv = {};
 var elsewhere = null;
+var daemonDir = null;
+var emptyDir = null;
 var config = { sharedEnv: "", projects: [{ slug: "mine" }, { slug: "admins" }] };
 var envSettings = createEnvSettings({
   getConfig: function () { return config; },
@@ -81,7 +82,13 @@ function spyOnSettingsReads() {
 test.before(function () {
   PROVIDER_VARS.forEach(function (n) { savedEnv[n] = process.env[n]; delete process.env[n]; });
   elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "settings-policy-"));
+  daemonDir = fs.mkdtempSync(path.join(os.tmpdir(), "settings-policy-daemon-"));
+  emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "settings-policy-empty-"));
+  // The directory the edited text names holds a Bedrock file; the daemon's own
+  // directory holds a Vertex one, so which was read shows in the message.
   fs.writeFileSync(path.join(elsewhere, "settings.json"), JSON.stringify({ env: { CLAUDE_CODE_USE_BEDROCK: "1", AWS_PROFILE: "x" } }));
+  fs.writeFileSync(path.join(daemonDir, "settings.json"), JSON.stringify({ env: { CLAUDE_CODE_USE_VERTEX: "1", ANTHROPIC_VERTEX_PROJECT_ID: "p" } }));
+  process.env.CLAUDE_CONFIG_DIR = daemonDir;
   config.projects[0].envrc = "CLAUDE_CONFIG_DIR=" + elsewhere;
   config.projects[1].envrc = "CLAUDE_CONFIG_DIR=" + elsewhere;
 });
@@ -91,10 +98,10 @@ test.after(function () {
     if (savedEnv[n] === undefined) delete process.env[n];
     else process.env[n] = savedEnv[n];
   });
-  fs.rmSync(elsewhere, { recursive: true });
+  [elsewhere, daemonDir, emptyDir].forEach(function (d) { fs.rmSync(d, { recursive: true }); });
 });
 
-test("multi-user: a non-admin owner's CLAUDE_CONFIG_DIR is not read; an administrator's is", async function () {
+test("multi-user: the daemon's file is read for owner and administrator alike; an edited CLAUDE_CONFIG_DIR never is", async function () {
   var s = await startServer({
     users: [
       { key: "admin", username: "admin", role: "admin" },
@@ -109,15 +116,17 @@ test("multi-user: a non-admin owner's CLAUDE_CONFIG_DIR is not read; an administ
 
     var spy = spyOnSettingsReads();
     var asOwner;
+    var asAdmin;
     try {
       asOwner = await shownForAuthError(s.ctxs.mine, s.server.people.owner.id);
-      assert.equal(spy.readElsewhere(), false, "the owner-edited path is never opened");
+      asAdmin = await shownForAuthError(s.ctxs.admins, s.server.people.admin.id);
+      assert.equal(spy.readElsewhere(), false, "the edited path is never opened");
+      assert.ok(spy.reads.some(function (f) { return f.indexOf(daemonDir) === 0; }), "the daemon's file is read");
     } finally { spy.restore(); }
-    assert.ok(asOwner.some(function (m) { return m.type === "auth_required"; }), "no provider is seen, so sign-in is still offered");
-
-    var asAdmin = await shownForAuthError(s.ctxs.admins, s.server.people.admin.id);
-    assert.equal(asAdmin.some(function (m) { return m.type === "auth_required"; }), false);
-    assert.match(asAdmin.filter(function (m) { return m.type === "error"; })[0].text, /Amazon Bedrock/);
+    [asOwner, asAdmin].forEach(function (shown) {
+      assert.equal(shown.some(function (m) { return m.type === "auth_required"; }), false);
+      assert.match(shown.filter(function (m) { return m.type === "error"; })[0].text, /Google Vertex/);
+    });
   } finally {
     await s.server.stop();
   }
@@ -130,15 +139,13 @@ test("os-users: the daemon reads no settings file for the session", async functi
     projects: [{ slug: "mine", ownerKey: "admin" }],
   });
   try {
-    var policy = s.ctxs.mine.sdk.getSettingsReadPolicy(null);
-    assert.equal(policy.osUsers, true);
     var spy = spyOnSettingsReads();
     try {
       var session = s.ctxs.mine.sm.createSessionRaw({ ownerId: s.server.people.admin.id });
-      assert.equal(s.ctxs.mine.sdk.getSettingsReadPolicy(session).osUsers, true);
-      require("../lib/claude-settings-env").applyUserSettingsEnv(
-        s.ctxs.mine.sdk.getEffectiveRuntimeEnv(session), { readPolicy: s.ctxs.mine.sdk.getSettingsReadPolicy(session) });
+      var shown = await shownForAuthError(s.ctxs.mine, s.server.people.admin.id);
+      assert.ok(shown.length > 0);
       assert.deepEqual(spy.reads.filter(function (f) { return /settings\.json$/.test(f); }), []);
+      assert.ok(session);
     } finally { spy.restore(); }
   } finally {
     await s.server.stop();
@@ -150,6 +157,8 @@ test("os-users: the daemon reads no settings file for the session", async functi
 // only its owner's sessions in multi-user mode, so the environments differ.
 test("capabilities are recorded from the environment no session owns, so one owner's provider does not decide them", async function () {
   var savedProject = config.projects[0].envrc;
+  // A daemon directory with no settings file, so only the owner's text differs.
+  process.env.CLAUDE_CONFIG_DIR = emptyDir;
   config.projects[0].envrc = "CLAUDE_CODE_USE_BEDROCK=1\nAWS_PROFILE=x";
   var s = await startServer({
     users: [
@@ -179,6 +188,7 @@ test("capabilities are recorded from the environment no session owns, so one own
     assert.equal(ctx.sm.capabilitiesByVendor.claude.webSearch, true, "the owner's session did not narrow the shared ledger");
   } finally {
     config.projects[0].envrc = savedProject;
+    process.env.CLAUDE_CONFIG_DIR = daemonDir;
     await s.server.stop();
   }
 });
