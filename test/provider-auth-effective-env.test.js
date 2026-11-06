@@ -144,3 +144,36 @@ test("no provider: the message does not claim a provider's credentials failed", 
     assert.doesNotMatch(m.text || "", /credentials failed/);
   });
 });
+
+// A failed turn ends with done code 1, the signal every other failed turn
+// uses and the loop engine reads; the canned reply is a failure, not a success.
+function cannedReplyDone(providerText) {
+  clearProviders();
+  config.sharedEnv = providerText;
+  var session = alpha.sm.createSessionRaw({ ownerId: server.people.admin.id });
+  session.vendor = "claude";
+  session.responsePreview = "Not logged in · Please run /login";
+  alpha.sdk.processSDKMessage(session, { yokeType: "result", cost: 0, duration: 1, usage: null, sessionId: "cli-x" });
+  return session.history.filter(function (m) { return m.type === "done"; });
+}
+
+test("the canned login reply under a provider ends the turn with done code 1", function () {
+  var done = cannedReplyDone("CLAUDE_CODE_USE_BEDROCK=1\nAWS_REGION=us-east-1\nAWS_PROFILE=host");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].code, 1);
+});
+
+test("the canned login reply with no provider ends the turn with done code 1", function () {
+  var done = cannedReplyDone("");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].code, 1);
+});
+
+test("a normal result still ends the turn with done code 0", function () {
+  clearProviders();
+  var session = alpha.sm.createSessionRaw({ ownerId: server.people.admin.id });
+  session.vendor = "claude";
+  session.responsePreview = "All done.";
+  alpha.sdk.processSDKMessage(session, { yokeType: "result", cost: 0.01, duration: 1, usage: null, sessionId: "cli-y" });
+  assert.equal(session.history.filter(function (m) { return m.type === "done"; })[0].code, 0);
+});
