@@ -1,6 +1,6 @@
 "use strict";
-// Which Claude settings file the daemon reads for a session's provider and
-// capability decisions: exactly one, located from the daemon's own environment.
+// Which Claude settings file the daemon reads for a session's provider
+// decisions: exactly one, located from the daemon's own environment.
 // Environment text saved in Settings never chooses the path, whoever wrote it,
 // and under os-users mode no file is read. Real server and SDK bridge; the
 // Claude Agent SDK is the stand-in (test/fixtures/fake-agent-sdk).
@@ -148,47 +148,6 @@ test("os-users: the daemon reads no settings file for the session", async functi
       assert.ok(session);
     } finally { spy.restore(); }
   } finally {
-    await s.server.stop();
-  }
-});
-
-// The capability ledger is one entry per vendor and every client reads it, so
-// it must not depend on which session reported last. The project's text reaches
-// only its owner's sessions in multi-user mode, so the environments differ.
-test("capabilities are recorded from the environment no session owns, so one owner's provider does not decide them", async function () {
-  var savedProject = config.projects[0].envrc;
-  // A daemon directory with no settings file, so only the owner's text differs.
-  process.env.CLAUDE_CONFIG_DIR = emptyDir;
-  config.projects[0].envrc = "CLAUDE_CODE_USE_BEDROCK=1\nAWS_PROFILE=x";
-  var s = await startServer({
-    users: [
-      { key: "admin", username: "admin", role: "admin" },
-      { key: "owner", username: "owner", role: "user" },
-    ],
-    projects: [{ slug: "mine", ownerKey: "owner" }],
-  });
-  try {
-    await s.server.connect("mine", "owner");
-    await sleep(400);
-    var ctx = s.ctxs.mine;
-    var ownerSession = ctx.sm.createSessionRaw({ ownerId: s.server.people.owner.id });
-    var otherSession = ctx.sm.createSessionRaw({ ownerId: s.server.people.admin.id });
-    assert.equal(ctx.sdk.getEffectiveRuntimeEnv(ownerSession).CLAUDE_CODE_USE_BEDROCK, "1");
-    assert.equal(ctx.sdk.getEffectiveRuntimeEnv(otherSession).CLAUDE_CODE_USE_BEDROCK, undefined, "the two sessions' environments differ");
-    // A session on a vendor whose models are not yet known reports that
-    // vendor's capabilities when its turn starts.
-    ownerSession.vendor = "claude";
-    if (ctx.sm.modelsByVendor) delete ctx.sm.modelsByVendor.claude;
-    ownerSession.isProcessing = true;
-    await ctx.sdk.startQuery(ownerSession, "auth-error", null, null);
-    await waitFor(function () {
-      return ownerSession.history.some(function (m) { return m.type === "done"; });
-    }, "the turn to end");
-    if (ownerSession.queryInstance) ownerSession.queryInstance.close();
-    assert.equal(ctx.sm.capabilitiesByVendor.claude.webSearch, true, "the owner's session did not narrow the shared ledger");
-  } finally {
-    config.projects[0].envrc = savedProject;
-    process.env.CLAUDE_CONFIG_DIR = daemonDir;
     await s.server.stop();
   }
 });

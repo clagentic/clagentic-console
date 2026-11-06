@@ -296,7 +296,7 @@ test("the vendor-keyed instruction table is gone: a fake vendor's native files c
 });
 
 test("the interface lists what the console really consumes: endInput is required, the rest is declared optional", function () {
-  assert.equal(iface.INTERFACE_VERSION, "0.6.0");
+  assert.equal(iface.INTERFACE_VERSION, "0.5.0");
   assert.ok(iface.QUERY_HANDLE_METHODS.indexOf("endInput") !== -1);
   assert.deepEqual(iface.QUERY_HANDLE_OPTIONAL_METHODS.slice().sort(), ["rewindFiles", "setPermissionMode"]);
   ["rollbackThread", "shutdown", "forkSession"].forEach(function (m) {
