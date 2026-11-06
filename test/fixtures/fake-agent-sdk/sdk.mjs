@@ -28,6 +28,9 @@ export function query({ prompt, options }) {
   globalThis.__fakeAgentSdkQueries.push(record);
 
   const events = [];
+  // A user message "auth-error" makes the stream fail the way a rejected
+  // credential does, with the text the classifier looks for.
+  let failure = null;
   let wake = null;
   let closed = false;
   function emit(event) {
@@ -48,6 +51,15 @@ export function query({ prompt, options }) {
       // A title request: answer it so the caller's loop ends.
       if (typeof text === "string" && text.indexOf("Below is a conversation") === 0) {
         emit({ type: "result", subtype: "success" });
+        continue;
+      }
+      if (text === "auth-error") {
+        failure = new Error("Authentication failed: the provider rejected the credentials");
+        if (wake) {
+          const w = wake;
+          wake = null;
+          w();
+        }
         continue;
       }
       if (text !== "ask") continue;
@@ -90,7 +102,8 @@ export function query({ prompt, options }) {
     [Symbol.asyncIterator]() {
       return {
         async next() {
-          while (!events.length && !closed) await new Promise((resolve) => { wake = resolve; });
+          while (!events.length && !closed && !failure) await new Promise((resolve) => { wake = resolve; });
+          if (failure && !events.length) throw failure;
           if (!events.length) return { value: undefined, done: true };
           return { value: events.shift(), done: false };
         },
