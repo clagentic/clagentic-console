@@ -59,7 +59,7 @@ test("both shipped agents register one complete descriptor each, in preference o
   var codex = registry.get("codex");
   assert.equal(claude.displayName, "Claude Code");
   assert.equal(codex.displayName, "Codex");
-  assert.equal(claude.loginCommand, "claude login");
+  assert.equal(claude.loginCommand, "claude auth login");
   assert.equal(codex.loginCommand, "codex login --device-auth");
   assert.equal(codex.needsRuntimeEnv, true, "every Codex entry point requires runtimeEnv");
   assert.equal(claude.needsRuntimeEnv, false);
