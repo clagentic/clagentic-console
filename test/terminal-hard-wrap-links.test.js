@@ -147,3 +147,36 @@ test("an OAuth-shaped hard-wrapped URL with query-string continuation rows is jo
   assert.equal(links.length, 1);
   assert.equal(links[0].text, oauth);
 });
+
+function countingXterm(rows) {
+  var xterm = fakeXterm(rows);
+  var real = xterm.buffer.active.getLine;
+  xterm.calls = 0;
+  xterm.buffer.active.getLine = function (y) { xterm.calls++; return real(y); };
+  return xterm;
+}
+
+function longChain(mod, nRows) {
+  var rows = [{ text: "" }];
+  rows[0].text = ("https://e.test/" + "a".repeat(COLS)).slice(0, COLS);
+  for (var i = 1; i < nRows; i++) rows.push({ text: "b".repeat(COLS) });
+  return rows;
+}
+
+test("a 500-row continuation chain resolves in bounded work with no deep recursion", async function () {
+  var mod = await import(MOD_URL);
+  var xterm = countingXterm(longChain(mod, 500));
+  var started = Date.now();
+  var links = linksAt(mod, xterm, 1);
+  assert.ok(links && links.length === 1);
+  assert.ok(Date.now() - started < 1000);
+  assert.ok(xterm.calls <= mod.MAX_LINK_ROWS * 8, "getLine calls: " + xterm.calls);
+});
+
+test("a chain longer than the bound is cut at the bound", async function () {
+  var mod = await import(MOD_URL);
+  var links = linksAt(mod, fakeXterm(longChain(mod, mod.MAX_LINK_ROWS * 2)), 1);
+  assert.equal(links.length, 1);
+  assert.equal(links[0].range.end.y, mod.MAX_LINK_ROWS);
+  assert.equal(links[0].text.length, mod.MAX_LINK_ROWS * COLS);
+});
