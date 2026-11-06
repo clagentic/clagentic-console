@@ -4,6 +4,7 @@
 docs/
 ├── guides/                             Maintenance & development guides
 │   ├── AGENT-GUIDE.md                  Agents as console users: open-session, send-input, list-sessions
+│   ├── CLOUD-PROVIDER-AUTH.md          Admins: Claude on Bedrock, Vertex or Foundry host-wide via Settings env
 │   ├── PERMISSION-SETTINGS.md          The permission settings: defaults, who may change them, what off does
 │   ├── architecture.md                 System overview, SDK, WebSocket protocol
 │   ├── MODULE_MAP.md                   File-by-file module guide

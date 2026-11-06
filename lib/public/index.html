@@ -744,6 +744,7 @@
             </div>
             <div class="ps-env-tab-content active" data-tab="project">
               <p class="settings-hint" id="ps-env-scope-hint" style="margin-bottom: 12px;"></p>
+              <div class="settings-hint ps-env-notice hidden" id="ps-env-shadow-notice"></div>
               <div class="ps-env-header">
                 <button class="settings-btn-sm" id="ps-env-add-btn"><i data-lucide="plus"></i> Add Variable</button>
                 <span class="ps-save-status" id="ps-env-save-status"></span>
@@ -754,6 +755,7 @@
             </div>
             <div class="ps-env-tab-content" data-tab="shared">
               <p class="settings-hint" style="margin-bottom: 12px;">Shared variables apply to every session in every project. Only administrators can change them. Project-level variables take precedence where they apply. Applies to sessions started after saving.</p>
+              <div class="settings-hint ps-env-notice hidden" id="ps-shared-env-shadow-notice"></div>
               <div class="ps-env-header">
                 <button class="settings-btn-sm" id="ps-shared-env-add-btn"><i data-lucide="plus"></i> Add Variable</button>
                 <span class="ps-save-status" id="ps-shared-env-save-status"></span>
@@ -1325,6 +1327,7 @@
         <div class="server-settings-section" data-section="environment">
           <h2>Environment</h2>
           <p class="settings-hint" style="margin-bottom: 16px;">Define environment variables shared across all projects. Project-level variables take precedence over shared ones. Applies to sessions started after saving.</p>
+          <div class="settings-hint ps-env-notice hidden" id="ss-env-shadow-notice"></div>
           <div class="ps-env-header">
             <button class="settings-btn-sm" id="ss-env-add-btn"><i data-lucide="plus"></i> Add Variable</button>
             <span class="ps-save-status" id="ss-env-save-status"></span>
