@@ -131,3 +131,19 @@ test("copy of a single-row selection is returned unchanged", async function () {
   var mod = await import(MOD_URL);
   assert.equal(mod.copyTextForSelection(fakeXterm([{ text: "abc" }]), "abc"), "abc");
 });
+
+test("a full-width complete URL followed by an ordinary sentence is not joined", async function () {
+  var mod = await import(MOD_URL);
+  var full = "https://example.test/a".padEnd(COLS, "b").slice(0, COLS);
+  var xterm = fakeXterm([{ text: full }, { text: "Then press Enter" }]);
+  assert.equal(linksAt(mod, xterm, 1), undefined);
+});
+
+test("an OAuth-shaped hard-wrapped URL with query-string continuation rows is joined", async function () {
+  var mod = await import(MOD_URL);
+  var oauth = "https://auth.example.test/oauth/authorize?code=true&client_id=abc-123&response_type=code&scope=a%20b&state=xyz";
+  var rows = [{ text: "Open this URL:" }].concat(chunk(oauth, false));
+  var links = linksAt(mod, fakeXterm(rows), 2);
+  assert.equal(links.length, 1);
+  assert.equal(links[0].text, oauth);
+});
