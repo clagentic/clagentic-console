@@ -106,10 +106,12 @@ test("multi-user: an ownerless banner is withheld from a non-admin, so their cou
 
 test("multi-user: dismissing sends each viewer their own count", function () {
   var w = countWorld(true);
-  w.nm.notify("permission_request", { title: "Run", slug: "p", sessionId: "s", ownerId: null, requestId: "r1", toolName: "Bash", toolInput: {} });
+  var audience = { ownerId: null, isMultiUser: function () { return true; }, listAdmins: function () { return ["admin-1"]; } };
+  var core = require("../lib/notify").notifyFor(null, w.nm);
+  core.notify("permission_request", { slug: "p", sessionId: 1, requestId: "r1" }, { push: { title: "Run", body: "" }, banner: { title: "Run", toolName: "Bash", toolInput: {} } }, audience);
   w.nm.notify("mate_dm", { senderName: "x", preview: "hi" });
   w.sent.length = 0;
-  w.nm.dismissByRequestId("r1");
+  core.resolve({ slug: "p", sessionId: 1, requestId: "r1" }, audience);
   var dismissed = w.sent.filter(function (s) { return s.msg.type === "notification_dismissed"; });
   assert.equal(dismissed.length, 2);
   dismissed.forEach(function (s) { assert.equal(s.msg.unreadCount, 1); });

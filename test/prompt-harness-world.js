@@ -131,6 +131,8 @@ async function createServer(opts) {
     onProcessingChanged: function () {},
     getProjectName: function () { return opts.projectName || ""; },
     getProjectSlug: function () { return "harness"; },
+    // As lib/project.js wires it: the registry's one notify() reaches the push module.
+    getPushModule: function () { return opts.pushModule || null; },
   });
 
   var handles = [];

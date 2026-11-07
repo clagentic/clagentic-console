@@ -192,7 +192,7 @@ test("reaping a session with no background agents stays silent, as before", func
 test("a permission prompt raised by a background agent names the agent on the card and in the notification", function () {
   var sm = makeSm();
   var notes = [];
-  sm.notifications = { notify: function (type, payload) { notes.push({ type: type, payload: payload }); } };
+  sm.notifications = { show: function (type, payload) { notes.push({ type: type, payload: payload }); }, dismissKeys: function () {} };
   var h = makeBridge(sm);
   var prompts = promptsFor(sm);
   var session = makeSession(5, { activeTaskToolIds: { "task-1": true } });
@@ -258,7 +258,7 @@ test("a dispatched Task is named from its input, and forgotten when it ends", fu
 test("a top-level permission prompt is unchanged by agent naming", function () {
   var sm = makeSm();
   var notes = [];
-  sm.notifications = { notify: function (type, payload) { notes.push(payload); } };
+  sm.notifications = { show: function (type, payload) { notes.push(payload); }, dismissKeys: function () {} };
   var h = makeBridge(sm);
   var session = makeSession(6);
   sm.sessions.set(6, session);
