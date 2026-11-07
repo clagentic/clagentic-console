@@ -1,8 +1,9 @@
 "use strict";
 // Opening and settling an operator prompt each leave one journal line, and
 // every settle names its source: the connection and user that answered, the
-// push action, the timer, or the cancel reason. The same source is recorded on
-// the prompt_resolved event. No line carries prompt content.
+// push action, or for a cancel its source (the timer, the session ending, ...).
+// An answer's source is recorded on the prompt_resolved event, a cancel's on
+// the prompt_cancel event. No line carries prompt content.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -127,7 +128,7 @@ test("a prompt that ends with its query logs the cancel reason as its source", a
     await asked.promise;
     var settled = log.registry()[1];
     assert.match(settled, /^\[prompt-registry\] prompt cancelled: /);
-    assert.match(settled, / reason=\w+ source=cancel$/);
+    assert.match(settled, / reason=\w+ source=session_end$/);
     assert.doesNotMatch(settled, /decision=/);
   });
 });

@@ -32,6 +32,8 @@
 //       its aliases, the banner) and writes no grant, and no standing approval
 //       answers an ask marked suppressAlwaysAllowRule, defaultToNo or
 //       matchedAskRule
+//   I10 every settle carries a source: an answer its responder, a cancel one
+//       of user, timeout, session_end, daemon_restart, worker or caller:<name>
 //
 // Set CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB to another checkout's lib/ to run the
 // wire-level checks against it; the client render layer always exercises
@@ -77,6 +79,23 @@ test("a run against this checkout fails when a step it chose could not be sent",
     assert.equal(h.unexpressible, 1, "the lost step was counted");
     assert.deepEqual(h.violations, [], "and is no invariant violation by itself");
     assert.throws(function () { h.assertClean(); }, /every answer the run chose could be sent/);
+  } finally {
+    h.close();
+  }
+});
+
+test("a prompt that settles without a source fails the run (I10)", async function (t) {
+  if (world.overridesLib) { t.skip("only meaningful against this checkout"); return; }
+  if (RENDER) t.mock.timers.enable({ apis: ["setTimeout"] });
+  await freshDom();
+  var h = new Harness("source-guard");
+  await h.init(1);
+  try {
+    var r = null;
+    await h.step(async function () { r = await h.request(PROMPTS[0], null); });
+    h.auditor.inbox.push({ type: "prompt_cancel", requestId: r.id, kind: "permission", reason: "aborted" });
+    h.drain(h.auditor);
+    assert.match(h.violations.join("\n"), /was cancelled with no source \(I10\)/);
   } finally {
     h.close();
   }
