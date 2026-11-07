@@ -149,7 +149,9 @@ test("a background agent's prompt left unanswered gets reminders at the schedule
     assert.equal(first[0].category, "approval_reminder");
     assert.equal(w.pushes.length, 1);
     assert.equal(w.pushes[0].type, "permission_reminder");
-    assert.equal(w.pushes[0].tag, "prompt-reminder-p:1");
+    assert.equal(w.pushes[0].tag, "n:permission_reminder:p:1");
+    assert.deepEqual(w.pushes[0].target, { slug: "p", sessionId: "1", requestId: w.pushes[0].target.requestId });
+    assert.ok(w.pushes[0].target.requestId, "the push names the prompt it is about");
 
     w.clock.t += 20 * MIN; w.rem.sweep(true);
     var second = w.live();
