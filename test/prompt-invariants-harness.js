@@ -236,6 +236,15 @@ Harness.prototype.drain = function (client) {
       if (client === this.auditor && isEnding(msg) && msg.reason !== "stale") {
         var id = promptIdOf(msg);
         this.terminalEvents[id] = (this.terminalEvents[id] || 0) + 1;
+        // Every settle names who or what ended it: an answer's responder, a
+        // cancel's source from the vocabulary.
+        if (world.overridesLib) {
+          // An older lib predates sources; only this checkout is held to I10.
+        } else if (msg.type === "prompt_cancel" || msg.type === "permission_cancel") {
+          if (typeof msg.source !== "string" || !msg.source) this.fail(id + " was cancelled with no source (I10)");
+        } else if (msg.type === "prompt_resolved" && !msg.source) {
+          this.fail(id + " was resolved with no source (I10)");
+        }
       }
       wireApply(client.known, msg);
       this.applyToView(client, msg);
