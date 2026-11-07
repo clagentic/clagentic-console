@@ -249,3 +249,131 @@ test("the live-prompt snapshot lists the viewer's pending prompts by session, wi
   assert.deepEqual(snap.items, [{ sessionId: "1", requestId: "r1", toolUseId: "t1" }]);
   assert.equal(typeof snap.at, "number");
 });
+
+// The in-app banner surface (lib/project-notifications.js as the store).
+function bannerWorld() {
+  var { attachNotifications } = require("../lib/project-notifications");
+  fs.rmSync(path.join(require("../lib/config").CONFIG_DIR, "notifications.json"), { force: true });
+  var sent = [];
+  var nm = attachNotifications({ broadcastAll: function (m) { sent.push(m); }, pushModule: null });
+  var push = fakePush();
+  return {
+    nm: nm, push: push, sent: sent,
+    core: notify.notifyFor(push, nm),
+    live: function () {
+      var list = [];
+      sent.forEach(function (m) {
+        if (m.type === "notification_created") list.push(m.notification);
+        if (m.type === "notification_dismissed") list = list.filter(function (n) { return m.ids.indexOf(n.id) === -1; });
+      });
+      return list;
+    },
+  };
+}
+var BANNER = { banner: { title: "T", toolName: "Bash", toolInput: {} } };
+function raise(w, type, t) {
+  return w.core.notify(type, t, { title: "T", body: "B" }, aud({ ownerId: "u1" }), BANNER);
+}
+
+test("one resolve() closes the banner and the push of a prompt together (AC1)", function () {
+  var w = bannerWorld();
+  var t = { slug: "p", sessionId: 4, requestId: "r1" };
+  raise(w, "permission_request", t);
+  assert.equal(w.live().length, 1);
+  assert.equal(w.push.sent.length, 1);
+  w.push.sent.length = 0;
+  w.core.resolve(t, aud({ ownerId: "u1" }));
+  assert.equal(w.live().length, 0, "the banner is gone");
+  assert.equal(w.push.sent.filter(function (s) { return s.payload.type === "notify_close"; }).length, 1, "the push is closed");
+});
+
+test("a prompt settled through the registry closes its banner and its push (AC1)", function () {
+  var w = bannerWorld();
+  var session = { localId: 6, title: "S", ownerId: "u1" };
+  var registry = createPromptRegistry({
+    index: Object.create(null),
+    getSession: function () { return session; },
+    sendAndRecord: function () {},
+    saveSessionFile: function () {},
+    getProjectSlug: function () { return "p"; },
+    getPushModule: function () { return w.push; },
+    getNotificationsModule: function () { return w.nm; },
+  });
+  var opened = registry.open(session, "permission", { toolName: "Bash", toolInput: { command: "ls" } },
+    { toolUseId: "t1", notification: { title: "Run", body: "", slug: "p", sessionId: 6, ownerId: "u1", toolName: "Bash", toolInput: {} } });
+  raise(w, "permission_request", { slug: "p", sessionId: 6, requestId: opened.requestId });
+  assert.equal(w.live().length, 1, "the registry's banner and the push share one key");
+  w.push.sent.length = 0;
+  registry.respond(opened.requestId, { behavior: "allow" }, { session: session });
+  assert.equal(w.live().length, 0);
+  assert.equal(w.push.sent.filter(function (s) { return s.payload.type === "notify_close"; }).length, 1);
+});
+
+test("repeats for one target show one banner, through the registry's collapse rule (AC2)", function () {
+  var w = bannerWorld();
+  raise(w, "permission_reminder", { slug: "p", sessionId: 4, requestId: "a" });
+  raise(w, "permission_reminder", { slug: "p", sessionId: 4, requestId: "b" });
+  assert.equal(w.live().length, 1, "a session's reminders collapse");
+  raise(w, "permission_reminder", { slug: "p", sessionId: 5, requestId: "a" });
+  raise(w, "permission_reminder", { slug: "q", sessionId: 4, requestId: "a" });
+  assert.equal(w.live().length, 3, "another session, and another project's same session number, do not");
+  raise(w, "permission_request", { slug: "p", sessionId: 4, requestId: "r1" });
+  raise(w, "permission_request", { slug: "p", sessionId: 4, requestId: "r1" });
+  raise(w, "permission_request", { slug: "p", sessionId: 4, requestId: "r2" });
+  assert.equal(w.live().filter(function (n) { return n.type === "permission_request"; }).length, 2, "request-level: one per prompt");
+  assert.equal(w.nm.getUnreadCount(), 5);
+});
+
+test("a banner's close is derived from the target alone and scoped to its project (AC1)", function () {
+  var w = bannerWorld();
+  raise(w, "permission_request", { slug: "p", sessionId: 4, requestId: "r1" });
+  raise(w, "permission_request", { slug: "q", sessionId: 4, requestId: "r1" });
+  notify.notifyFor(null, w.nm).resolve({ slug: "q", sessionId: 4, requestId: "r1" });
+  var left = w.live();
+  assert.equal(left.length, 1);
+  assert.equal(left[0].slug, "p");
+});
+
+test("the banner carries the registry's persistent flag and its collapse data (AC4)", function () {
+  var w = bannerWorld();
+  raise(w, "permission_request", { slug: "p", sessionId: 4, requestId: "r1" });
+  var n = w.live()[0];
+  assert.equal(n.persistent, true);
+  assert.equal(n.liveInState, true);
+  assert.equal(n.collapse, "request");
+  assert.equal(n.key, "n:permission_request:p:4:r1");
+  var registry = createTypeRegistry();
+  registry.register("mate_dm", { collapse: "session", persistent: false, banner: true });
+  var core = notify.createNotifyCore({ registry: registry, push: null, inApp: w.nm });
+  core.notify("mate_dm", { slug: "p", sessionId: 9 }, { title: "T", body: "B" }, aud(), { banner: { senderName: "x" } });
+  var dm = w.live().filter(function (x) { return x.key === "n:mate_dm:p:9"; });
+  assert.equal(dm.length, 1);
+  assert.equal(dm[0].persistent, false, "the flag is the type's, nothing else decides");
+});
+
+test("the in-app path keeps no second core: no per-emitter replace, dismiss-by-request or type list (AC2, AC4)", function () {
+  var root = path.join(__dirname, "..", "lib");
+  var store = fs.readFileSync(path.join(root, "project-notifications.js"), "utf8");
+  assert.doesNotMatch(store, /dismissByRequestId|replaceReminder|dismissReminder|reminderIds/);
+  var reminders = fs.readFileSync(path.join(root, "prompt-reminders.js"), "utf8");
+  assert.doesNotMatch(reminders, /replaceReminder|dismissReminder|audienceFor/);
+  var client = fs.readFileSync(path.join(root, "public", "modules", "app-notifications.js"), "utf8");
+  assert.doesNotMatch(client, /_autoDismiss = \(notif\.type ===/);
+  assert.doesNotMatch(client, /switchProject/, "the banner click goes to the one router");
+});
+
+test("an id that is not a string or number names nothing", function () {
+  assert.equal(target.makeTarget({ slug: "p", sessionId: 1, requestId: { toString: null } }).requestId, null);
+  assert.equal(target.makeTarget({ slug: "p", sessionId: {} }).sessionId, null);
+  assert.equal(target.makeTarget({ slug: "p", sessionId: 0 }).sessionId, "0");
+});
+
+test("a stale answer naming only a request retires that request's banner, in its own project", function () {
+  var w = bannerWorld();
+  raise(w, "permission_request", { slug: "p", sessionId: 4, requestId: "r1" });
+  raise(w, "permission_request", { slug: "q", sessionId: 4, requestId: "r1" });
+  w.core.resolve({ slug: "p", requestId: "r1" });
+  var left = w.live();
+  assert.equal(left.length, 1);
+  assert.equal(left[0].slug, "q");
+});

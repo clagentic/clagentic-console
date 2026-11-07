@@ -42,8 +42,8 @@ function makeNotifications() {
   var dismissed = [];
   return {
     dismissed: dismissed,
-    notify: function () {},
-    dismissByRequestId: function (id) { dismissed.push(id); },
+    show: function () {},
+    dismissKeys: function (keys) { keys.forEach(function (k) { dismissed.push(k.split(":").pop()); }); },
   };
 }
 
@@ -156,7 +156,7 @@ test("resolving a request dismisses its notification", function () {
 
     h.handlers.handleSessionsMessage({ _session: session }, { type: "permission_response", requestId: requestId, decision: "allow" });
 
-    assert.deepEqual(h.notifications.dismissed, [requestId]);
+    assert.ok(h.notifications.dismissed.indexOf(requestId) !== -1, "its banner is retired");
     return decision;
   } finally {
     cleanup(h);
@@ -200,7 +200,7 @@ test("aborting a pending request dismisses its notification", function () {
 
     ac.abort();
 
-    assert.deepEqual(h.notifications.dismissed, [requestId]);
+    assert.ok(h.notifications.dismissed.indexOf(requestId) !== -1, "its banner is retired");
     return decision;
   } finally {
     cleanup(h);
@@ -219,7 +219,7 @@ function freshNotificationsModule() {
   return require("../lib/project-notifications");
 }
 
-test("notifications module dismissByRequestId removes only the matching permission banner", function () {
+test("a core resolve removes only the matching permission banner from the notifications module", function () {
   var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-perm-notif-"));
   var origHome = process.env.CLAGENTIC_HOME;
   process.env.CLAGENTIC_HOME = tmpHome;
@@ -227,16 +227,21 @@ test("notifications module dismissByRequestId removes only the matching permissi
     var { attachNotifications } = freshNotificationsModule();
     var broadcasts = [];
     var nm = attachNotifications({ broadcastAll: function (m) { broadcasts.push(m); }, pushModule: null });
-    nm.notify("permission_request", { requestId: "r1", toolName: "Bash" });
-    nm.notify("permission_request", { requestId: "r2", toolName: "Bash" });
+    var core = require("../lib/notify").notifyFor(null, nm);
+    function raise(requestId) {
+      core.notify("permission_request", { slug: "p", sessionId: 1, requestId: requestId },
+        { title: "t", body: "b" }, { ownerId: null }, { banner: { toolName: "Bash" } });
+    }
+    raise("r1");
+    raise("r2");
 
-    nm.dismissByRequestId("r1");
+    core.resolve({ slug: "p", sessionId: 1, requestId: "r1" }, { ownerId: null });
 
     var dismissals = broadcasts.filter(function (m) { return m.type === "notification_dismissed"; });
     assert.equal(dismissals.length, 1);
     assert.equal(dismissals[0].ids.length, 1);
     assert.equal(nm.getUnreadCount(), 1);
-    nm.dismissByRequestId("unknown");
+    core.resolve({ slug: "p", sessionId: 1, requestId: "unknown" }, { ownerId: null });
     assert.equal(nm.getUnreadCount(), 1);
   } finally {
     if (origHome === undefined) delete process.env.CLAGENTIC_HOME;

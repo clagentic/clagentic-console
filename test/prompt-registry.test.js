@@ -28,8 +28,9 @@ function makeRegistry() {
     saveSessionFile: function (session) { saved.push(session.localId); },
     getNotificationsModule: function () {
       return {
-        notify: function (type, data) { notified.push(data.requestId); },
-        dismissByRequestId: function (id) { dismissed.push(id); },
+        show: function (type, data) { notified.push(data.requestId); },
+        dismissKeys: function (keys) { keys.forEach(function (k) { dismissed.push(k.split(":").pop()); }); },
+        dismissRequest: function (slug, id) { dismissed.push(id); },
       };
     },
     onProcessingChanged: function () { badgeRefreshes++; },
@@ -127,7 +128,9 @@ test("an answer settles exactly once; a second answer is stale and still retires
   assert.deepEqual(eventsOf(h, "prompt_resolved"), [{ type: "prompt_resolved", requestId: opened.requestId, kind: "permission", decision: "allow" }]);
   assertEmptyTable(s.pendingPermissions);
   assert.equal(h.index[opened.requestId], undefined);
-  assert.deepEqual(h.dismissed, [opened.requestId, opened.requestId]);
+  // The core also closes the tool-use id's key (a question's push is keyed by
+  // it), which names no banner here: the request id's banner is retired twice.
+  assert.deepEqual(h.dismissed.filter(function (id) { return id === opened.requestId; }), [opened.requestId, opened.requestId]);
 });
 
 test("permission decisions map to the vendor outcome and anything unknown fails closed", async function () {
@@ -434,7 +437,7 @@ test("cancelSession without recording settles every resolver and emits no event"
   assert.deepEqual(await a.answer, { behavior: "deny", message: "Session deleted" });
   assert.deepEqual(await ask.answer, { behavior: "deny", message: "Cancelled" });
   assert.equal(eventsOf(h, "prompt_cancel").length, 0);
-  assert.deepEqual(h.dismissed.sort(), [a.requestId, "tu-ask"].sort());
+  assert.deepEqual(h.dismissed.filter(function (id) { return id === a.requestId || id === "tu-ask"; }).sort(), [a.requestId, "tu-ask"].sort());
 });
 
 test("shutdown ends every pending prompt, recorded, sub-agent ones included", async function () {

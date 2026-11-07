@@ -295,3 +295,30 @@ test("sw.js wires the generic handlers and drops the dead error branch", functio
   vm.runInNewContext(src, Object.assign(sandbox, { self: sandbox.self }));
   assert.ok(handlers.push && handlers.notificationclick);
 });
+
+test("the banner reconcile shares the push reconcile's live check (AC5)", function () {
+  var banner = function (over) {
+    return Object.assign({
+      id: "n1", type: "permission_request", slug: "p", sessionId: 3, key: "n:permission_request:p:3:r1",
+      collapse: "request", liveInState: true, createdAt: 1000, meta: { requestId: "r1" },
+    }, over);
+  };
+  var live = { slug: "p", at: 2000, items: [{ sessionId: "3", requestId: "r1", toolUseId: null }] };
+  assert.equal(sw.isBannerLive(banner(), [banner()], null), true, "listed by the server");
+  assert.equal(sw.isBannerLive(banner(), [], live), true, "not listed, its prompt still waits");
+  assert.equal(sw.isBannerLive(banner(), [], { slug: "p", at: 2000, items: [] }), false, "its prompt is gone");
+  assert.equal(sw.isBannerLive(banner({ createdAt: 3000 }), [], { slug: "p", at: 2000, items: [] }), true, "newer than the record");
+  assert.equal(sw.isBannerLive(banner({ liveInState: false }), [], { slug: "p", at: 2000, items: [] }), true, "not judged");
+  var reminder = banner({ type: "permission_reminder", collapse: "session", key: "n:permission_reminder:p:3", meta: {} });
+  assert.equal(sw.isBannerLive(reminder, [], live), false, "a reminder is live only while listed");
+  assert.equal(sw.isBannerLive(reminder, [reminder], live), true);
+});
+
+test("a shown push is live while a banner under its tag is listed", async function () {
+  var w = world();
+  var data = corePayload("permission_reminder", { slug: "p", sessionId: 3, requestId: "r1" });
+  await sw.handlePush(w.env, data);
+  var listed = [{ key: data.tag, type: "permission_reminder", meta: {} }];
+  assert.equal(await sw.reconcileShown(w.env.registration, listed, SCOPE_P), 0);
+  assert.equal(await sw.reconcileShown(w.env.registration, [], SCOPE_P), 1);
+});
