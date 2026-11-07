@@ -120,7 +120,7 @@ function loadSw(cacheNames) {
     delete: function (n) { deleted.push(n); return Promise.resolve(true); },
     open: function () { return Promise.resolve({ addAll: function () { return Promise.resolve(); } }); },
   };
-  var ctx = vm.createContext({ self: self, caches: caches, URL: URL, Promise: Promise, console: console });
+  var ctx = vm.createContext({ self: self, importScripts: function () {}, caches: caches, URL: URL, Promise: Promise, console: console });
   vm.runInContext(src, ctx);
   return { ctx: ctx, listeners: listeners, deleted: deleted };
 }
