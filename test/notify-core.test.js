@@ -270,9 +270,9 @@ function bannerWorld() {
     },
   };
 }
-var BANNER = { banner: { title: "T", toolName: "Bash", toolInput: {} } };
+var BANNER = { title: "T", toolName: "Bash", toolInput: {} };
 function raise(w, type, t) {
-  return w.core.notify(type, t, { title: "T", body: "B" }, aud({ ownerId: "u1" }), BANNER);
+  return w.core.notify(type, t, { push: { title: "T", body: "B" }, banner: BANNER }, aud({ ownerId: "u1" }));
 }
 
 test("one resolve() closes the banner and the push of a prompt together (AC1)", function () {
@@ -345,7 +345,7 @@ test("the banner carries the registry's persistent flag and its collapse data (A
   var registry = createTypeRegistry();
   registry.register("mate_dm", { collapse: "session", persistent: false, banner: true });
   var core = notify.createNotifyCore({ registry: registry, push: null, inApp: w.nm });
-  core.notify("mate_dm", { slug: "p", sessionId: 9 }, { title: "T", body: "B" }, aud(), { banner: { senderName: "x" } });
+  core.notify("mate_dm", { slug: "p", sessionId: 9 }, { push: { title: "T", body: "B" }, banner: { senderName: "x" } }, aud());
   var dm = w.live().filter(function (x) { return x.key === "n:mate_dm:p:9"; });
   assert.equal(dm.length, 1);
   assert.equal(dm[0].persistent, false, "the flag is the type's, nothing else decides");
@@ -376,4 +376,43 @@ test("a stale answer naming only a request retires that request's banner, in its
   var left = w.live();
   assert.equal(left.length, 1);
   assert.equal(left[0].slug, "q");
+});
+
+test("emitter content cannot override the audience the core computes (banner audience)", function () {
+  var w = bannerWorld();
+  w.core.notify("permission_request", { slug: "p", sessionId: 4, requestId: "r1" }, {
+    push: { title: "T", body: "B" },
+    banner: Object.assign({ targetUserId: "intruder", targetUserIds: ["intruder"], ownerId: "intruder", slug: "other", sessionId: 99 }, BANNER),
+  }, aud({ ownerId: "u1" }));
+  var n = w.live()[0];
+  assert.equal(n.targetUserId, "u1");
+  assert.equal(n.targetUserIds, null);
+  assert.equal(n.ownerId, "u1");
+  assert.equal(n.slug, "p");
+});
+
+test("a request-only dismissal with no concrete slug dismisses nothing", function () {
+  var w = bannerWorld();
+  raise(w, "permission_request", { slug: "p", sessionId: 4, requestId: "r1" });
+  w.nm.dismissRequest(null, "r1");
+  w.nm.dismissRequest(undefined, "r1");
+  w.nm.dismissRequest("", "r1");
+  assert.equal(w.live().length, 1);
+  w.nm.dismissRequest("q", "r1");
+  assert.equal(w.live().length, 1, "another project's slug does not reach it");
+  w.nm.dismissRequest("p", "r1");
+  assert.equal(w.live().length, 0);
+});
+
+test("one notify() reaches the surfaces the content names and the type registers", function () {
+  var w = bannerWorld();
+  var t = { slug: "p", sessionId: 4, requestId: "r1" };
+  w.core.notify("permission_request", t, { banner: BANNER }, aud({ ownerId: "u1" }));
+  assert.equal(w.push.sent.length, 0, "no push content, no push");
+  assert.equal(w.live().length, 1);
+  w.core.notify("permission_request", t, { push: { title: "T", body: "B" }, banner: BANNER }, aud({ ownerId: "u1" }));
+  assert.equal(w.push.sent.length, 1);
+  assert.equal(w.live().length, 1, "the repeat collapses");
+  w.core.notify("ask_user", { slug: "p", sessionId: 4, requestId: "toolu_x" }, { push: { title: "T", body: "B" }, banner: BANNER }, aud({ ownerId: "u1" }));
+  assert.equal(w.live().length, 1, "a type that registers no banner shows none");
 });
