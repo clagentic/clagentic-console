@@ -494,8 +494,8 @@ test("replayAnnotator stamps the authoritative state on every prompt opener, fro
 
   assert.deepEqual(states, [
     { state: "resolved", decision: "allow_always" },
-    { state: "cancelled", reason: "turn_ended" },
-    { state: "cancelled", reason: "stale" },
+    { state: "cancelled", reason: "turn_ended", source: "unspecified" },
+    { state: "cancelled", reason: "stale", source: "unspecified" },
     { state: "pending" },
     { state: "resolved", action: "accept" },
     { state: "resolved", answers: { 0: "prod" } },
@@ -517,7 +517,7 @@ test("an AskUserQuestion card whose prompt has not opened yet is called stale on
   assert.equal(midTurn(opening).promptState, undefined, "the vendor may still open it: no state is claimed");
 
   var afterTurn = h.registry.replayAnnotator(s, [abandoned, { type: "result" }, opening], 0);
-  assert.deepEqual(afterTurn(abandoned).promptState, { state: "cancelled", reason: "stale" });
+  assert.deepEqual(afterTurn(abandoned).promptState, { state: "cancelled", reason: "stale", source: "unspecified" });
   assert.equal(afterTurn(opening).promptState, undefined);
 });
 
