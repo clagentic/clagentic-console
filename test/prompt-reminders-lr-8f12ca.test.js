@@ -149,7 +149,9 @@ test("a background agent's prompt left unanswered gets reminders at the schedule
     assert.equal(first[0].category, "approval_reminder");
     assert.equal(w.pushes.length, 1);
     assert.equal(w.pushes[0].type, "permission_reminder");
-    assert.equal(w.pushes[0].tag, "prompt-reminder-p:1");
+    assert.equal(w.pushes[0].tag, "n:permission_reminder:p:1");
+    assert.deepEqual(w.pushes[0].target, { slug: "p", sessionId: "1", requestId: w.pushes[0].target.requestId });
+    assert.ok(w.pushes[0].target.requestId, "the push names the prompt it is about");
 
     w.clock.t += 20 * MIN; w.rem.sweep(true);
     var second = w.live();
@@ -379,4 +381,20 @@ test("the sweep tick is a constant: tickSeconds in config has no effect and no o
   assert.equal(reminders.SWEEP_TICK_MS, 30000);
   var keys = Object.keys(reminders.resolveSchedule({ tickSeconds: 0.001 })).sort();
   assert.deepEqual(keys, ["enabled", "offsetsMs", "repeatMs"]);
+});
+
+test("stopping the reminders (daemon shutdown) closes the push of every live reminder", function () {
+  var w = world();
+  try {
+    var session = w.addSession(1, { ownerId: "u1" });
+    w.open(session, "Edit", "tool1");
+    w.clock.t += 6 * MIN; w.rem.sweep(true);
+    var shown = w.pushes.filter(function (p) { return p.type === "permission_reminder"; });
+    assert.equal(shown.length, 1);
+    w.pushes.length = 0;
+    w.rem.stop();
+    assert.equal(w.pushes.length, 1);
+    assert.equal(w.pushes[0].type, "notify_close");
+    assert.deepEqual(w.pushes[0].tags, [shown[0].tag]);
+  } finally { w.done(); }
 });
