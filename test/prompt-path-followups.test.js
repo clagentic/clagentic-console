@@ -66,7 +66,7 @@ test("a recorded AskUserQuestion skip replays as skipped, an ending with no answ
   assert.deepEqual(w.registry.replayAnnotator(session, answered, 0)(answered[0]).promptState, { state: "resolved", answers: { 0: "a" } });
 
   var ended = askHistory({ type: "ask_user_answered", toolId: "q1" });
-  assert.deepEqual(w.registry.replayAnnotator(session, ended, 0)(ended[0]).promptState, { state: "cancelled", reason: null });
+  assert.deepEqual(w.registry.replayAnnotator(session, ended, 0)(ended[0]).promptState, { state: "cancelled", reason: null, source: "unspecified" });
 });
 
 test("the client reads the same three recorded endings the same way", async function () {
