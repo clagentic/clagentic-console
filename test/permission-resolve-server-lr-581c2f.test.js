@@ -156,7 +156,8 @@ test("resolving a request dismisses its notification", function () {
 
     h.handlers.handleSessionsMessage({ _session: session }, { type: "permission_response", requestId: requestId, decision: "allow" });
 
-    assert.ok(h.notifications.dismissed.indexOf(requestId) !== -1, "its banner is retired");
+    // The request-keyed banner and the tool-use-keyed one the core also closes.
+    assert.deepEqual(h.notifications.dismissed, [requestId, "tu-2"]);
     return decision;
   } finally {
     cleanup(h);
@@ -200,7 +201,7 @@ test("aborting a pending request dismisses its notification", function () {
 
     ac.abort();
 
-    assert.ok(h.notifications.dismissed.indexOf(requestId) !== -1, "its banner is retired");
+    assert.deepEqual(h.notifications.dismissed, [requestId, "tu-3"]);
     return decision;
   } finally {
     cleanup(h);
@@ -230,7 +231,7 @@ test("a core resolve removes only the matching permission banner from the notifi
     var core = require("../lib/notify").notifyFor(null, nm);
     function raise(requestId) {
       core.notify("permission_request", { slug: "p", sessionId: 1, requestId: requestId },
-        { title: "t", body: "b" }, { ownerId: null }, { banner: { toolName: "Bash" } });
+        { push: { title: "t", body: "b" }, banner: { toolName: "Bash" } }, { ownerId: null });
     }
     raise("r1");
     raise("r2");

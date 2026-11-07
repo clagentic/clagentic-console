@@ -130,7 +130,9 @@ test("an answer settles exactly once; a second answer is stale and still retires
   assert.equal(h.index[opened.requestId], undefined);
   // The core also closes the tool-use id's key (a question's push is keyed by
   // it), which names no banner here: the request id's banner is retired twice.
-  assert.deepEqual(h.dismissed.filter(function (id) { return id === opened.requestId; }), [opened.requestId, opened.requestId]);
+  // Resolve closes the request key and the tool-use key; the stale second
+  // answer retires the request id again.
+  assert.deepEqual(h.dismissed, [opened.requestId, "tu-1", opened.requestId]);
 });
 
 test("permission decisions map to the vendor outcome and anything unknown fails closed", async function () {
@@ -437,7 +439,7 @@ test("cancelSession without recording settles every resolver and emits no event"
   assert.deepEqual(await a.answer, { behavior: "deny", message: "Session deleted" });
   assert.deepEqual(await ask.answer, { behavior: "deny", message: "Cancelled" });
   assert.equal(eventsOf(h, "prompt_cancel").length, 0);
-  assert.deepEqual(h.dismissed.filter(function (id) { return id === a.requestId || id === "tu-ask"; }).sort(), [a.requestId, "tu-ask"].sort());
+  assert.deepEqual(h.dismissed, [a.requestId, "tu-a", "tu-ask"]);
 });
 
 test("shutdown ends every pending prompt, recorded, sub-agent ones included", async function () {
