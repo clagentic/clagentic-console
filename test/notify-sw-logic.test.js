@@ -181,22 +181,99 @@ test("legacy permission, reminder and ask payloads keep their old tags", async f
   assert.deepEqual(tags, ["claude-ask", "perm-r9", "prompt-reminder-p:1"]);
 });
 
+var SCOPE_P = { slug: "p", livePrompts: null };
+
 test("reconcile closes a verifiable notification whose prompt is gone, and only that", async function () {
   var w = world();
   await sw.handlePush(w.env, corePayload("permission_request", { slug: "p", sessionId: 3, requestId: "live" }));
   await sw.handlePush(w.env, corePayload("permission_request", { slug: "p", sessionId: 3, requestId: "gone" }));
   await sw.handlePush(w.env, corePayload("permission_reminder", { slug: "p", sessionId: 3, requestId: "old" }));
-  await sw.handlePush(w.env, corePayload("ask_user", { slug: "p", sessionId: 3, requestId: "q" }));
   var state = [
     { type: "permission_request", meta: { requestId: "live" } },
     { type: "permission_reminder", meta: { reminderKey: "p:3", requestIds: ["live"] } },
   ];
-  var closed = await sw.reconcileShown(w.env.registration, state);
+  var closed = await sw.reconcileShown(w.env.registration, state, SCOPE_P);
   assert.equal(closed, 1);
-  var open = w.shown().filter(function (n) { return !n.closed; }).map(function (n) { return n.options.data.target.requestId; }).sort();
-  assert.deepEqual(open, ["live", "old", "q"]);
-  closed = await sw.reconcileShown(w.env.registration, []);
-  assert.equal(closed, 2, "with nothing live both verifiable ones close; the question is not judged");
+  var open = w.shown().map(function (n) { return n.options.data.target.requestId; }).sort();
+  assert.deepEqual(open, ["live", "old"]);
+  closed = await sw.reconcileShown(w.env.registration, [], SCOPE_P);
+  assert.equal(closed, 2, "with nothing live both close");
+});
+
+test("reconcile verifies ask_user and elicitation against the server's live-prompt record", async function () {
+  var w = world();
+  var ask = corePayload("ask_user", { slug: "p", sessionId: 3, requestId: "toolu_live" });
+  var gone = corePayload("ask_user", { slug: "p", sessionId: 3, requestId: "toolu_gone" });
+  var elicit = corePayload("elicitation", { slug: "p", sessionId: 4, requestId: "e1" });
+  [ask, gone, elicit].forEach(function (d) { d.sentAt = 1000; });
+  await sw.handlePush(w.env, ask);
+  await sw.handlePush(w.env, gone);
+  await sw.handlePush(w.env, elicit);
+  var live = { slug: "p", at: 2000, items: [{ sessionId: "3", requestId: "uuid-1", toolUseId: "toolu_live" }] };
+  var closed = await sw.reconcileShown(w.env.registration, [], { slug: "p", livePrompts: live });
+  assert.equal(closed, 2, "the ended question and the ended elicitation");
+  assert.deepEqual(w.shown().map(function (n) { return n.options.data.target.requestId; }), ["toolu_live"]);
+});
+
+test("reconcile does not judge a notification sent after the record was taken", async function () {
+  var w = world();
+  var fresh = corePayload("ask_user", { slug: "p", sessionId: 3, requestId: "toolu_new" });
+  fresh.sentAt = 3000;
+  await sw.handlePush(w.env, fresh);
+  var closed = await sw.reconcileShown(w.env.registration, [], { slug: "p", livePrompts: { slug: "p", at: 2000, items: [] } });
+  assert.equal(closed, 0);
+});
+
+test("reconcile never closes another project's notification", async function () {
+  var w = world();
+  await sw.handlePush(w.env, corePayload("permission_request", { slug: "q", sessionId: 3, requestId: "r1" }));
+  var ask = corePayload("ask_user", { slug: "q", sessionId: 3, requestId: "a1" });
+  ask.sentAt = 1;
+  await sw.handlePush(w.env, ask);
+  assert.equal(await sw.reconcileShown(w.env.registration, [], { slug: "p", livePrompts: { slug: "p", at: 2, items: [] } }), 0);
+  assert.equal(w.shown().length, 2);
+  assert.equal(await sw.reconcileShown(w.env.registration, [], { slug: "", livePrompts: null }), 0, "no slug, no judgement");
+});
+
+test("a close where every push must show one leaves a newer notification under the tag alone", async function () {
+  var ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1";
+  var w = world({ userAgent: ios });
+  var t = { slug: "p", sessionId: 3, requestId: "r1" };
+  var first = corePayload("permission_request", t);
+  await sw.handlePush(w.env, first);
+  var lingers = [];
+  w.env.setTimeout = function (fn) { lingers.push(fn); };
+  var closing = sw.handlePush(w.env, payloads.buildClose(registry.get("permission_request"), first.tag));
+  await new Promise(function (r) { setImmediate(r); });
+  assert.equal(lingers.length, 1);
+  // A live notification takes the tag before the linger ends.
+  await sw.handlePush(w.env, corePayload("permission_request", t));
+  lingers[0]();
+  await closing;
+  assert.equal(w.shown().length, 1);
+  assert.equal(w.shown()[0].options.data.core, 1, "the live notification stays");
+});
+
+test("a close with nothing shown shows one silent notice and closes it at once where a push must show one", async function () {
+  var ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1";
+  var w = world({ userAgent: ios });
+  var shownCalls = [];
+  var realShow = w.env.registration.showNotification;
+  w.env.registration.showNotification = function (title, o) { shownCalls.push(o); return realShow(title, o); };
+  var waits = 0;
+  w.env.setTimeout = function () { waits++; };
+  await sw.handlePush(w.env, payloads.buildClose(registry.get("permission_request"), ["n:permission_request:p:3:r1", "n:ask_user:p:3:r1"]));
+  assert.equal(shownCalls.length, 1, "one notice for the whole close");
+  assert.equal(shownCalls[0].silent, true);
+  assert.equal(waits, 0, "no linger");
+  assert.equal(w.shown().length, 0);
+
+  var android = world();
+  var calls = 0;
+  var realAndroid = android.env.registration.showNotification;
+  android.env.registration.showNotification = function (title, o) { calls++; return realAndroid(title, o); };
+  await sw.handlePush(android.env, payloads.buildClose(registry.get("permission_request"), "n:permission_request:p:3:r1"));
+  assert.equal(calls, 0, "a platform that allows it shows nothing");
 });
 
 test("sw.js wires the generic handlers and drops the dead error branch", function () {

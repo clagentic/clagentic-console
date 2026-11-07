@@ -103,39 +103,51 @@ test("a request-level type without a requestId, an unknown type and a bad target
   assert.throws(function () { c.notify("ask_user", { slug: "../", sessionId: 1, requestId: "r" }, {}, aud()); }, /invalid/);
 });
 
-test("resolve(requestId) sends a close push with the tag to the audience the notification went to", function () {
+test("resolve(target) sends a close push with the tag derived from the target, to the audience", function () {
   var push = fakePush();
   var c = core(push);
   var p = c.notify("permission_request", { slug: "p", sessionId: 3, requestId: "r1" }, { title: "t", body: "b" }, aud({ ownerId: "u1" }));
-  c.notify("permission_request", { slug: "p", sessionId: 3, requestId: "r2" }, { title: "t", body: "b" }, aud({ ownerId: "u1" }));
   push.sent.length = 0;
-  assert.equal(c.resolve("r1"), 1);
+  assert.equal(c.resolve({ slug: "p", sessionId: 3, requestId: "r1" }, aud({ ownerId: "u1" })), 1);
   assert.equal(push.sent.length, 1);
   assert.equal(push.sent[0].to, "u1");
   assert.equal(push.sent[0].payload.type, "notify_close");
   assert.equal(push.sent[0].payload.closes, "permission_request");
-  assert.deepEqual(push.sent[0].payload.tags, [p.tag]);
-  assert.equal(c.resolve("r1"), 0, "closed once");
-  assert.equal(c.liveCount(), 1, "the other prompt is still shown");
+  assert.ok(push.sent[0].payload.tags.indexOf(p.tag) !== -1);
 });
 
-test("resolve with a slug does not close another project's prompt", function () {
+test("a close needs no live memory: a fresh core closes what an earlier one showed, for every request-level type", function () {
   var push = fakePush();
-  var c = core(push);
-  c.notify("permission_request", { slug: "p", sessionId: 3, requestId: "r1" }, { title: "t", body: "b" }, aud());
-  assert.equal(c.resolve({ slug: "q", sessionId: 3, requestId: "r1" }), 0);
-  assert.equal(c.resolve({ slug: "p", sessionId: 3, requestId: "r1" }), 1);
-});
-
-test("resolve for a session closes its reminder and leaves its prompts' pushes", function () {
-  var push = fakePush();
-  var c = core(push);
-  c.notify("permission_reminder", { slug: "p", sessionId: 3, requestId: "r1" }, { title: "t", body: "b" }, aud());
-  c.notify("permission_request", { slug: "p", sessionId: 3, requestId: "r1" }, { title: "t", body: "b" }, aud());
+  var shown = core(push);
+  var t = { slug: "p", sessionId: 3, requestId: "r1" };
+  var tags = ["permission_request", "ask_user", "elicitation"].map(function (type) {
+    return shown.notify(type, t, { title: "t", body: "b" }, aud({ ownerId: "u1" })).tag;
+  });
   push.sent.length = 0;
-  assert.equal(c.resolve({ slug: "p", sessionId: 3 }), 1);
+  var afterRestart = core(push);
+  assert.equal(afterRestart.resolve(t, aud({ ownerId: "u1" })), 1, "one push per category");
+  assert.deepEqual(push.sent[0].payload.tags.slice().sort(), tags.slice().sort());
+  assert.equal(push.sent[0].to, "u1");
+});
+
+test("a close for another project's target names other tags", function () {
+  var push = fakePush();
+  var c = core(push);
+  var mine = c.notify("permission_request", { slug: "p", sessionId: 3, requestId: "r1" }, { title: "t", body: "b" }, aud());
+  push.sent.length = 0;
+  c.resolve({ slug: "q", sessionId: 3, requestId: "r1" }, aud());
+  assert.equal(push.sent[0].payload.tags.indexOf(mine.tag), -1);
+  assert.equal(c.resolve({ requestId: "r1" }, aud()), 0, "a request id alone names no target");
+});
+
+test("resolve for a session closes its reminder and not its prompts' pushes", function () {
+  var push = fakePush();
+  var c = core(push);
+  var reminder = c.notify("permission_reminder", { slug: "p", sessionId: 3, requestId: "r1" }, { title: "t", body: "b" }, aud());
+  push.sent.length = 0;
+  assert.equal(c.resolve({ slug: "p", sessionId: 3 }, aud()), 1);
   assert.equal(push.sent[0].payload.closes, "permission_reminder");
-  assert.equal(c.liveCount(), 1);
+  assert.deepEqual(push.sent[0].payload.tags, [reminder.tag]);
 });
 
 test("registered categories match the push filter's categories, and a close follows its type's category", function () {
@@ -201,4 +213,39 @@ test("prompt registry closes the push when a prompt settles, however it ends", f
   push.sent.length = 0;
   registry.cancelSession(session, "session_ended");
   assert.equal(push.sent.filter(function (s) { return s.payload.type === "notify_close"; }).length, 1, "ended with the session");
+});
+
+test("a daemon shutdown settles every pending prompt and closes its push, with no live memory", function () {
+  var push = fakePush();
+  var sessions = new Map();
+  var session = { localId: 5, title: "S", ownerId: "u1" };
+  sessions.set(5, session);
+  var index = Object.create(null);
+  var registry = createPromptRegistry({
+    index: index,
+    getSession: function (id) { return sessions.get(id); },
+    sendAndRecord: function () {},
+    saveSessionFile: function () {},
+    getProjectSlug: function () { return "p"; },
+    getPushModule: function () { return push; },
+  });
+  var ask = registry.open(session, "permission", { toolName: "Bash", toolInput: { command: "ls" } }, { toolUseId: "t9" });
+  var expected = notify.notifyFor(fakePush()).notify("permission_request", { slug: "p", sessionId: 5, requestId: ask.requestId }, { title: "t", body: "b" }, aud({ ownerId: "u1" })).tag;
+  push.sent.length = 0;
+  registry.shutdown();
+  var closes = push.sent.filter(function (s) { return s.payload.type === "notify_close"; });
+  assert.ok(closes.length >= 1);
+  assert.equal(closes[0].to, "u1");
+  assert.ok(closes[0].payload.tags.indexOf(expected) !== -1);
+});
+
+test("the live-prompt snapshot lists the viewer's pending prompts by session, with ids only", function () {
+  var { snapshotLivePrompts } = require("../lib/notify/live-prompts");
+  var sessions = [{ localId: 1, ownerId: "u1" }, { localId: 2, ownerId: "u2" }];
+  var prompts = { pendingInfo: function (s) { return [{ requestId: "r" + s.localId, toolUseId: "t" + s.localId, content: "secret" }]; } };
+  var multi = function () { return true; };
+  var snap = snapshotLivePrompts({ slug: "p", sessions: sessions, prompts: prompts, viewerId: "u1", isMultiUser: multi });
+  assert.equal(snap.slug, "p");
+  assert.deepEqual(snap.items, [{ sessionId: "1", requestId: "r1", toolUseId: "t1" }]);
+  assert.equal(typeof snap.at, "number");
 });
