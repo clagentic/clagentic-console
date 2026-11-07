@@ -108,8 +108,7 @@ test("multi-user: dismissing sends each viewer their own count", function () {
   var w = countWorld(true);
   var audience = { ownerId: null, isMultiUser: function () { return true; }, listAdmins: function () { return ["admin-1"]; } };
   var core = require("../lib/notify").notifyFor(null, w.nm);
-  core.notify("permission_request", { slug: "p", sessionId: 1, requestId: "r1" }, { title: "Run", body: "" }, audience,
-    { banner: { title: "Run", toolName: "Bash", toolInput: {} } });
+  core.notify("permission_request", { slug: "p", sessionId: 1, requestId: "r1" }, { push: { title: "Run", body: "" }, banner: { title: "Run", toolName: "Bash", toolInput: {} } }, audience);
   w.nm.notify("mate_dm", { senderName: "x", preview: "hi" });
   w.sent.length = 0;
   core.resolve({ slug: "p", sessionId: 1, requestId: "r1" }, audience);
