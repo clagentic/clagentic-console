@@ -129,37 +129,62 @@ test("a retraction removes the build-update offer and its action, and leaves oth
   assert.deepEqual(c.sent, []);
 });
 
-test("a refreshed offer replaces the entry in place: one action button, and the confirmation survives", async function (t) {
+function offerNotification(id, message) {
+  return {
+    id: id, type: "build_update_offer", slug: "", sessionId: null,
+    meta: { message: message || "A newer build is installed.", buildUpdate: BUILDS, actionable: standingOffer().actionable },
+  };
+}
+
+test("a re-issued offer notification replaces the entry in place: one action button, and the confirmation survives", async function (t) {
   var c = await client(t);
-  c.diagnostics.addDiagnostic(standingOffer());
+  c.diagnostics.applyBuildOffer(offerNotification("n1"));
   c.diagnostics.addDiagnostic(confirmOffer("tok-5"));
-  var refreshed = Object.assign(standingOffer(), { refresh: true, message: "A newer build is installed (changes read)." });
-  c.diagnostics.refreshDiagnostic(refreshed);
+  c.diagnostics.applyBuildOffer(offerNotification("n2", "A newer build is installed (changes read)."));
   c.settle();
-  assert.equal(c.toastsOf("build-update").length, 2, "still one standing offer and one confirmation");
-  assert.equal(c.container.querySelectorAll("button").filter(function (b) { return b.textContent === "Restart to apply update"; }).length, 1);
-  assert.ok(c.container.textContent.indexOf("changes read") !== -1, "the new text is the one shown");
+  assert.equal(c.container.querySelectorAll("button").filter(function (b) { return b.textContent === "Restart to apply update"; }).length, 0, "the offer shows no toast: its banner is the alert");
+  assert.equal(c.toastsOf("build-update").length, 1, "only the confirmation the operator asked for is a toast");
   assert.ok(c.button("Restart now"), "the confirmation the operator is reading was not replaced");
+  assert.deepEqual(c.sent, []);
+  // The re-issue was applied: the offer now held is the second notification, so
+  // declining it closes that one (an applyBuildOffer that did nothing sends none).
+  c.button("Not now").click();
+  assert.deepEqual(c.sent, [{ type: "notification_dismiss", ids: ["n2"] }]);
+});
+
+test("the same offer notification arriving again (a reconnect's state) changes nothing", async function (t) {
+  var c = await client(t);
+  c.diagnostics.applyBuildOffer(offerNotification("n1"));
+  c.diagnostics.addDiagnostic(confirmOffer("tok-6"));
+  c.diagnostics.applyBuildOffer(offerNotification("n1"));
+  c.settle();
+  assert.ok(c.button("Restart now"), "the confirmation is untouched");
   assert.deepEqual(c.sent, []);
 });
 
-test("a refresh does not bring back an offer the operator declined", async function (t) {
+test("withdrawing the offer removes its entry only, and a notification without an offer shows none", async function (t) {
   var c = await client(t);
-  c.diagnostics.addDiagnostic(confirmOffer("tok-6"));
+  c.diagnostics.applyBuildOffer({ id: "n0", type: "build_update_offer", meta: {} });
+  c.diagnostics.applyBuildOffer(offerNotification("n1"));
+  c.diagnostics.addDiagnostic(confirmOffer("tok-7"));
+  c.diagnostics.withdrawBuildOffer();
+  c.settle();
+  assert.ok(c.button("Restart now"), "the confirmation stays");
+  c.diagnostics.applyBuildOffer(offerNotification("n1"));
+  c.diagnostics.withdrawBuildOffer();
+  assert.deepEqual(c.sent, [], "withdrawing is local: it closes nothing on the server");
+  // No offer state is left: declining now has no notification to close.
   c.button("Not now").click();
-  c.settle();
-  c.diagnostics.refreshDiagnostic(Object.assign(confirmOffer("tok-6"), { refresh: true }));
-  c.settle();
-  assert.equal(c.toastsOf("build-update").length, 0);
-  assert.equal(c.button("Restart now"), null);
+  assert.deepEqual(c.sent, [], "after the withdrawal there is no offer to decline");
 });
 
-test("a refresh arriving before any offer is held is ignored; a plain diagnostic still shows", async function (t) {
+test("declining the confirmation closes the offer's notification, so every page and device drops it", async function (t) {
   var c = await client(t);
-  c.diagnostics.refreshDiagnostic(Object.assign(standingOffer(), { refresh: true }));
-  assert.equal(c.button("Restart to apply update"), null);
-  c.diagnostics.addDiagnostic(standingOffer());
-  assert.ok(c.button("Restart to apply update"));
+  c.diagnostics.applyBuildOffer(offerNotification("n9"));
+  c.diagnostics.addDiagnostic(confirmOffer("tok-8"));
+  c.button("Not now").click();
+  c.settle();
+  assert.deepEqual(c.sent, [{ type: "notification_dismiss", ids: ["n9"] }]);
 });
 
 test("the same offer shown again after a retraction is not swallowed as a duplicate", async function (t) {

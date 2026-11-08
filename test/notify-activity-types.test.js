@@ -338,7 +338,7 @@ test("a tap on a message notification hands the page the conversation to open (A
     scope: "https://h.example/",
     clients: { matchAll: function () { return Promise.resolve([win]); }, openWindow: function () { throw new Error("a window exists"); } },
   }, { data: p });
-  assert.deepEqual(posted, [{ type: "notify_route", target: { slug: null, sessionId: null, requestId: null, peerId: "u1" } }]);
+  assert.deepEqual(posted, [{ type: "notify_route", target: { slug: null, sessionId: null, requestId: null, peerId: "u1" }, notifyType: "mate_dm" }]);
 });
 
 // AC5: a mention.

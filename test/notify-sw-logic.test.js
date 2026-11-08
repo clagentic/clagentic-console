@@ -121,7 +121,7 @@ test("a tap focuses a window and posts it the target; the project's own window i
   await sw.handleClick(w.env, { data: data });
   assert.equal(w.windows[1].focused, true, "lands on P, not Q");
   assert.equal(w.windows[0].focused, false);
-  assert.deepEqual(w.windows[1].posted, [{ type: "notify_route", target: { slug: "p", sessionId: "3", requestId: "r1" } }]);
+  assert.deepEqual(w.windows[1].posted, [{ type: "notify_route", target: { slug: "p", sessionId: "3", requestId: "r1" }, notifyType: "permission_request" }]);
 });
 
 test("a tap with only another project's window open routes that window to the target", async function () {

@@ -1047,18 +1047,20 @@ detector:**
    were last shown: show, refresh in place, or retract. It is idempotent, and
    "nothing changed" compares a small summary (offer key and change-list
    status), recorded only after the broadcast succeeded. The offer is a
-   `diagnostic` with `source: "build-update"`, the two shas, and the commits
+   `build_update_offer` notification carrying the two shas and the commits
    between them (`git log loaded..installed`) where history is readable: the
    package directory if it is a checkout, or the repository named by
    `buildSourceRepo` in `daemon.json`. The offer is shown at once with the list
    marked unavailable; the read is cached per loaded:installed pair, one in
-   flight at a time, and fills the offer in place when it finishes. A failed
+   flight at a time, and fills the offer in when it finishes (the core replaces
+   the offer under its one tag). A failed
    read caches its reason and is retried at most once per reminder interval. A
    finished read reconciles against the latest verdict, so a result for a
    build that is no longer stale cannot restore an offer. A client that
-   connects is sent the held offer, or an explicit `diagnostic_retract` when
-   none stands (`onGetBuildUpdateDiagnostic`). The offer carries no session
-   content, because it goes to every client.
+   connects is sent the held offer in its notification list, and drops a
+   diagnostics entry whose offer is no longer listed. The offer carries no
+   session content or restart token, and only the admins are sent it (the
+   type's audience).
 
    A package install (`npm install -g`, including `install:local-test`) has no
    `.git` in its package directory, so the change list stays unavailable until
@@ -1068,23 +1070,24 @@ detector:**
    a height-bounded region, and the action buttons are siblings of that region,
    never inside it, so they stay reachable at any session count.
 
-   The offer is an ordinary diagnostic: it is listed in the Diagnostics panel,
-   cleared by its clear-all, and toasted in the shared
-   `#diagnostic-toast-container` stack with the other toasts. Because the
-   daemon replays it to every connection (each project connection of each tab,
-   and each reconnect), the client decides what an arrival does
-   (`lib/public/modules/build-notice-gate.js`, called from `addDiagnostic` in
-   `lib/public/modules/diagnostics.js`). The notice is identified by its
-   running:installed build pair. An identical arrival never adds a second
-   entry or toast; a different pair replaces the held notice. Once the operator
-   closes the toast the same pair gets no toast, and once they dismiss the
-   panel entry or clear all it does not return, until the cooldown has passed
-   (default one hour; the daemon sends it as `noticeCooldownMs`, set by
-   `CLAGENTIC_CONSOLE_BUILD_NOTICE_COOLDOWN_MS`). A server retraction removes
-   the entry but not the operator's closure, so a re-shown notice for the same
-   pair stays quiet. Each browser tab keeps its own state. The restart
-   confirmation (`confirm_build_update_restart`) is a separate diagnostic and
-   is not gated.
+   The offer is a system notification (`build_update_offer`, registered in
+   `lib/notify/types.js`; raised by `lib/build-update-notify.js`). The core
+   collapses every emit of it (the standing reconcile, a repeat) into one
+   banner and one push, and `resolve()` closes it on the phone and in every
+   open page when the build is adopted or the operator declines it. The page
+   builds the Diagnostics-panel entry with the restart button from the
+   notification (`applyBuildOffer` in `lib/public/modules/diagnostics.js`); a
+   tap on the banner or the push opens that panel through the shared router
+   (`registerPlace` in `lib/public/modules/notify-client.js`), and does not
+   decline it. Closing the banner, dismissing the entry, clearing all or "Not
+   now" declines it: the notification is dismissed, the core closes it
+   everywhere, and the standing offer stays quiet for the cooldown (default one
+   hour, `CLAGENTIC_CONSOLE_BUILD_NOTICE_COOLDOWN_MS`) unless a different
+   build is installed. The banner does not survive a daemon restart (the type
+   is `ephemeral`). The restart confirmation (`confirm_build_update_restart`)
+   is a diagnostic answering the operator's own click, not a notification: it
+   carries the one-use token and session titles, which must reach the
+   requester alone.
 4. **A restart takes two operator clicks** (`lib/build-update-restart.js`,
    `restart_for_build_update` in `lib/project-sessions.js`, admin only). The
    first click sends `restart_for_build_update` with no token and gets back an
