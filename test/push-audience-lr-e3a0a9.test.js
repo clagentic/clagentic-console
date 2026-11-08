@@ -47,6 +47,10 @@ var TYPES = {
   },
 };
 
+// The push payload type a notification type is raised under, where it differs
+// from the name the test goes by.
+var PAYLOAD_TYPE = { done: "response_done" };
+
 async function run(type, opts) {
   var push = spy();
   var server = await world.createServer({ pushModule: push, multiUser: opts.multiUser, users: opts.users });
@@ -55,7 +59,7 @@ async function run(type, opts) {
     if (opts.ownerId) server.session.ownerId = opts.ownerId;
     TYPES[type](server);
     await new Promise(function (r) { setImmediate(r); });
-    return push.calls.filter(function (c) { return c.payload.type === type; });
+    return push.calls.filter(function (c) { return c.payload.type === (PAYLOAD_TYPE[type] || type); });
   } finally {
     server.shutdown();
     world.removeHome(server.home);

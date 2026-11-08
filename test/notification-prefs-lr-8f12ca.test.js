@@ -110,8 +110,12 @@ test("categories cover every notification type and push payload the daemon raise
   assert.equal(prefs.categoryOfNotification("loop_error"), "loop");
   assert.equal(prefs.categoryOfNotification("auth_required"), "system");
   assert.equal(prefs.categoryOfNotification("constructor"), null);
-  assert.equal(prefs.categoryOfPush({ type: "done", tag: "claude-done" }), "turn_done");
-  assert.equal(prefs.categoryOfPush({ type: "done", tag: "ralph-loop-done" }), "loop");
+  assert.equal(prefs.categoryOfPush({ type: "response_done" }), "turn_done");
+  assert.equal(prefs.categoryOfPush({ type: "loop_complete" }), "loop");
+  assert.equal(prefs.categoryOfPush({ type: "loop_error" }), "loop");
+  assert.equal(prefs.categoryOfPush({ type: "mate_dm" }), "messages");
+  assert.equal(prefs.categoryOfPush({ type: "user_mention" }), "messages");
+  assert.equal(prefs.categoryOfPush({ type: "done", tag: "ralph-loop-done" }), null, "a payload of the removed legacy shape is not categorised by its tag");
   ["permission_request", "elicitation", "ask_user"].forEach(function (t) {
     assert.equal(prefs.categoryOfPush({ type: t }), "approval", t);
   });
