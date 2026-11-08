@@ -74,6 +74,9 @@ test("each system type is registered once, as category system, with its collapse
   };
   assert.deepEqual(Object.keys(SYSTEM_TYPES).sort(), Object.keys(declared).sort());
   Object.keys(declared).forEach(function (name) {
+    assert.equal(SYSTEM_TYPES[name].audience, declared[name].audience, name + " declares its audience in its own row");
+  });
+  Object.keys(declared).forEach(function (name) {
     var type = notifyApi.getType(name);
     assert.ok(type, name + " is registered");
     assert.equal(type.category, "system");
@@ -306,12 +309,30 @@ function offerCreated(id) {
 test("tapping the offer banner opens the place its action lives and does not decline it; its close button does (AC6, AC4)", async function (t) {
   var c = await pageWith(t);
   var opened = 0;
+  // The fake DOM does not parse innerHTML, so the banner's close button is
+  // supplied here: the page wires its listener when the banner is built.
+  var closeButtons = {};
+  var realCreate = global.document.createElement;
+  global.document.createElement = function (tag) {
+    var el = realCreate.call(global.document, tag);
+    var realQuery = el.querySelector;
+    el.querySelector = function (sel) {
+      if (sel !== ".notif-banner-close") return realQuery.call(el, sel);
+      var btn = { listeners: [], addEventListener: function (ev, fn) { if (ev === "click") this.listeners.push(fn); } };
+      closeButtons[el.dataset.notifId] = btn;
+      return btn;
+    };
+    return el;
+  };
   c.client.registerPlace("build_update_offer", function () { opened++; });
   c.mod.handleNotificationCreated(offerCreated("o1"));
   assert.ok(c.banner("o1"), "the offer is a banner");
   c.tap("o1");
   assert.equal(opened, 1);
   assert.deepEqual(c.sent.filter(function (m) { return m.type === "notification_dismiss"; }), [], "looking at the offer does not decline it");
+  c.mod.handleNotificationCreated(offerCreated("o1b"));
+  closeButtons.o1b.listeners[0]({ stopPropagation: function () {} });
+  assert.deepEqual(c.sent.filter(function (m) { return m.type === "notification_dismiss"; }), [{ type: "notification_dismiss", ids: ["o1b"] }], "the close button declines it");
 });
 
 test("a dismissal from the server removes the offer's banner on every page (AC4)", async function (t) {
@@ -355,6 +376,13 @@ test("a sign-in notice that targets a session routes to that session through the
     notification: { id: "a1", type: "auth_required", category: "system", title: "Claude is not logged in", body: "b", slug: "proj-a", sessionId: 7, persistent: true, meta: { vendor: "claude", loginCommand: "claude" } },
   });
   assert.ok(c.banner("a1"), "a banner for a session the page is not on is shown");
+  // The tap on the sign-in push reaches the router with the notice's target
+  // and type: the destination is that session, not a system place.
+  var opened = 0;
+  c.client.registerPlace("auth_required", function () { opened++; });
+  c.client.routeTo({ slug: "proj-a", sessionId: 7 }, "auth_required");
+  assert.deepEqual(c.sent.filter(function (m) { return m.type === "switch_session"; }), [{ type: "switch_session", id: 7 }]);
+  assert.equal(opened, 0, "a session target is not routed as a system place");
 });
 
 // AC8: the direct-message deep link survives a reload before the connection.
@@ -433,4 +461,68 @@ test("the quiet period after a declined offer comes from the setting: set, defau
   assert.equal(noticeCooldownFrom("0"), 0);
   assert.equal(noticeCooldownFrom("120000"), 120000);
   assert.equal(DEFAULT_NOTICE_COOLDOWN_MS, 3600000);
+});
+
+// A cold-start tap: no window exists, so the type must ride in the opened URL.
+test("a tap on a system push with no open window opens the page naming the type; a session target needs none (AC6)", async function () {
+  var opened = [];
+  var env = {
+    scope: "https://h.example/",
+    clients: { matchAll: function () { return Promise.resolve([]); }, openWindow: function (u) { opened.push(u); return Promise.resolve(); } },
+  };
+  var offer = payloads.buildPayload(notifyApi.getType("build_update_offer"), NotifyTarget.makeTarget({ slug: null, sessionId: null }), { title: "T", body: "B" });
+  await sw.handleClick(env, { data: offer });
+  var auth = payloads.buildPayload(notifyApi.getType("auth_required"), NotifyTarget.makeTarget({ slug: "proj-a", sessionId: 7 }), { title: "T", body: "B" });
+  await sw.handleClick(env, { data: auth });
+  assert.equal(opened[0], "https://h.example/?notify=build_update_offer");
+  assert.equal(opened[1].indexOf("notify="), -1);
+  assert.equal(NotifyTarget.parsePlaceLink("?notify=build_update_offer"), "build_update_offer");
+  assert.equal(NotifyTarget.parsePlaceLink("?notify=../x"), null);
+});
+
+test("a ?notify=<type> cold start opens that place once connected, and survives a reload before then (AC6)", async function (t) {
+  var storage = fakeSessionStorage(false);
+  var first = await freshClient(t, "?notify=update_available", storage);
+  first.mod.initNotifyClient();
+  assert.deepEqual(first.replaced, ["/"], "the query is dropped once sessionStorage holds the type");
+  var second = await freshClient(t, "", storage);
+  second.mod.initNotifyClient();
+  assert.equal(second.mod.takePendingPlace(), "update_available");
+  assert.equal(second.mod.takePendingPlace(), null, "taken once");
+  var refused = await freshClient(t, "?notify=build_update_offer", fakeSessionStorage(true));
+  refused.mod.initNotifyClient();
+  assert.deepEqual(refused.replaced, [], "the query stays while it is the only copy");
+  assert.equal(refused.mod.takePendingPlace(), "build_update_offer");
+  assert.deepEqual(refused.replaced, ["/"]);
+});
+
+// The offer's phone push closes before the install restart, not after it.
+test("installing the offer sends the push close before the restart begins, and the flush covers it (AC4)", async function () {
+  var { createBuildUpdateRestart } = require("../lib/build-update-restart");
+  var inflight = [];
+  var push = spyPush();
+  var realSend = push.sendPushToUser;
+  push.sendPushToUser = function (u, p) { realSend(u, p); inflight.push(p); };
+  var store = realStore(push);
+  var env = { push: push, inApp: store, isMultiUser: MULTI, listAdmins: ADMINS };
+  buildNotify.showBuildOffer(env, composeNotice(ASSESSMENT, null));
+  push.calls.length = 0;
+  inflight.length = 0;
+  var closedAtRestart = null;
+  var restart = createBuildUpdateRestart({
+    assess: function () { return Object.assign({ state: "stale" }, ASSESSMENT); },
+    getProjects: function () { return []; },
+    listChanges: function () { return Promise.resolve({ available: false, commits: [], truncated: false, reason: "r" }); },
+    restart: function () { closedAtRestart = push.calls.filter(function (c) { return c.payload.type === payloads.CLOSE_TYPE; }).map(function (c) { return c.to; }); },
+    onScheduled: function () { buildNotify.resolveBuildOffer(env); },
+  });
+  var asked = await restart.request(null);
+  var result = await restart.request(asked.offer.token);
+  assert.equal(result.status, "restarting");
+  assert.deepEqual(closedAtRestart, ["admin-1", "admin-2"], "both admins' phones were told before the restart ran");
+  assert.equal(offersOf(store.stateFor("admin-1")).length, 0);
+  var daemonSrc = fs.readFileSync(path.join(__dirname, "..", "lib", "daemon.js"), "utf8");
+  var serverSrc = fs.readFileSync(path.join(__dirname, "..", "lib", "server.js"), "utf8");
+  assert.match(daemonSrc, /onScheduled: function \(\) \{[^}]*resolveBuildOffer/, "the daemon closes the offer when the restart is scheduled");
+  assert.match(serverSrc, /pushModule\.flush\(\)/, "shutdown waits for pushes on the wire");
 });

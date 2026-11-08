@@ -146,6 +146,10 @@ test("a re-issued offer notification replaces the entry in place: one action but
   assert.equal(c.toastsOf("build-update").length, 1, "only the confirmation the operator asked for is a toast");
   assert.ok(c.button("Restart now"), "the confirmation the operator is reading was not replaced");
   assert.deepEqual(c.sent, []);
+  // The re-issue was applied: the offer now held is the second notification, so
+  // declining it closes that one (an applyBuildOffer that did nothing sends none).
+  c.button("Not now").click();
+  assert.deepEqual(c.sent, [{ type: "notification_dismiss", ids: ["n2"] }]);
 });
 
 test("the same offer notification arriving again (a reconnect's state) changes nothing", async function (t) {
@@ -169,6 +173,9 @@ test("withdrawing the offer removes its entry only, and a notification without a
   c.diagnostics.applyBuildOffer(offerNotification("n1"));
   c.diagnostics.withdrawBuildOffer();
   assert.deepEqual(c.sent, [], "withdrawing is local: it closes nothing on the server");
+  // No offer state is left: declining now has no notification to close.
+  c.button("Not now").click();
+  assert.deepEqual(c.sent, [], "after the withdrawal there is no offer to decline");
 });
 
 test("declining the confirmation closes the offer's notification, so every page and device drops it", async function (t) {
