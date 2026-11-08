@@ -1,7 +1,7 @@
 "use strict";
 
 // The update offer is level-triggered: after every poll it equals the offer
-// derived from the CURRENT confirmed verdict, and a broadcast happens only when
+// derived from the CURRENT confirmed verdict, and the core is called only when
 // the shown state (offer key + change-list status) differs. These cases drive
 // the real monitor and the real standing offer through assessment sequences.
 
@@ -53,10 +53,15 @@ function rig(opts) {
       if (r.composeThrows) throw new Error("compose failed");
       return { type: "diagnostic", source: "build-update", installed: a.installedBuildSha, changes: changes, actionable: { action: "restart_for_build_update" } };
     },
-    broadcast: function (m) {
+    show: function (m, o) {
       if (r.broadcastThrows) throw new Error("broadcast failed");
-      r.sent.push(m);
+      r.sent.push(o && o.refresh ? Object.assign({}, m, { refresh: true }) : m);
     },
+    retract: function () {
+      if (r.broadcastThrows) throw new Error("broadcast failed");
+      r.sent.push({ type: "diagnostic_retract", source: "build-update" });
+    },
+    quietMs: opts.quietMs,
     now: function () { return r.clock; },
     retryAfterMs: opts.retryAfterMs === undefined ? 1000 : opts.retryAfterMs,
     log: function (l) { r.lines.push(l); },
@@ -87,7 +92,7 @@ var SEQUENCES = [
   { name: "mid-install inconclusive polls leave the held offer alone",
     steps: [["A", null, []], ["A", "A", ["show", "refresh"]], ["inconclusive", "A", []], ["inconclusive", "A", []], ["A", "A", []]] },
   { name: "stale A then stale B: one sighting of B keeps A, a confirmed B replaces it",
-    steps: [["A", null, []], ["A", "A", ["show", "refresh"]], ["B", "A", []], ["B", "B", ["retract", "show", "refresh"]]] },
+    steps: [["A", null, []], ["A", "A", ["show", "refresh"]], ["B", "A", []], ["B", "B", ["show", "refresh"]]] },
   { name: "stale then adopted: retracted once, then silent",
     steps: [["A", null, []], ["A", "A", ["show", "refresh"]], ["adopted", null, ["retract"]], ["adopted", null, []]] },
   { name: "stale, adopted, stale again: no offer until reconfirmed",
@@ -177,7 +182,8 @@ test("a reader that throws synchronously is a failed read, not a lost offer", as
     listChanges: function () { throw new Error("sync"); },
     desired: function () { return stale("A"); },
     compose: function (a, changes) { return { type: "diagnostic", changes: changes }; },
-    broadcast: function (m) { sent.push(m); },
+    show: function (m, o) { sent.push(o && o.refresh ? Object.assign({}, m, { refresh: true }) : m); },
+    retract: function () {},
   });
   offer.reconcile(stale("A"));
   await tick();
@@ -203,7 +209,7 @@ test("a change list for a replaced build never shows over the new one", async fu
   await r.poll(LABELS.A);
   await r.poll(LABELS.B);
   await r.poll(LABELS.B);
-  assert.deepEqual(r.kinds(), ["show", "retract", "show"]);
+  assert.deepEqual(r.kinds(), ["show", "show"]);
   assert.equal(r.reads.length, 2);
   r.reads[0].resolve({ available: true, commits: [{ sha: "a", subject: "for A" }], truncated: false });
   await tick();
@@ -262,16 +268,35 @@ test("a failed retract is retried by the next poll", async function () {
   assert.deepEqual(r.kinds(), ["retract"]);
 });
 
-test("a client that connects is sent the held offer, or an explicit no-offer", async function () {
-  var r = rig();
-  assert.deepEqual(r.offer.forNewClient(), { type: "diagnostic_retract", source: "build-update" });
+test("a declined offer stays quiet for the quiet period, then comes back while the build is still stale", async function () {
+  var r = rig({ quietMs: 1000 });
   await r.poll(LABELS.A);
   await r.poll(LABELS.A);
-  assert.equal(r.offer.forNewClient().actionable.action, "restart_for_build_update");
-  assert.equal(r.offer.forNewClient().refresh, undefined);
+  r.kinds();
+  r.offer.declined();
+  assert.equal(r.held(), null, "the declined offer is no longer held");
+  r.clock = 500;
+  await r.poll(LABELS.A);
+  assert.deepEqual(r.kinds(), [], "quiet: nothing is raised again");
+  r.clock = 1500;
+  await r.poll(LABELS.A);
+  assert.deepEqual(r.kinds(), ["show", "refresh"], "the quiet period passed: the offer returns once");
+});
+
+test("a declined offer does not silence a different build, nor survive the build being adopted", async function () {
+  var r = rig({ quietMs: 100000 });
+  await r.poll(LABELS.A);
+  await r.poll(LABELS.A);
+  r.offer.declined();
+  r.kinds();
+  await r.poll(LABELS.B);
+  await r.poll(LABELS.B);
+  assert.deepEqual(r.kinds(), ["show", "refresh"], "a new build is offered at once");
+  r.offer.declined();
   await r.poll(LABELS.adopted);
-  // A client that missed the retraction is told there is no offer when it connects.
-  assert.deepEqual(r.offer.forNewClient(), { type: "diagnostic_retract", source: "build-update" });
+  await r.poll(LABELS.B);
+  await r.poll(LABELS.B);
+  assert.deepEqual(r.kinds().slice(-2), ["show", "refresh"], "adoption ends the quiet period");
 });
 
 test("journal reminders continue while the offer is unchanged and across an inconclusive poll", async function () {

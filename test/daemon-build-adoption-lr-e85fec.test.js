@@ -55,6 +55,23 @@ function buildUpdateDiagnostics(sock) {
   return sock.messages.filter(function (m) { return m.type === "diagnostic" && m.source === "build-update"; });
 }
 
+// The standing offer is a core notification: the offers a socket holds now, in
+// the order the daemon sent them (a created one is held, a dismissed one is not,
+// and the state a connection is sent replaces what it held).
+function heldOffers(sock) {
+  var held = [];
+  sock.messages.forEach(function (m) {
+    if (m.type === "notifications_state") {
+      held = (m.notifications || []).filter(function (n) { return n.type === "build_update_offer"; });
+    } else if (m.type === "notification_created" && m.notification.type === "build_update_offer") {
+      held.push(m.notification);
+    } else if (m.type === "notification_dismissed") {
+      held = held.filter(function (n) { return m.ids.indexOf(n.id) === -1; });
+    }
+  });
+  return held;
+}
+
 function bootFromInstall(inst, extra) {
   return bootDaemon(Object.assign({
     script: inst.daemonScript,
@@ -72,12 +89,12 @@ test("a fresh daemon on the installed build is adopted and logs no stale warning
     assert.equal(s.loadedBuildSha, SHA_A);
     assert.equal(s.installedBuildSha, SHA_A);
     assert.doesNotMatch(d.journal(), /serving STALE/);
-    // A client that connects while no offer stands is told so explicitly.
+    // A client that connects while no offer stands is sent a state without one.
     var late = await d.openAdminSocket();
     await waitUntil(function () {
-      return late.messages.find(function (m) { return m.type === "diagnostic_retract" && m.source === "build-update"; });
-    }, 10000, "the explicit no-offer on connect");
-    assert.equal(buildUpdateDiagnostics(late).length, 0);
+      return late.messages.find(function (m) { return m.type === "notifications_state"; });
+    }, 10000, "the notification state on connect");
+    assert.equal(heldOffers(late).length, 0);
     late.ws.terminate();
   } finally {
     await d.cleanup();
@@ -99,7 +116,7 @@ test("an identical reinstall over a running daemon is still adopted and still lo
     assert.equal(s.state, "adopted", JSON.stringify(s));
     assert.equal(s.loadedContentHash, s.installedContentHash);
     assert.doesNotMatch(d.journal(), /serving STALE/);
-    assert.equal(buildUpdateDiagnostics(sock).length, 0, "no update is offered for an identical reinstall");
+    assert.equal(heldOffers(sock).length, 0, "no update is offered for an identical reinstall");
     sock.ws.terminate();
   } finally {
     await d.cleanup();
@@ -126,26 +143,20 @@ test("a different installed build is stale, offered, and restarts nothing until 
 
     inst.installBuild(shaNew, "marker-new");
 
-    var announced = await waitUntil(function () { return buildUpdateDiagnostics(sock)[0]; }, 15000, "the update offer");
+    var announced = (await waitUntil(function () { return heldOffers(sock)[0]; }, 15000, "the update offer")).meta;
     assert.equal(announced.actionable.action, "restart_for_build_update");
     assert.equal(announced.buildUpdate.loadedBuildSha, shaOld);
     assert.equal(announced.buildUpdate.installedBuildSha, shaNew);
-    assert.equal(announced.buildUpdate.interruptions, undefined, "the broadcast carries no session content");
-    assert.equal(announced.buildUpdate.token, undefined, "the broadcast carries no confirmation token");
-    // The offer is shown at once; the change list refreshes it in place when git answers.
-    var listed = await waitUntil(function () {
-      return buildUpdateDiagnostics(sock).find(function (m) { return m.buildUpdate && m.buildUpdate.changes.available; });
-    }, 15000, "the offer refreshed with its change list");
-    assert.equal(listed.refresh, true, "the change list refreshes the offer rather than adding a second one");
+    assert.equal(announced.buildUpdate.interruptions, undefined, "the notification carries no session content");
+    assert.equal(announced.buildUpdate.token, undefined, "the notification carries no confirmation token");
+    // The offer is shown at once; when git answers, the core replaces it with the
+    // one that lists the changes, so exactly one offer is ever held.
+    var listed = (await waitUntil(function () {
+      return heldOffers(sock).find(function (n) { return n.meta.buildUpdate && n.meta.buildUpdate.changes.available; });
+    }, 15000, "the offer refreshed with its change list")).meta;
+    assert.equal(heldOffers(sock).length, 1, "the change list replaces the offer rather than adding a second one");
     assert.equal(listed.actionable.action, "restart_for_build_update");
     assert.ok(listed.buildUpdate.changes.commits.length >= 1, "the commits between the builds are listed");
-    // The explicit no-offer sent when this socket connected precedes the offer.
-    assert.equal(
-      sock.messages.slice(sock.messages.indexOf(announced)).filter(function (m) {
-        return m.type === "diagnostic_retract" && m.source === "build-update";
-      }).length, 0,
-      "the offer is not retracted while it is refreshed"
-    );
 
     var s = await status(d);
     assert.equal(s.state, "stale");
