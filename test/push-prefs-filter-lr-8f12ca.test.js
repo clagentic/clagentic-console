@@ -36,7 +36,7 @@ function setup() {
 test("a muted type is not sent to the user's subscription; another user's is unaffected", function () {
   var w = setup();
   w.prefs.set("alice", { preset: "approval_reminders" });
-  w.push.sendPush({ type: "done", tag: "claude-done", title: "t", body: "b" });
+  w.push.sendPush({ type: "response_done", title: "t", body: "b" });
   assert.deepEqual(sent.map(function (s) { return s.endpoint; }), ["https://push.invalid/bob-phone"]);
 });
 
@@ -55,7 +55,7 @@ test("with 'Approval prompts only' prompts are pushed and finished turns are not
   var w = setup();
   w.prefs.set("alice", { preset: "approval_prompts" });
   w.push.sendPushToUser("alice", { type: "permission_request" });
-  w.push.sendPushToUser("alice", { type: "done", tag: "claude-done" });
+  w.push.sendPushToUser("alice", { type: "response_done" });
   assert.deepEqual(sent.map(function (s) { return s.type; }), ["permission_request"]);
 });
 
@@ -66,7 +66,7 @@ test("a subscription with no account follows the default user's preferences", fu
   push.addSubscription({ endpoint: "https://push.invalid/only-phone" }, null, null);
   sent.length = 0;
   prefs.set(null, { surfaces: { push: { turn_done: false } } });
-  push.sendPush({ type: "done", tag: "claude-done" });
+  push.sendPush({ type: "response_done" });
   assert.deepEqual(sent, []);
   push.sendPush({ type: "permission_request" });
   assert.equal(sent.length, 1);
@@ -77,6 +77,6 @@ test("without preferences wired, push behaves as before", function () {
   var push = initPush();
   push.addSubscription({ endpoint: "https://push.invalid/legacy" }, null, "carol");
   sent.length = 0;
-  push.sendPushToUser("carol", { type: "done", tag: "claude-done" });
+  push.sendPushToUser("carol", { type: "response_done" });
   assert.equal(sent.length, 1);
 });

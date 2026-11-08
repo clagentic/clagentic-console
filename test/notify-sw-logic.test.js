@@ -145,40 +145,35 @@ test("a tap on the silent resolved notice does nothing", async function () {
   assert.equal(w.opened.length, 0);
 });
 
-test("legacy payloads are shown and tapped as before", async function () {
+test("a payload without the core mark is dropped, and its tap only opens the app", async function () {
   var w = world();
-  await sw.handlePush(w.env, { type: "done", title: "d", body: "b", slug: "p" });
-  assert.equal(w.shown()[0].tag, "claude-done");
-  assert.equal(w.shown()[0].options.requireInteraction, undefined);
+  await sw.handlePush(w.env, { type: "done", title: "d", body: "b", slug: "p", tag: "any" });
   await sw.handlePush(w.env, { type: "dm", title: "d", body: "b" });
-  assert.ok(w.shown().some(function (n) { return n.tag === "dm"; }));
-  await sw.handlePush(w.env, { type: "done", title: "d", body: "b", tag: "ralph-loop-done" });
-  assert.ok(w.shown().some(function (n) { return n.tag === "ralph-loop-done"; }));
-  await sw.handlePush(w.env, { type: "user_mention", title: "m", body: "b", data: { slug: "p" } });
-  assert.ok(w.shown().some(function (n) { return n.tag === "clagentic"; }));
+  await sw.handlePush(w.env, { type: "permission_request", requestId: "r9", title: "t", body: "b" });
   await sw.handlePush(w.env, { type: "test" });
-  assert.equal(w.shown().length, 4);
-
-  var vis = world({ windows: [{ url: "https://h.example/p/p/", visibilityState: "visible" }] });
-  await sw.handlePush(vis.env, { type: "done", title: "d", body: "b" });
-  assert.equal(vis.shown().length, 0, "done is still suppressed in the foreground");
+  assert.equal(w.shown().length, 0);
 
   var tap = world({ windows: [{ url: "https://h.example/p/p/", visibilityState: "hidden" }] });
   await sw.handleClick(tap.env, { data: { type: "done", slug: "p" } });
   assert.equal(tap.windows[0].focused, true);
-  assert.deepEqual(tap.windows[0].posted, []);
+  assert.deepEqual(tap.windows[0].posted, [{ type: "notify_route", target: null }]);
   var none = world();
   await sw.handleClick(none.env, { data: { type: "done", slug: "p" } });
-  assert.deepEqual(none.opened, ["https://h.example/p/p/"]);
+  assert.deepEqual(none.opened, ["https://h.example/"]);
 });
 
-test("legacy permission, reminder and ask payloads keep their old tags", async function () {
-  var w = world({ windows: [{ url: "https://h.example/", visibilityState: "visible", focused: true }] });
-  await sw.handlePush(w.env, { type: "permission_request", requestId: "r9", title: "t", body: "b" });
-  await sw.handlePush(w.env, { type: "ask_user", title: "t", body: "b" });
-  await sw.handlePush(w.env, { type: "permission_reminder", title: "t", body: "b", tag: "prompt-reminder-p:1" });
-  var tags = w.shown().map(function (n) { return n.tag; }).sort();
-  assert.deepEqual(tags, ["claude-ask", "perm-r9", "prompt-reminder-p:1"]);
+test("every activity type is shown from its own payload fields, under its core tag", async function () {
+  var w = world();
+  await sw.handlePush(w.env, corePayload("response_done", { slug: "p", sessionId: 4 }));
+  await sw.handlePush(w.env, corePayload("loop_complete", { slug: "p", sessionId: 4 }));
+  await sw.handlePush(w.env, corePayload("user_mention", { slug: "p", sessionId: 4 }));
+  await sw.handlePush(w.env, corePayload("mate_dm", { peerId: "u2" }));
+  assert.deepEqual(w.shown().map(function (n) { return n.tag; }), [
+    "n:response_done:p:4",
+    "n:loop_complete:p:4",
+    "n:user_mention:p:4",
+    "n:mate_dm:dm:u2",
+  ]);
 });
 
 var SCOPE_P = { slug: "p", livePrompts: null };
