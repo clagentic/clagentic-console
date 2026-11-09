@@ -982,6 +982,15 @@ bound to localhost, or firewalled). This mirrors the trust model of
 `X-Forwarded-For`-consuming software generally (nginx `real_ip`, Express
 `trust proxy`) rather than inventing a new one.
 
+`lib/client-address.js` answers the client address and locality of a request
+for the login, OTP and recovery rate limits, their audit records, and
+`ws._clagenticLocal`. With `trustedProxy` set, the address is the
+`X-Forwarded-For` value only when it is a single valid IP; a multi-valued,
+invalid or absent header falls back to the peer address, never a chosen hop.
+Without `trustedProxy` the peer address is used. A connection is local only
+when the peer is loopback and none of `X-Forwarded-For`, `Forwarded` or
+`X-Real-IP` is present, whatever `trustedProxy` says.
+
 ## Build-adoption diagnostic (lr-e85fec)
 
 Installing a new build (`npm install -g @clagentic/console`) never restarts a
