@@ -12,6 +12,9 @@ var os = require("os");
 var path = require("path");
 var cred = require("../lib/mcp-bridge-credential");
 var codexAppServerModule = require("../lib/yoke/codex-app-server");
+var RealCodexAppServer = codexAppServerModule.CodexAppServer;
+var EventEmitter = require("events");
+var PassThrough = require("stream").PassThrough;
 // Patched before anything loads the adapter, which binds the class on require.
 var servers = [];
 function FakeAppServer(executablePath, opts) {
@@ -135,6 +138,63 @@ test("a server auth token never reaches the app-server argv or the bridge env", 
     assert.equal(JSON.stringify(server.opts).includes(secret), false);
     assert.equal(server.opts.config.mcp_servers["clay-tools"].env, undefined);
   } finally {
+    if (adapter) await adapter.shutdown();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("with no slug the adapter configures no clay-tools bridge and no secretEnv", async function () {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "bridge-cred-"));
+  var adapter;
+  try {
+    var codexModule = require("../lib/yoke/adapters/codex");
+    adapter = codexModule.createCodexAdapter({ cwd: dir });
+    await adapter.init({ runtimeEnv: null });
+    var server = servers[servers.length - 1];
+    var mcp = (server.opts.config && server.opts.config.mcp_servers) || {};
+    assert.equal(mcp["clay-tools"], undefined);
+    assert.equal(server.opts.secretEnv, undefined);
+  } finally {
+    if (adapter) await adapter.shutdown();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the real app-server start keeps the credential and server token out of argv and the log", async function () {
+  var secret = "server-auth-token-value-0123456789";
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "bridge-cred-"));
+  var adapter;
+  var spawned = null;
+  var logged = [];
+  var realLog = console.log;
+  try {
+    var codexModule = require("../lib/yoke/adapters/codex");
+    adapter = codexModule.createCodexAdapter({ cwd: dir, slug: "alpha" });
+    await adapter.init({ runtimeEnv: null, clayAuthToken: secret });
+    var opts = Object.assign({}, servers[servers.length - 1].opts, {
+      commandDeps: {
+        spawn: function (file, args, options) {
+          spawned = { file: file, args: args, env: options.env };
+          var proc = new EventEmitter();
+          proc.stdout = new PassThrough();
+          proc.stderr = new PassThrough();
+          return proc;
+        },
+      },
+    });
+    var real = new RealCodexAppServer("/usr/local/bin/codex", opts);
+    console.log = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+    try { await real.start(); } finally { console.log = realLog; }
+    var token = cred.credentialFor("alpha");
+    var argv = spawned.args.join(" ");
+    var text = argv + "\n" + logged.join("\n");
+    assert.equal(text.includes(secret), false);
+    assert.equal(text.includes(token), false);
+    assert.equal(text.includes("CLAY_AUTH_TOKEN"), false);
+    assert.equal(spawned.env[cred.ENV_NAME], token, "the credential reaches the child through its environment");
+    real.proc.stdout.end();
+  } finally {
+    console.log = realLog;
     if (adapter) await adapter.shutdown();
     fs.rmSync(dir, { recursive: true, force: true });
   }
