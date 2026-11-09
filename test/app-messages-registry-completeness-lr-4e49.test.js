@@ -107,7 +107,6 @@ var ORIGINAL_CASE_LABELS = [
   // default mode to the running sessions.
   "permission_settings", "permission_mode_applied",
   // A send-now message that fell back to the queue; drops its false mark.
-  "sent_mid_turn_cleared",
 ];
 
 var REGISTRY_FILES = [

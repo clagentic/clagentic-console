@@ -18,6 +18,12 @@ function tick() { return new Promise(function (resolve) { setImmediate(resolve);
 
 // A fake app-server whose turn/start never completes on its own, so the turn
 // stays running until the test ends it.
+function rpcError(message, code) {
+  var e = new Error(message);
+  e.rpcCode = code;
+  return e;
+}
+
 function runningTurn(steerBehavior) {
   var handlers = [];
   var fake = { calls: [] };
@@ -65,7 +71,7 @@ test("Codex: a steered message goes to turn/steer with the running turn id", asy
 });
 
 test("Codex: a steer that races the end of the turn is queued for the next turn, not dropped", async function () {
-  var fake = runningTurn(function () { return Promise.reject(new Error("expected turn id does not match the active turn")); });
+  var fake = runningTurn(function () { return Promise.reject(rpcError("expected turn id does not match the active turn", -32600)); });
   var handle = await startTurn(fake);
   var result = await handle.steerMessage("late", null, "human", "m3");
   assert.equal(result.steered, false);
@@ -79,7 +85,9 @@ test("Codex: a steer that races the end of the turn is queued for the next turn,
   handle.close();
 });
 
-test("Codex: a steer that falls back to the queue clears the mark in the persisted line and in every client's bubble", async function () {
+// Drives one send-now message through the real user-message handler with a
+// steer outcome and returns what was recorded, persisted and broadcast.
+async function sendNowOutcome(steerResult) {
   var os = require("os");
   var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "send-now-fallback-"));
   var origHome = process.env.CLAGENTIC_HOME;
@@ -97,7 +105,7 @@ test("Codex: a steer that falls back to the queue clears the mark in the persist
     var sent = [];
     var sdk = {
       canSteer: function () { return true; },
-      steerMessage: function () { return Promise.resolve({ steered: false, reason: "turn-ended" }); },
+      steerMessage: function () { return Promise.resolve(steerResult); },
       pushMessage: noop,
     };
     var handler = require("../lib/project-user-message").attachUserMessage({
@@ -116,17 +124,8 @@ test("Codex: a steer that falls back to the queue clears the mark in the persist
       adapter: { renameSession: function () { return Promise.resolve(); } },
     });
     handler.handleUserMessage({}, { type: "message", text: "late one", sendNow: true });
-    var recorded = session.history[session.history.length - 1];
-    assert.equal(recorded.sentMidTurn, true, "recorded as sent mid-turn while the steer is in flight");
     await tick();
     await tick();
-    assert.equal(recorded.sentMidTurn, false, "the in-memory entry lost the mark");
-    var cleared = sent.filter(function (m) { return m.type === "sent_mid_turn_cleared"; });
-    assert.equal(cleared.length, 1, "every client is told, the sender included");
-    assert.equal(cleared[0].messageId, recorded.messageId);
-    assert.equal(cleared[0].text, "late one");
-    assert.ok(sent.some(function (m) { return m.type === "diagnostic" && m.source === "send-now"; }), "the user gets the notice");
-    // The persisted line: the buffered append is flushed by the fix.
     sm.saveSessionFile(session);
     var found = null;
     var base = path.join(tmpHome, "console", "sessions");
@@ -135,14 +134,54 @@ test("Codex: a steer that falls back to the queue clears the mark in the persist
       if (fs.existsSync(f)) found = f;
     });
     var lines = fs.readFileSync(found, "utf8").split("\n").filter(Boolean).map(JSON.parse);
-    var line = lines.filter(function (l) { return l.type === "user_message" && l.messageId === recorded.messageId; });
-    assert.equal(line.length, 1);
-    assert.ok(!line[0].sentMidTurn, "the persisted line lost the mark");
+    return {
+      sent: sent,
+      memory: session.history.filter(function (h) { return h.type === "user_message"; }),
+      persisted: lines.filter(function (l) { return l.type === "user_message"; }),
+    };
   } finally {
     if (origHome === undefined) delete process.env.CLAGENTIC_HOME; else process.env.CLAGENTIC_HOME = origHome;
     ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
+}
+
+test("send-now: a steer that lands is recorded once, marked mid-turn", async function () {
+  var out = await sendNowOutcome({ steered: true });
+  assert.equal(out.memory.length, 1);
+  assert.equal(out.persisted.length, 1);
+  assert.equal(out.memory[0].sentMidTurn, true);
+  assert.equal(out.persisted[0].sentMidTurn, true);
+});
+
+test("send-now: a fallback to the queue produces exactly one unmarked record and no clear message", async function () {
+  var out = await sendNowOutcome({ steered: false, reason: "turn-ended" });
+  assert.equal(out.memory.length, 1);
+  assert.equal(out.persisted.length, 1);
+  assert.ok(!out.memory[0].sentMidTurn && !out.persisted[0].sentMidTurn, "never marked");
+  assert.ok(!out.sent.some(function (m) { return m.type === "sent_mid_turn_cleared"; }));
+  assert.ok(out.sent.some(function (m) { return m.type === "diagnostic" && m.source === "send-now"; }), "the user gets the notice");
+});
+
+test("send-now: an unconfirmed delivery is recorded once, unmarked, with a notice that it is unconfirmed", async function () {
+  var out = await sendNowOutcome({ steered: false, reason: "unconfirmed" });
+  assert.equal(out.persisted.length, 1);
+  assert.ok(!out.persisted[0].sentMidTurn);
+  var notice = out.sent.filter(function (m) { return m.type === "diagnostic" && m.source === "send-now"; });
+  assert.equal(notice.length, 1);
+  assert.match(notice[0].message, /could not confirm/);
+});
+
+test("Codex: a transport timeout on turn/steer is not requeued and resolves unconfirmed", async function () {
+  var fake = runningTurn(function () { return Promise.reject(new Error("Request timeout: turn/steer (id=9)")); });
+  var handle = await startTurn(fake);
+  var result = await handle.steerMessage("maybe", null, "human", "m5");
+  assert.equal(result.steered, false);
+  assert.equal(result.reason, "unconfirmed");
+  fake.dispatch({ method: "turn/completed", params: { threadId: "thread-1", turn: { id: "turn-7", status: "completed" } } });
+  for (var i = 0; i < 20; i++) await tick();
+  assert.equal(fake.calls.filter(function (c) { return c.method === "turn/start"; }).length, 1, "no second turn was started for it");
+  handle.close();
 });
 
 test("Codex: with no running turn a steer is queued like a normal send", async function () {
@@ -157,8 +196,8 @@ test("Codex: with no running turn a steer is queued like a normal send", async f
 });
 
 test("Codex: the probe turns steering on from the app-server's answer, never from a version", async function () {
-  var has = { send: function () { return Promise.reject(new Error("thread not found: 0000")); } };
-  var lacks = { send: function () { return Promise.reject(new Error("Invalid request: unknown variant `turn/steer`, expected one of `initialize`")); } };
+  var has = { send: function () { return Promise.reject(rpcError("thread not found: 0000", -32600)); } };
+  var lacks = { send: function () { return Promise.reject(rpcError("Method not found", -32601)); } };
   var dead = { send: function () { return Promise.reject(new Error("Process exited: code=1")); } };
   assert.equal(await codexAdapter._test_probeTurnSteer(has), true);
   assert.equal(await codexAdapter._test_probeTurnSteer(lacks), false);
