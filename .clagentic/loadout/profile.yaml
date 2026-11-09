@@ -5,3 +5,6 @@
 class: released-tool
 paths:
   ".crew/**": {class: internal}
+test:
+  full: [node, --test, --test-reporter=junit, "--test-reporter-destination={junit}", "test/*.test.js"]
+  files: [node, --test, --test-reporter=junit, "--test-reporter-destination={junit}"]

@@ -774,6 +774,42 @@
   opacity: 0.7;
 }
 
+/* Send-now: shown only while a turn runs, on touch and narrow layouts where
+   there is no Ctrl key. Touch-sized; unavailable agents keep it visible but
+   dimmed, and tapping it states the reason. */
+#send-now-btn {
+  display: none;
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+#send-now-btn .lucide { width: 20px; height: 20px; }
+
+#send-now-btn.unavailable {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  #send-now-btn:not(.hidden) { display: flex; }
+}
+
+.msg-sent-midturn {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
 /* ==========================================================================
    Slash Command Autocomplete
    ========================================================================== */

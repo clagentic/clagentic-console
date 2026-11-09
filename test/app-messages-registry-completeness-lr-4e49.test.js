@@ -106,6 +106,7 @@ var ORIGINAL_CASE_LABELS = [
   // The server-wide permission settings, and the result of applying a new
   // default mode to the running sessions.
   "permission_settings", "permission_mode_applied",
+  // A send-now message that fell back to the queue; drops its false mark.
 ];
 
 var REGISTRY_FILES = [
