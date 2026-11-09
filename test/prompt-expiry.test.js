@@ -139,6 +139,15 @@ test("a kind's own timeout wins over the bound", function (t) {
   assert.equal(h.registry.lookup(explicit.requestId), null, "an explicit timeoutMs is honoured even with the bound off");
 });
 
+test("an explicit timeoutMs of 0 means no timer: the prompt never expires, whatever the bound", function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var h = makeRegistry(null);
+  var opened = h.registry.open(h.session, "permission", { toolName: "Bash", toolInput: {}, vendor: "claude" }, { toolUseId: "tu-zero", timeoutMs: 0 });
+  t.mock.timers.tick(DAY * 3);
+  assert.notEqual(h.registry.lookup(opened.requestId), null);
+  assert.equal(cancels(h).length, 0);
+});
+
 test("a reconnect, a replay and a history page do not reset the deadline", async function (t) {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   var h = makeRegistry(null);
