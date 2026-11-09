@@ -119,3 +119,28 @@ test("the codex adapter hands the credential to the bridge child through the env
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a server auth token never reaches the app-server argv or the bridge env", async function () {
+  var secret = "server-auth-token-value-0123456789";
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "bridge-cred-"));
+  var adapter;
+  try {
+    var codexModule = require("../lib/yoke/adapters/codex");
+    adapter = codexModule.createCodexAdapter({ cwd: dir, slug: "alpha" });
+    await adapter.init({ runtimeEnv: null, clayAuthToken: secret });
+    var server = servers[servers.length - 1];
+    var argv = codexAppServerModule.serializeConfig(server.opts.config, "").join(" ");
+    assert.equal(argv.includes(secret), false);
+    assert.equal(argv.includes("CLAY_AUTH_TOKEN"), false);
+    assert.equal(JSON.stringify(server.opts).includes(secret), false);
+    assert.equal(server.opts.config.mcp_servers["clay-tools"].env, undefined);
+  } finally {
+    if (adapter) await adapter.shutdown();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the bridge admitted on its credential alone, with no cookie", async function () {
+  var res = await H.request("POST", "/p/alpha/api/mcp-bridge", null, { action: "list_tools" }, { [cred.HEADER_NAME]: cred.credentialFor("alpha") });
+  assert.equal(res.status, 200);
+});
