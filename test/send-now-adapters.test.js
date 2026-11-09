@@ -79,6 +79,72 @@ test("Codex: a steer that races the end of the turn is queued for the next turn,
   handle.close();
 });
 
+test("Codex: a steer that falls back to the queue clears the mark in the persisted line and in every client's bubble", async function () {
+  var os = require("os");
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "send-now-fallback-"));
+  var origHome = process.env.CLAGENTIC_HOME;
+  process.env.CLAGENTIC_HOME = tmpHome;
+  ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
+  try {
+    var noop = function () {};
+    var sm = require("../lib/sessions").createSessionManager({ cwd: tmpHome, send: noop, sendTo: noop, sendEach: noop });
+    var session = sm.createSessionRaw({});
+    session.cliSessionId = "send-now-fallback-1";
+    session.vendor = "codex";
+    session.title = "t";
+    session.isProcessing = true;
+    sm.saveSessionFile(session);
+    var sent = [];
+    var sdk = {
+      canSteer: function () { return true; },
+      steerMessage: function () { return Promise.resolve({ steered: false, reason: "turn-ended" }); },
+      pushMessage: noop,
+    };
+    var handler = require("../lib/project-user-message").attachUserMessage({
+      cwd: tmpHome, slug: "p", osUsers: false, sm: sm, sdk: sdk, nm: {}, tm: {},
+      send: noop, sendTo: noop, sendToSession: function (id, obj) { sent.push(obj); }, sendToSessionOthers: noop, clients: new Set(),
+      opts: {}, usersModule: {},
+      getSessionForWs: function () { return session; },
+      getLinuxUserForSession: function () { return null; },
+      ensureProjectAccessForSession: function () { return null; },
+      getOsUserInfoForWs: noop, hydrateImageRefs: function (m) { return m; }, saveImageFile: noop, imagesDir: tmpHome,
+      onProcessingChanged: noop,
+      _loop: { handleLoopMessage: function () { return false; } },
+      browserState: { _browserTabList: {} },
+      scheduledInput: {},
+      loadContextSources: function () { return []; }, saveContextSources: noop,
+      adapter: { renameSession: function () { return Promise.resolve(); } },
+    });
+    handler.handleUserMessage({}, { type: "message", text: "late one", sendNow: true });
+    var recorded = session.history[session.history.length - 1];
+    assert.equal(recorded.sentMidTurn, true, "recorded as sent mid-turn while the steer is in flight");
+    await tick();
+    await tick();
+    assert.equal(recorded.sentMidTurn, false, "the in-memory entry lost the mark");
+    var cleared = sent.filter(function (m) { return m.type === "sent_mid_turn_cleared"; });
+    assert.equal(cleared.length, 1, "every client is told, the sender included");
+    assert.equal(cleared[0].messageId, recorded.messageId);
+    assert.equal(cleared[0].text, "late one");
+    assert.ok(sent.some(function (m) { return m.type === "diagnostic" && m.source === "send-now"; }), "the user gets the notice");
+    // The persisted line: the buffered append is flushed by the fix.
+    sm.saveSessionFile(session);
+    var found = null;
+    var base = path.join(tmpHome, "console", "sessions");
+    fs.readdirSync(base).forEach(function (d) {
+      var f = path.join(base, d, "send-now-fallback-1.jsonl");
+      if (fs.existsSync(f)) found = f;
+    });
+    var lines = fs.readFileSync(found, "utf8").split("\n").filter(Boolean).map(JSON.parse);
+    var line = lines.filter(function (l) { return l.type === "user_message" && l.messageId === recorded.messageId; });
+    assert.equal(line.length, 1);
+    assert.ok(!line[0].sentMidTurn, "the persisted line lost the mark");
+  } finally {
+    if (origHome === undefined) delete process.env.CLAGENTIC_HOME; else process.env.CLAGENTIC_HOME = origHome;
+    ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
 test("Codex: with no running turn a steer is queued like a normal send", async function () {
   var fake = runningTurn();
   var handle = await startTurn(fake);
