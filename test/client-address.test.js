@@ -64,7 +64,11 @@ async function waitForLockout(home, ip) {
     try {
       var hit = auditEntries(home).filter(function (e) { return e.action === "auth.lockout" && e.metadata.ip === ip; });
       if (hit.length) return hit;
-    } catch (e) { /* log not written yet */ }
+    } catch (e) {
+      // Only the two states of a log still being written retry: no file yet, or
+      // a last line cut off mid-write. Anything else is a real failure.
+      if (e.code !== "ENOENT" && !(e instanceof SyntaxError)) throw e;
+    }
     await new Promise(function (r) { setTimeout(r, 20); });
   }
   return [];
