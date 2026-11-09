@@ -89,7 +89,7 @@ Opens a new session in a project and starts its first turn with the prompt. The 
 ```
 clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|->
     [--vendor <id>] [--agent <name>] [--name <session-name>] [--visibility shared|private]
-    [--permission-mode <mode>] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]
+    [--permission-mode <mode>] [--settings <path>] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]
 ```
 
 | Flag | Required | Meaning |
@@ -102,6 +102,7 @@ clagentic-console open-session (--project <slug> | --to <address>) --prompt <tex
 | `--name <session-name>` | no | The session name; see [Session names](#session-names-name). |
 | `--visibility shared\|private` | no | Absent: `shared`. Any other value is `refused`. |
 | `--permission-mode <mode>` | no | The mode the session starts in: `default`, `plan`, `acceptEdits`, `dontAsk` or `auto`. Absent: the server setting "Mode for sessions opened by the CLI or a trigger", which is `acceptEdits` unless an admin changed it. A mode the server or the session's agent does not allow (`bypassPermissions`, an unknown name, `auto` on an agent without it) is `refused` and no session is created. See [Session mode](#session-mode). |
+| `--settings <path>` | no | A settings file the session's agent runtime loads in addition to its other settings sources (a relative path is resolved against the calling directory). See [Session settings file](#session-settings-file). |
 | `--initiator <kind>` | no | Who started the turn. See [Initiator](#initiator). |
 | `--context-note <text>` | no | A label. It becomes the session title (absent: `External trigger`) and is stored on the recorded message. |
 | `--from <name>` | no | Declares the caller's name. See [The sender record](#the-sender-record). |
@@ -151,6 +152,14 @@ A mode the console does not allow for that session fails the call before anythin
 ```
 
 A file-drop trigger cannot name a mode; it takes the server setting. The settings, who may change them and what turning each off does are in [PERMISSION-SETTINGS.md](./PERMISSION-SETTINGS.md).
+
+### Session settings file
+
+`--settings <path>` names a settings file passed to the agent runtime as an additional settings source for that session. It is additive: it adds to the user, project and local settings, and cannot remove a rule they set. The console does not read or interpret the file, except that when a loop's `disableAllHooks` is also in force the two are merged into one settings object (the loop's keys win) so both take effect.
+
+The path must be absolute once resolved, exist, be a regular file and be readable by the console daemon; otherwise the call is `refused` with a reason naming the path and no session is created. An agent without the capability (for example Codex) is refused the same way. A session running as another OS user is not checked as that user: its runtime fails the turn if it cannot read the file.
+
+The path is saved with the session and passed on every turn, including a resume and a turn after a daemon restart. If the file has since gone missing or become unreadable, the turn fails with an error naming the path; it never runs without the file. A trigger cannot name a settings file.
 
 ## send-input
 
