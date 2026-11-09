@@ -176,7 +176,8 @@ test("persisted file keeps confirmedAt; a file without it loads null; a malforme
   var d = createUsageStore({ file: file, log: function (m) { logs.push(m); } });
   d.load();
   assert.equal(snap(d, NOW).vendors.claude.buckets.five_hour.state, "unknown");
-  assert.equal(logs.length, 1);
+  assert.equal(logs.length, 2);
+  assert.match(logs[0], /dropped 1 malformed/);
 });
 
 test("confirm updates are throttled into one write", function () {
