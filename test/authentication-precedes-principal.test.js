@@ -12,6 +12,7 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var cred = require("../lib/mcp-bridge-credential");
 var harness = require("./access-harness");
 
 var H = null;
@@ -96,7 +97,7 @@ function withGate(state, fn) {
   }));
 
   test(label + ": the local MCP bridge needs no login", withGate({ authed: false, multiUser: multiUser }, async function () {
-    var bridge = await H.request("POST", "/p/mine/api/mcp-bridge", null, { action: "no-such-action" });
+    var bridge = await H.request("POST", "/p/mine/api/mcp-bridge", null, { action: "no-such-action" }, { [cred.HEADER_NAME]: cred.credentialFor("mine") });
     assert.equal(bridge.status, 400, "the request reached the bridge handler");
   }));
 });

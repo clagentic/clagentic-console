@@ -13,6 +13,7 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var cred = require("../lib/mcp-bridge-credential");
 var fs = require("fs");
 var path = require("path");
 var { execFileSync } = require("child_process");
@@ -174,7 +175,7 @@ test("single-user: project list broadcasts and renames reach the owner with ever
 
 test("single-user: the local MCP bridge still answers with no login", async function () {
   mode.multiUser = false;
-  var bridge = await H.request("POST", "/p/mine/api/mcp-bridge", null, { action: "no-such-action" });
+  var bridge = await H.request("POST", "/p/mine/api/mcp-bridge", null, { action: "no-such-action" }, { [cred.HEADER_NAME]: cred.credentialFor("mine") });
   assert.equal(bridge.status, 400);
 });
 

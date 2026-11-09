@@ -11,6 +11,7 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var cred = require("../lib/mcp-bridge-credential");
 var harness = require("./access-harness");
 
 var H = null;
@@ -157,9 +158,9 @@ test("the root redirect never lands on a project the user cannot use", async fun
   assert.equal(res.headers.location, "/p/pub/");
 });
 
-test("the local MCP bridge keeps working with no login; other unauthenticated project calls are refused", async function () {
-  var bridge = await H.request("POST", "/p/priv/api/mcp-bridge", null, { action: "no-such-action" });
-  assert.equal(bridge.status, 400, "reaches the bridge handler without a login");
+test("the MCP bridge needs its credential and no login; other unauthenticated project calls are refused", async function () {
+  var bridge = await H.request("POST", "/p/priv/api/mcp-bridge", null, { action: "no-such-action" }, { [cred.HEADER_NAME]: cred.credentialFor("priv") });
+  assert.equal(bridge.status, 400, "reaches the bridge handler with the credential and no login");
   var upload = await H.request("POST", "/p/pub/api/upload", null, { name: "x", data: "eA==" });
   assert.equal(upload.status, 401);
 });
