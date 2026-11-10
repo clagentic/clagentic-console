@@ -1,0 +1,94 @@
+/* The result card of a command typed in the composer with ! (user-shell.js). */
+
+.shell-result {
+  max-width: var(--content-width);
+  margin: 8px auto;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--code-bg);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.shell-result.ok { border-left-color: var(--success); }
+.shell-result.failed,
+.shell-result.error { border-left-color: var(--error); }
+.shell-result.denied,
+.shell-result.refused { border-left-color: var(--text-dimmer); }
+.shell-result.pending { border-left-color: var(--accent); }
+
+.shell-result .shell-cmd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.shell-result .shell-prompt {
+  color: var(--accent);
+  margin-right: 6px;
+  user-select: none;
+}
+
+.shell-result .shell-output {
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 360px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.shell-result .shell-status {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.shell-result.failed .shell-status,
+.shell-result.error .shell-status { color: var(--error); }
+
+.shell-result .shell-actions { margin-top: 8px; }
+
+.shell-result .shell-edit {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.shell-result .shell-edit:hover { border-color: var(--accent); color: var(--accent); }
+
+/* A chat message typed while a command runs, waiting for it to end (shell-queue.js). */
+.shell-queued {
+  max-width: var(--content-width);
+  margin: 8px auto;
+  padding: 6px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.shell-queued.unsent { border-color: var(--error); }
+
+.shell-queued .shell-queued-tag {
+  margin-right: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-dimmer);
+  user-select: none;
+}
+
+.shell-queued.unsent .shell-queued-tag { color: var(--error); }

@@ -437,6 +437,22 @@ A `shell` request (`{command, requestId?}`) is handled by `lib/project-user-shel
 
 **Settings** (`lib/user-shell-settings.js`, in `daemon.json`, read at each request): `userShellEnabled` (default on), `userShellTimeoutMinutes` (default 10) and `userShellMaxOutputKiB` (default 256). An admin changes them with `set_user_shell_settings`; every client gets `user_shell_settings` on connect and after a change.
 
+### The `!` command line (composer side)
+
+All client modules sit in `lib/public/modules/`: `shell-line.js` (which line is a command, how a result reads), `shell-card.js` (the result card), `shell-queue.js` (the chat queue), `user-shell.js` (the wiring and the two message handlers) and `shell-settings-controls.js` (the settings page controls).
+
+**Routing.** `sendMessage` in `input.js` reads the composer as typed. A line that starts with `!` (leading whitespace aside) and has a command after it is a `shell` request when the server's `user_shell_settings` say the mode is on; only the `!` and the whitespace after it are removed, so the tail reaches the server exactly as typed. With the mode off, with an attachment, or with nothing after the `!`, the line is ordinary chat and keeps its usual trimming.
+
+**Sending.** A frame counts as sent only when the socket is open and takes it. A `shell` request is marked pending, and its card drawn, only after that; a chat message is recorded in the conversation only after that. A send that fails leaves the line in the composer (or, for a queued message, queued and marked "Not sent"), marks nothing pending, and so never holds later chat.
+
+**Queue.** Chat submitted while a command of the session on screen is pending, or behind an earlier message that is still unsent, is shown as queued and sent in the order typed when the command's `shell_result` arrives, whatever the outcome (result, refusal, denial, error, timeout, stop). It leaves the queue only by being sent, and is drawn once, so a retry never draws it twice. After a reconnect, `history_done` redraws the running card and the queued lines and resumes the queue. The server holds no chat.
+
+**Reload and switching.** The queue is saved in `sessionStorage`. Queued messages of a session that is no longer on screen, and everything a reload finds saved, are parked and restored to that session's composer, ahead of its draft, when it is shown. An image attached to a queued message cannot be restored to the composer, as with any draft; the restored text says so.
+
+**Refused command.** A refusal draws a card with an Edit action that puts the command back in the composer. A draft already there is set aside, never placed behind the `!` (where it would run as part of the command), and returns after the next send.
+
+**Results and replay.** `shell_result` draws one card: the command, its output as text, and a status line (exit code, duration, truncated, timed out, interrupted, or the refusal or denial reason). A replayed result draws the same card and neither sends nor releases the queue; the queue resumes when the replay ends.
+
 ## Agent-runtime environment
 
 Settings hold two environment texts of `KEY=VALUE` lines (the pages write each row as `export KEY=VALUE`): the **shared** text (`sharedEnv` on the daemon config, administrators only) and one per **project** (`envrc` on the project's record). `daemon-env-settings.js` stores them; `server.js` hands its callbacks to every project, which is how the Settings pages reach them.
