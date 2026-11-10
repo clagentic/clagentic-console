@@ -53,8 +53,14 @@ var { spawn } = require("child_process");
 // ── constants ────────────────────────────────────────────────────────────────
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
-var TEST_TIMEOUT_MS = 45000;
-var DAEMON_READY_MS = 20000;
+// Daemon boot is CPU-bound and scales with parallel daemons: measured 9-13 s
+// with 11 concurrent daemons on 6 cores, so the old 20 s ceiling had little
+// headroom against a full suite. The test budget covers
+// readiness + five requests at httpGetRaw's 5 s cap + teardown.
+var DAEMON_READY_MS = 60000;
+var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
+var TEST_TIMEOUT_MS = 120000;
+var PORT_ATTEMPTS = 5;
 
 // ── helpers (mirrors boot-smoke-lr-1a5f.test.js) ───────────────────────────
 
@@ -86,6 +92,49 @@ function waitForServer(port, timeoutMs) {
       req.setTimeout(500, function () { req.destroy(); });
     }
     attempt();
+  });
+}
+
+// findFreePort() closes its probe socket before the daemon binds, so under
+// full-suite load (many parallel daemons) another process can take the port in
+// that window. The daemon then logs "in use, retrying" and the HTTP-only
+// waitForServer() was satisfied by whatever foreign server owned the port, so
+// the assertions ran against the wrong server. Readiness here means the
+// spawned daemon itself printed its listen line; a bind collision is reported
+// as { portInUse: true } so the caller can allocate a fresh port.
+var LISTEN_LINE = /\[daemon\] Listening on /;
+var PORT_IN_USE_LINE = /\[daemon\] Port \d+ in use, retrying/;
+
+function waitForDaemonListening(proc, getLog, timeoutMs) {
+  var start = Date.now();
+  return new Promise(function (resolve, reject) {
+    var finished = false;
+    function finish(err, value) {
+      if (finished) { return; }
+      finished = true;
+      proc.removeListener("exit", onExit);
+      if (err) { reject(err); } else { resolve(value); }
+    }
+    function onExit(code) {
+      finish(new Error("daemon exited with code " + code + " before listening:\n" + getLog()));
+    }
+    proc.once("exit", onExit);
+    (function poll() {
+      if (finished) { return; }
+      var log = getLog();
+      if (PORT_IN_USE_LINE.test(log)) {
+        var e = new Error("daemon port was taken before the daemon bound it");
+        e.portInUse = true;
+        finish(e);
+        return;
+      }
+      if (LISTEN_LINE.test(log)) { finish(null); return; }
+      if (Date.now() - start > timeoutMs) {
+        finish(new Error("daemon did not report listening within " + timeoutMs + " ms:\n" + log));
+        return;
+      }
+      setTimeout(poll, 50);
+    })();
   });
 }
 
@@ -143,12 +192,26 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
     });
   });
 
-  findFreePort().then(function (port) {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-e33776-"));
-    var projectDir = path.join(tmpHome, "asset-auth-project");
-    fs.mkdirSync(projectDir, { recursive: true });
+  tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-e33776-"));
+  var projectDir = path.join(tmpHome, "asset-auth-project");
+  fs.mkdirSync(projectDir, { recursive: true });
+  var configFile = path.join(tmpHome, "daemon.json");
 
-    var configFile = path.join(tmpHome, "daemon.json");
+  // Multi-user mode with no admin set up yet — every project route is
+  // unauthenticated for the duration of this test (matches the bug's
+  // "not authenticated" precondition).
+  var usersFile = path.join(tmpHome, "console", "users.json");
+  fs.mkdirSync(path.dirname(usersFile), { recursive: true });
+  fs.writeFileSync(usersFile, JSON.stringify({
+    multiUser: true,
+    setupCode: "LRE33776",
+    users: [],
+    invites: [],
+    smtp: null,
+  }, null, 2), { mode: 0o600 });
+
+  function startDaemonOn(port) {
+    daemonLog = [];
     fs.writeFileSync(configFile, JSON.stringify({
       port: port,
       host: "127.0.0.1",
@@ -157,38 +220,39 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
       projects: [{ path: projectDir, slug: "asset-auth-project", addedAt: Date.now(), visibility: "public" }],
     }, null, 2), { mode: 0o600 });
 
-    // Multi-user mode with no admin set up yet — every project route is
-    // unauthenticated for the duration of this test (matches the bug's
-    // "not authenticated" precondition).
-    var usersFile = path.join(tmpHome, "console", "users.json");
-    fs.mkdirSync(path.dirname(usersFile), { recursive: true });
-    fs.writeFileSync(usersFile, JSON.stringify({
-      multiUser: true,
-      setupCode: "LRE33776",
-      users: [],
-      invites: [],
-      smtp: null,
-    }, null, 2), { mode: 0o600 });
-
-    daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
+    var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
       env: Object.assign({}, process.env, {
         CLAGENTIC_HOME: tmpHome,
         CLAGENTIC_CONFIG: configFile,
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
-    daemonProc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
-    daemonProc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
-    daemonProc.once("exit", function (code) {
+    daemonProc = proc;
+    proc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
+    proc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
+    proc.once("exit", function (code) {
       if (code !== 0 && code !== null) {
         t.diagnostic("daemon exited with code " + code);
         t.diagnostic("daemon log:\n" + daemonLog.slice(-30).join(""));
       }
     });
+    return waitForDaemonListening(proc, function () { return daemonLog.join(""); }, DAEMON_READY_MS)
+      .then(function () { return waitForServer(port, HTTP_READY_MS); })
+      .then(function () { return port; });
+  }
 
-    return waitForServer(port, DAEMON_READY_MS).then(function () { return port; });
+  // A bind collision on the probed port is a setup race, not a test result:
+  // pick a fresh port and start over. Assertions below never run on a retry.
+  function startDaemon(attemptsLeft) {
+    return findFreePort().then(startDaemonOn).catch(function (err) {
+      if (err && err.portInUse && attemptsLeft > 1) {
+        return killAndWait(daemonProc).then(function () { return startDaemon(attemptsLeft - 1); });
+      }
+      throw err;
+    });
+  }
 
-  }).then(function (port) {
+  startDaemon(PORT_ATTEMPTS).then(function (port) {
     // ── Case 1: unauthenticated GET to a project-scoped .js asset path ──────
     // lr-2895ea: app.js is a PUBLIC shell asset (identical for every user, no
     // per-user data) now served ahead of the auth gate — real 200 + JS MIME,
@@ -283,5 +347,50 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
       }
       done(err);
     });
+  });
+});
+
+// Regression for the readiness defect: a foreign HTTP server already on the
+// daemon's port must NOT count as the daemon being ready.
+test("lr-e33776: a foreign server on the daemon port is reported as a port collision, not as readiness", { timeout: TEST_TIMEOUT_MS }, function (t, done) {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-e33776-collide-"));
+  var foreign = http.createServer(function (req, res) { res.writeHead(404); res.end("foreign"); });
+  var daemonProc = null;
+  var log = [];
+
+  function cleanup() {
+    var p = daemonProc && daemonProc.exitCode === null ? killAndWait(daemonProc) : Promise.resolve();
+    return p.then(function () {
+      return new Promise(function (r) { foreign.close(function () { r(); }); });
+    }).then(function () {
+      try { fs.rmSync(tmpHome, { recursive: true, force: true }); }
+      catch (e) { t.diagnostic("collision test tmpdir cleanup failed: " + e.message); }
+    });
+  }
+
+  foreign.listen(0, "127.0.0.1", function () {
+    var port = foreign.address().port;
+    var configFile = path.join(tmpHome, "daemon.json");
+    fs.writeFileSync(configFile, JSON.stringify({
+      port: port, host: "127.0.0.1", tls: false, debug: false, projects: [],
+    }), { mode: 0o600 });
+    daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
+      env: Object.assign({}, process.env, { CLAGENTIC_HOME: tmpHome, CLAGENTIC_CONFIG: configFile }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    daemonProc.stdout.on("data", function (d) { log.push(d.toString()); });
+    daemonProc.stderr.on("data", function (d) { log.push("[err] " + d.toString()); });
+
+    waitForDaemonListening(daemonProc, function () { return log.join(""); }, DAEMON_READY_MS).then(
+      function () {
+        cleanup().then(function () { done(new Error("readiness reported although a foreign server owns the port")); });
+      },
+      function (err) {
+        cleanup().then(function () {
+          try { assert.strictEqual(err.portInUse, true, "expected a portInUse rejection; got: " + err.message); done(); }
+          catch (e) { done(e); }
+        });
+      }
+    );
   });
 });
