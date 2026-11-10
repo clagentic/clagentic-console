@@ -121,7 +121,9 @@ test("a long reply from the session's agent never collapses", async function (t)
 test("the outbox row of a long armed schedule uses the three-line rule and Expand", async function (t) {
   dom.setupGlobals();
   document.removeEventListener = function () {};
-  var messages = new dom.FakeElement("div");
+  // dom-refs caches the first #messages it is given for the life of the process.
+  var messages = sharedMessages;
+  messages._children = [];
   document.getElementById = function (id) { return id === "messages" ? messages : null; };
   var ob = await import(dom.moduleUrl("scheduled-outbox.js") + "?collapse=outbox");
   try {
