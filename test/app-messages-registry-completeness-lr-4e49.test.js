@@ -114,6 +114,9 @@ var ORIGINAL_CASE_LABELS = [
   "message_delivered", "queued_message_cancelled",
   // The ! command line: the outcome of a command, and its settings.
   "shell_result", "user_shell_settings",
+  // The Team view's agent messages: the answer to a request, and the content-free
+  // nudge that makes the section ask again.
+  "team_traffic", "team_traffic_changed",
   // A send-now message that fell back to the queue; drops its false mark.
 ];
 
