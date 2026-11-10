@@ -46,6 +46,19 @@ function once(id, text, ms) {
 
 function rows(env) { return env.messages.querySelectorAll(".scheduled-queued"); }
 
+// The page mints a requestId per request; the tests that name the frame's other
+// fields compare without it, and the ones about the id read it from the frame.
+function noRequestId(frame) {
+  var copy = Object.assign({}, frame);
+  assert.equal(typeof copy.requestId, "string", "every outbox request carries a requestId");
+  delete copy.requestId;
+  return copy;
+}
+
+function recurring(id, text, ms) {
+  return { id: id, kind: "recurring", every: 60000, createdBy: "browser", text: text, nextAt: Date.now() + (ms || 60000), firedCount: 0 };
+}
+
 test("an armed schedule is an outbox item with its fire time, Fire now and Cancel sized like the queued controls", async function () {
   var env = await boot();
   try {
@@ -80,10 +93,11 @@ test("Fire now sends run-now for that schedule once; Cancel sends cancel for it"
     var items = rows(env);
     items[1].querySelector(".scheduled-queued-fire").click();
     items[0].querySelector(".scheduled-queued-cancel").click();
-    assert.deepEqual(env.frames, [
+    assert.deepEqual(env.frames.map(noRequestId), [
       { type: "send_scheduled_now", id: "si_2" },
       { type: "cancel_scheduled_message", id: "si_1" },
     ]);
+    assert.notEqual(env.frames[0].requestId, env.frames[1].requestId, "each request has its own id");
   } finally { done(env); }
 });
 
@@ -95,7 +109,7 @@ test("Fire now stays available while a turn runs; the server delivers it as a pe
     var fire = rows(env)[0].querySelector(".scheduled-queued-fire");
     assert.equal(fire.getAttribute("aria-disabled"), "false");
     fire.click();
-    assert.deepEqual(env.frames, [{ type: "send_scheduled_now", id: "si_1" }]);
+    assert.deepEqual(env.frames.map(noRequestId), [{ type: "send_scheduled_now", id: "si_1" }]);
   } finally { done(env); }
 });
 
@@ -169,7 +183,7 @@ test("a double click on Fire now sends one send_scheduled_now; the row is busy u
     fire.click();
     fire.click();
     cancel.click();
-    assert.deepEqual(env.frames, [{ type: "send_scheduled_now", id: "si_1" }]);
+    assert.deepEqual(env.frames.map(noRequestId), [{ type: "send_scheduled_now", id: "si_1" }]);
     assert.equal(fire.disabled, true);
     assert.equal(cancel.disabled, true);
     var other = rows(env)[1];
@@ -205,7 +219,7 @@ test("a server error reply frees the row, shows the failure, and the row stays",
     var row = rows(env)[0];
     row.querySelector(".scheduled-queued-cancel").click();
     assert.equal(row.querySelector(".scheduled-queued-cancel").disabled, true);
-    ob.failScheduledRequests("Clagentic: Console could not cancel that: busy");
+    ob.failScheduledRequests("Clagentic: Console could not cancel that: busy", env.frames[0].requestId);
     assert.equal(row.querySelector(".scheduled-queued-fire").disabled, false);
     assert.equal(row.querySelector(".scheduled-queued-cancel").disabled, false);
     assert.match(row.querySelector(".scheduled-queued-error").textContent, /could not cancel that/);
@@ -215,11 +229,96 @@ test("a server error reply frees the row, shows the failure, and the row stays",
   } finally { done(env); }
 });
 
-test("the app's error message handler frees rows waiting on an answer", async function () {
-  var fs = require("fs");
-  var path = require("path");
-  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", "app-messages.js"), "utf8");
-  assert.match(src, /error: function \(msg\) \{\s*removePreThinking\(\);\s*failScheduledRequests\(msg\.text\);/);
+// Frames go through the app's real message handler, as the socket delivers them.
+async function handler() {
+  // The fake DOM does not parse innerHTML, so a system message's text span is
+  // absent; a stub stands in so the real error handler can run to its end.
+  var find = dom.FakeElement.prototype.querySelector;
+  if (!find._scheduledOutboxStub) {
+    var patched = function (sel) { return find.call(this, sel) || (sel === ".sys-text" ? {} : null); };
+    patched._scheduledOutboxStub = true;
+    dom.FakeElement.prototype.querySelector = patched;
+  }
+  return await import(dom.moduleUrl("app-messages.js"));
+}
+
+test("an error frame through the app's handler: another request's id or none frees no row, the row's own id frees it with the failure", async function () {
+  var env = await boot();
+  try {
+    var app = await handler();
+    env.rl.applyScheduledInputList(list("A", [once("si_1", "first"), once("si_2", "second")]));
+    var items = rows(env);
+    items[0].querySelector(".scheduled-queued-cancel").click();
+    items[1].querySelector(".scheduled-queued-fire").click();
+    var own = env.frames[0].requestId;
+    app.processMessage({ type: "error", text: "Clagentic: Console could not schedule that: unrelated" });
+    app.processMessage({ type: "error", text: "another request", requestId: "sr_other" });
+    [0, 1].forEach(function (i) {
+      assert.equal(items[i].querySelector(".scheduled-queued-cancel").disabled, true, "row " + i + " still waits");
+      assert.equal(items[i].querySelector(".scheduled-queued-error").textContent, "", "no false failure on row " + i);
+    });
+    app.processMessage({ type: "error", text: "Clagentic: Console could not cancel that: busy", requestId: own });
+    assert.equal(items[0].querySelector(".scheduled-queued-cancel").disabled, false);
+    assert.match(items[0].querySelector(".scheduled-queued-error").textContent, /could not cancel that: busy/);
+    assert.equal(items[1].querySelector(".scheduled-queued-fire").disabled, true, "the other row is still waiting");
+    assert.equal(items[1].querySelector(".scheduled-queued-error").textContent, "");
+  } finally { done(env); }
+});
+
+test("a recurring schedule stays listed after Fire now; the server's answer enables its controls again", async function () {
+  var env = await boot();
+  try {
+    var app = await handler();
+    env.rl.applyScheduledInputList(list("A", [recurring("si_r", "every minute")]));
+    var fire = rows(env)[0].querySelector(".scheduled-queued-fire");
+    fire.click();
+    assert.equal(fire.disabled, true);
+    var requestId = env.frames[0].requestId;
+    // The server's list after the fire still has the record, with a new next time.
+    env.rl.applyScheduledInputList(list("A", [recurring("si_r", "every minute", 120000)]));
+    app.processMessage({ type: "scheduled_request_result", requestId: requestId, id: "si_r", ok: true });
+    var row = rows(env)[0];
+    assert.equal(row.querySelector(".scheduled-queued-fire").disabled, false);
+    assert.equal(row.querySelector(".scheduled-queued-cancel").disabled, false);
+    assert.equal(row.querySelector(".scheduled-queued-error").textContent, "");
+    assert.equal(rows(env).length, 1, "the row stays listed");
+    assert.match(row.querySelector(".scheduled-queued-time").textContent, /\(1m \d+s\)|\(2m/, "with its next fire time");
+    row.querySelector(".scheduled-queued-fire").click();
+    assert.equal(env.frames.length, 2, "Fire now can be used again");
+  } finally { done(env); }
+});
+
+test("an answer for another request frees no row", async function () {
+  var env = await boot();
+  try {
+    var app = await handler();
+    env.rl.applyScheduledInputList(list("A", [recurring("si_r", "x")]));
+    var fire = rows(env)[0].querySelector(".scheduled-queued-fire");
+    fire.click();
+    app.processMessage({ type: "scheduled_request_result", requestId: "sr_other", id: "si_r", ok: true });
+    app.processMessage({ type: "scheduled_request_result", id: "si_r", ok: true });
+    assert.equal(fire.disabled, true);
+  } finally { done(env); }
+});
+
+test("a reconnect with a request in flight frees the row and the list redraws it", async function () {
+  var env = await boot();
+  try {
+    var ob = await import(dom.moduleUrl("scheduled-outbox.js"));
+    env.rl.applyScheduledInputList(list("A", [recurring("si_r", "x")]));
+    var row = rows(env)[0];
+    row.querySelector(".scheduled-queued-fire").click();
+    assert.equal(row.querySelector(".scheduled-queued-fire").disabled, true);
+    // The connection drops after the send: no list push and no error ever comes.
+    ob.clearScheduledOutboxOnReconnect();
+    assert.equal(row.querySelector(".scheduled-queued-fire").disabled, false);
+    assert.equal(row.querySelector(".scheduled-queued-cancel").disabled, false);
+    env.rl.applyScheduledInputList(list("A", [recurring("si_r", "x")]));
+    var redrawn = rows(env)[0];
+    assert.equal(redrawn.querySelector(".scheduled-queued-fire").disabled, false, "not left disabled after the redraw");
+    redrawn.querySelector(".scheduled-queued-fire").click();
+    assert.equal(env.frames.length, 2);
+  } finally { done(env); }
 });
 
 test("a timer fire, seen as a list push without that id, removes the row live and frees nothing stale", async function () {

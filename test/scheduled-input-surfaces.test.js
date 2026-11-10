@@ -207,6 +207,40 @@ test("send now by id, and without an id, delivers as scheduled-now even into a r
   } finally { t.cleanup(); }
 });
 
+test("a requestId on send now and cancel is echoed on the result and on the error; without one nothing extra is sent", async function () {
+  var t = setup();
+  try {
+    t.handle({ type: "schedule_message", text: "a", resetsAt: t.clock.now() + 60 * MIN });
+    t.handle({ type: "schedule_message", text: "b", resetsAt: t.clock.now() + 90 * MIN });
+    t.handle({ type: "schedule_message", text: "c", resetsAt: t.clock.now() + 95 * MIN });
+    var byText = {};
+    t.armed().forEach(function (r) { byText[r.preview] = r.id; });
+    t.sent.length = 0;
+
+    t.handle({ type: "send_scheduled_now", id: byText.a, requestId: "sr_1" });
+    await fakes.flush();
+    t.handle({ type: "cancel_scheduled_message", id: byText.b, requestId: "sr_2" });
+    assert.deepEqual(t.sent.filter(function (m) { return m.type === "scheduled_request_result"; }), [
+      { type: "scheduled_request_result", requestId: "sr_1", id: byText.a, ok: true },
+      { type: "scheduled_request_result", requestId: "sr_2", id: byText.b, ok: true },
+    ]);
+
+    // A refusal names the request; the id is gone, so the cancel is refused.
+    t.sent.length = 0;
+    t.handle({ type: "cancel_scheduled_message", id: byText.b, requestId: "sr_3" });
+    t.handle({ type: "send_scheduled_now", id: byText.a, requestId: "sr_4" });
+    await fakes.flush();
+    assert.deepEqual(t.sent.map(function (m) { return m.type + ":" + m.requestId; }), ["error:sr_3", "error:sr_4"]);
+
+    // Without a requestId: the replies are what they were, and a success says nothing.
+    t.sent.length = 0;
+    t.handle({ type: "cancel_scheduled_message", id: byText.c });
+    t.handle({ type: "cancel_scheduled_message", id: byText.c });
+    await fakes.flush();
+    assert.deepEqual(t.sent.filter(function (m) { return m.type === "scheduled_request_result" || m.type === "error"; }), []);
+  } finally { t.cleanup(); }
+});
+
 test("a browser cannot cancel or send another session's input", async function () {
   var other = fakes.makeSession(2, "vendor-2");
   var t = setup([other]);
