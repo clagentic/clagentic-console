@@ -89,7 +89,7 @@ if (args[0] === "release") {
   }
 }
 
-// --- `open-session` / `send-input` / `list-sessions` / `list-outbound`: drive a session through the running daemon ---
+// --- `open-session` / `send-input` / `end-session` / `list-sessions` / `list-outbound`: drive a session through the running daemon ---
 // Positional verbs, handled before flag parsing: `clagentic-console send-input --project <slug> ...`.
 var { SESSION_VERBS, runSessionVerb } = require("../lib/cli/session-subcommands");
 if (SESSION_VERBS.indexOf(args[0]) !== -1) {
@@ -200,6 +200,7 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
   console.log("       clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|-> [--vendor <id>] [--agent <name>] [--name <session-name>] [--visibility shared|private] [--permission-mode <mode>] [--settings <path>] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Open a session and run a first prompt (prints JSON)");
   console.log("       clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) --prompt <text|-> [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Send input to a session, resuming it if needed (prints JSON; exit 3 ambiguous, 4 not found by address)");
+  console.log("       clagentic-console end-session (--project <slug> --session <id> | --to <address>) [--from <name>] [--from-session <id>] [--reason <text>]  Stand one live session down, even one blocked on a permission prompt; history is kept and the session resumes by id (prints JSON; exit 3 ambiguous, 4 not found by address)");
   console.log("       clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <id>] [--state live|idle|reaped|any]  List the console's sessions (prints JSON)");
   console.log("       clagentic-console list-outbound --session <vendor-session-id> [--project <slug>] [--since <dur>] [--kind sent|opens]  List what a session (by vendor session id, see list-sessions) sent out with send-input and open-session: target, prompt, time, initiator (prints JSON; read-only; kept 30 days by default)");
   console.log("       clagentic-console schedule-input create --session <id> [--project <slug>] (--in <dur> | --at <time> | --every <dur> (--until <time> | --count <n>)) (--prompt <text|-> | --prompt-file <path>)  Send text into a session later, once or on a repeat with an end (prints JSON)");
