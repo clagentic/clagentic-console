@@ -57,6 +57,7 @@ async function withShell(o, fn) {
         onGetUserShellSettings: function () { return userShellSettings.readUserShellSettings(config); },
         onSetUserShellSettings: function (values) { userShellSettings.applySettingChanges(config, values); },
         broadcastAll: function (m) { h.broadcast.push(m); },
+        onProcessingChanged: o.onProcessingChanged,
       },
       getSessionForWs: function () { return session; },
     });
@@ -539,5 +540,55 @@ test("busy clears even when recording the result throws", async function () {
       h.server.sm.sendAndRecord = real;
     }
     assert.equal(h.session.isProcessing, false);
+  });
+});
+
+// ------------------------------------------- every path out reaches the result
+
+function quietly(fn) {
+  var logged = console.error;
+  console.error = function () {};
+  return Promise.resolve().then(fn).then(function (v) { console.error = logged; return v; }, function (e) { console.error = logged; throw e; });
+}
+
+test("an adapter that resolves with nothing ends in one error result, not a stuck session", async function () {
+  await withShell({ run: function () { return Promise.resolve(undefined); } }, async function (h) {
+    await quietly(function () { return h.say(READ_ONLY); });
+    assert.equal(h.session.isProcessing, false, "busy cleared");
+    assert.equal(h.results().length, 1, "one result sent");
+    assert.equal(h.results()[0].error, true);
+    assert.equal(h.recorded().length, 1);
+    h.handler.handleUserShellMessage(h.ws, { type: "stop" });
+    await settle();
+    assert.equal(h.results().length, 1, "no second result from a later stop");
+  });
+});
+
+test("a throw inside the busy marking ends in one error result and clears busy", async function () {
+  var armed = true;
+  await withShell({ onProcessingChanged: function () { if (armed) throw new Error("callback broke"); } }, async function (h) {
+    await quietly(function () { return h.say(READ_ONLY); });
+    armed = false;
+    assert.equal(h.session.isProcessing, false, "busy cleared");
+    assert.equal(h.runs.length, 0, "the command never started");
+    assert.equal(h.results().length, 1, "one result sent");
+    assert.equal(h.results()[0].error, true);
+    assert.equal(h.recorded().length, 1);
+  });
+});
+
+test("a ! command after a failed one is accepted, not refused as busy", async function () {
+  var first = true;
+  await withShell({
+    run: function () {
+      if (first) { first = false; return Promise.resolve(undefined); }
+      return Promise.resolve(ok("second"));
+    },
+  }, async function (h) {
+    await quietly(function () { return h.say(READ_ONLY); });
+    await h.say(READ_ONLY);
+    assert.equal(h.refusals().length, 0, "nothing refused");
+    assert.equal(h.runs.length, 2);
+    assert.equal(h.results()[1].output, "second");
   });
 });
