@@ -310,6 +310,27 @@ This function exists in one place. The rest of Clay's codebase does not know ven
 5. Define `runtime_specific` events (data unique to this runtime)
 6. Document `adapterOptions.VENDOR` schema
 7. Verify existing Clay UI does not break with the new capability set
+8. Decide whether the query handle takes the optional `runUserShellCommand` (see 7.1). Leave it out and the console offers no `!` mode for sessions of that agent.
+
+### 7.1 `runUserShellCommand` (interface 0.6.0)
+
+The composer's `!` command line runs a command the person typed and puts it in the conversation with no model turn. The console decides whether it may run (the mode setting, OS-user isolation, plan mode, and the permission gate as a Bash tool call, in that order: `docs/guides/architecture.md`, "The composer's `!` command line"); the adapter only runs it.
+
+```
+handle.runUserShellCommand(command, cwd, timeoutMs, maxOutputBytes, { signal })
+  -> Promise<{ exitCode, durationMs, output, truncated, timedOut }>   // + interrupted: true when interrupted
+```
+
+An adapter that implements it:
+
+- runs the command where the session runs (`cwd`), as the console process and never as another user, and does not ask for approval (the gate has been passed);
+- stops it at `timeoutMs` (`timedOut: true`) and when `signal` aborts (`interrupted: true`), killing what the command started, and stops it too when the query is aborted or closed;
+- keeps at most `maxOutputBytes` of output, ends it with `[output truncated at N bytes]` and sets `truncated: true` when it cut;
+- records the command in the agent's conversation without starting a turn: the Claude adapter pushes a `shouldQuery: false` user message; the Codex adapter calls `thread/shellCommand` with `timeoutMs` and keeps that turn's notifications out of the event stream;
+- treats the command and its output as data when it writes them into the conversation (the Claude adapter escapes `<` and `>` so output cannot close the record's wrapper early);
+- rejects, rather than resolving with a made-up result, when the agent refuses the request.
+
+Migration from 0.5.0: nothing to change for an adapter that does not want the mode. The method is in `QUERY_HANDLE_OPTIONAL_METHODS`, not `QUERY_HANDLE_METHODS`.
 
 ---
 

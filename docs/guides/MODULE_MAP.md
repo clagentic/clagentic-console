@@ -60,6 +60,8 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `permission-mode-policy.js` | The one check every permission mode passes before it is applied: known mode, bypass only when the server allows it, Don't ask and Auto only for a vendor that declares them |
 | `permission-settings.js` | The server-wide permission settings (Auto-approve read-only tools, mode for sessions opened by the CLI or a trigger): defaults, which request fields are accepted, and the precedence that picks an opened session's mode |
 | `project-permission-settings.js` | The admin-only `set_permission_settings` message and the admin check shared with the server default mode |
+| `project-user-shell.js` | `shell`, `set_user_shell_settings` and the `stop` that interrupts a command: the composer's `!` command line. Applies the checks in order (setting, OS-user mode, plan mode, the Bash permission gate), calls the query handle's `runUserShellCommand` and records the `shell_result` |
+| `user-shell-settings.js` | The `!` command line's settings (on or off, timeout, output cap): defaults, ranges, which request fields are accepted |
 | `sdk-skill-discovery.js` | Skill directory scanning, shell segment splitting, SDK/filesystem skill merging |
 | `sdk-message-queue.js` | Async iterable message queue for streaming input to SDK |
 | `sdk-message-processor.js` | SDK stream event processing (message_start, content_block_*), sub-agent message routing |
@@ -86,7 +88,8 @@ YOKE is the vendor-agnostic interface layer. Each adapter implements the same co
 | Module | Concern |
 |--------|---------|
 | `yoke/index.js` | Adapter factory, wraps createQuery with project instructions |
-| `yoke/interface.js` | YOKE interface contract definition |
+| `yoke/interface.js` | YOKE interface contract definition and its migration log (0.6.0 added the optional `runUserShellCommand`) |
+| `yoke/user-shell.js` | Runs a command typed with `!` (shell, timeout, output cap, process-group kill) and formats the transcript record of it; used by the Claude adapter and for the Codex output cap |
 | `yoke/adapters/claude.js` | Claude adapter using `@anthropic-ai/claude-agent-sdk`. In-process + worker (OS user isolation) paths |
 | `yoke/adapters/permission-relay.js` | The wire shape of a tool-permission ask between a Claude worker and the daemon, including the SDK's presentation hints (`suppressAlwaysAllowRule`, `defaultToNo`, `matchedAskRule`); both sides build and read it here |
 | `yoke/adapters/effort-control.js` | Changing a running Claude session's effort through `applyFlagSettings({effortLevel})`; shared by the in-process handle and the worker |

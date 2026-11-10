@@ -13,6 +13,7 @@ The console never adds or removes what an agent may do: an agent brings its own 
 - [A session keeps its own mode](#a-session-keeps-its-own-mode)
 - [Changing a default mode](#changing-a-default-mode)
 - [What an "Allow for session" answer covers](#what-an-allow-for-session-answer-covers)
+- [Commands typed with !](#commands-typed-with-)
 - [A loop that turns hooks off](#a-loop-that-turns-hooks-off)
 - [The browser extension adds tools](#the-browser-extension-adds-tools)
 - [What is not changed by these settings](#what-is-not-changed-by-these-settings)
@@ -26,6 +27,7 @@ The console never adds or removes what an agent may do: an agent brings its own 
 | Mode for sessions opened by the CLI or a trigger | Server settings, Security | Accept edits | An admin. In single-user mode, the authenticated connection. |
 | `--permission-mode` on `open-session` | The CLI and the daemon IPC request | Not given: the setting above applies | The caller of that one `open-session`. |
 | Apply to running sessions | The default-mode picker in Server settings and Project settings | Off, for each change | Whoever may change that default. |
+| Run commands typed with `!` | Server settings, Security | On | An admin. In single-user mode, the authenticated connection. |
 
 The first, third and fourth rows are stored with the other server settings in `daemon.json` as `autoApproveReadOnly` and `openedSessionMode`. A value equal to its default is not written. They are read at the moment they apply, so a change needs no restart.
 
@@ -104,6 +106,23 @@ The picker offers Don't ask and Auto only when the project's default agent decla
 "Allow for session" on a permission prompt stores a grant for the whole tool, not for the one call. A grant on `Bash` covers every later `Bash` call in that session, whatever the command. The grant is kept across a daemon restart and a resume.
 
 The way back is the list-and-revoke dialog for the session's grants: remove the tool there and the next call asks again. If you want to approve one command at a time, answer "Allow" rather than "Allow for session".
+
+## Commands typed with !
+
+A message that starts with `!` and has a command after it runs as a shell command in the session's folder. Its output is shown in the conversation and added to what the agent has seen, and no turn starts. The `!` line is for the person at the keyboard; nothing in it is offered to an agent.
+
+It is checked in this order, and the first check that applies decides:
+
+1. **The setting is off.** The message is sent as ordinary text, `!` included, and no command runs.
+2. **OS-user isolation is on.** It is refused, with the reason on screen. The console has no way yet to run a command as the session owner's own account, and it never runs one as the daemon's account on a user's behalf.
+3. **The session is in plan mode.** It is refused, with the reason on screen: plan mode does not run commands.
+4. **The permission gate.** The command goes through the same check a `Bash` tool call goes through, so the session's mode and your allow rules decide as they do for the agent's own commands: a read-only command on the console's list runs, an "Allow for session" answer on `Bash` covers it, bypass mode runs it, and otherwise the permission prompt opens and the command runs only if you approve it. The console's gate does not treat Accept edits specially for `Bash`, so a command typed with `!` asks in that mode too; any shortcut the agent's own CLI applies in Accept edits happens before this gate and does not apply to the `!` line.
+
+A command also needs the agent to be idle and to have a live process (send a message first in a brand-new session), and in a multi-user server the user needs the terminal permission. A refusal is shown to the person who typed it, nothing runs, and the line goes back into an empty composer.
+
+**Limits.** A command is stopped after **10 minutes** and keeps at most **256 KiB** of output; past the cap the output ends with `[output truncated at N bytes]`, and a timed-out command says so. Stopping the agent while a command runs (the stop button) stops the command too. Both limits are `daemon.json` settings, `userShellTimeoutMinutes` (1 to 1440) and `userShellMaxOutputKiB` (1 to 4096), and an admin can change them and the switch with `set_user_shell_settings`; a value equal to its default is not written. They are read each time a command is sent.
+
+**What it is not.** The command is not sandboxed: it runs with the account the console runs as, in the session's folder, as it would in a terminal there. The gate is the only check, which is why a permission prompt for it is the same prompt the agent's own command would get.
 
 ## A loop that turns hooks off
 
