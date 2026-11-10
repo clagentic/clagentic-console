@@ -61,11 +61,14 @@ An address is at most 192 characters. `--project` may be given beside `--to`, an
 
 An address names a class of sessions, and the console never guesses within one. Among the sessions an address matches, the highest state tier that has any match decides:
 
-1. `live`: a turn is running, or the session is blocked on a pending prompt.
+1. running: `state` is `live` and `pendingPrompts` is empty (a turn is running).
 2. `idle`: a runtime is attached, nothing is running and nothing is pending.
-3. `reaped`: no runtime (the idle reaper, a daemon restart). Input resumes it.
+3. prompt-blocked: `state` is `live` and `pendingPrompts` is not empty. The session is stuck on the operator, so it ranks below an idle one.
+4. `reaped`: no runtime (the idle reaper, a daemon restart). Input resumes it.
 
-Exactly one match in the deciding tier: the input goes to it. Several in that tier: nothing is delivered and the result is `ambiguous`, with the tied sessions as `candidates` (the exit code is 3). Lower tiers are not consulted once a higher tier matched. No match at all is `not-found` (exit code 4). An address that does not parse, or names an unknown project, is `refused`.
+The split of `live` into running and prompt-blocked applies to resolution only. `list-sessions` and the candidates still report `live` for both, with `pendingPrompts` telling them apart.
+
+Exactly one match in the deciding tier: the input goes to it. Several in that tier: nothing is delivered and the result is `ambiguous`, with the tied sessions as `candidates` (the exit code is 3). Lower tiers are not consulted once a higher tier matched. `answer-prompt --to` does not use the tiers: it picks the matched session that holds the named request. No match at all is `not-found` (exit code 4). An address that does not parse, or names an unknown project, is `refused`.
 
 When a result is `ambiguous`, pick a candidate and send again with `--project <slug> --session <consoleSessionId>`, or name the session (below).
 
@@ -309,7 +312,7 @@ clagentic-console answer-prompt (--project <slug> --session <id> | --to <address
 |---|---|---|
 | `--project <slug>` | with `--session` | The registered project slug. |
 | `--session <id>` | with `--project` | The console session id or the vendor-assigned id. |
-| `--to <address>` | one target | See [Addressing a session](#addressing-a-session). The same resolution as `end-session`: an address that matches several sessions answers none and gives `ambiguous` with the candidates. |
+| `--to <address>` | one target | See [Addressing a session](#addressing-a-session). The address is narrowed by `--request`, not by the tier order: the target is the one session the address matches that holds that request, whatever its tier (a prompt-blocked session is answered even when an idle twin exists). No matched session holding it is `not-found`; several holding it is `ambiguous` with the candidates. |
 | `--request <id>` | yes | The request id of the pending prompt, as `list-sessions` shows it. |
 | `--decision <value>` | yes | The answer, by kind (below). |
 | `--from <name>` | no | Who is answering, recorded as `caller:<name>` on the prompt's resolved event, which the session shows. 1 to 64 of letters, digits and `. _ @ / + -`. A label the caller gives itself, under the same OS-user trust as `send-input`. Without it the source is `user`. |
@@ -329,7 +332,7 @@ Prints one JSON object: `{ "ok", "result", "requestId", "kind", "source" }`, wit
 | `result` | Meaning |
 |---|---|
 | `answered` | The prompt resolved with the decision. |
-| `not-found` | No pending request with that id in that session, or the session has no runtime. Nothing changed. |
+| `not-found` | No pending request with that id in that session (with `--to`: in any session the address matches), or the session has no runtime. Nothing changed. |
 | `already-settled` | The request was settled before this call; `settledBy` names its source when the session recorded one. Nothing changed. |
 | `invalid` | The kind does not accept the decision; `reason` says why. The prompt stays pending. |
 | `ambiguous` | `--to` matched several sessions; `candidates` lists them. Nothing was answered. |
