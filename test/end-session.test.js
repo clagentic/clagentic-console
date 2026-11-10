@@ -248,6 +248,25 @@ test("a failing abort does not leave the query open or the prompts pending", fun
   assert.ok(errors.some(function (l) { return l.indexOf("could not abort") !== -1; }));
 });
 
+test("a failing prompt settle is reported: ok false, failures names prompts, result stays ended", function () {
+  var s = liveSession(11);
+  var w = makeWorld([s]);
+  var registry = promptsFor(w.sm);
+  registry.cancelSession = function () { throw new Error("settle broke"); };
+  var original = console.error;
+  console.error = function () {};
+  var r;
+  try { r = w.input.endSession({ projectSlug: "p", sessionId: "11" }); }
+  finally { console.error = original; }
+  assert.equal(r.ok, false);
+  assert.equal(r.result, "ended");
+  assert.deepEqual(r.failures, [{ step: "prompts", error: "settle broke" }]);
+  assert.equal(s.abortController.aborted, 1);
+  assert.equal(s.queryInstance.closed, 1);
+  var entries = w.ledger.readAttributed().concat(w.ledger.readUnattributed());
+  assert.deepEqual(entries[0].failures, r.failures);
+});
+
 test("the IPC handler passes the end_session fields through", function () {
   var seen;
   var fake = { endSession: function (req) { seen = req; return { ok: true }; } };
