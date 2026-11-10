@@ -55,60 +55,25 @@ var net = require("net");
 var http = require("http");
 var crypto = require("crypto");
 var { spawn } = require("child_process");
+var {
+  waitForServer,
+  waitForDaemonListening,
+  killAndWait,
+  startOnFreePort,
+} = require("./helpers/daemon-readiness");
 
 // ── constants ────────────────────────────────────────────────────────────────
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var TEST_TIMEOUT_MS = 45000;
 var DAEMON_READY_MS = 20000;
+var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
+var PORT_ATTEMPTS = 5;
 var PROJECT_SLUG = "ws-echo-project";
 var SESSION_COOKIE_NAME = "relay_auth_user";
 var SESSION_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // matches server-auth.js TOKEN_TTL_MS
 
 // ── helpers (mirrors shell-asset-public-before-auth-lr-2895ea.test.js) ─────
-
-function findFreePort() {
-  return new Promise(function (resolve, reject) {
-    var srv = net.createServer();
-    srv.listen(0, "127.0.0.1", function () {
-      var p = srv.address().port;
-      srv.close(function () { resolve(p); });
-    });
-    srv.on("error", reject);
-  });
-}
-
-function waitForServer(port, timeoutMs) {
-  var start = Date.now();
-  return new Promise(function (resolve, reject) {
-    function attempt() {
-      if (Date.now() - start > timeoutMs) {
-        reject(new Error("daemon did not respond within " + timeoutMs + " ms"));
-        return;
-      }
-      var req = http.get("http://127.0.0.1:" + port + "/", function (res) {
-        res.resume();
-        if (res.statusCode) { resolve(); }
-        else { setTimeout(attempt, 250); }
-      });
-      req.on("error", function () { setTimeout(attempt, 250); });
-      req.setTimeout(500, function () { req.destroy(); });
-    }
-    attempt();
-  });
-}
-
-function killAndWait(proc) {
-  return new Promise(function (resolve) {
-    if (proc.exitCode !== null) { resolve(); return; }
-    proc.once("exit", resolve);
-    try { proc.kill("SIGTERM"); } catch (_) {}
-    setTimeout(function () {
-      try { proc.kill("SIGKILL"); } catch (_) {}
-      resolve();
-    }, 4000);
-  });
-}
 
 // Raw WS upgrade over a plain TCP socket. Reads only the response headers
 // (up to the blank line terminating them) — sufficient to assert the 101
@@ -179,8 +144,12 @@ test("lr-4c58ae: a cookie-authed upgrade that also offers a ticket subprotocol e
     });
   });
 
-  findFreePort().then(function (port) {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-4c58ae-"));
+  // Readiness is the daemon's own listen line, then an HTTP check; a port taken
+  // between probe and bind restarts this setup on a fresh port (bounded), so the
+  // assertions below never run against a foreign server.
+  function startDaemonOn(port) {
+    daemonLog = [];
+    if (!tmpHome) tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-4c58ae-"));
     var projectDir = path.join(tmpHome, PROJECT_SLUG);
     fs.mkdirSync(projectDir, { recursive: true });
 
@@ -246,9 +215,12 @@ test("lr-4c58ae: a cookie-authed upgrade that also offers a ticket subprotocol e
       }
     });
 
-    return waitForServer(port, DAEMON_READY_MS).then(function () { return port; });
+    return waitForDaemonListening(daemonProc, function () { return daemonLog.join(""); }, DAEMON_READY_MS)
+      .then(function () { return waitForServer(port, HTTP_READY_MS); })
+      .then(function () { return port; });
+  }
 
-  }).then(function (port) {
+  startOnFreePort(startDaemonOn, function () { return daemonProc; }, PORT_ATTEMPTS).then(function (port) {
     var cookie = SESSION_COOKIE_NAME + "=" + sessionToken;
 
     // ── Case 1: cookie-authed, NO subprotocol offered ───────────────────────
