@@ -472,7 +472,9 @@ test("a cancelled reply carries the message text; other answers do not", async f
 
 var ID_C = "33333333-3333-4333-8333-333333333333";
 var ID_D = "44444444-4444-4444-8444-444444444444";
-function frameOf(h, isResult) { queuedChat.settleTurn(h.session, isResult); }
+// A turn's frames reach the session only through the message processor; the end of a turn
+// settles nothing, it only records where the next batch starts.
+function frameOf(h, isResult) { if (isResult) queuedChat.markTurnEnd(h.session); }
 function droppedReplies(h) { return h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled" && m.result === "dropped"; }); }
 function answers(h) { return h.replies().map(function (r) { return r.result; }); }
 
@@ -506,6 +508,8 @@ test("the batch representative: false, the whole batch never runs, every member 
     frameOf(h, false); // the next turn runs without the dropped batch
     queuedChat.consume(h.session, [ID_C]);
     frameOf(h, true);
+    assert.deepEqual(droppedReplies(h), [], "a turn's end drops nothing");
+    queuedChat.settleIdle(h.session, false); // nothing runs for the grace period
     assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.text]; }), [[ID_A, "first"], [ID_B, "second"]]);
     assert.equal(h.records().length, 1, "only the message that ran is recorded");
     assert.deepEqual(h.delivered().map(function (m) { return m.messageId; }), [ID_C], "the later message was not caught up in it");
@@ -521,14 +525,16 @@ test("a held-back uuid: false with a pending-cancel mark, dropped by the drain; 
     assert.deepEqual(answers(h), ["pending"]);
     frameOf(h, false); // the running turn continues
     assert.equal(droppedReplies(h).length, 0, "not decided mid-turn: a fold-in could still take it");
-    frameOf(h, true); // it ends and the drain drops the message: no frame ever names it
+    frameOf(h, true);
+    assert.equal(droppedReplies(h).length, 0, "nor at the turn's end: the agent may run it as the next turn");
+    queuedChat.settleIdle(h.session, false); // idle for the grace period: no frame ever names it
     var dropped = droppedReplies(h);
     assert.equal(dropped.length, 1);
     assert.equal(dropped[0].text, "held");
     assert.equal(h.records().length, 0);
     queuedChat.consume(h.session, [ID_A]);
     assert.equal(h.delivered().length, 0, "never shown as delivered");
-    frameOf(h, true);
+    queuedChat.settleIdle(h.session, false);
     assert.equal(droppedReplies(h).length, 1, "reported once");
   } finally { h.done(); }
 });
@@ -547,14 +553,14 @@ test("a held-back uuid the running turn folds in is delivered, not dropped", asy
   } finally { h.done(); }
 });
 
-test("no turn runs after a false cancel: the idle settle reports the message dropped with its text; a running turn is left to its result", async function () {
+test("no turn runs after a false cancel: the idle settle reports the message dropped with its text; a running turn leaves it alone", async function () {
   var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
   try {
     h.send({ type: "message", text: "idle drop", messageId: ID_A });
     h.send({ type: "cancel_queued_message", messageId: ID_A });
     await tick(); await tick();
     assert.equal(queuedChat.hasUnconfirmed(h.session), true);
-    assert.deepEqual(queuedChat.settleIdle(h.session, true), [], "a turn is running: its result settles it");
+    assert.deepEqual(queuedChat.settleIdle(h.session, true), [], "a turn is running: left alone");
     assert.deepEqual(queuedChat.settleIdle(h.session, false), [ID_A]);
     assert.equal(droppedReplies(h)[0].text, "idle drop");
     assert.equal(queuedChat.hasUnconfirmed(h.session), false);
@@ -621,6 +627,8 @@ test("a dropped reply names its cause: not taken by the turn, or the query close
     await tick(); await tick();
     frameOf(h, false);
     frameOf(h, true);
+    assert.deepEqual(droppedReplies(h), [], "a turn's end drops nothing");
+    queuedChat.settleIdle(h.session, false);
     assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.cause]; }), [[ID_A, "not_taken"], [ID_B, "not_taken"]]);
     h.send({ type: "message", text: "three", messageId: ID_C });
     queuedChat.dropAll(h.session);
@@ -642,12 +650,13 @@ test("a representative cancel drops the batch dequeued for the running turn; a m
     frameOf(h, false);
     queuedChat.consume(h.session, [ID_C]); // folded into the running turn
     frameOf(h, true);
+    queuedChat.settleIdle(h.session, false);
     assert.deepEqual(droppedReplies(h).map(function (m) { return m.messageId; }), [ID_A, ID_B]);
     assert.deepEqual(h.delivered().map(function (m) { return m.messageId; }), [ID_C]);
   } finally { h.done(); }
 });
 
-test("the message processor delivers a message named on a frame before it settles the turn: through the frame path, consume then settle", function () {
+test("the message processor delivers a message named on a frame; the result frame drops nothing, only the idle settle does", function () {
   var { attachMessageProcessor } = require("../lib/sdk-message-processor.js");
   var sm = {
     skillMeta: [], workflowMeta: [], skillNames: [], slashCommands: null, currentModel: null, _savedDefaultModel: null,
@@ -680,8 +689,51 @@ test("the message processor delivers a message named on a frame before it settle
     processor.processSDKMessage(session, { yokeType: "status", status: null });
     assert.deepEqual(events, [], "nothing is settled mid-turn");
     processor.processSDKMessage(session, { yokeType: "result", userMessageUuids: [ID_A] });
-    assert.deepEqual(events, [["delivered", ID_A], ["dropped", ID_D, "not_taken"]], "named on the result frame: delivered; not named: dropped after it");
+    assert.deepEqual(events, [["delivered", ID_A]], "named on the result frame: delivered; not named: still waiting");
+    assert.equal(queuedChat.has(session, ID_D), true);
     assert.equal(queuedChat.has(session, ID_B), true, "a message never in doubt keeps waiting");
     assert.equal(queuedChat.has(session, ID_C), true);
+    queuedChat.settleIdle(session, false);
+    assert.deepEqual(events[1], ["dropped", ID_D, "not_taken"], "dropped only by the idle settle");
   });
+});
+
+function processorFor() {
+  var { attachMessageProcessor } = require("../lib/sdk-message-processor.js");
+  var sm = {
+    skillMeta: [], workflowMeta: [], skillNames: [], slashCommands: null, currentModel: null, _savedDefaultModel: null,
+    sendAndRecord: function () {}, sendToSession: function () {}, saveSessionFile: function () {}, broadcastSessionList: function () {},
+    modelsByVendor: {}, availableModels: [], availableVendors: [], installedVendors: [],
+  };
+  return attachMessageProcessor({
+    sm: sm, send: function () {}, slug: "t", cwd: "/tmp", pushModule: null,
+    getNotificationsModule: function () { return null; }, adapter: { vendor: "claude" },
+    onProcessingChanged: function () {}, onTurnDone: null, onAutoTitle: null, opts: {},
+    discoverSkillDirs: function () { return []; }, mergeSkills: function () { return []; }, discoverWorkflows: function () { return []; },
+    discoverSkillsWithMeta: function () { return []; }, mergeSkillsWithMeta: function () { return []; }, getSDK: null,
+  });
+}
+
+test("a message cancelled during an already-running turn stays pending through that turn's result, and a later turn delivers it once", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    var processor = processorFor();
+    h.send({ type: "message", text: "cancelled mid-turn", messageId: ID_A });
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    assert.deepEqual(answers(h), ["pending"]);
+    processor.processSDKMessage(h.session, { yokeType: "status", status: null }); // the running turn goes on
+    processor.processSDKMessage(h.session, { yokeType: "result" }); // and ends without naming the message
+    assert.equal(droppedReplies(h).length, 0, "not dropped at that turn's result");
+    assert.equal(queuedChat.has(h.session, ID_A), true, "still tracked: the agent runs it as the next turn");
+    assert.equal(h.records().length, 0, "not restored, not recorded yet");
+    processor.processSDKMessage(h.session, { yokeType: "status", status: null }); // the next turn begins
+    processor.processSDKMessage(h.session, { yokeType: "status", status: null, userMessageUuids: [ID_A] });
+    assert.equal(h.delivered().length, 1, "delivered by the later turn");
+    assert.equal(h.records().length, 1, "in history exactly once");
+    processor.processSDKMessage(h.session, { yokeType: "result", userMessageUuids: [ID_A] });
+    assert.equal(h.records().length, 1);
+    assert.equal(h.delivered().length, 1);
+    assert.equal(droppedReplies(h).length, 0);
+  } finally { h.done(); }
 });
