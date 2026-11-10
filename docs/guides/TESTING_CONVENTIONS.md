@@ -1,5 +1,19 @@
 # Testing Conventions
 
+## clagentic-loadout test runs sync node_modules to the lock first
+
+`.clagentic/loadout/profile.yaml` declares `test.prepare: [npm, ci]`. Every
+`clagentic-loadout test run` (full, impacted, files, tier; foreground and
+detached) runs `npm ci` in the repo root before the tests, so `node_modules`
+matches `package-lock.json` on every run, as CI does. This ends local runs
+executing against a drifted dependency copy (for example an older
+`@anthropic-ai/claude-agent-sdk` than the lock pins).
+
+If `npm ci` fails, the run is `unrunnable` (exit 73) and
+`clagentic-loadout test report <run> --summary` shows the prepare log tail.
+`npm test` run directly does not go through prepare; run `npm ci` first.
+No separate drift-guard test exists because prepare syncs on every run.
+
 ## Regression tests must be demonstrated failing pre-fix (lr-4e1242)
 
 ### The problem
