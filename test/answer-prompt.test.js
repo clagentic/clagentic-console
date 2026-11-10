@@ -254,14 +254,37 @@ test("ambiguous: an address matching several sessions answers none and lists can
   var b = liveSession(2);
   var w = makeWorld([a, b]);
   var p = open(w, a, "permission", BASH, "tu-1");
-  // Both sessions wait on a prompt, so they share the prompt-blocked tier; a
-  // running twin of a prompt-blocked session would outrank it.
-  open(w, b, "permission", BASH, "tu-2");
+  // Two sessions holding the same request id are the only ambiguity left for an
+  // address: answer-prompt picks by the request id, not by tier.
+  b.pendingPermissions = {};
+  b.pendingPermissions[p.requestId] = a.pendingPermissions[p.requestId];
   var r = w.input.answerPrompt({ to: "@p", requestId: p.requestId, decision: "allow" });
   assert.equal(r.ok, false);
   assert.equal(r.result, "ambiguous");
   assert.equal(r.candidates.length, 2);
   assert.ok(promptsFor(w.sm).lookup(p.requestId));
+});
+
+test("an address answers the prompt-blocked holder over an idle twin", function () {
+  var a = liveSession(1);
+  var b = liveSession(2, { isProcessing: false });
+  var w = makeWorld([a, b]);
+  var p = open(w, a, "permission", BASH, "tu-1");
+  var r = w.input.answerPrompt({ to: "@p", requestId: p.requestId, decision: "allow" });
+  assert.equal(r.result, "answered");
+  assert.equal(r.consoleSessionId, "1");
+  assert.equal(promptsFor(w.sm).lookup(p.requestId), null);
+});
+
+test("not-found: no session the address matches holds the request id", function () {
+  var a = liveSession(1);
+  var b = liveSession(2, { isProcessing: false });
+  var w = makeWorld([a, b]);
+  var r = w.input.answerPrompt({ to: "@p", requestId: "no-such-request", decision: "allow" });
+  assert.equal(r.ok, false);
+  assert.equal(r.result, "not-found");
+  assert.match(r.reason, /@p/);
+  assert.match(r.reason, /no-such-request/);
 });
 
 test("an address matching one session answers its prompt", function () {
