@@ -26,7 +26,6 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var os = require("os");
 var path = require("path");
-var net = require("net");
 var http = require("http");
 var { spawn } = require("child_process");
 var WebSocket = require("ws");
@@ -36,6 +35,11 @@ var { bootDaemon: bootHarness } = require("./fixtures/daemon-harness");
 var { TOKEN_ENV, newHarnessToken, verifyOwnedPid } = require("./fixtures/process-ownership");
 var { makeInstall } = require("./fixtures/install-fixture");
 var { removeTempHome } = require("./helpers/remove-temp-home");
+var {
+  waitForServer,
+  waitForDaemonListening,
+  startOnFreePort,
+} = require("./helpers/daemon-readiness");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var SETUP_CODE = "SHUTDOWNENTRY";
@@ -44,17 +48,9 @@ var SHUTDOWN_BUDGET_MS = 9000;
 var EXIT_CLEAN = 0;
 var EXIT_HANDOFF = 120;
 var NO_RESTART_GRACE_MS = 3000;
-
-function findFreePort() {
-  return new Promise(function (resolve, reject) {
-    var srv = net.createServer();
-    srv.listen(0, "127.0.0.1", function () {
-      var p = srv.address().port;
-      srv.close(function () { resolve(p); });
-    });
-    srv.on("error", reject);
-  });
-}
+var DAEMON_READY_MS = 20000;
+var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
+var PORT_ATTEMPTS = 5;
 
 function httpRequest(opts, body) {
   return new Promise(function (resolve, reject) {
@@ -68,19 +64,6 @@ function httpRequest(opts, body) {
     if (body) req.write(body);
     req.end();
   });
-}
-
-async function waitForServer(port, ms) {
-  var start = Date.now();
-  while (Date.now() - start < ms) {
-    try {
-      await httpRequest({ hostname: "127.0.0.1", port: port, path: "/", method: "GET" });
-      return;
-    } catch (e) {
-      await new Promise(function (r) { setTimeout(r, 250); });
-    }
-  }
-  throw new Error("daemon did not respond within " + ms + " ms");
 }
 
 function waitForExit(proc, ms) {
@@ -109,31 +92,42 @@ async function bootDaemon(config, extraEnv) {
   var projectDir = path.join(home, "project");
   fs.mkdirSync(consoleDir, { recursive: true });
   fs.mkdirSync(projectDir, { recursive: true });
-  var port = await findFreePort();
-  fs.writeFileSync(path.join(consoleDir, "daemon.json"), JSON.stringify(Object.assign({
-    port: port, host: "127.0.0.1", tls: false, debug: false,
-    projects: [{ path: projectDir, slug: "entry-project", addedAt: Date.now(), visibility: "public" }],
-  }, config || {}), null, 2), { mode: 0o600 });
   fs.writeFileSync(path.join(consoleDir, "users.json"), JSON.stringify({
     multiUser: true, setupCode: SETUP_CODE, users: [], invites: [], smtp: null,
   }, null, 2), { mode: 0o600 });
 
   var configPath = path.join(consoleDir, "daemon.json");
   var log = [];
+  var port = null;
   var token = newHarnessToken();
   var env = Object.assign(unsupervisedEnv(), { CLAGENTIC_CONSOLE_HOME: home, HOME: home, USERPROFILE: home }, extraEnv || {});
   env[TOKEN_ENV] = token; // the detached successor inherits it; the reaper trusts nothing else
-  var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
-    // HOME too: legacy-path reads (~/.clagentic, ~/.clagentic-rc, ~/clagentic-projects)
-    // must not reach the operator's real home.
-    // The test runner may itself run under a service unit; an inherited
-    // supervisor variable would turn every restart case into a supervised one.
-    env: env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  proc.stdout.on("data", function (d) { log.push(d.toString()); });
-  proc.stderr.on("data", function (d) { log.push(d.toString()); });
-  await waitForServer(port, 20000);
+  var proc = null;
+  // Readiness is the daemon's own listen line, then HTTP. A port taken between
+  // the probe and the bind restarts the boot on a fresh port (bounded), so a
+  // foreign server is never mistaken for the daemon.
+  async function startOn(p) {
+    port = p;
+    log = [];
+    fs.writeFileSync(configPath, JSON.stringify(Object.assign({
+      port: port, host: "127.0.0.1", tls: false, debug: false,
+      projects: [{ path: projectDir, slug: "entry-project", addedAt: Date.now(), visibility: "public" }],
+    }, config || {}), null, 2), { mode: 0o600 });
+    var mine = log;
+    proc = spawn(process.execPath, [DAEMON_SCRIPT], {
+      // HOME too: legacy-path reads (~/.clagentic, ~/.clagentic-rc, ~/clagentic-projects)
+      // must not reach the operator's real home.
+      // The test runner may itself run under a service unit; an inherited
+      // supervisor variable would turn every restart case into a supervised one.
+      env: env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    proc.stdout.on("data", function (d) { mine.push(d.toString()); });
+    proc.stderr.on("data", function (d) { mine.push(d.toString()); });
+    await waitForDaemonListening(proc, function () { return log.join(""); }, DAEMON_READY_MS);
+    await waitForServer(port, HTTP_READY_MS);
+  }
+  await startOnFreePort(startOn, function () { return proc; }, PORT_ATTEMPTS);
 
   var d = {
     home: home,

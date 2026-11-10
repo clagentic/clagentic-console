@@ -32,6 +32,7 @@ var WebSocket = require("ws");
 var {
   waitForServer,
   waitForDaemonListening,
+  captureLog,
   killAndWait,
   startOnFreePort,
 } = require("./helpers/daemon-readiness");
@@ -137,7 +138,6 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
   // between probe and bind restarts this setup on a fresh port (bounded), so the
   // assertions below never run against a foreign server.
   function startDaemonOn(port) {
-    daemonLog = [];
     fs.writeFileSync(configFile, JSON.stringify({
       port:            port,
       host:            "127.0.0.1",
@@ -154,17 +154,19 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
       stdio: ["ignore", "pipe", "pipe"],
     });
     daemonProc = proc;
-    proc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
-    proc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
+    // This attempt's own log: a killed collided attempt's late output cannot
+    // reach the retry.
+    var attempt = captureLog(proc, { tagStderr: true });
+    daemonLog = attempt.lines;
     proc.once("exit", function (code) {
       if (code !== 0 && code !== null) {
         t.diagnostic("daemon exited with code " + code);
-        t.diagnostic("daemon log:\n" + daemonLog.slice(-30).join(""));
+        t.diagnostic("daemon log:\n" + attempt.lines.slice(-30).join(""));
       }
     });
 
     // ── 3. Check 1 — daemon booted (listen line) and answers HTTP ─────────────
-    return waitForDaemonListening(proc, function () { return daemonLog.join(""); }, DAEMON_READY_MS)
+    return waitForDaemonListening(proc, attempt.getLog, DAEMON_READY_MS)
       .then(function () { return waitForServer(port, HTTP_READY_MS); })
       .then(function () { return port; });
   }

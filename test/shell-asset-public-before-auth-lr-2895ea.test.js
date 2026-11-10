@@ -50,45 +50,23 @@ var os = require("os");
 var net = require("net");
 var http = require("http");
 var { spawn } = require("child_process");
+var {
+  waitForServer,
+  waitForDaemonListening,
+  captureLog,
+  killAndWait,
+  startOnFreePort,
+} = require("./helpers/daemon-readiness");
 
 // ── constants ────────────────────────────────────────────────────────────────
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var TEST_TIMEOUT_MS = 45000;
 var DAEMON_READY_MS = 20000;
+var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
+var PORT_ATTEMPTS = 5;
 
 // ── helpers (mirrors project-asset-auth-fallback-lr-e33776.test.js) ────────
-
-function findFreePort() {
-  return new Promise(function (resolve, reject) {
-    var srv = net.createServer();
-    srv.listen(0, "127.0.0.1", function () {
-      var p = srv.address().port;
-      srv.close(function () { resolve(p); });
-    });
-    srv.on("error", reject);
-  });
-}
-
-function waitForServer(port, timeoutMs) {
-  var start = Date.now();
-  return new Promise(function (resolve, reject) {
-    function attempt() {
-      if (Date.now() - start > timeoutMs) {
-        reject(new Error("daemon did not respond within " + timeoutMs + " ms"));
-        return;
-      }
-      var req = http.get("http://127.0.0.1:" + port + "/", function (res) {
-        res.resume();
-        if (res.statusCode) { resolve(); }
-        else { setTimeout(attempt, 250); }
-      });
-      req.on("error", function () { setTimeout(attempt, 250); });
-      req.setTimeout(500, function () { req.destroy(); });
-    }
-    attempt();
-  });
-}
 
 function httpGetRaw(port, urlPath) {
   return new Promise(function (resolve, reject) {
@@ -147,24 +125,11 @@ function wsUpgradeRaw(port, urlPath) {
   });
 }
 
-function killAndWait(proc) {
-  return new Promise(function (resolve) {
-    if (proc.exitCode !== null) { resolve(); return; }
-    proc.once("exit", resolve);
-    try { proc.kill("SIGTERM"); } catch (_) {}
-    setTimeout(function () {
-      try { proc.kill("SIGKILL"); } catch (_) {}
-      resolve();
-    }, 4000);
-  });
-}
-
 // ── test ─────────────────────────────────────────────────────────────────────
 
 test("lr-2895ea: unauth GET of the app-shell static assets returns the real asset; document/api/ws stay gated", { timeout: TEST_TIMEOUT_MS }, function (t, done) {
   var tmpHome = null;
   var daemonProc = null;
-  var daemonLog = [];
 
   t.after(function () {
     var p = daemonProc && daemonProc.exitCode === null
@@ -178,8 +143,11 @@ test("lr-2895ea: unauth GET of the app-shell static assets returns the real asse
     });
   });
 
-  findFreePort().then(function (port) {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-2895ea-"));
+  // Readiness is the daemon's own listen line, then an HTTP check; a port taken
+  // between probe and bind restarts this setup on a fresh port (bounded), so the
+  // assertions below never run against a foreign server.
+  function startDaemonOn(port) {
+    if (!tmpHome) tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-2895ea-"));
     var projectDir = path.join(tmpHome, "shell-asset-project");
     fs.mkdirSync(projectDir, { recursive: true });
 
@@ -211,18 +179,22 @@ test("lr-2895ea: unauth GET of the app-shell static assets returns the real asse
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
-    daemonProc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
-    daemonProc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
+    // This attempt's own log: a killed collided attempt's late output cannot
+    // reach the retry.
+    var attempt = captureLog(daemonProc, { tagStderr: true });
     daemonProc.once("exit", function (code) {
       if (code !== 0 && code !== null) {
         t.diagnostic("daemon exited with code " + code);
-        t.diagnostic("daemon log:\n" + daemonLog.slice(-30).join(""));
+        t.diagnostic("daemon log:\n" + attempt.lines.slice(-30).join(""));
       }
     });
 
-    return waitForServer(port, DAEMON_READY_MS).then(function () { return port; });
+    return waitForDaemonListening(daemonProc, attempt.getLog, DAEMON_READY_MS)
+      .then(function () { return waitForServer(port, HTTP_READY_MS); })
+      .then(function () { return port; });
+  }
 
-  }).then(function (port) {
+  startOnFreePort(startDaemonOn, function () { return daemonProc; }, PORT_ATTEMPTS).then(function (port) {
     // ── Case 1: unauthenticated GET /p/{slug}/app.js → 200 real JS asset ───
     return httpGetRaw(port, "/p/shell-asset-project/app.js").then(function (res) {
       assert.strictEqual(res.status, 200,

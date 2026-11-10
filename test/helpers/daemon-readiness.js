@@ -49,7 +49,16 @@ function waitForServer(port, timeoutMs) {
   });
 }
 
-function waitForDaemonListening(proc, getLog, timeoutMs) {
+// opts.fromOffset: only log text after this character offset counts, so a
+//   restarted daemon cannot be satisfied by the previous boot's listen line.
+// opts.tolerateInUse: ignore "in use, retrying" lines and keep waiting for the
+//   daemon's own retry to bind. For a restart on a fixed port, where moving to a
+//   fresh port is not an option; a foreign owner still never yields a listen
+//   line, so it ends in a timeout or an exit, never in readiness.
+// A timeout says whether the daemon exited or never bound, with its log.
+function waitForDaemonListening(proc, getLog, timeoutMs, opts) {
+  var fromOffset = (opts && opts.fromOffset) || 0;
+  var tolerateInUse = !!(opts && opts.tolerateInUse);
   var start = Date.now();
   return new Promise(function (resolve, reject) {
     var finished = false;
@@ -66,20 +75,39 @@ function waitForDaemonListening(proc, getLog, timeoutMs) {
     (function poll() {
       if (finished) { return; }
       var log = getLog();
-      if (PORT_IN_USE_LINE.test(log)) {
+      var scoped = fromOffset ? log.slice(fromOffset) : log;
+      if (!tolerateInUse && PORT_IN_USE_LINE.test(scoped)) {
         var e = new Error("daemon port was taken before the daemon bound it");
         e.portInUse = true;
         finish(e);
         return;
       }
-      if (LISTEN_LINE.test(log)) { finish(null); return; }
+      if (LISTEN_LINE.test(scoped)) { finish(null); return; }
       if (Date.now() - start > timeoutMs) {
-        finish(new Error("daemon did not report listening within " + timeoutMs + " ms:\n" + log));
+        finish(new Error("daemon never bound: still running, but logged no listen line within " + timeoutMs + " ms:\n" + log));
         return;
       }
       setTimeout(poll, 50);
     })();
   });
+}
+
+// One log array per spawned daemon, owned by that process's stream handlers.
+// killAndWait resolves on "exit", which does not guarantee stdout is drained,
+// so a killed collided attempt can still deliver a late "in use" line. If the
+// handlers wrote to a variable shared across attempts, that line would land in
+// the retry's log and fail it. Each attempt must call this once and read only
+// the returned getLog().
+//   opts.tagStderr: prefix stderr chunks with "[err] "
+function captureLog(proc, opts) {
+  var lines = [];
+  var errPrefix = opts && opts.tagStderr ? "[err] " : "";
+  proc.stdout.on("data", function (d) { lines.push(d.toString()); });
+  proc.stderr.on("data", function (d) { lines.push(errPrefix + d.toString()); });
+  return {
+    lines: lines,
+    getLog: function () { return lines.join(""); },
+  };
 }
 
 function killAndWait(proc) {
@@ -115,6 +143,7 @@ module.exports = {
   findFreePort: findFreePort,
   waitForServer: waitForServer,
   waitForDaemonListening: waitForDaemonListening,
+  captureLog: captureLog,
   killAndWait: killAndWait,
   startOnFreePort: startOnFreePort,
 };
