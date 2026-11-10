@@ -235,6 +235,45 @@ test("idleCompaction: a FIFO is refused without blocking and without being writt
   }
 });
 
+test("idleCompaction: a symlinked settings file stays a link and its target is updated", function () {
+  var dir = tmpDir();
+  try {
+    var target = path.join(dir, "real", "settings.json");
+    fs.mkdirSync(path.dirname(target));
+    fs.writeFileSync(target, JSON.stringify({ model: "m" }));
+    var link = path.join(dir, "settings.json");
+    fs.symlinkSync(target, link);
+    assert.deepEqual(idle.writeSetting(link, "off"), { ok: true, value: "off" });
+    assert.ok(fs.lstatSync(link).isSymbolicLink(), "link survives");
+    assert.deepEqual(JSON.parse(fs.readFileSync(target, "utf8")), { model: "m", idleCompaction: false });
+    assert.deepEqual(fs.readdirSync(path.dirname(target)), ["settings.json"], "no temp file left");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("idleCompaction: back-to-back off then default ends at default", async function () {
+  var dir = tmpDir();
+  var savedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  try {
+    var opts = { osUsers: false, homeDir: dir };
+    var real = idle.settingsFileFor(opts);
+    fs.mkdirSync(path.dirname(real), { recursive: true });
+    fs.writeFileSync(real, "{}");
+    var results = await Promise.all([
+      idle.applyForOwner("write", "off", opts),
+      idle.applyForOwner("write", "default", opts),
+    ]);
+    assert.equal(results[0].value, "off");
+    assert.equal(results[1].value, "default");
+    assert.deepEqual(idle.readSetting(real), { ok: true, value: "default" });
+  } finally {
+    if (savedConfigDir !== undefined) process.env.CLAUDE_CONFIG_DIR = savedConfigDir;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("session_switched carries the session's compacting flag and the client hydrates from it", function () {
   var server = fs.readFileSync(path.join(__dirname, "..", "lib", "sessions.js"), "utf8");
   var line = server.split("\n").filter(function (l) { return l.indexOf('type: "session_switched"') !== -1; })[0];
