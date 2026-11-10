@@ -24,6 +24,7 @@ function buildFakeAppServer(opts) {
   opts = opts || {};
   var handlers = [];
   var sentTurnStarts = [];
+  var deferredSteer = null;
 
   var appServer = {
     started: true,
@@ -54,6 +55,12 @@ function buildFakeAppServer(opts) {
         }
         return Promise.resolve({});
       }
+      if (method === "turn/steer" && opts.deferSteer) {
+        // The test settles the steer by hand, after the loop has ended.
+        return new Promise(function (resolve, reject) {
+          deferredSteer = { resolve: resolve, reject: reject };
+        });
+      }
       if (method === "turn/steer" && opts.refuseSteer) {
         var err = new Error("no active turn");
         err.rpcCode = -32600;
@@ -69,7 +76,14 @@ function buildFakeAppServer(opts) {
     });
   }
 
-  return { appServer: appServer, dispatch: dispatch, sentTurnStarts: sentTurnStarts };
+  return {
+    appServer: appServer,
+    dispatch: dispatch,
+    sentTurnStarts: sentTurnStarts,
+    settleSteer: function (err) {
+      if (err) deferredSteer.reject(err); else deferredSteer.resolve({});
+    },
+  };
 }
 
 function waitForTurnStarts(fake, count) {
@@ -257,4 +271,51 @@ test("a refused steer re-queued with an image keeps its file until its turn, the
   assert.equal(fs.existsSync(path), false);
 
   handle.close();
+});
+
+// A steer whose response arrives after the loop has ended (abort mid-turn) must
+// not leave its file behind: nothing drains the per-loop lists again.
+async function lateSteerLeavesNoFile(settleError) {
+  var fake = buildFakeAppServer({ manual: true, deferSteer: true });
+  var handle = createCodexQueryHandle(fake.appServer, {});
+
+  handle.pushMessage("first", null);
+  await waitForTurnStarts(fake, 1);
+  fake.dispatch({ method: "turn/started", params: { turn: { id: "turn-1" } } });
+
+  var codexLocalImage = require("../lib/yoke/codex-local-image");
+  var realWrite = codexLocalImage.writeTempImage;
+  var written = [];
+  codexLocalImage.writeTempImage = function () {
+    var p = realWrite.apply(this, arguments);
+    written.push(p);
+    return p;
+  };
+  var steer;
+  try {
+    steer = handle.steerMessage("steered", IMG);
+  } finally {
+    codexLocalImage.writeTempImage = realWrite;
+  }
+  assert.equal(written.length, 1);
+  assert.ok(fs.existsSync(written[0]), "steer file exists while the steer is in flight");
+
+  handle.abort();
+  await ticks(3);
+
+  fake.settleSteer(settleError);
+  await steer;
+  await ticks(3);
+
+  assert.equal(fs.existsSync(written[0]), false, "a steer settling after the loop ended leaves no temp file");
+  handle.close();
+}
+
+test("a confirmed steer settling after the loop has ended leaves no temp file", async function () {
+  await lateSteerLeavesNoFile(null);
+});
+
+test("an unconfirmed steer settling after the loop has ended leaves no temp file", async function () {
+  // No rpcCode: a transport failure, the outcome is unknown.
+  await lateSteerLeavesNoFile(new Error("timeout"));
 });
