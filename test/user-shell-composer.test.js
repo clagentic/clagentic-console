@@ -312,6 +312,60 @@ test("a flushed ! refused as busy returns to the head of the queue with no refus
   assert.deepEqual(chatSent(env), ["behind"]);
 });
 
+test("a busy refusal while the page reads idle is retried on a timer, with no processing event, and runs once the server accepts", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!race");
+  endTurn(env);
+  assert.equal(frames(env, "shell").length, 1);
+  finish(env, lastShell(env), { refused: true, reason: "busy", message: "The session is busy.", exitCode: null });
+  assert.equal(cards().length, 0);
+  assert.deepEqual(queuedTexts(), ["!race"]);
+  t.mock.timers.tick(500);
+  assert.equal(frames(env, "shell").length, 2, "retried without any processing change");
+  assert.equal(lastShell(env).command, "race");
+  finish(env, lastShell(env), { output: "ok\n" });
+  assert.deepEqual(queuedTexts(), []);
+  t.mock.timers.tick(60000);
+  assert.equal(frames(env, "shell").length, 2, "sent once, never doubled");
+});
+
+test("repeated busy refusals back off, and the retry stops when the queue empties or the session switches", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var env = await setup();
+  type(env, "!again");
+  assert.equal(frames(env, "shell").length, 1);
+  var delays = [500, 1000, 2000, 4000, 8000, 8000];
+  var count = 1;
+  delays.forEach(function (ms) {
+    finish(env, lastShell(env), { refused: true, reason: "busy", message: "busy", exitCode: null });
+    t.mock.timers.tick(ms - 1);
+    assert.equal(frames(env, "shell").length, count, "not retried before " + ms + " ms");
+    t.mock.timers.tick(1);
+    count++;
+    assert.equal(frames(env, "shell").length, count, "retried at " + ms + " ms");
+  });
+
+  // The session switches: the pending retry is cancelled and the entry is parked.
+  finish(env, lastShell(env), { refused: true, reason: "busy", message: "busy", exitCode: null });
+  env.store.set({ activeSessionId: env.sid + 5000 });
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  t.mock.timers.tick(60000);
+  assert.equal(frames(env, "shell").length, count, "no retry after the session switched");
+
+  // The queue empties by another path: a later flush sends it and the timer is gone.
+  var env2 = await setup();
+  type(env2, "!once");
+  finish(env2, lastShell(env2), { refused: true, reason: "busy", message: "busy", exitCode: null });
+  env2.store.set({ processing: true });
+  endTurn(env2);
+  assert.equal(frames(env2, "shell").length, 2);
+  finish(env2, lastShell(env2));
+  t.mock.timers.tick(60000);
+  assert.equal(frames(env2, "shell").length, 2, "an emptied queue is not retried");
+});
+
 ["plan", "no_terminal", "unsupported", "denied"].forEach(function (reason) {
   test("a flushed ! refused as " + reason + " still shows its refusal card", async function () {
     var env = await setup();
