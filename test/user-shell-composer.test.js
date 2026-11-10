@@ -198,6 +198,142 @@ test("a command's result does not release another session's queue, and a stale r
   assert.deepEqual(queuedTexts(), ["waits"]);
 });
 
+// ---------------------------------------------------------------- ! during a turn
+
+function lastShell(env) { var f = frames(env, "shell"); return f[f.length - 1]; }
+function finish(env, req, over) {
+  env.us.handleShellResult(Object.assign({ type: "shell_result", requestId: req.requestId, command: req.command, exitCode: 0, durationMs: 5, output: "", truncated: false, timedOut: false, interrupted: false }, over || {}));
+}
+function endTurn(env) { env.store.set({ processing: false }); }
+
+test("a ! line typed during a turn is queued, not sent, and runs with its result card when the turn ends", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!sleep 30");
+  assert.equal(frames(env, "shell").length, 0, "nothing reaches the server while the turn runs");
+  assert.deepEqual(queuedTexts(), ["!sleep 30"], "it shows as a queued ! entry");
+  assert.equal(cards().length, 0);
+  assert.equal(env.ctx.inputEl.value, "", "the composer is cleared");
+
+  endTurn(env);
+  assert.equal(frames(env, "shell").length, 1, "sent when the turn ends");
+  assert.equal(lastShell(env).command, "sleep 30");
+  assert.deepEqual(queuedTexts(), []);
+  assert.equal(cards().length, 1, "it runs as a card");
+  finish(env, lastShell(env), { output: "done\n" });
+  assert.equal(cards()[0].querySelector(".shell-output").textContent, "done\n");
+});
+
+test("two queued ! commands run in order, the second only after the first's result", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!first");
+  type(env, "!second");
+  assert.deepEqual(queuedTexts(), ["!first", "!second"]);
+  endTurn(env);
+  assert.deepEqual(frames(env, "shell").map(function (f) { return f.command; }), ["first"], "one at a time");
+  assert.deepEqual(queuedTexts(), ["!second"]);
+  finish(env, lastShell(env));
+  assert.deepEqual(frames(env, "shell").map(function (f) { return f.command; }), ["first", "second"]);
+  assert.deepEqual(queuedTexts(), []);
+});
+
+test("a mixed queue of chat, !, chat keeps the typed order, the trailing chat after the command's result", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!mid");
+  type(env, "after");
+  assert.deepEqual(queuedTexts(), ["!mid", "after"], "chat typed behind a queued command waits behind it");
+  assert.deepEqual(chatSent(env), []);
+  endTurn(env);
+  assert.equal(frames(env, "shell").length, 1);
+  assert.deepEqual(chatSent(env), [], "the chat waits for the command's result");
+  finish(env, lastShell(env));
+  assert.deepEqual(chatSent(env), ["after"]);
+
+  var env2 = await setup();
+  type(env2, "!sleep 5");
+  type(env2, "one");
+  type(env2, "!two");
+  type(env2, "three");
+  assert.deepEqual(queuedTexts(), ["one", "!two", "three"]);
+  finish(env2, lastShell(env2));
+  assert.deepEqual(chatSent(env2), ["one"]);
+  assert.equal(frames(env2, "shell").length, 2, "the command behind the chat goes next");
+  finish(env2, lastShell(env2));
+  assert.deepEqual(chatSent(env2), ["one", "three"]);
+});
+
+test("a reload restores queued ! entries, none lost and none doubled", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!sleep 30");
+  type(env, "then chat");
+  els.messages._children = [];
+  reloads += 1;
+  var fresh = await import(dom.moduleUrl("user-shell.js") + "?reload=" + reloads);
+  var composerEl = new FakeElement("textarea");
+  fresh.handleSessionShown(composerEl);
+  assert.equal(composerEl.value, "", "a ! line is queued again as a command, not joined into the composer");
+  assert.equal(fresh.hasQueuedChat(), true);
+  fresh.handleHistoryReplayed();
+  fresh.handleHistoryReplayed();
+  assert.deepEqual(queuedTexts(), ["!sleep 30", "then chat"], "in typed order, each once");
+  assert.equal(frames(env, "shell").length, 0);
+});
+
+test("Stop on the turn keeps the queued ! entry, which runs when the session goes idle", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!kept");
+  env.ctx.processing = true;
+  env.ctx.sendBtn.click();
+  assert.deepEqual(frames(env, "stop").length, 1, "Stop was sent for the turn");
+  assert.deepEqual(queuedTexts(), ["!kept"], "Stop does not drop it");
+  endTurn(env);
+  assert.equal(lastShell(env).command, "kept");
+});
+
+test("a flushed ! refused as busy returns to the head of the queue with no refusal card, and retries on the next idle", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!race");
+  type(env, "behind");
+  endTurn(env);
+  assert.equal(frames(env, "shell").length, 1);
+  env.store.set({ processing: true });
+  finish(env, lastShell(env), { refused: true, reason: "busy", message: "The session is busy.", exitCode: null });
+  assert.equal(cards().length, 0, "no refusal card, and the running card is gone");
+  assert.deepEqual(queuedTexts(), ["!race", "behind"], "back at the head, in front of what was typed after it");
+  assert.deepEqual(chatSent(env), []);
+  endTurn(env);
+  assert.equal(frames(env, "shell").length, 2, "retried on the next idle");
+  finish(env, lastShell(env));
+  assert.deepEqual(chatSent(env), ["behind"]);
+});
+
+["plan", "no_terminal", "unsupported", "denied"].forEach(function (reason) {
+  test("a flushed ! refused as " + reason + " still shows its refusal card", async function () {
+    var env = await setup();
+    env.store.set({ processing: true });
+    type(env, "!x");
+    endTurn(env);
+    finish(env, lastShell(env), { refused: true, reason: reason, message: "Refused: " + reason, exitCode: null });
+    assert.equal(cards().length, 1);
+    assert.equal(cards()[0].className, "shell-result refused");
+    assert.deepEqual(queuedTexts(), [], "not queued again");
+  });
+});
+
+test("with ! mode off a ! line typed during a turn is sent as chat text, unchanged", async function () {
+  var env = await setup();
+  env.us.handleUserShellSettings({ userShellEnabled: false, userShellTimeoutMinutes: 10, userShellMaxOutputKiB: 256 });
+  env.store.set({ processing: true });
+  type(env, "!ls");
+  assert.deepEqual(chatSent(env), ["!ls"]);
+  assert.equal(frames(env, "shell").length, 0);
+});
+
 // ---------------------------------------------------------------- failed sends
 
 test("a shell request whose frame cannot be sent is not pending, stays in the composer, and does not hold later chat", async function () {
