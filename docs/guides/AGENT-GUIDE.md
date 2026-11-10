@@ -4,6 +4,7 @@ Agents are first-class users of Clagentic: Console. A script, a CI job or an AI 
 
 - `clagentic-console open-session` opens a new session and runs its first prompt.
 - `clagentic-console send-input` sends input to an existing session, and resumes it if its runtime was reaped.
+- `clagentic-console end-session` stands one live session down by id, even one blocked on a permission prompt. The history is kept and the session resumes by id.
 - `clagentic-console list-sessions` lists the console's sessions with their state and any prompts they are waiting on.
 - `clagentic-console list-outbound` lists what one session sent out with `send-input` and `open-session`: the target, the prompt, the time and the initiator. It only reads.
 - `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
@@ -19,6 +20,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [Addressing a session](#addressing-a-session)
 - [open-session](#open-session)
 - [send-input](#send-input)
+- [end-session](#end-session)
 - [list-sessions](#list-sessions)
 - [list-outbound](#list-outbound)
 - [Scheduled input](#scheduled-input)
@@ -239,6 +241,57 @@ It works only from inside a console session started by the console, because the 
 - the matched sender session runs as another OS user.
 
 It is `not-found` when no session of the recorded project has the recorded vendor and vendor session id, and `ambiguous` (with candidates) when the identity matches several sessions. A reply is delivered like any other input, so its own sender is recorded the same way and the receiver can reply in turn.
+
+## end-session
+
+Stands one live session down. It works on a session blocked on a permission prompt, which cannot read `send-input`. It is a reap, not a delete: the session's history is kept, `list-sessions` then shows it as `reaped`, and input to its id resumes it.
+
+```
+clagentic-console end-session (--project <slug> --session <id> | --to <address>)
+    [--from <name>] [--from-session <id>] [--reason <text>]
+```
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--project <slug>` | with `--session` | The registered project slug. |
+| `--session <id>` | with `--project` | The console session id or the vendor-assigned id. |
+| `--to <address>` | one target | See [Addressing a session](#addressing-a-session). The same resolution as `send-input`: an address that matches several sessions ends none and answers `ambiguous` with the candidates. |
+| `--from <name>` | no | Who is ending the session, recorded as `caller:<name>` on every prompt it settles. 1 to 64 of letters, digits and `. _ @ / + -`. A label the caller gives itself, under the same OS-user trust as `send-input`. Without it the source is `user`. |
+| `--from-session <id>` | no | See [The sender record](#the-sender-record). |
+| `--reason <text>` | no | Added, as one line of at most 200 characters, to the notice shown in the session. |
+
+The call needs no grant: it has the same trust as every other verb, the OS user that owns the console's config directory. What it does, in order:
+
+1. If the session has background agents, announces the end in the session and to connected clients, naming the agents (the notice the idle reaper gives).
+2. Settles every pending prompt of the session, its own and its background agents', as cancelled with reason `ended` and the source above.
+3. Aborts the running turn.
+4. Closes the session's query, as the idle reaper does.
+
+The call is recorded in the outbound ledger as `end_session`.
+
+```json
+{
+  "consoleSessionId": "12",
+  "sessionId": "6f1c…",
+  "localId": 12,
+  "vendor": "claude",
+  "agent": "reviewer",
+  "name": "pass-2",
+  "ok": true,
+  "result": "ended",
+  "endedBy": "caller:coordinator",
+  "agents": []
+}
+```
+
+| `result` | Meaning | Exit code |
+|---|---|---|
+| `ended` | The session was live and was stood down. `agents` lists the background agents named. | 0 |
+| `already-ended` | The session has no runtime (reaped, or only in the store). Nothing changed, and it is not resumed to be ended. | 0 |
+| `ambiguous` | An address matched several sessions; `candidates` lists them. Nothing was ended. | 3 |
+| `not-found` | No such session. Nothing changed. | 4 for `--to`, 1 for `--session` |
+
+The runtime stops a moment after the call answers, so `list-sessions` may show `reaped` a short time later, not at the same instant.
 
 ## list-sessions
 
@@ -545,6 +598,8 @@ The `result` field of the JSON, and the process exit code:
 | `delivered` | The input went into the session's running query. | 0 |
 | `resumed-and-delivered` | A reaped session was resumed and took the input. | 0 |
 | `listed` | `list-sessions` answered. | 0 |
+| `ended` | `end-session` stood a live session down. | 0 |
+| `already-ended` | `end-session` found the session without a runtime; nothing changed. | 0 |
 | `ambiguous` | An address (or `--reply`) matched several sessions in its deciding tier; `candidates` lists them. Nothing was delivered. | 3 |
 | `not-found` | `--to` or `--reply` matched no session. | 4 |
 | `not-found` | `--session` named a session the console does not hold. | 1 |
