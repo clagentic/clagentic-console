@@ -20,7 +20,8 @@ var ONE_BY_ONE_PNG_BASE64 =
 
 // Minimal fake app-server, same shape as the lr-f7a4 tests: only implements
 // what runQueryLoop / handleServerEvent actually call.
-function buildFakeAppServer() {
+function buildFakeAppServer(opts) {
+  opts = opts || {};
   var handlers = [];
   var sentTurnStarts = [];
 
@@ -46,10 +47,17 @@ function buildFakeAppServer() {
         sentTurnStarts.push(params);
         // Complete the turn on the next tick so runQueryLoop's cleanup
         // (post-turnPromise) runs deterministically inside the test.
-        setImmediate(function () {
-          dispatch({ method: "turn/completed", params: { usage: null } });
-        });
+        if (!opts.manual) {
+          setImmediate(function () {
+            dispatch({ method: "turn/completed", params: { usage: null } });
+          });
+        }
         return Promise.resolve({});
+      }
+      if (method === "turn/steer" && opts.refuseSteer) {
+        var err = new Error("no active turn");
+        err.rpcCode = -32600;
+        return Promise.reject(err);
       }
       return Promise.resolve({});
     },
@@ -151,6 +159,102 @@ test("lr-de04: a text-only message (no images) is unaffected — sent as before"
   assert.equal(input.length, 1);
   assert.equal(input[0].type, "text");
   assert.equal(input[0].text, "no attachments here");
+
+  handle.close();
+});
+
+// Queued-message image lifetime: a file lives until the turn that carries it
+// has ended, not until the end of whichever turn was running when it arrived.
+var IMG = [{ mediaType: "image/png", data: ONE_BY_ONE_PNG_BASE64 }];
+
+function imagePathOf(turnStart) {
+  return turnStart.input.filter(function (item) { return item.type === "localImage"; })[0].path;
+}
+
+function ticks(n) {
+  var p = Promise.resolve();
+  for (var i = 0; i < n; i++) p = p.then(function () { return new Promise(function (r) { setImmediate(r); }); });
+  return p;
+}
+
+test("a message with an image queued during a running turn reaches its turn with the file present, and nothing is left after both turns", async function () {
+  var fake = buildFakeAppServer({ manual: true });
+  var handle = createCodexQueryHandle(fake.appServer, {});
+
+  handle.pushMessage("first", IMG);
+  await waitForTurnStarts(fake, 1);
+  var firstPath = imagePathOf(fake.sentTurnStarts[0]);
+
+  handle.pushMessage("second", IMG);
+  fake.dispatch({ method: "turn/completed", params: { usage: null } });
+  await waitForTurnStarts(fake, 2);
+  var secondPath = imagePathOf(fake.sentTurnStarts[1]);
+
+  assert.equal(fs.existsSync(firstPath), false, "first turn's file is removed when it ends");
+  assert.ok(fs.existsSync(secondPath), "queued turn's file must still exist when its turn starts");
+
+  fake.dispatch({ method: "turn/completed", params: { usage: null } });
+  await ticks(3);
+  assert.equal(fs.existsSync(secondPath), false, "no temp file is left after both turns end");
+
+  handle.close();
+});
+
+test("on abort with a queued image message, the running and queued files are removed", async function () {
+  var fake = buildFakeAppServer({ manual: true });
+  var handle = createCodexQueryHandle(fake.appServer, {});
+
+  handle.pushMessage("first", IMG);
+  await waitForTurnStarts(fake, 1);
+  var firstPath = imagePathOf(fake.sentTurnStarts[0]);
+
+  // The queued entry's path is not visible on any turn/start yet, so record
+  // what the adapter writes.
+  var codexLocalImage = require("../lib/yoke/codex-local-image");
+  var realWrite = codexLocalImage.writeTempImage;
+  var written = [];
+  codexLocalImage.writeTempImage = function () {
+    var p = realWrite.apply(this, arguments);
+    written.push(p);
+    return p;
+  };
+  try {
+    handle.pushMessage("second", IMG);
+  } finally {
+    codexLocalImage.writeTempImage = realWrite;
+  }
+  assert.equal(written.length, 1);
+  assert.ok(fs.existsSync(written[0]), "queued file exists while queued");
+
+  handle.abort();
+  await ticks(3);
+
+  assert.equal(fs.existsSync(firstPath), false);
+  assert.equal(fs.existsSync(written[0]), false, "queued file removed along with the running turn's");
+
+  handle.close();
+});
+
+test("a refused steer re-queued with an image keeps its file until its turn, then removes it", async function () {
+  var fake = buildFakeAppServer({ manual: true, refuseSteer: true });
+  var handle = createCodexQueryHandle(fake.appServer, {});
+
+  handle.pushMessage("first", null);
+  await waitForTurnStarts(fake, 1);
+  // The steer needs an active turn id; turn/started names it.
+  fake.dispatch({ method: "turn/started", params: { turn: { id: "turn-1" } } });
+
+  var result = await handle.steerMessage("steered", IMG);
+  assert.equal(result.steered, false);
+
+  fake.dispatch({ method: "turn/completed", params: { usage: null } });
+  await waitForTurnStarts(fake, 2);
+  var path = imagePathOf(fake.sentTurnStarts[1]);
+  assert.ok(fs.existsSync(path), "re-queued steer's file must exist when its turn starts");
+
+  fake.dispatch({ method: "turn/completed", params: { usage: null } });
+  await ticks(3);
+  assert.equal(fs.existsSync(path), false);
 
   handle.close();
 });
