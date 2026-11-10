@@ -1,9 +1,4 @@
-/* team-panel.css - Live team activity panel styles */
-
-.team-panel-body {
-  padding: 12px 14px;
-  overflow-y: auto;
-}
+/* team-panel.css - Agent Teams section content styles */
 
 .team-section-header {
   font-size: 10px;
