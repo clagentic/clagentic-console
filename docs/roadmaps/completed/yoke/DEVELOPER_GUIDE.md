@@ -311,6 +311,18 @@ This function exists in one place. The rest of Clay's codebase does not know ven
 6. Document `adapterOptions.VENDOR` schema
 7. Verify existing Clay UI does not break with the new capability set
 
+### 7.1 Optional QueryHandle method: `runUserShellCommand` (interface 0.6.0)
+
+`runUserShellCommand(command, cwd, timeoutMs, maxOutputBytes, { signal })` runs a shell command the person typed for themselves and puts it in the agent's conversation without a model turn. It resolves `{ exitCode, durationMs, output, truncated, timedOut, interrupted }`. It is optional: a caller tests `typeof handle.runUserShellCommand === "function"`, and an adapter without it is simply offered no such command. The OS-user worker handle does not implement it, so a command is never run as the daemon's user on someone's behalf.
+
+Contract for an implementation:
+
+- The caller has already passed any permission gate; the method never asks.
+- `timeoutMs` and `signal` stop the command (the whole process group where the adapter runs it itself). `interrupted: true` is reported only once the command has stopped; an interrupt that did not take effect reports `interrupted: false`.
+- The output is cut at `maxOutputBytes` on a UTF-8 character boundary, counting any failure text the adapter adds, and `truncated` says so.
+- The Claude adapter runs the command itself (`lib/yoke/user-shell.js`) and appends the record as a user message carrying `shouldQuery: false`. `close()` records an interrupted command's entry before it ends the message queue.
+- The Codex adapter sends the app-server's `thread/shellCommand` with `timeoutMs`. Every notification of the command is matched on the command's turn id: a model turn's start, items and end, and the late end of an earlier command's turn, are told apart by id, so a model turn end is never swallowed. An interrupt asked for before the command's turn has started is held, with no timer, until that run's `turn/started` arrives; then it is sent and the result reports `interrupted: true` when the turn ends. If no turn starts before the timeout plus a fixed margin, the result reports `timedOut: true`. No turn is ever bound by timing alone. The Codex handle runs a command only in the thread's own working directory: given another `cwd` it resolves a refusal result that names the reason, and never runs the command elsewhere.
+
 ---
 
 ## 8. User-Supplied Polyfills (Plugin Pattern)

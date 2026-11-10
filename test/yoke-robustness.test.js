@@ -427,9 +427,9 @@ test("8: INTERFACE_VERSION is exported and is a semver string", function() {
   );
 });
 
-test("8: INTERFACE_VERSION is 0.5.0 after the per-turn initiator joined pushMessage", function() {
-  assert.strictEqual(INTERFACE_VERSION, "0.5.0",
-    "INTERFACE_VERSION must be 0.5.0 after the per-turn initiator joined pushMessage");
+test("8: INTERFACE_VERSION is 0.6.0 after runUserShellCommand joined the optional QueryHandle methods", function() {
+  assert.strictEqual(INTERFACE_VERSION, "0.6.0",
+    "INTERFACE_VERSION must be 0.6.0 after runUserShellCommand joined the optional QueryHandle methods");
 });
 
 test("8: DIAGNOSTIC_SEVERITIES contains info, warning, error", function() {
