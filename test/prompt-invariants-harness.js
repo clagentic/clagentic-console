@@ -158,6 +158,8 @@ function Harness(label) {
   this.clients = [];
   this.terminalEvents = {};
   this.unexpressible = 0;
+  // The last cancel event the auditor saw for each prompt.
+  this.cancelEvents = {};
   // Whether the lib under test lacks prompt_response. Set only by a foreign
   // lib, except in the test that proves a lost step fails a run.
   this.predatesPromptResponse = world.overridesLib;
@@ -236,6 +238,7 @@ Harness.prototype.drain = function (client) {
       if (client === this.auditor && isEnding(msg) && msg.reason !== "stale") {
         var id = promptIdOf(msg);
         this.terminalEvents[id] = (this.terminalEvents[id] || 0) + 1;
+        if (msg.type === "prompt_cancel") this.cancelEvents[id] = { reason: msg.reason, source: msg.source };
         // Every settle names who or what ended it: an answer's responder, a
         // cancel's source from the vocabulary.
         if (world.overridesLib) {
@@ -548,6 +551,19 @@ Harness.prototype.restart = async function () {
   await this.settle();
 };
 
+// The registry's unanswered-prompt bound passes. advance() moves the owning
+// test's fake clock past it; the registry, not the harness, ends the prompts.
+var EXPIRY = "prompt expiry";
+Harness.prototype.expire = async function (advance) {
+  this.op = EXPIRY;
+  var self = this;
+  this.pending().forEach(function (r) { r.scopedBefore = self.taskTracked(r.owner); });
+  advance();
+  await this.settle();
+  this.log.push(this.op);
+  this.check();
+};
+
 // --- invariants ----------------------------------------------------------
 
 var OPERATOR_CAUSE = /^(client-\d+|HTTP) /;
@@ -574,7 +590,7 @@ Harness.prototype.check = function () {
       var byOperator = aimedHere && (OPERATOR_CAUSE.test(cause) || cause.indexOf("abort ") === 0);
       if (!byOperator) {
         if (allows(r.outcome)) self.fail(id + " ended by '" + cause + "' without stopping the call (I5)");
-        var scopeEnd = cause === "daemon restart" || cause === QUERY_END ||
+        var scopeEnd = cause === "daemon restart" || cause === EXPIRY || cause === QUERY_END ||
           (cause === "turn result" && !r.scopedBefore);
         if (!scopeEnd) self.fail(id + " (" + r.kind + ", owner " + (r.owner || "top-level") + ") was ended by '" + cause + "', outside its scope (I6)");
       }

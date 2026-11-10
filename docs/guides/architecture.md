@@ -657,7 +657,7 @@ On connect, session switch and every history page, the server sends the authorit
 
 ### Reminders for unanswered prompts
 
-A permission prompt has no timeout, so a prompt nobody sees (the session's own, or a background agent's) waits for ever and pins its session. `lib/prompt-reminders.js` closes that side: it repeats a notification at growing intervals until the prompt is answered or cancelled. It adds no channel; a reminder is a notification of type `permission_reminder` made by `project-notifications.js` (the in-app banner and the notifications panel) and a push of the same type.
+An unanswered prompt is bounded only by the expiry (see "Expiry of unanswered prompts"), 24 hours by default and off when set to 0, so a prompt nobody sees (the session's own, or a background agent's) can pin its session until then. `lib/prompt-reminders.js` closes the gap before that: it repeats a notification at growing intervals until the prompt is answered or cancelled. It adds no channel; a reminder is a notification of type `permission_reminder` made by `project-notifications.js` (the in-app banner and the notifications panel) and a push of the same type.
 
 **Derived, not timed.** Nothing is scheduled per prompt. A sweep (every 30 seconds, a constant) walks every project's sessions and reads their pending prompts from the prompt registry (`pendingInfo()`: request id, kind, tool, owning agent, opening time). The schedule is a function of the oldest pending prompt's age: the configured steps (5, 15 and 30 minutes by default), then one more every `repeatMinutes` (60). A session keeps how many reminders it has already sent; the next one is due when the age earns more. When the oldest prompt is answered and a newer one remains, the count follows the newer prompt's own age.
 
@@ -666,6 +666,16 @@ A permission prompt has no timeout, so a prompt nobody sees (the session's own, 
 **Restart.** The registry ends every prompt at shutdown, so no pending prompt, and no reminder, exists across a restart; reminder notifications are not restored from `notifications.json`, like the prompt notifications they accompany. A prompt that is pending again afterwards (the agent asked once more) is reminded on its own schedule from its own opening time. The sweep only reads: it never opens or settles a prompt, and the idle reaper does not consult it.
 
 **Configuration.** `daemon.json` `promptReminders` (read on every sweep): `{ "enabled": true, "scheduleMinutes": [5, 15, 30], "repeatMinutes": 60 }`. The only numeric keys are the two intervals, and each must be at least one minute; anything malformed or smaller falls back to the default, with one warning naming the key. The sweep tick is not configurable, and a `tickSeconds` key left in the file is ignored. A single session is switched off from its context menu (`set_session_prompt_reminders`, persisted in the session meta as `promptRemindersOff`; switching it off clears a live reminder).
+
+### Expiry of unanswered prompts
+
+The prompt registry (`lib/prompt-registry.js`) ends a prompt nobody answers, on every path that opens one: the in-process bridge, the worker relay and the Codex approval path all open through `open()`, so one bound covers all of them. No adapter keeps its own timer; the worker's former 30-second auto-deny is gone, and the `permission_expired` message the daemon still accepts from a worker is only honoured, not sent.
+
+**Setting.** `daemon.json` `promptExpiryMinutes` (`lib/prompt-expiry.js`), read at each `open()`, global scope only: absent means `1440` (24 hours); `0` turns the expiry off; a positive number is that many minutes (fractions allowed). A malformed value (not a number, negative, not finite, or larger than a timer can hold, about 35,000 minutes) falls back to the default with one warning naming the key. A change applies to the next prompt; a prompt already open keeps its deadline. There is no settings screen for it.
+
+**Which prompts.** The operator-facing kinds: `permission`, `plan`, `ask_user` and `elicitation`. A prompt that sets its own timeout keeps it (`opts.timeoutMs`, or a kind's `defaultTimeoutMs`, such as the browser extension's 3 seconds); the setting bounds only a prompt that sets none.
+
+**On expiry.** The prompt is cancelled once with reason `expired` and source `timeout`, and the kind's fail-closed value reaches the vendor's callback: deny for `permission` and `plan`, deny for `ask_user` (the tool call is refused), and reject for `elicitation`. The card reads Expired and the banner and push are dismissed, as for any cancel. The deadline is fixed at `open()`: a reconnect, a replay or a history page does not touch it, and an answer that arrives first settles the prompt so the timer never fires. A daemon restart ends every prompt first (source `daemon_restart`).
 
 ### Notification preferences
 
