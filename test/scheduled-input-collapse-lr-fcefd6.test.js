@@ -1,6 +1,6 @@
 "use strict";
 // A pending scheduled input is an outbox item (scheduled-outbox.js) and long
-// fired scheduled messages collapse to one line. The helper logic always runs; the browser cases drive the real
+// fired scheduled messages collapse to about three lines. The helper logic always runs; the browser cases drive the real
 // client against a daemon booted by the harness over a private home and port,
 // at a desktop and a phone width. Playwright is not a dependency of this repo:
 // the browser cases run when it resolves (CLAGENTIC_CONSOLE_TEST_PLAYWRIGHT
@@ -19,20 +19,20 @@ function loadPlaywright() {
   try { return require(where || "playwright"); } catch (e) { return null; }
 }
 
-test("collapsible-text: first line, threshold and scheduled initiators", async function () {
+test("collapsible-text: preview lines, threshold and the non-typed predicate", async function () {
   var m = await import(pathToFileURL(path.join(MODULES, "collapsible-text.js")).href);
-  assert.equal(m.firstLine("\n\n  wake up\nsecond\nthird"), "  wake up");
-  assert.equal(m.firstLine(""), "");
-  assert.equal(m.firstLine(null), "");
+  assert.equal(m.previewLines("\n\n  wake up\nsecond\nthird\nfourth"), "  wake up\nsecond\nthird");
+  assert.equal(m.previewLines(""), "");
+  assert.equal(m.previewLines(null), "");
   assert.equal(m.needsCollapse("one short line"), false);
   assert.equal(m.needsCollapse("one short line\n"), false, "a trailing newline is not a second line");
-  assert.equal(m.needsCollapse("a\nb"), true);
+  assert.equal(m.needsCollapse("a\nb"), false, "up to three lines render in full");
+  assert.equal(m.needsCollapse("a\nb\nc\nd"), true);
   assert.equal(m.needsCollapse("x".repeat(m.COLLAPSE_CHAR_LIMIT)), false);
   assert.equal(m.needsCollapse("x".repeat(m.COLLAPSE_CHAR_LIMIT + 1)), true);
-  assert.equal(m.isScheduledInitiator("scheduled"), true);
-  assert.equal(m.isScheduledInitiator("scheduled-now"), true);
-  assert.equal(m.isScheduledInitiator("loop"), false);
-  assert.equal(m.isScheduledInitiator(undefined), false);
+  assert.equal(m.isNonTypedInput({ initiator: "scheduled", senderKind: "automation" }), true);
+  assert.equal(m.isNonTypedInput({ initiator: "loop", senderKind: "automation" }), true);
+  assert.equal(m.isNonTypedInput(null), false);
 });
 
 test("the outbox row of a long prompt has a real expand and collapse beside Fire now and Cancel; a short one has none", async function () {
@@ -129,7 +129,7 @@ VIEWPORTS.forEach(function (vp) {
       assert.equal(await fired.nth(0).locator(".bubble").textContent(), "short fired message");
       var longMsg = fired.nth(1);
       assert.equal(await longMsg.locator(".collapsible-full").isVisible(), false);
-      assert.equal(await longMsg.locator(".collapsible-preview").textContent(), "line 1 of the wake-up prompt");
+      assert.equal(await longMsg.locator(".collapsible-preview").textContent(), "line 1 of the wake-up prompt\nline 2 of the wake-up prompt\nline 3 of the wake-up prompt");
       await longMsg.locator(".collapsible-toggle").click();
       assert.equal(await longMsg.locator(".collapsible-full").textContent(), PROMPT);
       assert.equal(await longMsg.locator(".collapsible-full").isVisible(), true);
