@@ -257,3 +257,120 @@ test("no live reference to the old #team-panel popup remains in the shipped tree
   });
   assert.deepEqual(hits.map(function (f) { return path.relative(ROOT, f); }), []);
 });
+
+// --- Round 2: breakpoint consistency and auto-open ownership ---
+
+// Splits a stylesheet into its top-level rules and @media blocks. Enough for
+// this file; the repo has no CSS engine to resolve :has() or media queries.
+function topLevelBlocks(css) {
+  css = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  var blocks = [];
+  var depth = 0;
+  var start = 0;
+  for (var i = 0; i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        var text = css.slice(start, i + 1);
+        var open = text.indexOf("{");
+        blocks.push({ prelude: text.slice(0, open).trim(), body: text.slice(open + 1, -1) });
+        start = i + 1;
+      }
+    }
+  }
+  return blocks;
+}
+
+test("the chat pane is hidden only at widths where the Team view can show, across the 768px breakpoint", async function () {
+  var pos = await import(dom.moduleUrl("popover-position.js"));
+  var bp = pos.MOBILE_BREAKPOINT;
+  var blocks = topLevelBlocks(read("lib/public/css/team-view.css"));
+  var hidesChat = /#app\s*\{\s*display:\s*none/;
+
+  var unconditional = blocks.filter(function (b) { return /#team-view:not\(\.hidden\)/.test(b.prelude) && hidesChat.test(b.body); });
+  assert.equal(unconditional.length, 0, "no top-level rule hides #app on the view's open state alone");
+
+  var wide = blocks.filter(function (b) { return /^@media/.test(b.prelude) && /#team-view:not\(\.hidden\)\)\s*>\s*#app/.test(b.body); });
+  assert.equal(wide.length, 1, "the #app-hiding rule lives in exactly one media block");
+  assert.equal(wide[0].prelude.replace(/\s+/g, ""), "@media(min-width:" + (bp + 1) + "px)",
+    "it applies only above the width where isMobileViewport() is true");
+
+  var phone = blocks.filter(function (b) { return /^@media/.test(b.prelude) && /#team-view\s*\{\s*display:\s*none/.test(b.body); });
+  assert.equal(phone.length, 1, "the phone rule that hides the view");
+  assert.equal(phone[0].prelude.replace(/\s+/g, ""), "@media(max-width:" + bp + "px)",
+    "the CSS ceiling equals MOBILE_BREAKPOINT, the threshold isMobileViewport() uses");
+  assert.doesNotMatch(phone[0].body, /#app/, "the phone rule leaves the chat pane alone");
+
+  // At every width exactly one of the two media rules applies, so the chat is
+  // hidden if and only if the view is shown: no width has both or neither.
+  [320, bp, bp + 1, 1280].forEach(function (w) {
+    var viewHiddenByCss = w <= bp;
+    var chatHiddenByCss = w >= bp + 1;
+    assert.notEqual(viewHiddenByCss, chatHiddenByCss, "width " + w);
+  });
+
+  // The JS side of the same threshold: auto-open is skipped at or below it.
+  global.window = global.window || {};
+  [bp, bp + 1].forEach(function (w) {
+    global.window.innerWidth = w;
+    assert.equal(pos.isMobileViewport(), w <= bp);
+  });
+});
+
+test("opened wide then narrowed then widened, the view stays open and consistent", async function () {
+  var els = installPage(1280);
+  var mods = await loadModules(true);
+  mods.view.initTeamView();
+  mods.panel.handleTeamGone();
+  mods.view.closeTeamView();
+
+  mods.view.openTeamView();
+  assert.equal(mods.view.isTeamViewOpen(), true);
+
+  global.window.innerWidth = 600;
+  mods.view.refreshTeamView();
+  assert.equal(mods.view.isTeamViewOpen(), true, "narrowing does not change the open state; CSS owns visibility");
+  assert.ok(els["team-view-body"].querySelector(".team-empty-state"), "still renders in place");
+
+  global.window.innerWidth = 1280;
+  mods.view.refreshTeamView();
+  assert.equal(mods.view.isTeamViewOpen(), true);
+  assert.equal(els["team-view"].classList.contains("hidden"), false);
+});
+
+test("team_gone closes a view team_state opened on its own, back to the chat", async function () {
+  var els = installPage();
+  var mods = await loadModules(true);
+  mods.view.initTeamView();
+  mods.panel.handleTeamGone();
+  mods.view.closeTeamView();
+
+  feedTeam(mods.panel);
+  assert.equal(mods.view.isTeamViewOpen(), true, "team_state auto-opened it");
+
+  mods.panel.handleTeamGone();
+  assert.equal(mods.view.isTeamViewOpen(), false, "the view closes with the team");
+  assert.equal(els["team-view"].classList.contains("hidden"), true);
+  assert.equal(els["icon-strip-team-btn"].classList.contains("active"), false);
+});
+
+test("team_gone leaves a view the user opened on the empty state", async function () {
+  var els = installPage();
+  var mods = await loadModules(true);
+  mods.view.initTeamView();
+  mods.panel.handleTeamGone();
+  mods.view.closeTeamView();
+
+  mods.view.openTeamView();
+  feedTeam(mods.panel);
+  mods.panel.handleTeamGone();
+
+  assert.equal(mods.view.isTeamViewOpen(), true, "a user-opened view stays open");
+  assert.ok(els["team-view-body"].querySelector(".team-empty-state"), "it shows the empty state");
+
+  mods.view.closeTeamView();
+  feedTeam(mods.panel);
+  mods.panel.handleTeamGone();
+  assert.equal(mods.view.isTeamViewOpen(), false, "once closed, the next auto-open is auto again");
+});

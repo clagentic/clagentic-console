@@ -16,8 +16,14 @@
 #team-view.hidden { display: none; }
 
 /* The chat pane steps aside while the view is open; file viewer and terminal
-   panes keep their own place beside it. */
-#main-panels:has(#team-view:not(.hidden)) > #app { display: none; }
+   panes keep their own place beside it. Scoped to the widths where the view
+   can actually show (the phone rule below hides it), so the two rules never
+   disagree and a resize across the breakpoint cannot blank the main pane.
+   The 769px floor and the 768px ceiling below are MOBILE_BREAKPOINT + 1 and
+   MOBILE_BREAKPOINT in popover-position.js; a test pins them together. */
+@media (min-width: 769px) {
+  #main-panels:has(#team-view:not(.hidden)) > #app { display: none; }
+}
 
 /* Project settings is a full view of its own and wins over the Team view. */
 #main-panels:has(#project-settings:not(.hidden)) > #team-view { display: none; }
