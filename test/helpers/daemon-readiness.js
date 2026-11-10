@@ -92,6 +92,24 @@ function waitForDaemonListening(proc, getLog, timeoutMs, opts) {
   });
 }
 
+// One log array per spawned daemon, owned by that process's stream handlers.
+// killAndWait resolves on "exit", which does not guarantee stdout is drained,
+// so a killed collided attempt can still deliver a late "in use" line. If the
+// handlers wrote to a variable shared across attempts, that line would land in
+// the retry's log and fail it. Each attempt must call this once and read only
+// the returned getLog().
+//   opts.tagStderr: prefix stderr chunks with "[err] "
+function captureLog(proc, opts) {
+  var lines = [];
+  var errPrefix = opts && opts.tagStderr ? "[err] " : "";
+  proc.stdout.on("data", function (d) { lines.push(d.toString()); });
+  proc.stderr.on("data", function (d) { lines.push(errPrefix + d.toString()); });
+  return {
+    lines: lines,
+    getLog: function () { return lines.join(""); },
+  };
+}
+
 function killAndWait(proc) {
   return new Promise(function (resolve) {
     if (proc.exitCode !== null) { resolve(); return; }
@@ -125,6 +143,7 @@ module.exports = {
   findFreePort: findFreePort,
   waitForServer: waitForServer,
   waitForDaemonListening: waitForDaemonListening,
+  captureLog: captureLog,
   killAndWait: killAndWait,
   startOnFreePort: startOnFreePort,
 };

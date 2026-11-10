@@ -51,6 +51,7 @@ var { spawn } = require("child_process");
 var {
   waitForServer,
   waitForDaemonListening,
+  captureLog,
   killAndWait,
   startOnFreePort,
 } = require("./helpers/daemon-readiness");
@@ -95,7 +96,6 @@ function httpGetRaw(port, urlPath) {
 test("lr-e33776: unauthed project asset/module/API requests never get 200 text/html; navigation still shows the login page", { timeout: TEST_TIMEOUT_MS }, function (t, done) {
   var tmpHome = null;
   var daemonProc = null;
-  var daemonLog = [];
 
   t.after(function () {
     var p = daemonProc && daemonProc.exitCode === null
@@ -128,7 +128,6 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
   }, null, 2), { mode: 0o600 });
 
   function startDaemonOn(port) {
-    daemonLog = [];
     fs.writeFileSync(configFile, JSON.stringify({
       port: port,
       host: "127.0.0.1",
@@ -145,15 +144,16 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
       stdio: ["ignore", "pipe", "pipe"],
     });
     daemonProc = proc;
-    proc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
-    proc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
+    // This attempt's own log: a killed collided attempt's late output cannot
+    // reach the retry.
+    var attempt = captureLog(proc, { tagStderr: true });
     proc.once("exit", function (code) {
       if (code !== 0 && code !== null) {
         t.diagnostic("daemon exited with code " + code);
-        t.diagnostic("daemon log:\n" + daemonLog.slice(-30).join(""));
+        t.diagnostic("daemon log:\n" + attempt.lines.slice(-30).join(""));
       }
     });
-    return waitForDaemonListening(proc, function () { return daemonLog.join(""); }, DAEMON_READY_MS)
+    return waitForDaemonListening(proc, attempt.getLog, DAEMON_READY_MS)
       .then(function () { return waitForServer(port, HTTP_READY_MS); })
       .then(function () { return port; });
   }

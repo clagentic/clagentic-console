@@ -53,6 +53,7 @@ var { spawn } = require("child_process");
 var {
   waitForServer,
   waitForDaemonListening,
+  captureLog,
   killAndWait,
   startOnFreePort,
 } = require("./helpers/daemon-readiness");
@@ -129,7 +130,6 @@ function wsUpgradeRaw(port, urlPath) {
 test("lr-2895ea: unauth GET of the app-shell static assets returns the real asset; document/api/ws stay gated", { timeout: TEST_TIMEOUT_MS }, function (t, done) {
   var tmpHome = null;
   var daemonProc = null;
-  var daemonLog = [];
 
   t.after(function () {
     var p = daemonProc && daemonProc.exitCode === null
@@ -147,7 +147,6 @@ test("lr-2895ea: unauth GET of the app-shell static assets returns the real asse
   // between probe and bind restarts this setup on a fresh port (bounded), so the
   // assertions below never run against a foreign server.
   function startDaemonOn(port) {
-    daemonLog = [];
     if (!tmpHome) tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-lr-2895ea-"));
     var projectDir = path.join(tmpHome, "shell-asset-project");
     fs.mkdirSync(projectDir, { recursive: true });
@@ -180,16 +179,17 @@ test("lr-2895ea: unauth GET of the app-shell static assets returns the real asse
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
-    daemonProc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
-    daemonProc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
+    // This attempt's own log: a killed collided attempt's late output cannot
+    // reach the retry.
+    var attempt = captureLog(daemonProc, { tagStderr: true });
     daemonProc.once("exit", function (code) {
       if (code !== 0 && code !== null) {
         t.diagnostic("daemon exited with code " + code);
-        t.diagnostic("daemon log:\n" + daemonLog.slice(-30).join(""));
+        t.diagnostic("daemon log:\n" + attempt.lines.slice(-30).join(""));
       }
     });
 
-    return waitForDaemonListening(daemonProc, function () { return daemonLog.join(""); }, DAEMON_READY_MS)
+    return waitForDaemonListening(daemonProc, attempt.getLog, DAEMON_READY_MS)
       .then(function () { return waitForServer(port, HTTP_READY_MS); })
       .then(function () { return port; });
   }
