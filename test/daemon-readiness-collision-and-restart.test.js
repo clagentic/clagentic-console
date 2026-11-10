@@ -22,8 +22,10 @@ var {
   waitForServer,
   waitForDaemonListening,
   killAndWait,
+  captureLog,
+  startOnFreePort,
 } = require("./helpers/daemon-readiness");
-var { bootDaemon } = require("./fixtures/daemon-harness");
+var { bootDaemon, pidAlive } = require("./fixtures/daemon-harness");
 
 function listenForeign() {
   return new Promise(function (resolve) {
@@ -154,6 +156,84 @@ test("fixture: the restart wait is not satisfied by the first boot's listen line
       d.respawn(silentScript, 1500),
       function (err) { assert.match(err.message, /never bound/); return true; }
     );
+  } finally {
+    if (first.exitCode === null) {
+      first.kill("SIGKILL");
+      await new Promise(function (r) { first.once("exit", r); });
+    }
+    await d.cleanup();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a killed collided attempt's late 'in use' output does not fail or restart the retry", { timeout: 30000 }, async function () {
+  var attempts = [];
+  var procs = [];
+  var collided = "console.log('[daemon] Port 1 in use, retrying (1/10)...'); setInterval(function () {}, 1000);";
+  var bound = "setTimeout(function () { console.log('[daemon] Listening on http://127.0.0.1:1'); }, 400); setInterval(function () {}, 1000);";
+  function startOn() {
+    var proc = spawn(process.execPath, ["-e", attempts.length === 0 ? collided : bound], { stdio: ["ignore", "pipe", "pipe"] });
+    procs.push(proc);
+    var cap = captureLog(proc);
+    attempts.push(cap);
+    if (attempts.length === 2) {
+      // What killAndWait cannot rule out: the first attempt's stdout delivers
+      // another 'in use' chunk after its exit was observed and the retry began.
+      procs[0].stdout.emit("data", Buffer.from("[daemon] Port 1 in use, retrying (2/10)...\n"));
+    }
+    return waitForDaemonListening(proc, cap.getLog, 5000);
+  }
+  try {
+    await startOnFreePort(startOn, function () { return procs[procs.length - 1]; }, 3);
+    assert.equal(attempts.length, 2, "exactly one restart: the late line must not trigger another");
+    assert.doesNotMatch(attempts[1].getLog(), /in use/, "the retry's log holds only its own output");
+  } finally {
+    await Promise.all(procs.map(killAndWait));
+  }
+});
+
+// A script that records its pid and the home it was given, then never listens
+// (hang) or exits at once (exit).
+function recorderScript(dir, behavior) {
+  var script = path.join(dir, behavior + "-daemon.js");
+  fs.writeFileSync(script,
+    "require('fs').writeFileSync(process.env.RECORD_FILE, JSON.stringify({ pid: process.pid, home: process.env.CLAGENTIC_CONSOLE_HOME }));\n" +
+    (behavior === "hang" ? "setInterval(function () {}, 1000);\n" : "process.exit(1);\n"));
+  return script;
+}
+
+["hang", "exit"].forEach(function (behavior) {
+  test("fixture: a boot that rejects (" + behavior + ") leaves no child and no temp home", { timeout: 30000 }, async function () {
+    var tmp = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-failed-boot-"));
+    var record = path.join(tmp, "record.json");
+    var script = recorderScript(tmp, behavior);
+    var rec = null;
+    try {
+      await assert.rejects(
+        bootDaemon({ script: script, readyMs: 1000, env: { RECORD_FILE: record } }),
+        behavior === "hang" ? /never bound/ : /exited with code 1/
+      );
+      rec = JSON.parse(fs.readFileSync(record, "utf8"));
+      assert.equal(pidAlive(rec.pid), false, "the spawned child is dead");
+      assert.equal(fs.existsSync(rec.home), false, "the temp home the boot created is removed");
+    } finally {
+      if (rec && pidAlive(rec.pid)) process.kill(rec.pid, "SIGKILL");
+      if (rec) fs.rmSync(rec.home, { recursive: true, force: true });
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+test("fixture: a respawn that rejects leaves no child it spawned", { timeout: 60000 }, async function () {
+  var tmp = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-failed-respawn-"));
+  var record = path.join(tmp, "record.json");
+  var script = recorderScript(tmp, "hang");
+  var d = await bootDaemon({ env: { RECORD_FILE: record } });
+  var first = d.proc;
+  try {
+    await assert.rejects(d.respawn(script, 1000), /never bound/);
+    var rec = JSON.parse(fs.readFileSync(record, "utf8"));
+    assert.equal(pidAlive(rec.pid), false, "the restart's child is dead");
   } finally {
     if (first.exitCode === null) {
       first.kill("SIGKILL");

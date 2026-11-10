@@ -81,11 +81,20 @@ async function waitForRecordedPid(file, pid, ms) {
   throw new Error("the daemon did not record pid " + pid + " in " + file + " within " + ms + " ms");
 }
 
+// SIGKILL the child this harness spawned and wait until it has exited.
+async function stopChild(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  var exited = new Promise(function (resolve) { child.once("exit", resolve); });
+  signalPid(child.pid, "SIGKILL");
+  await exited;
+}
+
 /**
  * @param {object} [o]
  * @param {object} [o.config] merged over the daemon.json the daemon starts with
  * @param {object} [o.env] extra environment for the daemon; a null value removes the variable
  * @param {string} [o.script] daemon entry to run (default: this checkout's lib/daemon.js)
+ * @param {number} [o.readyMs] bound on the wait for the daemon's listen line (default 20000)
  * @param {function} [o.findPort] picks the port to try; a collision retries on a fresh findFreePort() port
  */
 async function bootDaemon(o) {
@@ -135,16 +144,28 @@ async function bootDaemon(o) {
     log = [];
     writeConfig();
     proc = start();
-    await waitForDaemonListening(proc, function () { return log.join(""); }, DEFAULT_READY_MS);
+    await waitForDaemonListening(proc, function () { return log.join(""); }, opts.readyMs || DEFAULT_READY_MS);
     await waitForServer(port, HTTP_READY_MS);
     await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
   }
   var firstPort = true;
-  await startOnFreePort(function (p) {
-    var pick = firstPort && opts.findPort ? opts.findPort() : Promise.resolve(p);
-    firstPort = false;
-    return pick.then(startOn);
-  }, function () { return proc; }, LISTEN_ATTEMPTS);
+  try {
+    await startOnFreePort(function (p) {
+      var pick = firstPort && opts.findPort ? opts.findPort() : Promise.resolve(p);
+      firstPort = false;
+      return pick.then(startOn);
+    }, function () { return proc; }, LISTEN_ATTEMPTS);
+  } catch (err) {
+    // The caller never receives d, so nothing else can stop the child or remove
+    // the home this call created.
+    await stopChild(proc);
+    try {
+      await removeTempHome(home, { children: proc ? [proc] : [], token: token });
+    } catch (cleanupErr) {
+      err.message += "; the failed boot's cleanup also failed: " + cleanupErr.message;
+    }
+    throw err;
+  }
 
   var d = {
     token: token,
@@ -166,9 +187,16 @@ async function bootDaemon(o) {
       var from = log.join("").length;
       d.proc = start();
       proc = d.proc;
-      await waitForDaemonListening(proc, function () { return log.join(""); }, readyMs || DEFAULT_READY_MS, { fromOffset: from, tolerateInUse: true });
-      await waitForServer(port, HTTP_READY_MS);
-      await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
+      try {
+        await waitForDaemonListening(proc, function () { return log.join(""); }, readyMs || DEFAULT_READY_MS, { fromOffset: from, tolerateInUse: true });
+        await waitForServer(port, HTTP_READY_MS);
+        await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
+      } catch (err) {
+        // The home belongs to d, which the caller still cleans up; only the
+        // child this restart spawned is stopped here.
+        await stopChild(proc);
+        throw err;
+      }
       return d.proc;
     },
     // The pid a self-spawning restart records for its successor. An unreadable
