@@ -92,3 +92,30 @@
 }
 
 .shell-queued.unsent .shell-queued-tag { color: var(--error); }
+
+/* Per-entry controls on a queued ! line: labelled in words, as tall as the send button. */
+.shell-queued .shell-queued-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.shell-queued .shell-queued-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.shell-queued .shell-queued-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.shell-queued .shell-queued-btn.unavailable {
+  opacity: 0.4;
+  border-style: dashed;
+}
