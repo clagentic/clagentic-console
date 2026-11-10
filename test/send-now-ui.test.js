@@ -42,13 +42,17 @@ test("send now steers only a running turn on an agent that can; otherwise it sen
   assert.match(off.reason, /cannot take a message/);
 });
 
-test("the composer has a send-now button beside send, and the keydown handler routes the shortcut before Enter", function () {
+test("the composer has no send-now button; the keydown handler routes the shortcut before Enter", function () {
   var html = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8");
-  assert.ok(html.indexOf('id="send-now-btn"') !== -1 && html.indexOf('id="send-now-btn"') < html.indexOf('id="send-btn"'));
+  assert.equal(html.indexOf("send-now-btn"), -1, "the lightning button is gone from the markup");
   var input = fs.readFileSync(path.join(PUBLIC, "modules", "input.js"), "utf8");
+  assert.equal(input.indexOf("initSendNowButton"), -1);
+  assert.equal(input.indexOf("send-now-btn"), -1);
   var shortcut = input.indexOf("isSendNowKey(e, isMacPlatform())");
   var enter = input.indexOf('if (e.key === "Enter" && !e.shiftKey && !isComposing)');
   assert.ok(shortcut > 0 && shortcut < enter);
   var css = fs.readFileSync(path.join(PUBLIC, "css", "input.css"), "utf8");
-  assert.match(css, /#send-now-btn \{[^}]*min-height: 44px/);
+  assert.equal(css.indexOf("send-now-btn"), -1, "its CSS is gone");
+  var mod = fs.readFileSync(path.join(PUBLIC, "modules", "send-now.js"), "utf8");
+  assert.equal(mod.indexOf("initSendNowButton"), -1);
 });

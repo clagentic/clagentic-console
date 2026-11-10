@@ -541,6 +541,248 @@ test("an image attachment of a queued message is named in the restored text, not
   assert.match(back.value, /^see\n\npasted\n\[an image attachment of this message was not restored/);
 });
 
+// ---------------------------------------------------------------- queued ! controls, keys
+
+function press(env, evt) {
+  var ev = Object.assign({ key: "", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, prevented: false }, evt);
+  ev.preventDefault = function () { ev.prevented = true; };
+  (env.ctx.inputEl._listeners.keydown || []).forEach(function (fn) { fn(ev); });
+  return ev;
+}
+function queuedEls() { return els.messages.querySelectorAll(".shell-queued"); }
+function btn(el, cls) { return el.querySelector("." + cls); }
+var CAN_STEER = { steering: true };
+
+test("a queued ! entry shows Send now, Edit and Cancel, labelled in words", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!sleep 30");
+  var q = queuedEls()[0];
+  ["shell-queued-send-now", "shell-queued-edit", "shell-queued-cancel"].forEach(function (cls, i) {
+    assert.ok(btn(q, cls), cls);
+    assert.equal(btn(q, cls).textContent, ["Send now", "Edit", "Cancel"][i]);
+    assert.equal(btn(q, cls).getAttribute("aria-label"), ["Send now", "Edit", "Cancel"][i]);
+  });
+  var css = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "css", "user-shell.css"), "utf8");
+  assert.match(css, /\.shell-queued \.shell-queued-btn \{[^}]*min-height: 36px/, "as tall as the send button");
+});
+
+test("during a turn a queued ! entry's Send now is disabled with the reason, and follows the turn", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!sleep 30");
+  var send = btn(queuedEls()[0], "shell-queued-send-now");
+  assert.equal(send.getAttribute("aria-disabled"), "true");
+  assert.match(send.title, /a command runs after the turn/);
+  send.click();
+  assert.equal(frames(env, "shell").length, 0, "nothing runs during the turn");
+  assert.match(els.messages.querySelectorAll(".sys-text")[0].textContent, /a command runs after the turn/, "a tap says why");
+  assert.deepEqual(queuedTexts(), ["!sleep 30"]);
+
+  // Idle again with a command running: the entry waits behind it and Send now is usable.
+  env.store.set({ processing: false });
+  type(env, "!held");
+  env.store.set({ processing: true });
+  env.store.set({ processing: false });
+  var queued = queuedEls();
+  assert.equal(btn(queued[queued.length - 1], "shell-queued-send-now").getAttribute("aria-disabled"), "false");
+});
+
+test("Send now on a queued ! entry while idle with others ahead runs it next", async function () {
+  var env = await setup();
+  type(env, "!running");
+  type(env, "!one");
+  type(env, "!two");
+  assert.deepEqual(queuedTexts(), ["!one", "!two"]);
+  btn(queuedEls()[1], "shell-queued-send-now").click();
+  assert.deepEqual(queuedTexts(), ["!two", "!one"], "it moved to the head, on screen too");
+  finish(env, lastShell(env));
+  assert.equal(lastShell(env).command, "two", "it runs next");
+  finish(env, lastShell(env));
+  assert.equal(lastShell(env).command, "one");
+});
+
+test("Cancel removes a queued ! entry; Edit removes it and puts the command in the composer", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!keep");
+  type(env, "!drop");
+  type(env, "!fix me");
+  btn(queuedEls()[1], "shell-queued-cancel").click();
+  assert.deepEqual(queuedTexts(), ["!keep", "!fix me"]);
+  btn(queuedEls()[1], "shell-queued-edit").click();
+  assert.deepEqual(queuedTexts(), ["!keep"]);
+  assert.equal(env.ctx.inputEl.value, "!fix me");
+  endTurn(env);
+  assert.deepEqual(frames(env, "shell").map(function (f) { return f.command; }), ["keep"], "neither removed entry ran");
+
+  els.messages._children = [];
+  reloads += 1;
+  var fresh = await import(dom.moduleUrl("user-shell.js") + "?reload=" + reloads);
+  var composerEl = new FakeElement("textarea");
+  fresh.handleSessionShown(composerEl);
+  assert.equal(composerEl.value, "", "a removed entry is not restored after a reload");
+});
+
+test("Ctrl+Enter during a turn sends the draft into the turn at once and sets queued ! entries to run next", async function () {
+  var env = await setup();
+  env.store.set({ processing: true, vendorCapabilities: CAN_STEER });
+  type(env, "!later");
+  env.ctx.inputEl.value = "change course";
+  var ev = press(env, { key: "Enter", ctrlKey: true });
+  assert.equal(ev.prevented, true);
+  assert.deepEqual(frames(env, "message").map(function (f) { return [f.text, f.sendNow]; }), [["change course", true]], "sent now, not queued behind the ! entry");
+  assert.equal(frames(env, "shell").length, 0, "the command still waits for the turn to end");
+  assert.deepEqual(queuedTexts(), ["!later"]);
+  endTurn(env);
+  assert.equal(lastShell(env).command, "later");
+});
+
+test("Ctrl+Enter keeps the unchanged refusal when the agent cannot take a message into a turn", async function () {
+  var env = await setup();
+  env.store.set({ processing: true, vendorCapabilities: {} });
+  type(env, "!later");
+  env.ctx.inputEl.value = "change course";
+  press(env, { key: "Enter", ctrlKey: true });
+  assert.equal(frames(env, "message").length, 0);
+  assert.equal(env.ctx.inputEl.value, "change course", "the draft stays in the composer");
+  assert.match(env.notes[0], /^Send now is unavailable: .* Use send to queue it for the next turn\.$/);
+});
+
+test("Ctrl+Enter puts queued ! entries ahead of queued chat, with no draft needed", async function () {
+  var env = await setup();
+  type(env, "!running");
+  type(env, "chat first");
+  type(env, "!cmd");
+  assert.deepEqual(queuedTexts(), ["chat first", "!cmd"]);
+  press(env, { key: "Enter", ctrlKey: true });
+  assert.deepEqual(queuedTexts(), ["!cmd", "chat first"]);
+  assert.equal(env.notes.length, 0, "an empty draft is not a refusal");
+  finish(env, lastShell(env));
+  assert.equal(lastShell(env).command, "cmd");
+});
+
+test("Up from an empty composer takes back only the last queued ! entry when nothing else is queued", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  type(env, "!one");
+  type(env, "!two");
+  var ev = press(env, { key: "ArrowUp" });
+  assert.equal(ev.prevented, true);
+  assert.equal(env.ctx.inputEl.value, "!two", "a single ! line, never several joined");
+  assert.deepEqual(queuedTexts(), ["!one"], "the earlier entry stays queued");
+  env.ctx.inputEl.value = "";
+  press(env, { key: "ArrowUp" });
+  assert.equal(env.ctx.inputEl.value, "!one", "Up again takes the next one");
+  assert.deepEqual(queuedTexts(), []);
+  endTurn(env);
+  assert.equal(frames(env, "shell").length, 0, "taken back, so nothing runs");
+});
+
+test("Up keeps its current behaviour with a draft, queued chat, or nothing queued", async function () {
+  var env = await setup();
+  var ev = press(env, { key: "ArrowUp" });
+  assert.equal(ev.prevented, false, "nothing queued");
+
+  type(env, "!running");
+  type(env, "chat");
+  type(env, "!cmd");
+  ev = press(env, { key: "ArrowUp" });
+  assert.equal(ev.prevented, false, "chat is queued too");
+  assert.deepEqual(queuedTexts(), ["chat", "!cmd"]);
+  assert.equal(env.ctx.inputEl.value, "");
+
+  var env2 = await setup();
+  env2.store.set({ processing: true });
+  type(env2, "!one");
+  env2.ctx.inputEl.value = "draft";
+  ev = press(env2, { key: "ArrowUp" });
+  assert.equal(ev.prevented, false, "the composer is not empty");
+  assert.deepEqual(queuedTexts(), ["!one"]);
+  assert.equal(env2.ctx.inputEl.value, "draft");
+});
+
+test("Enter is unchanged: it queues a ! line during a turn and does not send now", async function () {
+  var env = await setup();
+  env.store.set({ processing: true, vendorCapabilities: CAN_STEER });
+  env.ctx.inputEl.value = "hello";
+  press(env, { key: "Enter" });
+  assert.equal(frames(env, "message").length, 1);
+  assert.equal(frames(env, "message")[0].sendNow, undefined, "an ordinary send, not send-now");
+});
+
+test("one capability table defines Send now per kind, chat and !", async function () {
+  var m = await import(dom.moduleUrl("send-now.js"));
+  assert.deepEqual(Object.keys(m.SEND_NOW_BY_KIND).sort(), ["chat", "shell"]);
+  var can = { enabled: true, reason: "" };
+  var cannot = { enabled: false, reason: "no steering here" };
+  assert.deepEqual(m.sendNowForKind("chat", true, can), { mode: "steer", reason: "" });
+  assert.deepEqual(m.sendNowForKind("chat", true, cannot), { mode: "disabled", reason: "no steering here" });
+  assert.equal(m.sendNowForKind("chat", false, cannot).mode, "send");
+  assert.equal(m.sendNowForKind("shell", true, can).mode, "disabled", "a ! command never goes into a turn, whatever the agent can do");
+  assert.equal(m.sendNowForKind("shell", true, can).reason, "a command runs after the turn");
+  assert.equal(m.sendNowForKind("shell", false, null).mode, "run-next");
+  assert.equal(m.sendNowState(true, can).mode, "steer", "the chat helper reads the same table");
+});
+
+test("touch: a long press of the send button with a draft ready during a turn sends it now, and its click does not also send", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var env = await setup();
+  env.store.set({ processing: true, vendorCapabilities: CAN_STEER });
+  env.ctx.processing = true;
+  env.ctx.inputEl.value = "hold to send now";
+  var b = env.ctx.sendBtn;
+  function fire(name, e) { (b._listeners[name] || []).slice().forEach(function (fn) { fn(Object.assign({ preventDefault: function () {}, stopImmediatePropagation: function () {} }, e)); }); }
+  fire("pointerdown", { pointerType: "touch" });
+  t.mock.timers.tick(499);
+  assert.equal(frames(env, "message").length, 0, "a short press is not long");
+  t.mock.timers.tick(1);
+  assert.deepEqual(frames(env, "message").map(function (f) { return f.sendNow; }), [true]);
+
+  // A quick tap sends nothing extra when released early.
+  env.ctx.inputEl.value = "second";
+  fire("pointerdown", { pointerType: "touch" });
+  fire("pointerup", {});
+  t.mock.timers.tick(1000);
+  assert.equal(frames(env, "message").length, 1);
+  // A mouse press is never a long press.
+  fire("pointerdown", { pointerType: "mouse" });
+  t.mock.timers.tick(1000);
+  assert.equal(frames(env, "message").length, 1);
+});
+
+test("touch: a long press that ends in pointerleave or pointercancel does not swallow the next click", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var env = await setup();
+  env.store.set({ processing: true, vendorCapabilities: CAN_STEER });
+  env.ctx.processing = true;
+  var b = env.ctx.sendBtn;
+  var swallowed;
+  function fire(name, e) {
+    (b._listeners[name] || []).slice().forEach(function (fn) {
+      fn(Object.assign({ preventDefault: function () {}, stopImmediatePropagation: function () { swallowed = true; } }, e));
+    });
+  }
+  ["pointerleave", "pointercancel"].forEach(function (ending) {
+    env.ctx.inputEl.value = "hold " + ending;
+    fire("pointerdown", { pointerType: "touch" });
+    t.mock.timers.tick(500);
+    fire(ending, {});
+    t.mock.timers.tick(1000);
+    swallowed = false;
+    fire("click", {});
+    assert.equal(swallowed, false, "a keyboard click with no pointerdown after a " + ending + " is not swallowed");
+  });
+  // The click that ends a normal long press is still swallowed.
+  env.ctx.inputEl.value = "normal";
+  fire("pointerdown", { pointerType: "touch" });
+  t.mock.timers.tick(500);
+  fire("pointerup", {});
+  swallowed = false;
+  fire("click", {});
+  assert.equal(swallowed, true);
+});
+
 // ---------------------------------------------------------------- refused command: Edit
 
 function refusal(command) {
