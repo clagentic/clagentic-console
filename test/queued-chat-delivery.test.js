@@ -183,7 +183,7 @@ test("a cancel that races delivery yields delivery alone, whatever the agent ans
   var t2 = tracker();
   t2.track(ID_A);
   var result = await queuedChat.cancel(t2.session, ID_A, function () { return Promise.resolve(false); });
-  assert.equal(result, "already_delivered", "the agent had taken it");
+  assert.equal(result, "pending", "false does not say the agent runs it: it is not reported already_delivered");
   assert.equal(queuedChat.has(t2.session, ID_A), true, "its delivery report is still to come");
   queuedChat.consume(t2.session, [ID_A]);
   assert.deepEqual(t2.seen.delivered, [ID_A]);
@@ -464,4 +464,132 @@ test("a cancelled reply carries the message text; other answers do not", async f
   assert.equal(t.replies()[1].result, "already_delivered");
   assert.equal("text" in t.replies()[1], false);
   t.done();
+});
+
+// ------------------------------------------------------------ cancelled:false (SDK 0.3.318 notes)
+// A fake agent answers false to every cancel below, as the SDK does for a
+// coalesced-batch member, the batch representative and a held-back uuid.
+
+var ID_C = "33333333-3333-4333-8333-333333333333";
+function frameOf(h, isResult) { queuedChat.settleTurn(h.session, isResult); }
+function droppedReplies(h) { return h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled" && m.result === "dropped"; }); }
+function answers(h) { return h.replies().map(function (r) { return r.result; }); }
+
+test("a non-representative batch member: false, it still runs, stays tracked, becomes a normal message, nothing is dropped", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "member one", messageId: ID_A });
+    h.send({ type: "message", text: "member two", messageId: ID_B });
+    h.send({ type: "cancel_queued_message", messageId: ID_B });
+    await tick(); await tick();
+    assert.deepEqual(answers(h), ["pending"], "never already_delivered");
+    frameOf(h, false);
+    queuedChat.consume(h.session, [ID_A, ID_B]);
+    frameOf(h, true);
+    assert.equal(h.records().length, 2, "both are normal messages");
+    assert.equal(h.delivered().length, 2);
+    assert.equal(droppedReplies(h).length, 0);
+  } finally { h.done(); }
+});
+
+test("the batch representative: false, the whole batch never runs, every member is reported dropped with its text", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "first", messageId: ID_A });
+    h.send({ type: "message", text: "second", messageId: ID_B });
+    frameOf(h, true); // the turn they were queued during ends; they wait for the next turn's batch
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    assert.deepEqual(answers(h), ["pending"]);
+    h.send({ type: "message", text: "later turn", messageId: ID_C });
+    frameOf(h, false); // the next turn runs without the dropped batch
+    queuedChat.consume(h.session, [ID_C]);
+    frameOf(h, true);
+    assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.text]; }), [[ID_A, "first"], [ID_B, "second"]]);
+    assert.equal(h.records().length, 1, "only the message that ran is recorded");
+    assert.deepEqual(h.delivered().map(function (m) { return m.messageId; }), [ID_C], "the later message was not caught up in it");
+  } finally { h.done(); }
+});
+
+test("a held-back uuid: false with a pending-cancel mark, dropped by the drain; reported dropped with its text, not already_delivered", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "held", messageId: ID_A });
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    assert.deepEqual(answers(h), ["pending"]);
+    frameOf(h, false); // the running turn continues
+    assert.equal(droppedReplies(h).length, 0, "not decided mid-turn: a fold-in could still take it");
+    frameOf(h, true); // it ends and the drain drops the message: no frame ever names it
+    var dropped = droppedReplies(h);
+    assert.equal(dropped.length, 1);
+    assert.equal(dropped[0].text, "held");
+    assert.equal(h.records().length, 0);
+    queuedChat.consume(h.session, [ID_A]);
+    assert.equal(h.delivered().length, 0, "never shown as delivered");
+    frameOf(h, true);
+    assert.equal(droppedReplies(h).length, 1, "reported once");
+  } finally { h.done(); }
+});
+
+test("a held-back uuid the running turn folds in is delivered, not dropped", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "folded", messageId: ID_A });
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    frameOf(h, false);
+    queuedChat.consume(h.session, [ID_A]);
+    frameOf(h, true);
+    assert.equal(h.delivered().length, 1);
+    assert.equal(droppedReplies(h).length, 0);
+  } finally { h.done(); }
+});
+
+test("no turn runs after a false cancel: the idle settle reports the message dropped with its text; a running turn is left to its result", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "idle drop", messageId: ID_A });
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    assert.equal(queuedChat.hasUnconfirmed(h.session), true);
+    assert.deepEqual(queuedChat.settleIdle(h.session, true), [], "a turn is running: its result settles it");
+    assert.deepEqual(queuedChat.settleIdle(h.session, false), [ID_A]);
+    assert.equal(droppedReplies(h)[0].text, "idle drop");
+    assert.equal(queuedChat.hasUnconfirmed(h.session), false);
+  } finally { h.done(); }
+});
+
+test("the grace timer after a false cancel settles an idle session", async function () {
+  var timers = require("node:test").mock.timers;
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "timer", messageId: ID_A });
+    timers.enable({ apis: ["setTimeout"] });
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    h.session.isProcessing = false;
+    timers.tick(10000);
+    assert.equal(droppedReplies(h).length, 1);
+  } finally { timers.reset(); h.done(); }
+});
+
+test("a plain message already consumed: cancel is already_delivered and it is delivered once (unchanged)", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "running", messageId: ID_A });
+    queuedChat.consume(h.session, [ID_A]);
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick();
+    assert.deepEqual(answers(h), ["already_delivered"]);
+    frameOf(h, true);
+    assert.equal(h.delivered().length, 1);
+    assert.equal(droppedReplies(h).length, 0);
+  } finally { h.done(); }
+});
+
+test("the message processor settles unconfirmed messages on each frame it handles", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "sdk-message-processor.js"), "utf8");
+  assert.ok(/queuedChat\.settleTurn\(session, parsed\.yokeType === "result"\)/.test(src));
+  assert.ok(src.indexOf("queuedChat.consume(session") < src.indexOf("queuedChat.settleTurn("), "consume first, so a message named on the result frame is delivered");
 });

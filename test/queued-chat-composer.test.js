@@ -353,3 +353,26 @@ test("a reply with no queued item and no text changes nothing", async function (
   answer(env, "7e57ed00-0000-4000-8000-000000000000", "already_delivered", { text: "x" });
   assert.equal(env.ctx.inputEl.value, "my draft");
 });
+
+test("a pending answer keeps the item queued with its controls disabled; delivery then shows the message once, a drop hands the text back", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "maybe running");
+  var id = chat(env)[0].messageId;
+  btn(queuedEls()[0], "shell-queued-cancel").click();
+  answer(env, id, "pending");
+  assert.deepEqual(queuedTexts(), ["maybe running"], "still queued");
+  var q = queuedEls()[0];
+  assert.equal(btn(q, "shell-queued-cancel").getAttribute("aria-disabled"), "true");
+  assert.doesNotMatch(btn(q, "shell-queued-cancel").title, /Already delivered/);
+  assert.equal(env.ctx.inputEl.value, "", "nothing handed back yet");
+  delivered(env, id);
+  assert.deepEqual(env.shown, ["maybe running"]);
+
+  type(env, "never ran");
+  var id2 = chat(env)[1].messageId;
+  btn(queuedEls()[0], "shell-queued-cancel").click();
+  answer(env, id2, "pending");
+  answer(env, id2, "dropped", { text: "never ran" });
+  assert.deepEqual(queuedTexts(), []);
+  assert.equal(env.ctx.inputEl.value, "never ran");
+});
