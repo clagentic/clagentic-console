@@ -147,7 +147,7 @@ test("capText cuts on bytes, adds the marker, and leaves short text alone", func
 test("a cap that falls inside a multibyte character backs off to the character boundary", { skip: !posix }, async function () {
   // The cut point is the cap less the marker; put a 2-byte character across it.
   var room = 1000 - Buffer.byteLength(markerFor(1000));
-  var result = await run("head -c " + (room - 1) + " /dev/zero | tr '\\0' 'a'; printf '\\303\\251\\303\\251'", { maxOutputBytes: 1000 });
+  var result = await run("head -c " + (room - 1) + " /dev/zero | tr '\\0' 'a'; printf '\\303\\251\\303\\251'; head -c 200 /dev/zero | tr '\\0' 'b'", { maxOutputBytes: 1000 });
   assert.equal(result.truncated, true);
   var kept = result.output.slice(0, result.output.indexOf("\n[output truncated"));
   assert.equal(kept, "a".repeat(room - 1), "the partial character is dropped, not decoded to U+FFFD");
@@ -189,10 +189,10 @@ test("text added for a command that could not run is inside the cap too", { skip
   var result = await run("echo hi", { cwd: path.join(os.tmpdir(), "user-shell-no-such-dir-cap-" + process.pid), maxOutputBytes: 12 });
   assert.equal(result.truncated, true);
   assert.ok(Buffer.byteLength(result.output) <= 12, "the failure text and marker did not push the output past the cap");
-  var roomy = await run("echo hi", { cwd: path.join(os.tmpdir(), "user-shell-no-such-dir-cap2-" + process.pid), maxOutputBytes: 80 });
+  var roomy = await run("echo hi", { cwd: path.join(os.tmpdir(), "user-shell-no-such-dir-cap2-" + process.pid), maxOutputBytes: 40 });
   assert.equal(roomy.truncated, true);
-  assert.ok(Buffer.byteLength(roomy.output) <= 80);
-  assert.ok(roomy.output.endsWith(markerFor(80)));
+  assert.ok(Buffer.byteLength(roomy.output) <= 40);
+  assert.ok(roomy.output.endsWith(markerFor(40)), "a cap with room for some failure text keeps the marker");
 });
 
 test("a cap smaller than the marker still bounds the output and says it cut", function () {
