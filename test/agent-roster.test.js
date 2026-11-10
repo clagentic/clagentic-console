@@ -27,8 +27,14 @@ test.after(function () {
   tmpDirs.forEach(function (d) { fs.rmSync(d, { recursive: true, force: true }); });
 });
 
+// Writes one at a time, in call order, as lib/store.js writeJsonAt does: bare
+// concurrent writeFile calls to one path can interleave and leave a torn file.
+var writeChain = Promise.resolve();
 function fileWriter(file, value) {
-  return fs.promises.writeFile(file, JSON.stringify(value));
+  var body = JSON.stringify(value);
+  var next = writeChain.then(function () { return fs.promises.writeFile(file, body); });
+  writeChain = next.catch(function () {});
+  return next;
 }
 
 function makeRoster(file, over) {
@@ -267,7 +273,8 @@ test("the ws handlers answer a request, set an avatar, and report a refusal to t
   var m = makeRoster(tmpFile());
   m.roster.observe({ key: "agent-a", source: "session" });
   var sent = [];
-  var h = rosterWs.createWsHandlers({ service: m.roster, sendTo: function (ws, obj) { sent.push(obj); } });
+  var view = { listFor: function () { return m.roster.list(); }, setAvatar: m.roster.setAvatar };
+  var h = rosterWs.createWsHandlers({ service: view, sendTo: function (ws, obj) { sent.push(obj); } });
 
   assert.equal(h.handle({}, { type: "something_else" }), false);
   assert.equal(h.handle({}, { type: "agent_roster_request" }), true);
