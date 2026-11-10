@@ -247,7 +247,7 @@ test("a repeat names its end in the panel before it is armed", async function ()
   assert.match(el.textContent, /A repeat always has an end\./);
 });
 
-test("the bubbles are drawn from the list, one per input, and their buttons name the input", async function () {
+test("the outbox items are drawn from the list, one per input, and their buttons name the input", async function () {
   var env = await boot();
   var wsRef = await import(dom.moduleUrl("ws-ref.js"));
   var sentFrames = [];
@@ -261,13 +261,13 @@ test("the bubbles are drawn from the list, one per input, and their buttons name
         { id: "si_3", kind: "once", createdBy: "rate-limit", text: "continue", nextAt: Date.now() + 120000, firedCount: 0 },
       ],
     });
-    var wraps = env.messages.querySelectorAll(".scheduled-msg-wrap");
+    var wraps = env.messages.querySelectorAll(".scheduled-queued");
     assert.equal(wraps.length, 3);
-    assert.equal(wraps[0].querySelector(".bubble").textContent, "first");
-    assert.match(wraps[1].querySelector(".scheduled-msg-countdown").textContent, /^Scheduled repeat · Next at .* every 10 min until /);
-    assert.match(wraps[2].querySelector(".scheduled-msg-countdown").textContent, /^Automatic resume after rate limit · Sends at /);
-    click(wraps[1].querySelector(".scheduled-msg-send-now"));
-    click(wraps[0].querySelector(".scheduled-msg-cancel"));
+    assert.equal(wraps[0].querySelector(".shell-queued-text").textContent, "first");
+    assert.match(wraps[1].querySelector(".scheduled-queued-time").textContent, /^Scheduled repeat · Next at .* every 10 min until /);
+    assert.match(wraps[2].querySelector(".scheduled-queued-time").textContent, /^Automatic resume after rate limit · Sends at /);
+    click(wraps[1].querySelector(".scheduled-queued-fire"));
+    click(wraps[0].querySelector(".scheduled-queued-cancel"));
     assert.deepEqual(sentFrames, [
       { type: "send_scheduled_now", id: "si_2" },
       { type: "cancel_scheduled_message", id: "si_1" },
@@ -277,13 +277,13 @@ test("the bubbles are drawn from the list, one per input, and their buttons name
     rl.applyScheduledInputList({ type: "scheduled_input_list", localId: "A", limit: 5, inputs: [
       { id: "si_2", kind: "recurring", createdBy: "cli", text: "wake up", every: 600000, nextAt: Date.now() + 600000, until: Date.now() + 3600000, count: null, firedCount: 1 },
     ] });
-    assert.equal(env.messages.querySelectorAll(".scheduled-msg-wrap").length, 1);
+    assert.equal(env.messages.querySelectorAll(".scheduled-queued").length, 1);
 
     // A list for a session that is not on screen is kept, not drawn.
     rl.applyScheduledInputList({ type: "scheduled_input_list", localId: "B", limit: 5, inputs: [
       { id: "si_9", kind: "once", createdBy: "browser", text: "elsewhere", nextAt: Date.now() + 60000, firedCount: 0 },
     ] });
-    assert.equal(env.messages.querySelectorAll(".scheduled-msg-wrap").length, 1);
+    assert.equal(env.messages.querySelectorAll(".scheduled-queued").length, 1);
     assert.equal(env.messages.textContent.indexOf("elsewhere"), -1);
   } finally {
     rl.resetRateLimitState();

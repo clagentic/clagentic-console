@@ -711,9 +711,9 @@ test("Enter is unchanged: it queues a ! line during a turn and does not send now
   assert.equal(frames(env, "message")[0].sendNow, undefined, "an ordinary send, not send-now");
 });
 
-test("one capability table defines Send now per kind, chat and !", async function () {
+test("one capability table defines Send now per kind: chat, ! and scheduled", async function () {
   var m = await import(dom.moduleUrl("send-now.js"));
-  assert.deepEqual(Object.keys(m.SEND_NOW_BY_KIND).sort(), ["chat", "shell"]);
+  assert.deepEqual(Object.keys(m.SEND_NOW_BY_KIND).sort(), ["chat", "scheduled", "shell"]);
   var can = { enabled: true, reason: "" };
   var cannot = { enabled: false, reason: "no steering here" };
   assert.deepEqual(m.sendNowForKind("chat", true, can), { mode: "steer", reason: "" });
