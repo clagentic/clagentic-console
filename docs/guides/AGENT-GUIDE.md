@@ -61,9 +61,12 @@ An address is at most 192 characters. `--project` may be given beside `--to`, an
 
 An address names a class of sessions, and the console never guesses within one. Among the sessions an address matches, the highest state tier that has any match decides:
 
-1. `live`: a turn is running, or the session is blocked on a pending prompt.
+1. running: `state` is `live` and `pendingPrompts` is empty (a turn is running).
 2. `idle`: a runtime is attached, nothing is running and nothing is pending.
-3. `reaped`: no runtime (the idle reaper, a daemon restart). Input resumes it.
+3. prompt-blocked: `state` is `live` and `pendingPrompts` is not empty. The session is stuck on the operator, so it ranks below an idle one.
+4. `reaped`: no runtime (the idle reaper, a daemon restart). Input resumes it.
+
+The split of `live` into running and prompt-blocked applies to resolution only. `list-sessions` and the candidates still report `live` for both, with `pendingPrompts` telling them apart.
 
 Exactly one match in the deciding tier: the input goes to it. Several in that tier: nothing is delivered and the result is `ambiguous`, with the tied sessions as `candidates` (the exit code is 3). Lower tiers are not consulted once a higher tier matched. No match at all is `not-found` (exit code 4). An address that does not parse, or names an unknown project, is `refused`.
 
