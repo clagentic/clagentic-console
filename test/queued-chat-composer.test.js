@@ -283,7 +283,7 @@ test("no turn running: chat is shown as sent at once, with no id", async functio
 
 test("the capability table marks queued-chat Cancel and Edit unavailable, with a reason, for an agent without it", async function () {
   var m = await import(dom.moduleUrl("send-now.js"));
-  assert.deepEqual(Object.keys(m.QUEUED_CONTROLS_BY_KIND).sort(), ["chat", "shell"]);
+  assert.deepEqual(Object.keys(m.QUEUED_CONTROLS_BY_KIND).sort(), ["chat", "scheduled", "shell"]);
   var cannot = m.queuedControlsForKind("chat", { enabled: false, reason: "no cancel here" });
   assert.deepEqual(cannot, { cancel: { enabled: false, reason: "no cancel here" }, edit: { enabled: false, reason: "no cancel here" } });
   assert.equal(m.queuedControlsForKind("chat", { enabled: true, reason: "" }).cancel.enabled, true);
