@@ -419,3 +419,45 @@ test("messages of other types are not the handler's", async function () {
     assert.equal(h.handler.handleUserShellMessage(h.ws, { type: "permission_response" }), false);
   });
 });
+
+test("a chat send during a running command queues, and reaches the handle only after the command finishes", async function () {
+  var finish;
+  await withShell({ run: function () { return new Promise(function (resolve) { finish = resolve; }); } }, async function (h) {
+    var delivered = [];
+    h.handle.pushMessage = function (text) { delivered.push(text); };
+    await h.say(READ_ONLY);
+    assert.equal(h.runs.length, 1);
+    assert.equal(h.session.isProcessing, true, "the session is busy as it is during a turn");
+
+    h.server.bridge.pushMessage(h.session, "typed meanwhile", null, "human", "m-wait");
+    await settle();
+    assert.deepEqual(delivered, [], "the handle has not seen it while the command runs");
+
+    finish(ok("done"));
+    await settle();
+    assert.equal(h.recorded().length, 1, "the result is recorded");
+    assert.deepEqual(delivered, ["typed meanwhile"], "it goes on once the command is done");
+  });
+});
+
+test("a command that ends with nothing waiting leaves the session idle again", async function () {
+  await withShell({}, async function (h) {
+    await h.say(READ_ONLY);
+    assert.equal(h.runs.length, 1);
+    assert.equal(h.session.isProcessing, false);
+  });
+});
+
+test("a turn that started while the approval waited means the command does not run", async function () {
+  await withShell({}, async function (h) {
+    await h.say(NEEDS_PROMPT);
+    h.session.isProcessing = true;
+    h.prompts().respond(h.server.heldPromptIds()[0], { decision: "allow" });
+    await settle();
+    assert.equal(h.runs.length, 0);
+    assert.equal(h.results()[0].denied, true);
+    assert.equal(h.results()[0].reason, REASONS.busy);
+    assert.equal(h.session.isProcessing, true, "the running turn's busy state is left alone");
+    h.session.isProcessing = false;
+  });
+});
