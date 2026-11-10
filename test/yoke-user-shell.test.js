@@ -25,6 +25,8 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code !== "ESRCH"; }
 }
 
+function markerFor(cap) { return "\n[output truncated at " + cap + " bytes]"; }
+
 function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
 
 test("a finished command reports its exit code, duration and combined output", { skip: !posix }, async function () {
@@ -58,7 +60,9 @@ test("output past the cap is cut, marked, and the result says so; reading goes o
   assert.equal(result.exitCode, 0, "the command ran to its end, not killed by the cap");
   assert.ok(result.output.indexOf("[output truncated at 1000 bytes]") !== -1, "the marker is in the output");
   var kept = result.output.slice(0, result.output.indexOf("\n[output truncated"));
-  assert.equal(Buffer.byteLength(kept), 1000);
+  assert.equal(Buffer.byteLength(kept), 1000 - Buffer.byteLength(markerFor(1000)), "the marker's bytes are reserved inside the cap");
+  assert.ok(result.output.endsWith(markerFor(1000)));
+  assert.ok(Buffer.byteLength(result.output) <= 1000);
 });
 
 test("a command that runs past its timeout is killed, with what it started, and the result says timed out", { skip: !posix }, async function () {
@@ -133,23 +137,30 @@ test("a background process the command leaves behind does not hold the result up
 
 test("capText cuts on bytes, adds the marker, and leaves short text alone", function () {
   assert.deepEqual(userShell.capText("short", 100), { output: "short", truncated: false });
-  var cut = userShell.capText("x".repeat(50), 10);
+  var cut = userShell.capText("x".repeat(500), 100);
   assert.equal(cut.truncated, true);
-  assert.equal(cut.output, "x".repeat(10) + "\n[output truncated at 10 bytes]");
+  var room = 100 - Buffer.byteLength(markerFor(100));
+  assert.equal(cut.output, "x".repeat(room) + markerFor(100));
+  assert.equal(Buffer.byteLength(cut.output), 100);
 });
 
 test("a cap that falls inside a multibyte character backs off to the character boundary", { skip: !posix }, async function () {
-  // 999 bytes of "a" then two 2-byte characters: a cap of 1000 lands mid-character.
-  var result = await run("head -c 999 /dev/zero | tr '\\0' 'a'; printf '\\303\\251\\303\\251'", { maxOutputBytes: 1000 });
+  // The cut point is the cap less the marker; put a 2-byte character across it.
+  var room = 1000 - Buffer.byteLength(markerFor(1000));
+  var result = await run("head -c " + (room - 1) + " /dev/zero | tr '\\0' 'a'; printf '\\303\\251\\303\\251'", { maxOutputBytes: 1000 });
   assert.equal(result.truncated, true);
   var kept = result.output.slice(0, result.output.indexOf("\n[output truncated"));
-  assert.equal(kept, "a".repeat(999), "the partial character is dropped, not decoded to U+FFFD");
+  assert.equal(kept, "a".repeat(room - 1), "the partial character is dropped, not decoded to U+FFFD");
   assert.equal(result.output.indexOf("�"), -1);
+  assert.ok(Buffer.byteLength(result.output) <= 1000);
 
-  var cut = userShell.capText("a".repeat(9) + "éé", 10);
-  assert.equal(cut.output, "a".repeat(9) + "\n[output truncated at 10 bytes]");
-  var whole = userShell.capText("a".repeat(8) + "éé", 10);
-  assert.equal(whole.output, "a".repeat(8) + "é\n[output truncated at 10 bytes]", "a character that fits whole is kept");
+  var cap = 60;
+  var r = cap - Buffer.byteLength(markerFor(cap));
+  var cut = userShell.capText("a".repeat(r - 1) + "éé", cap);
+  assert.equal(cut.output, "a".repeat(r - 1) + markerFor(cap));
+  var whole = userShell.capText("a".repeat(r - 2) + "éé", cap);
+  assert.equal(whole.output, "a".repeat(r - 2) + "é" + markerFor(cap), "a character that fits whole is kept");
+  assert.ok(Buffer.byteLength(whole.output) <= cap);
 });
 
 test("the transcript text escapes angle brackets so output cannot close the block early", function () {
@@ -177,8 +188,33 @@ test("the transcript text names a timeout, an interrupt and a cut", function () 
 test("text added for a command that could not run is inside the cap too", { skip: !posix }, async function () {
   var result = await run("echo hi", { cwd: path.join(os.tmpdir(), "user-shell-no-such-dir-cap-" + process.pid), maxOutputBytes: 12 });
   assert.equal(result.truncated, true);
-  var kept = result.output.slice(0, result.output.indexOf("\n[output truncated"));
-  assert.ok(Buffer.byteLength(kept) <= 12, "the failure text did not push the output past the cap");
+  assert.ok(Buffer.byteLength(result.output) <= 12, "the failure text and marker did not push the output past the cap");
+  var roomy = await run("echo hi", { cwd: path.join(os.tmpdir(), "user-shell-no-such-dir-cap2-" + process.pid), maxOutputBytes: 80 });
+  assert.equal(roomy.truncated, true);
+  assert.ok(Buffer.byteLength(roomy.output) <= 80);
+  assert.ok(roomy.output.endsWith(markerFor(80)));
+});
+
+test("a cap smaller than the marker still bounds the output and says it cut", function () {
+  [0, 1, 5, 20].forEach(function (cap) {
+    var cut = userShell.capText("x".repeat(100), cap);
+    assert.equal(cut.truncated, true);
+    assert.ok(Buffer.byteLength(cut.output) <= cap, "cap " + cap);
+  });
+  var tiny = userShell.capText("é".repeat(40), 10);
+  assert.ok(Buffer.byteLength(tiny.output) <= 10);
+  assert.equal(tiny.output.indexOf("�"), -1);
+});
+
+test("output over the cap, marker included, never exceeds it on any cap", { skip: !posix }, async function () {
+  for (var cap of [30, 34, 50, 200]) {
+    var result = await run("head -c 5000 /dev/zero | tr '\\0' 'a'", { maxOutputBytes: cap });
+    assert.equal(result.truncated, true);
+    assert.ok(Buffer.byteLength(result.output) <= cap, "cap " + cap);
+    var cutText = userShell.capText("é".repeat(5000), cap);
+    assert.ok(Buffer.byteLength(cutText.output) <= cap, "capText cap " + cap);
+    assert.equal(cutText.output.indexOf("�"), -1);
+  }
 });
 
 test("the result has exactly the documented shape", { skip: !posix }, async function () {
