@@ -662,14 +662,18 @@ test("Ctrl+Enter puts queued ! entries ahead of queued chat, with no draft neede
   assert.equal(lastShell(env).command, "cmd");
 });
 
-test("Up from an empty composer takes back queued ! entries when nothing else is queued", async function () {
+test("Up from an empty composer takes back only the last queued ! entry when nothing else is queued", async function () {
   var env = await setup();
   env.store.set({ processing: true });
   type(env, "!one");
   type(env, "!two");
   var ev = press(env, { key: "ArrowUp" });
   assert.equal(ev.prevented, true);
-  assert.equal(env.ctx.inputEl.value, "!one\n!two");
+  assert.equal(env.ctx.inputEl.value, "!two", "a single ! line, never several joined");
+  assert.deepEqual(queuedTexts(), ["!one"], "the earlier entry stays queued");
+  env.ctx.inputEl.value = "";
+  press(env, { key: "ArrowUp" });
+  assert.equal(env.ctx.inputEl.value, "!one", "Up again takes the next one");
   assert.deepEqual(queuedTexts(), []);
   endTurn(env);
   assert.equal(frames(env, "shell").length, 0, "taken back, so nothing runs");
@@ -745,6 +749,38 @@ test("touch: a long press of the send button with a draft ready during a turn se
   fire("pointerdown", { pointerType: "mouse" });
   t.mock.timers.tick(1000);
   assert.equal(frames(env, "message").length, 1);
+});
+
+test("touch: a long press that ends in pointerleave or pointercancel does not swallow the next click", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var env = await setup();
+  env.store.set({ processing: true, vendorCapabilities: CAN_STEER });
+  env.ctx.processing = true;
+  var b = env.ctx.sendBtn;
+  var swallowed;
+  function fire(name, e) {
+    (b._listeners[name] || []).slice().forEach(function (fn) {
+      fn(Object.assign({ preventDefault: function () {}, stopImmediatePropagation: function () { swallowed = true; } }, e));
+    });
+  }
+  ["pointerleave", "pointercancel"].forEach(function (ending) {
+    env.ctx.inputEl.value = "hold " + ending;
+    fire("pointerdown", { pointerType: "touch" });
+    t.mock.timers.tick(500);
+    fire(ending, {});
+    t.mock.timers.tick(1000);
+    swallowed = false;
+    fire("click", {});
+    assert.equal(swallowed, false, "a keyboard click with no pointerdown after a " + ending + " is not swallowed");
+  });
+  // The click that ends a normal long press is still swallowed.
+  env.ctx.inputEl.value = "normal";
+  fire("pointerdown", { pointerType: "touch" });
+  t.mock.timers.tick(500);
+  fire("pointerup", {});
+  swallowed = false;
+  fire("click", {});
+  assert.equal(swallowed, true);
 });
 
 // ---------------------------------------------------------------- refused command: Edit
