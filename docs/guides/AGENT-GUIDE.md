@@ -5,6 +5,7 @@ Agents are first-class users of Clagentic: Console. A script, a CI job or an AI 
 - `clagentic-console open-session` opens a new session and runs its first prompt.
 - `clagentic-console send-input` sends input to an existing session, and resumes it if its runtime was reaped.
 - `clagentic-console end-session` stands one live session down by id, even one blocked on a permission prompt. The history is kept and the session resumes by id.
+- `clagentic-console answer-prompt` answers one pending prompt of a live session by request id, the way a person answers it in the browser, and records who answered.
 - `clagentic-console list-sessions` lists the console's sessions with their state and any prompts they are waiting on.
 - `clagentic-console list-outbound` lists what one session sent out with `send-input` and `open-session`: the target, the prompt, the time and the initiator. It only reads.
 - `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
@@ -21,6 +22,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [open-session](#open-session)
 - [send-input](#send-input)
 - [end-session](#end-session)
+- [answer-prompt](#answer-prompt)
 - [list-sessions](#list-sessions)
 - [list-outbound](#list-outbound)
 - [Scheduled input](#scheduled-input)
@@ -292,6 +294,47 @@ The call is recorded in the outbound ledger as `end_session`.
 | `not-found` | No such session. Nothing changed. | 4 for `--to`, 1 for `--session` |
 
 The runtime stops a moment after the call answers, so `list-sessions` may show `reaped` a short time later, not at the same instant.
+
+## answer-prompt
+
+Answers one pending operator prompt of a live session: a permission request, a plan approval, a question or a request for input. It goes through the same path as an answer given in the browser, so the prompt resolves exactly as that answer would, and the session shows who answered. Each call is one explicit act on one request; nothing answers a prompt without a call. Find the request ids with `list-sessions`, whose `pendingPrompts` lists them.
+
+```
+clagentic-console answer-prompt (--project <slug> --session <id> | --to <address>)
+    --request <id> --decision <allow|deny|allow_always|text>
+    [--from <name>] [--from-session <id>]
+```
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--project <slug>` | with `--session` | The registered project slug. |
+| `--session <id>` | with `--project` | The console session id or the vendor-assigned id. |
+| `--to <address>` | one target | See [Addressing a session](#addressing-a-session). The same resolution as `end-session`: an address that matches several sessions answers none and gives `ambiguous` with the candidates. |
+| `--request <id>` | yes | The request id of the pending prompt, as `list-sessions` shows it. |
+| `--decision <value>` | yes | The answer, by kind (below). |
+| `--from <name>` | no | Who is answering, recorded as `caller:<name>` on the prompt's resolved event, which the session shows. 1 to 64 of letters, digits and `. _ @ / + -`. A label the caller gives itself, under the same OS-user trust as `send-input`. Without it the source is `user`. |
+| `--from-session <id>` | no | See [The sender record](#the-sender-record). |
+
+| Prompt kind | `--decision` accepted |
+|---|---|
+| permission request | `allow`, `allow_always` (allow the tool for the rest of the session), `deny`. `allow_always` on a request that does not offer it is `invalid`. |
+| plan approval | `allow`, `allow_always` (as `allow`), `allow_accept_edits`, `allow_clear_context`, `deny`. A rejection with feedback needs the feedback text, which this verb does not carry. |
+| question (one question) | `skip`, or any other text, which is the answer. `allow`, `deny` and `allow_always` are not answers and are `invalid`. A prompt asking several questions can only be skipped. |
+| request for input | `allow` (accept), `deny` (decline). A form that needs fields can only be declined. |
+
+A request the operator cannot answer in the browser is not answerable here either. The call answers one request exactly once: a request the browser or another caller already settled is `already-settled` and nothing changes.
+
+Prints one JSON object: `{ "ok", "result", "requestId", "kind", "source" }`, with the session fields and a `reason` when the call did not answer.
+
+| `result` | Meaning |
+|---|---|
+| `answered` | The prompt resolved with the decision. |
+| `not-found` | No pending request with that id in that session, or the session has no runtime. Nothing changed. |
+| `already-settled` | The request was settled before this call; `settledBy` names its source when the session recorded one. Nothing changed. |
+| `invalid` | The kind does not accept the decision; `reason` says why. The prompt stays pending. |
+| `ambiguous` | `--to` matched several sessions; `candidates` lists them. Nothing was answered. |
+
+The call is recorded in the [outbound ledger](#list-outbound) as verb `answer_prompt`, with the request id and kind and never the decision. The same caller trust applies as for `send-input` and `end-session`: the daemon's OS user on `daemon.sock`, with no per-session ownership check beyond it, in single-user, multi-user and os-users modes alike.
 
 ## list-sessions
 
@@ -600,6 +643,9 @@ The `result` field of the JSON, and the process exit code:
 | `listed` | `list-sessions` answered. | 0 |
 | `ended` | `end-session` stood a live session down. | 0 |
 | `already-ended` | `end-session` found the session without a runtime; nothing changed. | 0 |
+| `answered` | `answer-prompt` resolved the prompt. | 0 |
+| `already-settled` | `answer-prompt` found the request already settled; nothing changed. | 1 |
+| `invalid` | `answer-prompt`: the prompt's kind does not accept the decision; the prompt stays pending. | 1 |
 | `ambiguous` | An address (or `--reply`) matched several sessions in its deciding tier; `candidates` lists them. Nothing was delivered. | 3 |
 | `not-found` | `--to` or `--reply` matched no session. | 4 |
 | `not-found` | `--session` named a session the console does not hold. | 1 |
