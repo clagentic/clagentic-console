@@ -1331,15 +1331,19 @@
   color: var(--error);
 }
 
-/* Collapsible text: a long fired scheduled input. Collapsed
-   shows the first line only, cut by CSS so the text itself stays whole. */
+/* Collapsible text: long input pushed into a session. Collapsed shows about
+   three lines, clamped by CSS so the text itself stays whole. */
+.collapsible-text .collapsible-preview,
+.collapsible-text .collapsible-full { white-space: pre-wrap; }
 .collapsible-text.is-collapsed .collapsible-full { display: none; }
 .collapsible-text:not(.is-collapsed):not(.collapsible-single) .collapsible-preview { display: none; }
 .collapsible-text.is-collapsed .collapsible-preview {
-  display: block;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .collapsible-toggle {
   padding: 0;
