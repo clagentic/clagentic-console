@@ -681,3 +681,13 @@
   .rate-limit-popover { font-size: 11px; padding: 6px 10px; }
   .header-context { width: 50px; }
 }
+
+/* Compacting state and nearing-compaction note on the session view header. */
+.header-compacting {
+  font-size: 11px;
+  color: var(--warning);
+  white-space: nowrap;
+  margin-right: 8px;
+}
+.header-context.nearing .header-context-label { color: var(--warning); }
+.header-context-nearing { font-size: 10px; color: var(--warning); white-space: nowrap; }

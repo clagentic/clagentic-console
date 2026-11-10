@@ -916,6 +916,30 @@ longer compacting (see the `status` handler in
 `lib/sdk-message-processor.js`) — the meter does not wait for the next
 turn's `result` event to reflect the provider's post-compaction accounting.
 
+### Compaction signals
+
+- **Compacting state.** The `compacting` event (`active` true then false, from
+  the vendor's status) sets `session.compacting`, and `mapSessionForClient`
+  carries it as `compacting` on the session list entry; the daemon rebroadcasts
+  the list on each change. The session view shows a header chip and the sidebar
+  a badge for exactly that span. The `compact_boundary` notice names only the
+  trigger the vendor reports (manual or automatic); any other value is left
+  unnamed.
+- **Nearing compaction.** `lib/public/modules/compaction-state.js` marks the
+  meter as nearing compaction when `getContextUsage` reports
+  `isAutoCompactEnabled` and an `autoCompactThreshold` and usage is at or above
+  90 percent of that threshold. No threshold or window is hardcoded; absent or
+  disabled, the state is hidden.
+- **Idle compaction.** `lib/idle-compaction-setting.js` reads and writes the
+  `idleCompaction` key of the Claude user settings file, the file the CLI reads.
+  It writes `false` or removes the key and never writes `true`, which the SDK
+  documents as not turning idle compaction on. Other keys are preserved, the
+  write is a temp file and rename that keeps the file mode, a missing file is
+  the default, and an unparseable file is reported and left untouched. It acts
+  on the requesting account's own file (a child process under that account's
+  uid under OS-level isolation); without isolation the one shared file may be
+  changed by an administrator only. Claude only.
+
 ## Custom emoji icons (lr-a68f)
 
 Projects can use uploaded images as icons instead of Unicode emoji. The icon value stored in `config.projects[].icon` is a `:slug:` sentinel string (pattern `^:[a-z0-9_-]{1,64}:$`) when a custom image is selected.
