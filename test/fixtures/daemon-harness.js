@@ -8,30 +8,28 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var os = require("os");
 var path = require("path");
-var net = require("net");
 var http = require("http");
 var { spawn } = require("child_process");
 var WebSocket = require("ws");
 var { TOKEN_ENV, newHarnessToken, verifyOwnedPid } = require("./process-ownership");
 var { removeTempHome } = require("../helpers/remove-temp-home");
+var {
+  findFreePort,
+  waitForServer,
+  waitForDaemonListening,
+  startOnFreePort,
+} = require("../helpers/daemon-readiness");
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "..", "lib", "daemon.js");
 var SETUP_CODE = "HARNESSCODE";
 
+var LISTEN_ATTEMPTS = 5;
+var DEFAULT_READY_MS = 20000;
+var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
+
 // Variables a supervisor sets; removed so a test run from inside a service
 // does not make the daemon under test believe it is supervised.
 var SUPERVISOR_ENV = ["INVOCATION_ID", "NOTIFY_SOCKET", "JOURNAL_STREAM"];
-
-function findFreePort() {
-  return new Promise(function (resolve, reject) {
-    var srv = net.createServer();
-    srv.listen(0, "127.0.0.1", function () {
-      var p = srv.address().port;
-      srv.close(function () { resolve(p); });
-    });
-    srv.on("error", reject);
-  });
-}
 
 function httpRequest(opts, body) {
   return new Promise(function (resolve, reject) {
@@ -45,19 +43,6 @@ function httpRequest(opts, body) {
     if (body) req.write(body);
     req.end();
   });
-}
-
-async function waitForServer(port, ms) {
-  var start = Date.now();
-  while (Date.now() - start < ms) {
-    try {
-      await httpRequest({ hostname: "127.0.0.1", port: port, path: "/", method: "GET" });
-      return;
-    } catch (e) {
-      await new Promise(function (r) { setTimeout(r, 250); });
-    }
-  }
-  throw new Error("daemon did not respond within " + ms + " ms");
 }
 
 function waitForExit(proc, ms) {
@@ -101,6 +86,7 @@ async function waitForRecordedPid(file, pid, ms) {
  * @param {object} [o.config] merged over the daemon.json the daemon starts with
  * @param {object} [o.env] extra environment for the daemon; a null value removes the variable
  * @param {string} [o.script] daemon entry to run (default: this checkout's lib/daemon.js)
+ * @param {function} [o.findPort] picks the port to try; a collision retries on a fresh findFreePort() port
  */
 async function bootDaemon(o) {
   var opts = o || {};
@@ -109,11 +95,13 @@ async function bootDaemon(o) {
   var projectDir = path.join(home, "project");
   fs.mkdirSync(consoleDir, { recursive: true });
   fs.mkdirSync(projectDir, { recursive: true });
-  var port = await findFreePort();
-  fs.writeFileSync(path.join(consoleDir, "daemon.json"), JSON.stringify(Object.assign({
-    port: port, host: "127.0.0.1", tls: false, debug: false,
-    projects: [{ path: projectDir, slug: "entry-project", addedAt: Date.now(), visibility: "public" }],
-  }, opts.config || {}), null, 2), { mode: 0o600 });
+  var port = null;
+  function writeConfig() {
+    fs.writeFileSync(path.join(consoleDir, "daemon.json"), JSON.stringify(Object.assign({
+      port: port, host: "127.0.0.1", tls: false, debug: false,
+      projects: [{ path: projectDir, slug: "entry-project", addedAt: Date.now(), visibility: "public" }],
+    }, opts.config || {}), null, 2), { mode: 0o600 });
+  }
   fs.writeFileSync(path.join(consoleDir, "users.json"), JSON.stringify({
     multiUser: true, setupCode: SETUP_CODE, users: [], invites: [], smtp: null,
   }, null, 2), { mode: 0o600 });
@@ -131,13 +119,32 @@ async function bootDaemon(o) {
   var selfSpawnExpected = false;
   function start() {
     var child = spawn(process.execPath, [opts.script || DAEMON_SCRIPT], { env: env, stdio: ["ignore", "pipe", "pipe"] });
-    child.stdout.on("data", function (c) { log.push(c.toString()); });
-    child.stderr.on("data", function (c) { log.push(c.toString()); });
+    // Bound to this attempt's array: a collided daemon's late output must not
+    // leak into the retry's journal.
+    var mine = log;
+    child.stdout.on("data", function (c) { mine.push(c.toString()); });
+    child.stderr.on("data", function (c) { mine.push(c.toString()); });
     return child;
   }
-  var proc = start();
-  await waitForServer(port, 20000);
-  await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
+  var proc = null;
+  // Readiness is the daemon's own listen line, then HTTP. A port taken between
+  // the probe and the bind restarts the boot on a fresh port, so a foreign
+  // server is never mistaken for the daemon.
+  async function startOn(p) {
+    port = p;
+    log = [];
+    writeConfig();
+    proc = start();
+    await waitForDaemonListening(proc, function () { return log.join(""); }, DEFAULT_READY_MS);
+    await waitForServer(port, HTTP_READY_MS);
+    await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
+  }
+  var firstPort = true;
+  await startOnFreePort(function (p) {
+    var pick = firstPort && opts.findPort ? opts.findPort() : Promise.resolve(p);
+    firstPort = false;
+    return pick.then(startOn);
+  }, function () { return proc; }, LISTEN_ATTEMPTS);
 
   var d = {
     token: token,
@@ -149,12 +156,18 @@ async function bootDaemon(o) {
     journal: function () { return log.join(""); },
     // What a supervisor does after the daemon exits: start it again, same
     // home and port. The new process replaces d.proc; its output joins the journal.
-    respawn: async function (script) {
+    // readyMs bounds the wait for the new daemon's listen line (default 20000).
+    respawn: async function (script, readyMs) {
       if (script) opts.script = script;
       log.push("\n--- supervisor starts the daemon again ---\n");
+      // Only a listen line logged after this point counts: the first boot's line
+      // is already in the journal. The port is fixed, so the daemon's own
+      // EADDRINUSE retry is waited out, not treated as a collision.
+      var from = log.join("").length;
       d.proc = start();
       proc = d.proc;
-      await waitForServer(port, 20000);
+      await waitForDaemonListening(proc, function () { return log.join(""); }, readyMs || DEFAULT_READY_MS, { fromOffset: from, tolerateInUse: true });
+      await waitForServer(port, HTTP_READY_MS);
       await waitForRecordedPid(path.join(consoleDir, "daemon.json"), proc.pid, 10000);
       return d.proc;
     },
