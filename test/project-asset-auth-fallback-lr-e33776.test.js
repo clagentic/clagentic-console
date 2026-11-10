@@ -46,9 +46,14 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
-var net = require("net");
 var http = require("http");
 var { spawn } = require("child_process");
+var {
+  waitForServer,
+  waitForDaemonListening,
+  killAndWait,
+  startOnFreePort,
+} = require("./helpers/daemon-readiness");
 
 // ── constants ────────────────────────────────────────────────────────────────
 
@@ -61,82 +66,6 @@ var DAEMON_READY_MS = 60000;
 var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
 var TEST_TIMEOUT_MS = 120000;
 var PORT_ATTEMPTS = 5;
-
-// ── helpers (mirrors boot-smoke-lr-1a5f.test.js) ───────────────────────────
-
-function findFreePort() {
-  return new Promise(function (resolve, reject) {
-    var srv = net.createServer();
-    srv.listen(0, "127.0.0.1", function () {
-      var p = srv.address().port;
-      srv.close(function () { resolve(p); });
-    });
-    srv.on("error", reject);
-  });
-}
-
-function waitForServer(port, timeoutMs) {
-  var start = Date.now();
-  return new Promise(function (resolve, reject) {
-    function attempt() {
-      if (Date.now() - start > timeoutMs) {
-        reject(new Error("daemon did not respond within " + timeoutMs + " ms"));
-        return;
-      }
-      var req = http.get("http://127.0.0.1:" + port + "/", function (res) {
-        res.resume();
-        if (res.statusCode) { resolve(); }
-        else { setTimeout(attempt, 250); }
-      });
-      req.on("error", function () { setTimeout(attempt, 250); });
-      req.setTimeout(500, function () { req.destroy(); });
-    }
-    attempt();
-  });
-}
-
-// findFreePort() closes its probe socket before the daemon binds, so under
-// full-suite load (many parallel daemons) another process can take the port in
-// that window. The daemon then logs "in use, retrying" and the HTTP-only
-// waitForServer() was satisfied by whatever foreign server owned the port, so
-// the assertions ran against the wrong server. Readiness here means the
-// spawned daemon itself printed its listen line; a bind collision is reported
-// as { portInUse: true } so the caller can allocate a fresh port.
-var LISTEN_LINE = /\[daemon\] Listening on /;
-var PORT_IN_USE_LINE = /\[daemon\] Port \d+ in use, retrying/;
-
-function waitForDaemonListening(proc, getLog, timeoutMs) {
-  var start = Date.now();
-  return new Promise(function (resolve, reject) {
-    var finished = false;
-    function finish(err, value) {
-      if (finished) { return; }
-      finished = true;
-      proc.removeListener("exit", onExit);
-      if (err) { reject(err); } else { resolve(value); }
-    }
-    function onExit(code) {
-      finish(new Error("daemon exited with code " + code + " before listening:\n" + getLog()));
-    }
-    proc.once("exit", onExit);
-    (function poll() {
-      if (finished) { return; }
-      var log = getLog();
-      if (PORT_IN_USE_LINE.test(log)) {
-        var e = new Error("daemon port was taken before the daemon bound it");
-        e.portInUse = true;
-        finish(e);
-        return;
-      }
-      if (LISTEN_LINE.test(log)) { finish(null); return; }
-      if (Date.now() - start > timeoutMs) {
-        finish(new Error("daemon did not report listening within " + timeoutMs + " ms:\n" + log));
-        return;
-      }
-      setTimeout(poll, 50);
-    })();
-  });
-}
 
 function httpGetRaw(port, urlPath) {
   return new Promise(function (resolve, reject) {
@@ -158,18 +87,6 @@ function httpGetRaw(port, urlPath) {
     });
     req.on("error", reject);
     req.setTimeout(5000, function () { req.destroy(new Error("httpGetRaw timeout")); });
-  });
-}
-
-function killAndWait(proc) {
-  return new Promise(function (resolve) {
-    if (proc.exitCode !== null) { resolve(); return; }
-    proc.once("exit", resolve);
-    try { proc.kill("SIGTERM"); } catch (_) {}
-    setTimeout(function () {
-      try { proc.kill("SIGKILL"); } catch (_) {}
-      resolve();
-    }, 4000);
   });
 }
 
@@ -241,18 +158,7 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
       .then(function () { return port; });
   }
 
-  // A bind collision on the probed port is a setup race, not a test result:
-  // pick a fresh port and start over. Assertions below never run on a retry.
-  function startDaemon(attemptsLeft) {
-    return findFreePort().then(startDaemonOn).catch(function (err) {
-      if (err && err.portInUse && attemptsLeft > 1) {
-        return killAndWait(daemonProc).then(function () { return startDaemon(attemptsLeft - 1); });
-      }
-      throw err;
-    });
-  }
-
-  startDaemon(PORT_ATTEMPTS).then(function (port) {
+  startOnFreePort(startDaemonOn, function () { return daemonProc; }, PORT_ATTEMPTS).then(function (port) {
     // ── Case 1: unauthenticated GET to a project-scoped .js asset path ──────
     // lr-2895ea: app.js is a PUBLIC shell asset (identical for every user, no
     // per-user data) now served ahead of the auth gate — real 200 + JS MIME,

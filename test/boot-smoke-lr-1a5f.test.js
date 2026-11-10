@@ -26,54 +26,26 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
-var net = require("net");
 var http = require("http");
 var { spawn } = require("child_process");
 var WebSocket = require("ws");
+var {
+  waitForServer,
+  waitForDaemonListening,
+  killAndWait,
+  startOnFreePort,
+} = require("./helpers/daemon-readiness");
 
 // ── constants ────────────────────────────────────────────────────────────────
 
 var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var TEST_TIMEOUT_MS = 45000;
 var DAEMON_READY_MS = 20000;
+var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
 var WS_CONNECT_MS  = 10000;
+var PORT_ATTEMPTS = 5;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-function findFreePort() {
-  return new Promise(function (resolve, reject) {
-    var srv = net.createServer();
-    srv.listen(0, "127.0.0.1", function () {
-      var p = srv.address().port;
-      srv.close(function () { resolve(p); });
-    });
-    srv.on("error", reject);
-  });
-}
-
-function waitForServer(port, timeoutMs) {
-  // Probe GET / as a boot liveness indicator — the daemon always handles this route
-  // (redirects to login page or serves admin setup). Any HTTP response means it is up.
-  // lr-ec2d: /info now requires auth; use / as a protocol-level liveness probe instead.
-  var start = Date.now();
-  return new Promise(function (resolve, reject) {
-    function attempt() {
-      if (Date.now() - start > timeoutMs) {
-        reject(new Error("daemon did not respond within " + timeoutMs + " ms"));
-        return;
-      }
-      var req = http.get("http://127.0.0.1:" + port + "/", function (res) {
-        res.resume();
-        // Any response (200, 302, 401, 404) means the daemon is up
-        if (res.statusCode) { resolve(); }
-        else { setTimeout(attempt, 250); }
-      });
-      req.on("error", function () { setTimeout(attempt, 250); });
-      req.setTimeout(500, function () { req.destroy(); });
-    }
-    attempt();
-  });
-}
 
 function httpGet(url) {
   return new Promise(function (resolve, reject) {
@@ -85,18 +57,6 @@ function httpGet(url) {
     });
     req.on("error", reject);
     req.setTimeout(5000, function () { req.destroy(new Error("httpGet timeout")); });
-  });
-}
-
-function killAndWait(proc) {
-  return new Promise(function (resolve) {
-    if (proc.exitCode !== null) { resolve(); return; }
-    proc.once("exit", resolve);
-    try { proc.kill("SIGTERM"); } catch (_) {}
-    setTimeout(function () {
-      try { proc.kill("SIGKILL"); } catch (_) {}
-      resolve();
-    }, 4000);
   });
 }
 
@@ -153,13 +113,31 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
   var SMOKE_PIN = "123456";
   var SMOKE_USERNAME = "smokeadmin";
 
-  findFreePort().then(function (port) {
-    // ── 1. Isolated home + minimal config ────────────────────────────────────
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-smoke-"));
-    var projectDir = path.join(tmpHome, "smoke-project");
-    fs.mkdirSync(projectDir, { recursive: true });
+  // ── 1. Isolated home + minimal config ──────────────────────────────────────
+  tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-smoke-"));
+  var projectDir = path.join(tmpHome, "smoke-project");
+  fs.mkdirSync(projectDir, { recursive: true });
 
-    var configFile = path.join(tmpHome, "daemon.json");
+  var configFile = path.join(tmpHome, "daemon.json");
+
+  // Pre-seed users.json with a known setup code so the smoke test can authenticate.
+  // lr-ec2d: single-user mode removed; system always runs in multi-user mode.
+  var usersFile = path.join(tmpHome, "console", "users.json");
+  fs.mkdirSync(path.dirname(usersFile), { recursive: true });
+  fs.writeFileSync(usersFile, JSON.stringify({
+    multiUser: true,
+    setupCode: SMOKE_SETUP_CODE,
+    users: [],
+    invites: [],
+    smtp: null,
+  }, null, 2), { mode: 0o600 });
+
+  // ── 2. Spawn daemon on a probed port ────────────────────────────────────────
+  // Readiness is the daemon's own listen line, then an HTTP check; a port taken
+  // between probe and bind restarts this setup on a fresh port (bounded), so the
+  // assertions below never run against a foreign server.
+  function startDaemonOn(port) {
+    daemonLog = [];
     fs.writeFileSync(configFile, JSON.stringify({
       port:            port,
       host:            "127.0.0.1",
@@ -168,40 +146,30 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
       projects: [{ path: projectDir, slug: "smoke-project", addedAt: Date.now(), visibility: "public" }],
     }, null, 2), { mode: 0o600 });
 
-    // Pre-seed users.json with a known setup code so the smoke test can authenticate.
-    // lr-ec2d: single-user mode removed; system always runs in multi-user mode.
-    var usersFile = path.join(tmpHome, "console", "users.json");
-    fs.mkdirSync(path.dirname(usersFile), { recursive: true });
-    fs.writeFileSync(usersFile, JSON.stringify({
-      multiUser: true,
-      setupCode: SMOKE_SETUP_CODE,
-      users: [],
-      invites: [],
-      smtp: null,
-    }, null, 2), { mode: 0o600 });
-
-    // ── 2. Spawn daemon ───────────────────────────────────────────────────────
-    daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
+    var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
       env: Object.assign({}, process.env, {
         CLAGENTIC_HOME:   tmpHome,
         CLAGENTIC_CONFIG: configFile,
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
-    daemonProc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
-    daemonProc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
-    daemonProc.once("exit", function (code) {
+    daemonProc = proc;
+    proc.stdout.on("data", function (d) { daemonLog.push(d.toString()); });
+    proc.stderr.on("data", function (d) { daemonLog.push("[err] " + d.toString()); });
+    proc.once("exit", function (code) {
       if (code !== 0 && code !== null) {
         t.diagnostic("daemon exited with code " + code);
         t.diagnostic("daemon log:\n" + daemonLog.slice(-30).join(""));
       }
     });
 
-    // ── 3. Check 1 — wait for daemon (uses /auth/setup GET as liveness probe) ─
-    // /auth/setup is served without auth so it is a reliable boot indicator.
-    return waitForServer(port, DAEMON_READY_MS).then(function () { return port; });
+    // ── 3. Check 1 — daemon booted (listen line) and answers HTTP ─────────────
+    return waitForDaemonListening(proc, function () { return daemonLog.join(""); }, DAEMON_READY_MS)
+      .then(function () { return waitForServer(port, HTTP_READY_MS); })
+      .then(function () { return port; });
+  }
 
-  }).then(function (port) {
+  startOnFreePort(startDaemonOn, function () { return daemonProc; }, PORT_ATTEMPTS).then(function (port) {
     // ── 4. Authenticate: create admin via /auth/setup ─────────────────────────
     return httpPost("http://127.0.0.1:" + port + "/auth/setup", {
       setupCode: SMOKE_SETUP_CODE,
@@ -338,5 +306,50 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
       }
       done(err);
     });
+  });
+});
+
+// Regression for the readiness defect: a foreign HTTP server already on the
+// daemon's port must be reported as a collision, never as the daemon being ready.
+test("boot smoke: a foreign server on the daemon port is a port collision, not readiness", { timeout: TEST_TIMEOUT_MS }, function (t, done) {
+  var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-smoke-collide-"));
+  var foreign = http.createServer(function (req, res) { res.writeHead(404); res.end("foreign"); });
+  var daemonProc = null;
+  var log = [];
+
+  function cleanup() {
+    var p = daemonProc && daemonProc.exitCode === null ? killAndWait(daemonProc) : Promise.resolve();
+    return p.then(function () {
+      return new Promise(function (r) { foreign.close(function () { r(); }); });
+    }).then(function () {
+      try { fs.rmSync(tmpHome, { recursive: true, force: true }); }
+      catch (e) { t.diagnostic("collision test tmpdir cleanup failed: " + e.message); }
+    });
+  }
+
+  foreign.listen(0, "127.0.0.1", function () {
+    var port = foreign.address().port;
+    var configFile = path.join(tmpHome, "daemon.json");
+    fs.writeFileSync(configFile, JSON.stringify({
+      port: port, host: "127.0.0.1", tls: false, debug: false, projects: [],
+    }), { mode: 0o600 });
+    daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
+      env: Object.assign({}, process.env, { CLAGENTIC_HOME: tmpHome, CLAGENTIC_CONFIG: configFile }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    daemonProc.stdout.on("data", function (d) { log.push(d.toString()); });
+    daemonProc.stderr.on("data", function (d) { log.push("[err] " + d.toString()); });
+
+    waitForDaemonListening(daemonProc, function () { return log.join(""); }, DAEMON_READY_MS).then(
+      function () {
+        cleanup().then(function () { done(new Error("readiness reported although a foreign server owns the port")); });
+      },
+      function (err) {
+        cleanup().then(function () {
+          try { assert.strictEqual(err.portInUse, true, "expected a portInUse rejection; got: " + err.message); done(); }
+          catch (e) { done(e); }
+        });
+      }
+    );
   });
 });
