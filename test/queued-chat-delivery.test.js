@@ -33,6 +33,25 @@ test("the installed Claude SDK carries consumed message uuids and a queued-messa
   assert.ok(runtime.indexOf("async cancelAsyncMessage(") !== -1, "the Query method exists at run time");
 });
 
+test("the SDK keeps a message the CLI has not consumed and runs it as a later turn; it is not discarded at a turn's result", function () {
+  var dir = path.join(__dirname, "..", "node_modules", "@anthropic-ai", "claude-agent-sdk");
+  var types = fs.readFileSync(path.join(dir, "sdk.d.ts"), "utf8");
+  assert.ok(types.indexOf("These WILL run") !== -1, "queued async messages survive an interrupt and run");
+  assert.ok(types.indexOf("Survivors that ride any later turn run normally") !== -1, "they ride a later turn");
+  assert.ok(types.indexOf("the drain loop, which starts the next queued turn immediately") !== -1 ||
+    types.indexOf("the drain loop starts the next queued turn immediately") !== -1, "the next queued turn starts at once");
+});
+
+test("a message is dropped only when the query closes: the bridge calls dropAll in one place, the query's close, never at a turn's result", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "sdk-bridge.js"), "utf8");
+  var calls = src.split("queuedChat.dropAll(").length - 1;
+  assert.equal(calls, 1);
+  var at = src.indexOf("queuedChat.dropAll(");
+  var before = src.slice(Math.max(0, at - 900), at);
+  assert.ok(/session\.queryInstance === myQueryInstance/.test(before), "inside the query-close cleanup");
+  assert.ok(/finally/.test(src.slice(0, at).split("\n").slice(-60).join("\n")), "in the stream's finally block");
+});
+
 // ------------------------------------------------------------ the adapter
 
 test("flattenEvent passes the consumed uuids through, and falls back to the single uuid", function () {
@@ -100,7 +119,12 @@ test("only Claude declares the capability; Codex and the resolved sets report it
   var yoke = require("../lib/yoke");
   assert.equal(yoke.registry.declaredCapabilities("codex").queuedMessageCancel, false);
   assert.equal(yoke.registry.declaredCapabilities("claude").queuedMessageCancel, true);
-  assert.equal(typeof resolveCapabilities, "function");
+  var claudeResolved = resolveCapabilities({ capabilities: claudeCapabilities() }, null, null);
+  var codexResolved = resolveCapabilities({ capabilities: codexCapabilities() }, null, null);
+  assert.equal(claudeResolved.queuedMessageCancel, true, "resolved Claude set: present");
+  assert.equal(codexResolved.queuedMessageCancel, false, "resolved Codex set: absent");
+  var narrowed = resolveCapabilities({ capabilities: claudeCapabilities() }, null, { queuedMessageCancel: false });
+  assert.equal(narrowed.queuedMessageCancel, false, "a session that reports it false turns it off");
 });
 
 // ------------------------------------------------------------ the tracker
@@ -181,7 +205,7 @@ test("two cancels of one message ask the agent once; a failed ask leaves the mes
   assert.equal(await queuedChat.cancel(t2.session, ID_B, function () { return Promise.resolve(true); }), "cancelled", "it can be asked again");
 });
 
-test("messages never taken when the turn ends are dropped once each", function () {
+test("messages never taken when the query closes are dropped once each", function () {
   var t = tracker();
   t.track(ID_A);
   t.track(ID_B);
@@ -189,6 +213,16 @@ test("messages never taken when the turn ends are dropped once each", function (
   assert.deepEqual(queuedChat.dropAll(t.session), [ID_B]);
   assert.deepEqual(queuedChat.dropAll(t.session), []);
   assert.deepEqual(t.seen, { delivered: [ID_A], dropped: [ID_B] });
+});
+
+test("a turn's result frame (no consumed uuids) neither delivers nor drops a tracked message", function () {
+  var t = tracker();
+  t.track(ID_A);
+  assert.deepEqual(queuedChat.consume(t.session, undefined), []);
+  assert.deepEqual(queuedChat.consume(t.session, []), []);
+  assert.equal(queuedChat.has(t.session, ID_A), true, "still tracked for the next turn");
+  assert.deepEqual(t.seen, { delivered: [], dropped: [] });
+  assert.deepEqual(queuedChat.consume(t.session, [ID_A]), [ID_A], "the next turn takes it");
 });
 
 test("only a uuid is accepted as a message id", function () {
@@ -287,7 +321,7 @@ test("cancel before delivery withdraws the message at the agent and it is never 
     h.send({ type: "cancel_queued_message", messageId: ID_A });
     await tick();
     assert.deepEqual(h.out.cancelled, [ID_A]);
-    assert.deepEqual(h.replies(), [{ type: "queued_message_cancelled", messageId: ID_A, result: "cancelled" }]);
+    assert.deepEqual(h.replies(), [{ type: "queued_message_cancelled", messageId: ID_A, result: "cancelled", text: "take me back", pastes: [], imageCount: 0 }]);
     queuedChat.consume(h.session, [ID_A]);
     assert.equal(h.records().length, 0);
     assert.equal(h.delivered().length, 0);
@@ -380,14 +414,14 @@ test("send now is never held as queued: it is recorded after its steer outcome, 
   } finally { h.done(); }
 });
 
-test("a turn that ends with the message never taken drops it: not recorded, and the page is told", async function () {
+test("a query that closes with the message never taken drops it: not recorded, and the page is told", async function () {
   var h = await harness();
   try {
     h.send({ type: "message", text: "orphan", messageId: ID_A });
     queuedChat.dropAll(h.session);
     assert.equal(h.records().length, 0);
     assert.deepEqual(h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled"; }),
-      [{ type: "queued_message_cancelled", messageId: ID_A, result: "dropped" }]);
+      [{ type: "queued_message_cancelled", messageId: ID_A, result: "dropped", text: "orphan", pastes: [], imageCount: 0 }]);
   } finally { h.done(); }
 });
 
@@ -401,4 +435,33 @@ test("a message sent after the turn already ended is recorded at once and announ
     assert.equal(h.out.toSender.filter(function (m) { return m.type === "message_delivered"; }).length, 1);
     assert.equal(queuedChat.has(h.session, ID_A), false);
   } finally { h.done(); }
+});
+
+test("a dropped reply carries the message text, pastes and image count so the page can restore it", async function () {
+  var t = await harness();
+  t.send({ type: "message", text: "wait for me", pastes: ["a paste"], images: [{ mediaType: "image/png", data: "AA==" }], messageId: ID_A });
+  assert.equal(queuedChat.dropAll(t.session).length, 1);
+  var dropped = t.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled"; });
+  assert.equal(dropped.length, 1);
+  assert.equal(dropped[0].result, "dropped");
+  assert.equal(dropped[0].text, "wait for me");
+  assert.deepEqual(dropped[0].pastes, ["a paste"]);
+  assert.equal(dropped[0].imageCount, 1);
+  t.done();
+});
+
+test("a cancelled reply carries the message text; other answers do not", async function () {
+  var t = await harness();
+  t.send({ type: "message", text: "take it back", messageId: ID_A });
+  t.send({ type: "cancel_queued_message", messageId: ID_A });
+  await tick(); await tick();
+  var r = t.replies();
+  assert.equal(r.length, 1);
+  assert.equal(r[0].result, "cancelled");
+  assert.equal(r[0].text, "take it back");
+  t.send({ type: "cancel_queued_message", messageId: ID_A });
+  await tick(); await tick();
+  assert.equal(t.replies()[1].result, "already_delivered");
+  assert.equal("text" in t.replies()[1], false);
+  t.done();
 });

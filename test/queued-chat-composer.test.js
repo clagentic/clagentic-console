@@ -221,14 +221,14 @@ test("Send now on a queued chat never sends a second copy", async function () {
   assert.deepEqual(queuedTexts(), ["already there"]);
 });
 
-test("a turn that ends with the message untaken hands its text back", async function () {
+test("a query that closes with the message untaken hands its text back", async function () {
   var env = await setup(CAN_CANCEL);
   type(env, "lost turn");
   var id = chat(env)[0].messageId;
   answer(env, id, "dropped");
   assert.deepEqual(queuedTexts(), []);
   assert.equal(env.ctx.inputEl.value, "lost turn");
-  assert.ok(sysText().some(function (t) { return /turn ended before this message was delivered/.test(t); }));
+  assert.ok(sysText().some(function (t) { return /session ended before this message was delivered/.test(t); }));
 });
 
 test("a cancel the server could not answer leaves the item queued with a stated reason", async function () {
@@ -323,4 +323,33 @@ test("showing a session again drops the queued chat items: the history has what 
   assert.deepEqual(queuedTexts(), [], "not drawn again");
   delivered(env, id);
   assert.deepEqual(env.shown, [], "no duplicate of a message the history will carry");
+});
+
+test("a dropped or cancelled reply with no queued item on the page (session switched and back) puts the text in the composer as one entry", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "pending");
+  var id = chat(env)[0].messageId;
+  els.messages._children = [];
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  env.ctx.inputEl.value = "";
+  env.us.handleSessionShown(env.ctx.inputEl);
+  answer(env, id, "dropped", { text: "pending", pastes: ["pasted"], imageCount: 0 });
+  assert.equal(env.ctx.inputEl.value, "pending\n\npasted", "one entry, text and paste together");
+  assert.ok(sysText().some(function (t) { return /not delivered/.test(t); }));
+
+  var env2 = await setup(CAN_CANCEL);
+  type(env2, "second");
+  var id2 = chat(env2)[0].messageId;
+  env2.us.handleSessionShown(new FakeElement("textarea"));
+  answer(env2, id2, "cancelled", { text: "second", pastes: [], imageCount: 1 });
+  assert.match(env2.ctx.inputEl.value, /^second\n\[an image attachment/, "an image is noted, not lost silently");
+});
+
+test("a reply with no queued item and no text changes nothing", async function () {
+  var env = await setup(CAN_CANCEL);
+  env.ctx.inputEl.value = "my draft";
+  answer(env, "7e57ed00-0000-4000-8000-000000000000", "dropped");
+  answer(env, "7e57ed00-0000-4000-8000-000000000000", "already_delivered", { text: "x" });
+  assert.equal(env.ctx.inputEl.value, "my draft");
 });
