@@ -21,9 +21,10 @@ var SYSTEM_TARGET = { slug: null, sessionId: null };
 var STRICT = [
   { name: "iPhone", ua: contract.IOS_UA },
   { name: "desktop Safari", ua: contract.SAFARI_UA },
+  { name: "Android Chrome", ua: contract.ANDROID_UA },
+  { name: "desktop Chrome", ua: contract.CHROME_DESKTOP_UA },
 ];
-var LENIENT = { name: "Android Chrome", ua: contract.ANDROID_UA };
-var AGENTS = STRICT.concat([LENIENT]);
+var AGENTS = STRICT;
 
 function targetFor(name) {
   if (name === "mate_dm") return MATE_TARGET;
@@ -91,25 +92,36 @@ STRICT.forEach(function (agent) {
   });
 });
 
-test("[Android Chrome] a close shows no placeholder, with or without a match", async function () {
-  var w = contract.createContractWorld(LENIENT.ua);
-  var data = corePayload("permission_request");
-  await w.runPush("open", data);
-  var withMatch = await w.runPush("close with match", closePush(data.tag));
-  assert.equal(withMatch.length, 0, "AC3");
-  assert.equal(w.live().length, 0, "the match is closed");
-  var noMatch = await w.runPush("close without match", closePush(data.tag));
-  assert.equal(noMatch.length, 0, "AC3");
+STRICT.forEach(function (agent) {
+  var SHOWS_NOTHING = [
+    ["a test push", { type: "test" }],
+    ["an unmarked legacy push", { type: "done", title: "d", body: "b", tag: "any" }],
+    ["a malformed payload", null],
+    ["a payload that is not an object", "oops"],
+    ["a close naming no tags", { type: "notify_close", core: 1, tags: [] }],
+  ];
+  SHOWS_NOTHING.forEach(function (row) {
+    test("[" + agent.name + "] " + row[0] + " shows one silent notice and closes it", async function () {
+      var w = contract.createContractWorld(agent.ua);
+      var shown = await w.runPush(row[0], row[1]);
+      assert.equal(shown.length, 1);
+      assert.equal(shown[0].options.silent, true);
+      assert.equal(w.live().length, 0);
+    });
+  });
 });
 
-test("the harness fails a push under a visible-only user agent that shows nothing (AC5)", async function () {
+test("the harness fails a push that shows nothing (AC5)", async function () {
   var w = contract.createContractWorld(contract.IOS_UA);
-  // An unmarked payload is dropped by handlePush: a push that shows nothing.
-  await assert.rejects(
-    w.runPush("legacy unmarked push", { type: "done", title: "d", body: "b", tag: "any" }),
-    /push 'legacy unmarked push' showed no notification/
-  );
-  var android = contract.createContractWorld(contract.ANDROID_UA);
-  var none = await android.runPush("legacy unmarked push", { type: "done", title: "d", body: "b", tag: "any" });
-  assert.equal(none.length, 0, "a platform that allows it is not held to the rule");
+  var realHandle = require("../lib/public/notify-sw-logic.js").handlePush;
+  var sw = require("../lib/public/notify-sw-logic.js");
+  sw.handlePush = function () { return Promise.resolve(); };
+  try {
+    await assert.rejects(
+      w.runPush("shows nothing", { type: "done" }),
+      /push 'shows nothing' showed no notification/
+    );
+  } finally {
+    sw.handlePush = realHandle;
+  }
 });

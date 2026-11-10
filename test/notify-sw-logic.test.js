@@ -84,20 +84,19 @@ test("two pushes for one target show one notification; two ask_user targets show
   assert.equal(w2.shown().length, 2);
 });
 
-test("a close push closes the shown notification where a push may show nothing", async function () {
+test("a close push closes the shown notification on Chrome and leaves no notice", async function () {
   var w = world();
   var data = corePayload("permission_request", { slug: "p", sessionId: 3, requestId: "r1" });
   await sw.handlePush(w.env, data);
-  var shownBefore = w.shown()[0];
   await sw.handlePush(w.env, payloads.buildClose(registry.get("permission_request"), data.tag));
-  assert.equal(shownBefore.closed, true);
+  assert.equal(w.shown().length, 0);
 });
 
-test("a close push replaces the notification with a silent notice where every push must show one", async function () {
+test("a close push replaces the notification with a silent notice on every browser", async function () {
   var ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1";
   assert.equal(sw.requiresVisible(ios), true);
   assert.equal(sw.requiresVisible("Mozilla/5.0 (Macintosh) AppleWebKit/605 Version/17 Safari/605"), true);
-  assert.equal(sw.requiresVisible("Mozilla/5.0 (Linux; Android 14) Chrome/120.0 Mobile Safari/537.36"), false);
+  assert.equal(sw.requiresVisible("Mozilla/5.0 (Linux; Android 14) Chrome/120.0 Mobile Safari/537.36"), true);
   var w = world({ userAgent: ios });
   var data = corePayload("permission_request", { slug: "p", sessionId: 3, requestId: "r1" });
   await sw.handlePush(w.env, data);
@@ -249,7 +248,7 @@ test("a close where every push must show one leaves a newer notification under t
   assert.equal(w.shown()[0].options.data.core, 1, "the live notification stays");
 });
 
-test("a close with nothing shown shows one silent notice and closes it at once where a push must show one", async function () {
+test("a close with nothing shown shows one silent notice and closes it at once on every browser", async function () {
   var ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1";
   var w = world({ userAgent: ios });
   var shownCalls = [];
@@ -268,7 +267,7 @@ test("a close with nothing shown shows one silent notice and closes it at once w
   var realAndroid = android.env.registration.showNotification;
   android.env.registration.showNotification = function (title, o) { calls++; return realAndroid(title, o); };
   await sw.handlePush(android.env, payloads.buildClose(registry.get("permission_request"), "n:permission_request:p:3:r1"));
-  assert.equal(calls, 0, "a platform that allows it shows nothing");
+  assert.equal(calls, 1, "Chrome gets the same single notice");
 });
 
 test("sw.js wires the generic handlers and drops the dead error branch", function () {

@@ -1,8 +1,9 @@
 "use strict";
 
-// A fake service-worker registration that enforces the WebKit push rule: iOS
-// and desktop Safari revoke a push subscription whose push event shows no
-// notification. Each runPush records the showNotification calls made while
+// A fake service-worker registration that enforces the userVisibleOnly push
+// rule: iOS and desktop Safari revoke a push subscription whose push event
+// shows no notification, and Chrome (desktop and Android) posts a generic
+// "updated in the background" notice of its own. Each runPush records the showNotification calls made while
 // one push is handled, and fails naming the push when a user agent that
 // requires a visible notification showed none.
 
@@ -11,6 +12,7 @@ var sw = require("../../lib/public/notify-sw-logic.js");
 var IOS_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1";
 var SAFARI_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15";
 var ANDROID_UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36";
+var CHROME_DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 function createContractWorld(userAgent) {
   var all = [];
@@ -73,7 +75,7 @@ function createContractWorld(userAgent) {
   function finish(label, rec) {
     if (calls === rec) calls = null;
     if (sw.requiresVisible(userAgent) && rec.length === 0) {
-      throw new Error("WebKit push contract broken: push '" + label + "' showed no notification");
+      throw new Error("Push contract broken: push '" + label + "' showed no notification");
     }
     return rec;
   }
@@ -89,4 +91,5 @@ module.exports = {
   IOS_UA: IOS_UA,
   SAFARI_UA: SAFARI_UA,
   ANDROID_UA: ANDROID_UA,
+  CHROME_DESKTOP_UA: CHROME_DESKTOP_UA,
 };
