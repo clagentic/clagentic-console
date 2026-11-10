@@ -86,7 +86,30 @@ test("malformed records are dropped, valid ones kept", function () {
   var v = snap(s, NOW).vendors.claude.buckets;
   assert.equal(v.five_hour.utilization, 0.1);
   assert.equal(v.seven_day.state, "unknown");
+  assert.equal(logs.length, 2);
+  assert.match(logs[0], /dropped 1 malformed usage record\(s\)/);
+  assert.match(logs[1], /loaded 1 usage record\(s\) from .*, newest observedAt 2026-11-02T12:00:00\.000Z$/);
+});
+
+test("load logs one line with the record count and newest observedAt", function () {
+  var t = tmpFile();
+  var mk = function (iso) { return { utilization: 0.1, utilizationObservedAt: iso, resetsAt: null, status: "allowed", observedAt: iso, source: null, sessionLocalId: null }; };
+  fs.writeFileSync(t.file, JSON.stringify({ version: 1, vendors: {
+    claude: { five_hour: mk("2026-11-02T10:00:00.000Z"), seven_day: mk("2026-11-02T11:30:00.000Z") },
+    codex: { five_hour: mk("2026-11-02T09:00:00.000Z") },
+  } }));
+  var logs = [];
+  createUsageStore({ file: t.file, log: function (m) { logs.push(m); } }).load();
   assert.equal(logs.length, 1);
+  assert.equal(logs[0], "[usage-store] Clagentic: Console loaded 3 usage record(s) from " + t.file + ", newest observedAt 2026-11-02T11:30:00.000Z");
+});
+
+test("a valid file with zero records logs loaded 0 and newest observedAt none", function () {
+  var t = tmpFile();
+  fs.writeFileSync(t.file, JSON.stringify({ version: 1, vendors: {} }));
+  var logs = [];
+  createUsageStore({ file: t.file, log: function (m) { logs.push(m); } }).load();
+  assert.deepEqual(logs, ["[usage-store] Clagentic: Console loaded 0 usage record(s) from " + t.file + ", newest observedAt none"]);
 });
 
 test("throttle coalesces several records into one write", function () {
@@ -142,7 +165,7 @@ test("__proto__ vendor and bucket keys in the file do not pollute and the store 
   var v = snap(s, NOW).vendors.claude.buckets;
   assert.equal(v.seven_day.utilization, 0.1);
   assert.equal(Object.keys(v).indexOf("__proto__"), -1);
-  assert.equal(logs.length, 1);
+  assert.equal(logs.length, 2);
   assert.match(logs[0], /dropped 2 /);
   s.record("claude", { rateLimitType: "five_hour", utilization: 0.3, status: "allowed" }, { now: NOW });
   assert.equal(snap(s, NOW).vendors.claude.buckets.five_hour.utilization, 0.3);

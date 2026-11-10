@@ -13,6 +13,9 @@ function tmpFile() {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-types-"));
   return path.join(dir, "usage-store.json");
 }
+function notLoaded(logs) {
+  return logs.filter(function (m) { return !/ loaded \d+ usage record/.test(m); });
+}
 function snap(s) {
   return s.snapshot({ now: NOW + 1000, staleSeconds: 1800, vendorIds: ["claude"] }).vendors.claude.buckets.five_hour;
 }
@@ -32,7 +35,7 @@ test("numeric sessionLocalId survives record, flush, load and snapshot", functio
   assert.equal(r.stored.sessionLocalId, "12");
   assert.equal(r.view.observedAt, new Date(NOW).toISOString());
   assert.equal(r.view.utilization, 0.4);
-  assert.deepEqual(r.logs, []);
+  assert.deepEqual(notLoaded(r.logs), []);
 });
 
 test("a file on disk with a numeric sessionLocalId loads and is not dropped", function () {
@@ -45,7 +48,7 @@ test("a file on disk with a numeric sessionLocalId loads and is not dropped", fu
   var logs = [];
   var s = createUsageStore({ file: file, log: function (m) { logs.push(m); } });
   s.load();
-  assert.deepEqual(logs, []);
+  assert.deepEqual(notLoaded(logs), []);
   assert.equal(snap(s).observedAt, iso);
   assert.equal(snap(s).utilization, 0.3);
 });
@@ -61,8 +64,8 @@ test("a non-finite or non-number sessionLocalId on disk is still dropped", funct
     var logs = [];
     var s = createUsageStore({ file: file, log: function (m) { logs.push(m); } });
     s.load();
-    assert.equal(logs.length, 1);
-    assert.match(logs[0], /dropped 1 malformed/);
+    assert.equal(notLoaded(logs).length, 1);
+    assert.match(notLoaded(logs)[0], /dropped 1 malformed/);
   });
 });
 
@@ -90,7 +93,7 @@ test("wrongly typed fields are normalised on write so they reload", function () 
   ];
   cases.forEach(function (c) {
     var r = roundtrip(c.info, c.meta);
-    assert.deepEqual(r.logs, [], JSON.stringify(c));
+    assert.deepEqual(notLoaded(r.logs), [], JSON.stringify(c));
     assert.equal(r.view.observedAt, new Date(NOW).toISOString(), JSON.stringify(c));
   });
 });
