@@ -116,6 +116,17 @@ test("parser: the newest URL wins when a login is retried", async function () {
   assert.equal(got.url, "https://a.example.test/two");
 });
 
+test("parser: after a retry the new URL is paired with the new code", async function () {
+  var P = await mod("login-parser.js");
+  var compiled = P.compileLoginPatterns(await patternsFor("codex"));
+  var attempt = function (n, code) {
+    return ["1. Open this link", "https://a.example.test/" + n, "2. Enter this one-time code", "   " + code];
+  };
+  var got = P.parseLoginLines(attempt("one", "AAAA-BBBB11").concat(attempt("two", "CCCC-DDDD22")), compiled);
+  assert.equal(got.url, "https://a.example.test/two");
+  assert.equal(got.userCode, "CCCC-DDDD22");
+});
+
 test("parser: a missing or broken pattern declares no panel instead of throwing", async function () {
   var P = await mod("login-parser.js");
   assert.equal(P.compileLoginPatterns(null), null);
@@ -371,6 +382,30 @@ test("terminal wiring: only the marked login tab feeds the panel; the code goes 
   h.container.querySelector(".login-panel-submit").click();
   var inputs = h.sent.filter(function (m) { return m.type === "term_input"; });
   assert.deepEqual(inputs.map(function (m) { return [m.id, m.data]; }), [["t1", "the-code\n"]]);
+});
+
+test("term request: a foreign terminal created in the window is not marked and gets no command", async function () {
+  var R = await mod("pending-term-request.js");
+  var storeMod = await mod("store.js");
+  storeMod.createStore({ pendingTermCommand: null, pendingLoginVendor: "", pendingTermRequestId: "" });
+  var store = storeMod.store;
+  var id = R.newTermRequestId();
+  store.set({ pendingTermCommand: "claude auth login\n", pendingLoginVendor: "claude", pendingTermRequestId: id });
+
+  assert.equal(R.consumePendingTerm(store, { id: "t-foreign" }), null);
+  assert.equal(R.consumePendingTerm(store, { id: "t-foreign", requestId: "tq-other" }), null);
+  assert.equal(store.get("pendingTermCommand"), "claude auth login\n", "the slot is left alone");
+
+  var got = R.consumePendingTerm(store, { id: "t-login", requestId: id });
+  assert.deepEqual(got, { command: "claude auth login\n", vendor: "claude" });
+  assert.equal(R.consumePendingTerm(store, { id: "t-login", requestId: id }), null, "consumed once");
+});
+
+test("term request: the server echoes a client request id on term_created", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "project-user-message.js"), "utf8");
+  assert.ok(/created\.requestId = msg\.requestId/.test(src));
+  var login = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", "app-notifications.js"), "utf8");
+  assert.ok(/type: "term_create"[^)]*requestId: requestId/.test(login));
 });
 
 test("terminal wiring: the identity note follows os-users versus shared mode", async function () {
