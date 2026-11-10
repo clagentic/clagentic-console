@@ -1,0 +1,96 @@
+/* agent-messages.css - the agent-messages section of the Team view: a map of
+   sender and target pairs, and the thread of the selected pair. Drawn in the
+   desktop view and the phone sheet alike; the phone shows the map or the
+   thread, one at a time. */
+
+.am-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.am-layout.phone { grid-template-columns: minmax(0, 1fr); }
+
+.am-map { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.am-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.am-pair:hover { background: rgba(var(--overlay-rgb), 0.05); }
+.am-pair.selected { border-color: var(--accent, var(--text)); }
+
+.am-pair-name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.am-arrow { color: var(--text-dimmer); }
+.am-count { margin-left: auto; font-weight: 700; }
+.am-last { color: var(--text-dim); font-size: 12px; }
+
+.am-avatar { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; }
+
+.am-thread { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.am-thread-head { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.am-thread-title { overflow-wrap: anywhere; }
+
+.am-back, .am-link {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.am-back:hover, .am-link:hover { color: var(--text); background: rgba(var(--overlay-rgb), 0.06); }
+
+.am-message {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.am-message.pending { border-style: dashed; }
+
+.am-message-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.am-sender { font-weight: 600; overflow-wrap: anywhere; }
+.am-time { color: var(--text-dim); }
+.am-note { color: var(--text-dim); font-size: 12px; overflow-wrap: anywhere; }
+.am-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; max-height: 240px; overflow-y: auto; }
+.am-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.am-chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(var(--overlay-rgb), 0.08);
+  color: var(--text-muted);
+}
+
+.am-chip.pending { color: var(--text); border: 1px dashed var(--text-dimmer); background: none; }
+
+.am-empty, .am-hint { color: var(--text-dim); font-size: 13px; padding: 12px 0; }
+.am-footnote { color: var(--text-dimmer); font-size: 12px; margin-top: 10px; }

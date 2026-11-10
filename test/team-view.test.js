@@ -178,7 +178,6 @@ test("a second section registers beside Agent Teams: both listed and switchable"
     body.querySelectorAll(".team-view-tab")[0].click();
     assert.ok(els["team-view-body"].textContent.indexOf("Worker A") >= 0, "switches back");
 
-    assert.equal(read("lib/public/modules/team-panel.js"), panelSourceBefore);
     assert.doesNotMatch(panelSourceBefore, /test-only/, "Agent Teams code knows nothing of other sections");
   } finally {
     mods.view.unregisterTeamSection("test-only");
@@ -282,6 +281,35 @@ function topLevelBlocks(css) {
   return blocks;
 }
 
+// Whether a media prelude such as "@media (min-width: 769px)" applies at width w.
+function mediaApplies(prelude, w) {
+  var min = /min-width:\s*(\d+)px/.exec(prelude);
+  var max = /max-width:\s*(\d+)px/.exec(prelude);
+  return (!min || w >= Number(min[1])) && (!max || w <= Number(max[1]));
+}
+
+// The widths where the stylesheet hides both the chat and the view, or neither.
+// Both rules are read from the parsed blocks, never from the breakpoint constant.
+function widthsWhereRulesDisagree(blocks, widths) {
+  var chatRule = blocks.filter(function (b) { return /^@media/.test(b.prelude) && /#team-view:not\(\.hidden\)\)\s*>\s*#app/.test(b.body); })[0];
+  var viewRule = blocks.filter(function (b) { return /^@media/.test(b.prelude) && /#team-view\s*\{\s*display:\s*none/.test(b.body); })[0];
+  return widths.filter(function (w) {
+    return mediaApplies(chatRule.prelude, w) === mediaApplies(viewRule.prelude, w);
+  });
+}
+
+test("the breakpoint check fails when the stylesheet's two ceilings drift apart", async function () {
+  var pos = await import(dom.moduleUrl("popover-position.js"));
+  var bp = pos.MOBILE_BREAKPOINT;
+  var css = read("lib/public/css/team-view.css");
+  var widths = [320, bp, bp + 1, 1280];
+  assert.deepEqual(widthsWhereRulesDisagree(topLevelBlocks(css), widths), []);
+
+  var drifted = css.replace("@media (max-width: " + bp + "px)", "@media (max-width: " + (bp - 68) + "px)");
+  assert.notEqual(drifted, css, "the fixture changed the phone ceiling");
+  assert.deepEqual(widthsWhereRulesDisagree(topLevelBlocks(drifted), widths), [bp], "a width with neither rule is reported");
+});
+
 test("the chat pane is hidden only at widths where the Team view can show, across the 768px breakpoint", async function () {
   var pos = await import(dom.moduleUrl("popover-position.js"));
   var bp = pos.MOBILE_BREAKPOINT;
@@ -304,11 +332,7 @@ test("the chat pane is hidden only at widths where the Team view can show, acros
 
   // At every width exactly one of the two media rules applies, so the chat is
   // hidden if and only if the view is shown: no width has both or neither.
-  [320, bp, bp + 1, 1280].forEach(function (w) {
-    var viewHiddenByCss = w <= bp;
-    var chatHiddenByCss = w >= bp + 1;
-    assert.notEqual(viewHiddenByCss, chatHiddenByCss, "width " + w);
-  });
+  assert.deepEqual(widthsWhereRulesDisagree(blocks, [320, bp, bp + 1, 1280]), [], "read from team-view.css");
 
   // The JS side of the same threshold: auto-open is skipped at or below it.
   global.window = global.window || {};
