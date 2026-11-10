@@ -1,6 +1,6 @@
 "use strict";
-// Pending scheduled-input cards and long fired scheduled messages collapse to
-// one line. The helper logic always runs; the browser cases drive the real
+// A pending scheduled input is an outbox item (scheduled-outbox.js) and long
+// fired scheduled messages collapse to one line. The helper logic always runs; the browser cases drive the real
 // client against a daemon booted by the harness over a private home and port,
 // at a desktop and a phone width. Playwright is not a dependency of this repo:
 // the browser cases run when it resolves (CLAGENTIC_CONSOLE_TEST_PLAYWRIGHT
@@ -35,6 +35,39 @@ test("collapsible-text: first line, threshold and scheduled initiators", async f
   assert.equal(m.isScheduledInitiator(undefined), false);
 });
 
+test("the outbox row of a long prompt has a real expand and collapse beside Fire now and Cancel; a short one has none", async function () {
+  var dom = require("./fake-dom-prompt-cards");
+  dom.setupGlobals();
+  document.removeEventListener = function () {};
+  var messages = new dom.FakeElement("div");
+  document.getElementById = function (id) { return id === "messages" ? messages : null; };
+  var ob = await import(dom.moduleUrl("scheduled-outbox.js"));
+  var long = Array.from({ length: 10 }, function (_, i) { return "line " + (i + 1); }).join("\n");
+  // The fake element's click passes an empty event; the toggle stops propagation.
+  function press(el) { el._listeners.click.forEach(function (fn) { fn({ stopPropagation: function () {} }); }); }
+  try {
+    ob.renderScheduledOutbox([
+      { id: "si_l", kind: "once", text: long, nextAt: Date.now() + 60000 },
+      { id: "si_s", kind: "once", text: "short", nextAt: Date.now() + 60000 },
+    ]);
+    var rows = messages.querySelectorAll(".scheduled-queued");
+    var toggle = rows[0].querySelector(".collapsible-toggle");
+    assert.ok(toggle, "a long prompt has the toggle");
+    assert.ok(rows[0].querySelector(".shell-queued-actions").contains(toggle), "beside Fire now and Cancel");
+    var text = rows[0].querySelector(".collapsible-text");
+    assert.ok(text.classList.contains("is-collapsed"), "collapsed at first");
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    assert.equal(rows[0].querySelector(".collapsible-full").textContent, long, "the whole text stays in the row");
+    press(toggle);
+    assert.equal(text.classList.contains("is-collapsed"), false, "expanded");
+    assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    press(toggle);
+    assert.ok(text.classList.contains("is-collapsed"), "collapsed again");
+    assert.equal(rows[1].querySelector(".collapsible-toggle"), null, "a short prompt needs none");
+    assert.equal(rows[1].querySelector(".shell-queued-text").textContent, "short");
+  } finally { ob.removeScheduledOutbox(); }
+});
+
 var PROMPT = Array.from({ length: 10 }, function (_, i) { return "line " + (i + 1) + " of the wake-up prompt"; }).join("\n");
 var VIEWPORTS = [
   { name: "desktop", width: 1280, height: 800 },
@@ -45,7 +78,7 @@ var playwright = loadPlaywright();
 var harness = require("./fixtures/daemon-harness");
 
 VIEWPORTS.forEach(function (vp) {
-  test("browser " + vp.name + ": pending scheduled input collapses, expands, collapses", { skip: !playwright && "playwright not available", timeout: 120000 }, async function () {
+  test("browser " + vp.name + ": pending scheduled input is an outbox item, a long fired one collapses", { skip: !playwright && "playwright not available", timeout: 120000 }, async function () {
     var d = await harness.bootDaemon();
     var browser = null;
     try {
@@ -66,46 +99,21 @@ VIEWPORTS.forEach(function (vp) {
       }, { text: PROMPT });
       assert.equal(armed, true, "the page's websocket was open");
 
-      var card = page.locator(".scheduled-msg-wrap");
+      // The pending schedule is an outbox item in the composer, the only
+      // rendering of it: it carries the fire time and Fire now and Cancel.
+      var card = page.locator(".scheduled-queued");
       await card.waitFor({ timeout: 15000 });
-      var toggle = card.locator(".collapsible-toggle");
-      var preview = card.locator(".collapsible-preview");
-      var full = card.locator(".collapsible-full");
-
-      async function checkCardShape(expanded) {
-        assert.equal(await toggle.getAttribute("aria-expanded"), expanded ? "true" : "false");
-        assert.equal((await toggle.textContent()).trim(), expanded ? "Collapse" : "Expand");
-        assert.equal(await card.locator(".scheduled-msg-send-now").isVisible(), true, "Send now visible");
-        assert.equal(await card.locator(".scheduled-msg-cancel").isVisible(), true, "Cancel visible");
-        assert.match(await card.locator(".scheduled-msg-countdown").textContent(), /Sends at/);
-      }
-
-      // Collapsed by default: one visible line, the first line of the prompt.
-      await checkCardShape(false);
-      assert.equal(await preview.isVisible(), true);
-      assert.equal(await full.isVisible(), false);
-      assert.equal((await preview.textContent()), "line 1 of the wake-up prompt");
-      if (process.env.CLAGENTIC_CONSOLE_TEST_SHOTS) await card.screenshot({ path: path.join(process.env.CLAGENTIC_CONSOLE_TEST_SHOTS, "pending-" + vp.name + "-collapsed.png") });
-      var lineHeight = await preview.evaluate(function (el) { return parseFloat(getComputedStyle(el).lineHeight) || el.getBoundingClientRect().height; });
-      var collapsedHeight = (await card.boundingBox()).height;
-      assert.ok(collapsedHeight < lineHeight * (vp.width < 600 ? 4 : 2.5), "collapsed card is a single prompt line tall (" + collapsedHeight + "px)");
-      assert.ok((await preview.boundingBox()).height < lineHeight * 1.5, "the preview is one line");
-
-      // The toggle is a real button and works from the keyboard.
-      assert.equal(await toggle.evaluate(function (el) { return el.tagName; }), "BUTTON");
-      await toggle.focus();
-      await page.keyboard.press("Enter");
-      await checkCardShape(true);
-      assert.equal(await full.isVisible(), true);
-      assert.equal(await preview.isVisible(), false);
-      assert.equal(await full.textContent(), PROMPT, "the full text is whole");
-      assert.ok((await card.boundingBox()).height > collapsedHeight * 2, "expanded card is taller");
-      if (process.env.CLAGENTIC_CONSOLE_TEST_SHOTS) await card.screenshot({ path: path.join(process.env.CLAGENTIC_CONSOLE_TEST_SHOTS, "pending-" + vp.name + "-expanded.png") });
-
-      await toggle.click();
-      await checkCardShape(false);
-      assert.equal(await full.isVisible(), false);
-      assert.ok(Math.abs((await card.boundingBox()).height - collapsedHeight) < 2, "back to one line");
+      assert.equal(await page.locator(".scheduled-msg-wrap").count(), 0, "no second card");
+      assert.equal(await card.locator(".scheduled-queued-fire").isVisible(), true, "Fire now visible");
+      assert.equal(await card.locator(".scheduled-queued-cancel").isVisible(), true, "Cancel visible");
+      assert.match(await card.locator(".scheduled-queued-time").textContent(), /Sends at/);
+      assert.equal(await card.locator(".collapsible-full").isVisible(), false, "collapsed at first");
+      await card.locator(".collapsible-toggle").click();
+      assert.equal(await card.locator(".collapsible-full").textContent(), PROMPT);
+      assert.equal(await card.locator(".collapsible-full").isVisible(), true, "expanded on the row");
+      await card.locator(".collapsible-toggle").click();
+      assert.equal(await card.locator(".collapsible-full").isVisible(), false, "collapsed again");
+      if (process.env.CLAGENTIC_CONSOLE_TEST_SHOTS) await card.screenshot({ path: path.join(process.env.CLAGENTIC_CONSOLE_TEST_SHOTS, "pending-" + vp.name + ".png") });
 
       // Fired scheduled messages, through the client's own renderer: a short one
       // stays as it was, a long one collapses with the same control.
@@ -129,11 +137,10 @@ VIEWPORTS.forEach(function (vp) {
       assert.equal(await longMsg.locator(".collapsible-full").isVisible(), false);
       if (process.env.CLAGENTIC_CONSOLE_TEST_SHOTS) await page.screenshot({ path: path.join(process.env.CLAGENTIC_CONSOLE_TEST_SHOTS, "fired-" + vp.name + ".png") });
 
-      // Collapse state is not persisted: a reload draws the card collapsed again.
-      await toggle.click();
+      // The service is the source of truth: a reload draws the pending schedule again.
       await page.reload();
       await card.waitFor({ timeout: 15000 });
-      assert.equal(await card.locator(".collapsible-toggle").getAttribute("aria-expanded"), "false");
+      assert.equal(await card.count(), 1);
     } finally {
       if (browser) await browser.close();
       await d.cleanup();
