@@ -39,7 +39,7 @@
 
 /* --------------------------------------------------------
    Diagnostics panel (inside #info-panels)
-   Follows the usage-panel / team-panel pattern.
+   Follows the usage-panel pattern.
    -------------------------------------------------------- */
 #diagnostics-panel {
   display: flex;

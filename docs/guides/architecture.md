@@ -816,6 +816,27 @@ The same events keep a per-project open-socket count (`lib/open-sockets.js`), re
 
 The browser keeps one WebSocket per tab (`lib/public/modules/app-connection.js`, tracked through `ws-ref.js`). `connect()` is single-flight: each call takes a new generation, cancels a pending reconnect timer and detaches the tracked socket, and an attempt still waiting for its ticket when a newer call starts neither opens nor registers a socket. Every handler of a socket checks that it is still the tracked one and returns otherwise, so a replaced socket never feeds `processMessage`. `resetClientState()` (reconnect, session switch, project switch) also calls `resetStreamState()` (`app-rendering.js`), so text buffered for drawing is dropped before the history replays and is never drawn in front of it.
 
+## Team View
+
+The icon-strip Team button opens `#team-view`, a main-panels view that takes the place of the chat pane (the same way project settings does) instead of a small popup in the `#info-panels` stack. It hosts sections; each section is one kind of agentic activity.
+
+`lib/public/modules/team-view.js` owns the registry and the view:
+
+```js
+registerTeamSection({
+  id: "my-section",            // unique; registering an id again replaces it
+  title: "My Section",         // tab label
+  render: function (container) { /* draw into container */ },
+  isAvailable: function () { return true; },  // optional; false hides the section
+});
+```
+
+- Sections are listed in registration order. One available section shows no tab strip; two or more show tabs, and the choice is kept while the view stays open.
+- When no section is available the view shows an empty state instead of a blank body.
+- A section calls `refreshTeamView()` after its data changes; it is a no-op while the view is closed. `openTeamView()` opens the view (a no-op on a phone viewport).
+- The mobile Team tab calls `renderTeamSections(listEl)`, so a section registered once appears on desktop and phone with no per-surface code.
+- A section registers from its own module and knows nothing of the others. Agent Teams (`team-panel.js`) is the first: it handles `team_state`, `team_member_update`, `team_task_update`, `team_message` and `team_gone`, opens the view on `team_state`, and is available while a team is active.
+
 ## Key Design Decisions
 
 | Decision | Rationale |

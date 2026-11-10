@@ -1,0 +1,101 @@
+/* team-view.css - The desktop Team view: a main-panels view that takes the
+   place of the chat pane, like project settings. Section content styles live
+   in team-panel.css. */
+
+#team-view {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  border-left: 1px solid var(--border-subtle);
+}
+
+#team-view.hidden { display: none; }
+
+/* The chat pane steps aside while the view is open; file viewer and terminal
+   panes keep their own place beside it. Scoped to the widths where the view
+   can actually show (the phone rule below hides it), so the two rules never
+   disagree and a resize across the breakpoint cannot blank the main pane.
+   The 769px floor and the 768px ceiling below are MOBILE_BREAKPOINT + 1 and
+   MOBILE_BREAKPOINT in popover-position.js; a test pins them together. */
+@media (min-width: 769px) {
+  #main-panels:has(#team-view:not(.hidden)) > #app { display: none; }
+}
+
+/* Project settings is a full view of its own and wins over the Team view. */
+#main-panels:has(#project-settings:not(.hidden)) > #team-view { display: none; }
+
+.team-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.team-view-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.team-view-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.team-view-close:hover { color: var(--text); background: rgba(var(--overlay-rgb), 0.06); }
+.team-view-close .lucide { width: 18px; height: 18px; }
+
+.team-view-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 28px 40px;
+}
+
+/* Sections read as a column, not a full-width stretch. */
+.team-view-body > * {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.team-view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.team-view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.team-view-tab:hover { color: var(--text); }
+.team-view-tab.active { color: var(--text); border-bottom-color: var(--accent, var(--text)); }
+
+/* Phones use the Team tab sheet; the view itself never shows there. */
+@media (max-width: 768px) {
+  #team-view { display: none !important; }
+}

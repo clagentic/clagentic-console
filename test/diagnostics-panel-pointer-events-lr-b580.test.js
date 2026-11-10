@@ -3,7 +3,7 @@
 // Root cause: #diagnostics-panel lives inside #info-panels
 // (lib/public/css/menus.css), which is `position: fixed; pointer-events: none`
 // so it can span the viewport without blocking clicks on the app underneath.
-// Sibling panels (#usage-panel, #status-panel, #context-panel, #team-panel)
+// Sibling panels (#usage-panel, #status-panel, #context-panel)
 // opt back into `pointer-events: auto` on their own bounds via a shared
 // selector. lr-8294 added #diagnostics-panel to the DOM/CSS file but never
 // added it to that selector, so the panel inherited `pointer-events: none`
@@ -47,7 +47,7 @@ test("menus.css: #diagnostics-panel is included in the shared pointer-events:aut
 
   assert.match(
     block,
-    /#usage-panel,\s*#status-panel,\s*#context-panel,\s*#team-panel,\s*#diagnostics-panel\s*\{[^}]*pointer-events:\s*auto/,
+    /#usage-panel,\s*#status-panel,\s*#context-panel,\s*#diagnostics-panel\s*\{[^}]*pointer-events:\s*auto/,
     "#diagnostics-panel must share the pointer-events:auto rule with its sibling panels -- without it, the panel inherits pointer-events:none from #info-panels and becomes fully unclickable (lr-b580 root cause)"
   );
 });
@@ -55,7 +55,7 @@ test("menus.css: #diagnostics-panel is included in the shared pointer-events:aut
 test("menus.css: #diagnostics-panel.hidden is included in the shared display:none selector", () => {
   assert.match(
     MENUS_CSS,
-    /#usage-panel\.hidden,\s*#status-panel\.hidden,\s*#context-panel\.hidden,\s*#team-panel\.hidden,\s*#diagnostics-panel\.hidden\s*\{\s*display:\s*none;\s*\}/,
+    /#usage-panel\.hidden,\s*#status-panel\.hidden,\s*#context-panel\.hidden,\s*#diagnostics-panel\.hidden\s*\{\s*display:\s*none;\s*\}/,
     "#diagnostics-panel.hidden must be listed alongside its sibling panels for consistency with the shared panel pattern"
   );
 });
