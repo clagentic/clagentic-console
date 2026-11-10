@@ -1310,6 +1310,17 @@
         <div class="server-settings-section" data-section="claudemd">
           <h2>CLAUDE.md</h2>
           <p class="ps-section-desc">Edit the global CLAUDE.md file. These instructions apply to all projects and sessions on this server.</p>
+          <h3 class="settings-subheading">Idle compaction (Claude)</h3>
+          <div class="settings-card">
+            <div class="settings-field">
+              <div class="settings-hint">Whether Claude Code compacts a long conversation while a session is idle. This is the <code>idleCompaction</code> key in the Claude user settings file, the same file the CLI reads.</div>
+              <div id="ss-idle-compaction-status" class="settings-hint"></div>
+              <div class="ps-textarea-actions">
+                <button class="settings-btn-sm" id="ss-idle-compaction-off">Turn off</button>
+                <button class="settings-btn-sm" id="ss-idle-compaction-default">Use CLI default</button>
+              </div>
+            </div>
+          </div>
           <div class="settings-card">
             <div class="settings-field">
               <div id="ss-claudemd-status" class="settings-hint"></div>

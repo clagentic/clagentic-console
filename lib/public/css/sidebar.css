@@ -2049,3 +2049,14 @@
   width: 12px;
   height: 12px;
 }
+
+/* Vendor-reported compaction in progress, shown beside the session title. */
+.session-item .session-compacting {
+  font-size: 10px;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  white-space: nowrap;
+}

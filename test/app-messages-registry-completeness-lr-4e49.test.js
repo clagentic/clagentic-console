@@ -88,6 +88,8 @@ var ORIGINAL_CASE_LABELS = [
   // for real new types before, not just transcribed once and frozen.
   "set_mem_available_threshold_result", "mem_available_threshold_changed",
   "set_tokens_per_mb_headroom_result", "tokens_per_mb_headroom_changed",
+  // The idleCompaction user setting's read and write results.
+  "idle_compaction_result", "set_idle_compaction_result",
   // The single operator-prompt shape (lib/prompt-registry.js); the
   // per-kind types above stay registered as aliases for recorded history.
   "prompt_request", "prompt_pending", "prompt_resolved", "prompt_cancel",
