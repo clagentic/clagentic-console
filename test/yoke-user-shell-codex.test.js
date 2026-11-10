@@ -262,7 +262,7 @@ test("turn-id table U3: a late end of a settled command's turn is taken by its i
   await finish(h);
 });
 
-test("turn-id table V2: an abort before turn/started is held, and sent once the turn starts in the grace period", async function () {
+test("turn-id table V2: an abort before turn/started is held with no timer, and sent when that run's turn starts", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
   var ac = new AbortController();
@@ -280,7 +280,7 @@ test("turn-id table V2: an abort before turn/started is held, and sent once the 
   await finish(h);
 });
 
-test("turn-id table V2: an abort with no turn in the grace period reports interrupted false", async function () {
+test("turn-id table V2: an abort is held however long the turn takes to start, and a run with no turn settles timedOut", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
   test.mock.timers.enable({ apis: ["setTimeout"] });
@@ -289,10 +289,17 @@ test("turn-id table V2: an abort with no turn in the grace period reports interr
     var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024, { signal: ac.signal });
     await tick();
     ac.abort();
-    test.mock.timers.tick(3000);
+    test.mock.timers.tick(30000);
+    await tick();
+    assert.equal(fake.callsTo("turn/interrupt").length, 0, "no timer sends or settles an abort held before the turn");
+    var settled = false;
+    pending.then(function () { settled = true; });
+    await tick();
+    assert.equal(settled, false, "still held well past the old grace times");
+    test.mock.timers.tick(60000);
     var result = await pending;
+    assert.equal(result.timedOut, true, "no turn before the timeout plus the margin");
     assert.equal(result.interrupted, false, "the command may still be running");
-    assert.equal(fake.callsTo("turn/interrupt").length, 0);
   } finally {
     test.mock.timers.reset();
   }
@@ -338,14 +345,15 @@ test("turn-id table X1: a model turn ending while the command is starting does n
   await finish(h);
 });
 
-test("a command asked for in another directory runs there, and is not sent to the thread", { skip: process.platform === "win32" }, async function () {
+test("a command asked for in another directory is refused with a reason, never run or sent", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
-  var dir = require("fs").realpathSync(require("os").tmpdir());
-  var result = await h.handle.runUserShellCommand("pwd", dir, 20000, 1024);
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.output.trim(), dir, "ran in the directory it was given");
-  assert.equal(fake.callsTo("thread/shellCommand").length, 0);
+  var other = require("path").resolve(require("os").tmpdir(), "not-the-thread-directory");
+  var result = await h.handle.runUserShellCommand("pwd", other, 20000, 1024);
+  assert.equal(result.exitCode, null);
+  assert.equal(result.interrupted, false);
+  assert.match(result.output, /only in its own working directory/);
+  assert.equal(fake.callsTo("thread/shellCommand").length, 0, "not sent to the thread");
   await finish(h);
 });
 
@@ -364,28 +372,19 @@ test("a command is refused, without being sent, while a model turn is running", 
   await finish(h);
 });
 
-test("turn-id table V2/orphan: a turn that starts after the grace period is the late command's, stopped and kept off the stream", async function () {
+test("turn-id table Y7: a turn that starts after a run gave up is never bound by timing and is delivered", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
   test.mock.timers.enable({ apis: ["setTimeout"] });
   try {
-    var ac = new AbortController();
-    var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024, { signal: ac.signal });
+    var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024);
     await tick();
-    ac.abort();
-    test.mock.timers.tick(3000);
-    assert.equal((await pending).interrupted, false);
-    assert.equal(fake.callsTo("turn/interrupt").length, 0);
+    test.mock.timers.tick(80000);
+    assert.equal((await pending).timedOut, true);
 
     var before = h.events.length;
-    startShellTurn(fake, "turn-late");
-    fake.dispatch("item/started", { turnId: "turn-late", item: cmdItem({ command: "sleep 999", status: "inProgress" }) });
-    endShellTurn(fake, "interrupted", "turn-late");
-    await tick();
-    assert.equal(fake.callsTo("turn/interrupt").length, 1, "the late turn is interrupted");
-    assert.equal(h.events.length, before, "none of its events reached the stream");
-
-    assert.equal(await modelTurnEnded(h, fake, "turn-model"), true, "a model turn after it is delivered as usual");
+    assert.equal(await modelTurnEnded(h, fake, "turn-after"), true, "a turn after the run settled is delivered, not captured");
+    assert.ok(h.events.length > before);
   } finally {
     test.mock.timers.reset();
   }
