@@ -40,6 +40,13 @@ test("a muted type is not sent to the user's subscription; another user's is una
   assert.deepEqual(sent.map(function (s) { return s.endpoint; }), ["https://push.invalid/bob-phone"]);
 });
 
+test("a close push for a muted category is not sent either", function () {
+  var w = setup();
+  w.prefs.set("alice", { preset: "approval_reminders" });
+  w.push.sendPushToUser("alice", { type: "notify_close", closes: "permission_request", tags: ["t"] });
+  assert.deepEqual(sent, []);
+});
+
 test("with 'Approval reminders only' a prompt is not pushed and its reminder is", function () {
   var w = setup();
   w.prefs.set("alice", { preset: "approval_reminders" });

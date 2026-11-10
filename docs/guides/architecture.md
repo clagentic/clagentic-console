@@ -747,6 +747,8 @@ A user's notification preferences filter every push at send time (see "Notificat
 
 The service worker (`lib/public/sw.js`) handles incoming pushes and routes the user back to the right session on tap.
 
+Every push shows something (`handlePush`, `lib/public/notify-sw-logic.js`). Browsers that enforce `userVisibleOnly` fail a push event that shows no notification: Safari revokes the subscription, Chrome (desktop and Android) posts its own generic "updated in the background" notice. So a push with nothing to display (a `notify_close`, a test push, an unmarked, malformed or unreadable payload) shows the minimal silent notice: a close replaces the matched notification under its tag and closes the notice after a short linger, and any other case shows one notice under a fixed tag and closes it at once. No user-agent split applies. A category the user turned off is filtered on the server before sending (`wanted` in `lib/push.js`), including its close pushes, never dropped in the worker. `test/helpers/webkit-push-contract.js` fails any push that shows nothing, per user agent.
+
 ## Client Freshness
 
 A browser must run the client code of the daemon it is connected to, including across a restart onto a new build that keeps the same `package.json` version (consecutive betas do). Freshness is therefore keyed on a build id (`lib/client-build-id.js`): the build SHA the daemon loaded at startup, or a per-start nonce when the install has no `lib/build-sha.json`.
