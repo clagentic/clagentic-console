@@ -85,6 +85,31 @@ test("Codex: a steer that races the end of the turn is queued for the next turn,
   handle.close();
 });
 
+test("Codex: a refused steer with an image writes the image once and queues the same prepared input", async function () {
+  var localImage = require("../lib/yoke/codex-local-image");
+  var origWrite = localImage.writeTempImage;
+  var writes = 0;
+  localImage.writeTempImage = function () { writes++; return origWrite.apply(this, arguments); };
+  var fake = runningTurn(function () { return Promise.reject(rpcError("expected turn id does not match the active turn", -32600)); });
+  var handle = await startTurn(fake);
+  try {
+    var png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    var result = await handle.steerMessage("with pic", [{ mediaType: "image/png", data: png }], "human", "m6");
+    assert.equal(result.reason, "turn-ended");
+    assert.equal(writes, 1, "the image was written once");
+    var steer = fake.calls.filter(function (c) { return c.method === "turn/steer"; })[0];
+    fake.dispatch({ method: "turn/completed", params: { threadId: "thread-1", turn: { id: "turn-7", status: "completed" } } });
+    for (var i = 0; i < 100 && fake.calls.filter(function (c) { return c.method === "turn/start"; }).length < 2; i++) await tick();
+    var starts = fake.calls.filter(function (c) { return c.method === "turn/start"; });
+    assert.equal(starts.length, 2);
+    assert.deepEqual(starts[1].params.input, steer.params.input, "the queued turn carries the prepared input");
+    assert.equal(starts[1].params.input[0].type, "localImage");
+  } finally {
+    localImage.writeTempImage = origWrite;
+    handle.close();
+  }
+});
+
 // Drives one send-now message through the real user-message handler with a
 // steer outcome and returns what was recorded, persisted and broadcast.
 async function sendNowOutcome(steerResult) {
