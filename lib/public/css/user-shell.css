@@ -120,17 +120,25 @@
   border-style: dashed;
 }
 
-/* An armed schedule in the outbox (scheduled-outbox.js): its fire time leads, and a
-   long prompt is cut to three lines on screen (the title holds the whole text). */
+/* An armed schedule in the outbox (scheduled-outbox.js): its fire time leads; a long
+   prompt collapses with the shared control (collapsible-text.js), placed with the
+   other controls. */
 .shell-queued.scheduled-queued .scheduled-queued-time {
   margin-right: 8px;
   font-size: 12px;
   color: var(--accent);
 }
 
-.shell-queued.scheduled-queued .shell-queued-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.shell-queued.scheduled-queued .shell-queued-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
 }
+
+.shell-queued.scheduled-queued .scheduled-queued-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--error, #d33);
+}
+
+.shell-queued.scheduled-queued .scheduled-queued-error:empty { display: none; }

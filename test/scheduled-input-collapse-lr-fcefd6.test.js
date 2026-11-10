@@ -35,6 +35,39 @@ test("collapsible-text: first line, threshold and scheduled initiators", async f
   assert.equal(m.isScheduledInitiator(undefined), false);
 });
 
+test("the outbox row of a long prompt has a real expand and collapse beside Fire now and Cancel; a short one has none", async function () {
+  var dom = require("./fake-dom-prompt-cards");
+  dom.setupGlobals();
+  document.removeEventListener = function () {};
+  var messages = new dom.FakeElement("div");
+  document.getElementById = function (id) { return id === "messages" ? messages : null; };
+  var ob = await import(dom.moduleUrl("scheduled-outbox.js"));
+  var long = Array.from({ length: 10 }, function (_, i) { return "line " + (i + 1); }).join("\n");
+  // The fake element's click passes an empty event; the toggle stops propagation.
+  function press(el) { el._listeners.click.forEach(function (fn) { fn({ stopPropagation: function () {} }); }); }
+  try {
+    ob.renderScheduledOutbox([
+      { id: "si_l", kind: "once", text: long, nextAt: Date.now() + 60000 },
+      { id: "si_s", kind: "once", text: "short", nextAt: Date.now() + 60000 },
+    ]);
+    var rows = messages.querySelectorAll(".scheduled-queued");
+    var toggle = rows[0].querySelector(".collapsible-toggle");
+    assert.ok(toggle, "a long prompt has the toggle");
+    assert.ok(rows[0].querySelector(".shell-queued-actions").contains(toggle), "beside Fire now and Cancel");
+    var text = rows[0].querySelector(".collapsible-text");
+    assert.ok(text.classList.contains("is-collapsed"), "collapsed at first");
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    assert.equal(rows[0].querySelector(".collapsible-full").textContent, long, "the whole text stays in the row");
+    press(toggle);
+    assert.equal(text.classList.contains("is-collapsed"), false, "expanded");
+    assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    press(toggle);
+    assert.ok(text.classList.contains("is-collapsed"), "collapsed again");
+    assert.equal(rows[1].querySelector(".collapsible-toggle"), null, "a short prompt needs none");
+    assert.equal(rows[1].querySelector(".shell-queued-text").textContent, "short");
+  } finally { ob.removeScheduledOutbox(); }
+});
+
 var PROMPT = Array.from({ length: 10 }, function (_, i) { return "line " + (i + 1) + " of the wake-up prompt"; }).join("\n");
 var VIEWPORTS = [
   { name: "desktop", width: 1280, height: 800 },
@@ -74,7 +107,12 @@ VIEWPORTS.forEach(function (vp) {
       assert.equal(await card.locator(".scheduled-queued-fire").isVisible(), true, "Fire now visible");
       assert.equal(await card.locator(".scheduled-queued-cancel").isVisible(), true, "Cancel visible");
       assert.match(await card.locator(".scheduled-queued-time").textContent(), /Sends at/);
-      assert.equal(await card.locator(".shell-queued-text").getAttribute("title"), PROMPT, "the whole prompt is kept on the item");
+      assert.equal(await card.locator(".collapsible-full").isVisible(), false, "collapsed at first");
+      await card.locator(".collapsible-toggle").click();
+      assert.equal(await card.locator(".collapsible-full").textContent(), PROMPT);
+      assert.equal(await card.locator(".collapsible-full").isVisible(), true, "expanded on the row");
+      await card.locator(".collapsible-toggle").click();
+      assert.equal(await card.locator(".collapsible-full").isVisible(), false, "collapsed again");
       if (process.env.CLAGENTIC_CONSOLE_TEST_SHOTS) await card.screenshot({ path: path.join(process.env.CLAGENTIC_CONSOLE_TEST_SHOTS, "pending-" + vp.name + ".png") });
 
       // Fired scheduled messages, through the client's own renderer: a short one

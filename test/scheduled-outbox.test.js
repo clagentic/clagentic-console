@@ -158,3 +158,78 @@ test("the capability table has one entry per kind, and the scheduled Send now is
   assert.equal(sn.sendNowForKind("shell", true, null).mode, "disabled", "a ! item still waits for the turn");
   assert.equal(sn.queuedControlsForKind("scheduled", null).cancel.enabled, true);
 });
+
+test("a double click on Fire now sends one send_scheduled_now; the row is busy until the server's list drops it", async function () {
+  var env = await boot();
+  try {
+    env.rl.applyScheduledInputList(list("A", [once("si_1", "first"), once("si_2", "second")]));
+    var row = rows(env)[0];
+    var fire = row.querySelector(".scheduled-queued-fire");
+    var cancel = row.querySelector(".scheduled-queued-cancel");
+    fire.click();
+    fire.click();
+    cancel.click();
+    assert.deepEqual(env.frames, [{ type: "send_scheduled_now", id: "si_1" }]);
+    assert.equal(fire.disabled, true);
+    assert.equal(cancel.disabled, true);
+    var other = rows(env)[1];
+    assert.equal(other.querySelector(".scheduled-queued-fire").disabled, false, "other rows are not held");
+    // A list push that still has the row keeps it held, redrawn.
+    env.rl.applyScheduledInputList(list("A", [once("si_1", "first"), once("si_2", "second")]));
+    assert.equal(rows(env)[0].querySelector(".scheduled-queued-fire").disabled, true);
+    // The row leaves only through the server's list.
+    env.rl.applyScheduledInputList(list("A", [once("si_2", "second")]));
+    assert.equal(rows(env).length, 1);
+  } finally { done(env); }
+});
+
+test("a refused send frees the row and shows the failure", async function () {
+  var env = await boot();
+  try {
+    env.rl.applyScheduledInputList(list("A", [once("si_1", "first")]));
+    env.wsRef.setWs({ readyState: 3, send: function () {} });
+    var row = rows(env)[0];
+    row.querySelector(".scheduled-queued-fire").click();
+    assert.equal(row.querySelector(".scheduled-queued-fire").disabled, false);
+    assert.equal(row.querySelector(".scheduled-queued-cancel").disabled, false);
+    assert.match(row.querySelector(".scheduled-queued-error").textContent, /connection is not open/);
+    assert.equal(rows(env).length, 1, "the row stays");
+  } finally { done(env); }
+});
+
+test("a server error reply frees the row, shows the failure, and the row stays", async function () {
+  var env = await boot();
+  try {
+    var ob = await import(dom.moduleUrl("scheduled-outbox.js"));
+    env.rl.applyScheduledInputList(list("A", [once("si_1", "first")]));
+    var row = rows(env)[0];
+    row.querySelector(".scheduled-queued-cancel").click();
+    assert.equal(row.querySelector(".scheduled-queued-cancel").disabled, true);
+    ob.failScheduledRequests("Clagentic: Console could not cancel that: busy");
+    assert.equal(row.querySelector(".scheduled-queued-fire").disabled, false);
+    assert.equal(row.querySelector(".scheduled-queued-cancel").disabled, false);
+    assert.match(row.querySelector(".scheduled-queued-error").textContent, /could not cancel that/);
+    assert.equal(rows(env).length, 1);
+    row.querySelector(".scheduled-queued-cancel").click();
+    assert.equal(env.frames.length, 2, "a retry is allowed after the failure");
+  } finally { done(env); }
+});
+
+test("the app's error message handler frees rows waiting on an answer", async function () {
+  var fs = require("fs");
+  var path = require("path");
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", "app-messages.js"), "utf8");
+  assert.match(src, /error: function \(msg\) \{\s*removePreThinking\(\);\s*failScheduledRequests\(msg\.text\);/);
+});
+
+test("a timer fire, seen as a list push without that id, removes the row live and frees nothing stale", async function () {
+  var env = await boot();
+  try {
+    env.rl.applyScheduledInputList(list("A", [once("si_1", "due", 1000), once("si_2", "later")]));
+    assert.equal(rows(env).length, 2);
+    env.rl.applyScheduledInputList(list("A", [once("si_2", "later")]));
+    assert.deepEqual(rows(env).map(function (r) { return r.getAttribute("data-id"); }), ["si_2"]);
+    env.rl.applyScheduledInputList(list("A", []));
+    assert.equal(rows(env).length, 0);
+  } finally { done(env); }
+});
