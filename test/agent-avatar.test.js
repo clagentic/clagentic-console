@@ -314,6 +314,52 @@ test("a failed upload is reported in the picker and chooses nothing", async func
   assert.equal(chosen.length, 0);
 });
 
+test("a custom-icon list that cannot be loaded shows an error, not an empty store", async function () {
+  dom.setupGlobals();
+  var pickerMod = await mod("agent-avatar-picker.js");
+  var picker = pickerMod.buildAvatarPicker("agent-a", function () {}, {
+    fetchList: function () { return Promise.reject(new Error("offline")); },
+    upload: function () { return Promise.resolve({ ok: true }); },
+  });
+  await new Promise(function (r) { setImmediate(r); });
+  assert.match(picker.textContent, /Custom icons could not be loaded/);
+  assert.doesNotMatch(picker.textContent, /No custom icons uploaded yet/);
+});
+
+test("the picker's own upload is create-only; the shared upload helper replaces unless asked", async function () {
+  dom.setupGlobals();
+  var icons = await mod("custom-icons.js");
+  var realFetch = global.fetch;
+  var realReader = global.FileReader;
+  var urls = [];
+  global.fetch = function (url) {
+    urls.push(url);
+    return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ ok: true }); } });
+  };
+  global.FileReader = function () {
+    var self = this;
+    this.readAsArrayBuffer = function () { setImmediate(function () { self.onload({ target: { result: new ArrayBuffer(1) } }); }); };
+  };
+  try {
+    await icons.uploadCustomIcon("a-icon", {});
+    await icons.uploadCustomIcon("a-icon", {}, { createOnly: true });
+    assert.deepEqual(urls, ["/api/custom-emoji/a-icon", "/api/custom-emoji/a-icon?create=1"]);
+
+    urls.length = 0;
+    var pickerMod = await mod("agent-avatar-picker.js");
+    var picker = pickerMod.buildAvatarPicker("agent-a", function () {}, { fetchList: function () { return Promise.resolve([]); } });
+    await new Promise(function (r) { setImmediate(r); });
+    var file = picker.querySelector(".ar-file");
+    file.files = [{ name: "Logo.PNG" }];
+    (file._listeners.change || []).forEach(function (fn) { fn({}); });
+    await new Promise(function (r) { setTimeout(r, 20); });
+    assert.deepEqual(urls, ["/api/custom-emoji/logo?create=1"]);
+  } finally {
+    global.fetch = realFetch;
+    global.FileReader = realReader;
+  }
+});
+
 test("uniqueSlug stays inside the store's slug limit", async function () {
   dom.setupGlobals();
   var pickerMod = await mod("agent-avatar-picker.js");

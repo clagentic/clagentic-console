@@ -259,7 +259,11 @@ A delivered result of an address or a reply also carries `resolvedBy` (`to` or `
 
 *One resolver.* `lib/public/modules/agent-avatar.js` is the only place that decides which avatar an agent shows. The roster section, the Agent messages section (through `injected-identity.js`), an injected message's sender (`app-rendering.js`) and the Task or Agent label in the transcript (`tools.js`) all ask it by the agent's key. With no choice an agent shows the caller's default (a known mate's or agent's avatar), else the seeded robot. A choice that names a custom icon that is gone (deleted from the store, or failing to load) swaps to that default with no broken image. Avatars drawn by the resolver carry `data-agent-key`, so when a roster message arrives `refreshAgentAvatars()` repaints every one already on the page.
 
-*Wire.* `agent_roster` (server to client) carries the whole roster; it is sent on connect, to a connection that sends `agent_roster_request`, and to every client, coalesced, after a change, so a transcript resolves avatars before the Team view is ever opened. `agent_avatar_set` (client to server) carries `{key, avatar}` (`avatar: null` clears it) and is answered to the sender alone with `agent_avatar_set_result`; a refusal (an agent never seen, a malformed reference) is reported there and changes nothing. The roster is daemon-wide: it lists the project and session an agent was seen in, and any connection may change an avatar (no access check is applied).
+*Wire.* `agent_roster` (server to client) carries the roster as one connection may read it; it is sent on connect and to a connection that sends `agent_roster_request`, so a transcript resolves avatars before the Team view is ever opened. After a change the server broadcasts `agent_roster_changed`, coalesced and with no content, and every client answers it with `agent_roster_request`, so what a connection may read is decided only when it asks (as with `team_traffic_changed`). `agent_avatar_set` (client to server) carries `{key, avatar}` (`avatar: null` clears it) and is answered to the sender alone with `agent_avatar_set_result`; a refusal (an agent never seen, a malformed reference) is reported there and changes nothing. Any connection may change an avatar (no access check is applied).
+
+*Reads.* Each place names a project and a session, so `filterForReader()` (`lib/agent-roster.js`) keeps a place only when the connection may read its project, by `canReadProject()` in `lib/outbound-access.js`, the same principal and project-access decision the agent-messages request applies. An agent left with no readable place is omitted for that connection. The on-connect send and the answer to a request take the same filtered path (`rosterMessage(service, caller)` in `lib/agent-roster-ws.js`); a service that cannot filter answers an empty roster.
+
+*Avatar uploads.* The picker uploads with `POST /api/custom-emoji/:slug?create=1`, which refuses a slug that already exists (409) instead of replacing its image, so choosing an avatar can never overwrite an icon a project, a folder or another agent uses. An upload without the flag replaces, as before; Server Settings does not set it. The picker also shows an error, not an empty store, when the icon list cannot be loaded (`fetchCustomIconListStrict()`).
 
 **Security is unchanged.** Callers must be the daemon's own OS user: the file drop needs write access to the config directory and `daemon.sock` is reachable only through it (`chmod 0700`). Per-user routing in multi-user mode remains future work.
 
@@ -1048,7 +1052,7 @@ Projects can use uploaded images as icons instead of Unicode emoji. The icon val
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/custom-emoji` | none | List all uploads: `[{slug, url}]` |
-| `POST` | `/api/custom-emoji/:slug` | required | Upload image (PNG/JPEG/GIF/WebP, max 512 KB) |
+| `POST` | `/api/custom-emoji/:slug` | required | Upload image (PNG/JPEG/GIF/WebP, max 512 KB); replaces an existing slug. With `?create=1` an existing slug is refused (409) and left unchanged |
 | `GET` | `/api/custom-emoji/:slug` | none | Serve image bytes with immutable `Cache-Control` |
 | `DELETE` | `/api/custom-emoji/:slug` | required | Remove an uploaded image |
 
