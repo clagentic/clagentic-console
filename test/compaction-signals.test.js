@@ -206,7 +206,7 @@ test("idleCompaction: an unreadable file is reported and never overwritten", fun
   }
 });
 
-test("idleCompaction: the file acted on is the owner's own", function () {
+test("idleCompaction: the file acted on is the owner's own", async function () {
   assert.equal(
     idle.settingsFileFor({ osUsers: true, osUserInfo: { home: "/home/alice" } }),
     path.join("/home/alice", ".claude", "settings.json")
@@ -216,6 +216,32 @@ test("idleCompaction: the file acted on is the owner's own", function () {
     idle.settingsFileFor({ osUsers: false, homeDir: "/home/daemon", osUserInfo: { home: "/home/alice" } }),
     path.join(process.env.CLAUDE_CONFIG_DIR || path.join("/home/daemon", ".claude"), "settings.json")
   );
-  var res = idle.applyForOwner("write", "off", { osUsers: true, osUserInfo: null });
+  var res = await idle.applyForOwner("write", "off", { osUsers: true, osUserInfo: null });
   assert.equal(res.ok, false, "no owner identity means no file is touched");
+});
+
+test("idleCompaction: a FIFO is refused without blocking and without being written", function () {
+  var dir = tmpDir();
+  try {
+    var fifo = path.join(dir, "settings.json");
+    require("child_process").execFileSync("mkfifo", [fifo]);
+    var read = idle.readSetting(fifo);
+    assert.equal(read.ok, false);
+    assert.match(read.error, /not a regular file/);
+    assert.equal(idle.writeSetting(fifo, "off").ok, false);
+    assert.ok(fs.statSync(fifo).isFIFO(), "the FIFO was not replaced");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("session_switched carries the session's compacting flag and the client hydrates from it", function () {
+  var server = fs.readFileSync(path.join(__dirname, "..", "lib", "sessions.js"), "utf8");
+  var line = server.split("\n").filter(function (l) { return l.indexOf('type: "session_switched"') !== -1; })[0];
+  assert.ok(line && line.indexOf("compacting: !!session.compacting") !== -1, "payload carries compacting");
+  var client = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", "app-messages.js"), "utf8");
+  var idx = client.indexOf("session_switched: function");
+  var seg = client.slice(idx, idx + 1500);
+  assert.ok(seg.indexOf("sessionCompacting: !!msg.compacting") !== -1, "client sets chip from payload");
+  assert.equal(seg.indexOf("sessionCompacting: false"), -1, "no unconditional reset");
 });
