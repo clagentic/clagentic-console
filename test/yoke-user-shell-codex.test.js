@@ -105,7 +105,7 @@ test("the request carries the thread, the command exactly as typed, and the cons
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
   var typed = "echo $(touch /tmp/never); rm -rf / # \"quoted\"";
-  var pending = h.handle.runUserShellCommand(typed, "/not/sent", 600000, 262144);
+  var pending = h.handle.runUserShellCommand(typed, null, 600000, 262144);
   await tick();
   var calls = fake.callsTo("thread/shellCommand");
   assert.equal(calls.length, 1);
@@ -338,20 +338,56 @@ test("turn-id table X1: a model turn ending while the command is starting does n
   await finish(h);
 });
 
-test("turn-id table X1: with a model turn running, its end is delivered and the command settles on its own item", async function () {
+test("a command asked for in another directory runs there, and is not sent to the thread", { skip: process.platform === "win32" }, async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  var dir = require("fs").realpathSync(require("os").tmpdir());
+  var result = await h.handle.runUserShellCommand("pwd", dir, 20000, 1024);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.output.trim(), dir, "ran in the directory it was given");
+  assert.equal(fake.callsTo("thread/shellCommand").length, 0);
+  await finish(h);
+});
+
+test("a command is refused, without being sent, while a model turn is running", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
   fake.dispatch("turn/started", { turn: { id: "turn-model" } });
-  var pending = h.handle.runUserShellCommand("ls", null, 1000, 1024);
-  await tick();
   var before = h.events.length;
-  // The model's own command item on the same turn is not the person's.
-  fake.dispatch("item/completed", { turnId: "turn-model", item: cmdItem({ id: "model-cmd", command: "git status", aggregatedOutput: "model", exitCode: 0, status: "completed" }) });
-  completeShellItem(fake, { id: "user-cmd", command: "ls", aggregatedOutput: "mine", exitCode: 0, durationMs: 2, status: "completed" }, "turn-model");
-  var result = await pending;
-  assert.equal(result.output, "mine");
+  var result = await h.handle.runUserShellCommand("ls", null, 1000, 1024);
+  assert.equal(fake.callsTo("thread/shellCommand").length, 0);
+  assert.equal(result.exitCode, null);
+  assert.match(result.output, /agent is working/);
   fake.dispatch("turn/completed", { turn: { id: "turn-model", status: "completed" } });
   await tick();
   assert.ok(h.events.length > before, "the model turn's end reached the stream");
+  await finish(h);
+});
+
+test("turn-id table V2/orphan: a turn that starts after the grace period is the late command's, stopped and kept off the stream", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  test.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    var ac = new AbortController();
+    var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024, { signal: ac.signal });
+    await tick();
+    ac.abort();
+    test.mock.timers.tick(3000);
+    assert.equal((await pending).interrupted, false);
+    assert.equal(fake.callsTo("turn/interrupt").length, 0);
+
+    var before = h.events.length;
+    startShellTurn(fake, "turn-late");
+    fake.dispatch("item/started", { turnId: "turn-late", item: cmdItem({ command: "sleep 999", status: "inProgress" }) });
+    endShellTurn(fake, "interrupted", "turn-late");
+    await tick();
+    assert.equal(fake.callsTo("turn/interrupt").length, 1, "the late turn is interrupted");
+    assert.equal(h.events.length, before, "none of its events reached the stream");
+
+    assert.equal(await modelTurnEnded(h, fake, "turn-model"), true, "a model turn after it is delivered as usual");
+  } finally {
+    test.mock.timers.reset();
+  }
   await finish(h);
 });

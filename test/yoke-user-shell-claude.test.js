@@ -126,6 +126,24 @@ test("close() records the interrupted command's entry before the queue ends", { 
   assert.equal(h.wasClosed(), true, "the raw query is closed after the entry is recorded");
 });
 
+test("close() with a failing transcript append resolves and logs", { skip: !posix }, async function () {
+  var h = liveHandle();
+  h.mq.push = function () { throw new Error("queue refused"); };
+  var warnings = [];
+  var original = console.warn;
+  console.warn = function () { warnings.push(Array.prototype.join.call(arguments, " ")); };
+  try {
+    var pending = h.handle.runUserShellCommand("sleep 30", os.tmpdir(), 60000, 1024);
+    await sleep(200);
+    await h.handle.close();
+    assert.equal((await pending).interrupted, true);
+  } finally {
+    console.warn = original;
+  }
+  assert.ok(warnings.some(function (w) { return /could not record/.test(w) && /queue refused/.test(w); }), "the failure was logged");
+  assert.equal(h.wasClosed(), true);
+});
+
 test("close() with no command running ends the queue and closes the query at once", function () {
   var h = liveHandle();
   h.handle.close();

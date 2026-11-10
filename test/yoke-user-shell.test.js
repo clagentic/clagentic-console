@@ -105,6 +105,19 @@ test("an interrupt that comes before the command starts runs nothing", { skip: !
   assert.equal(result.output, "");
 });
 
+test("an abort that arrives after the shell exited does not mark the command interrupted", { skip: !posix }, async function () {
+  var ac = new AbortController();
+  // The shell exits at once; a background process holds the pipes open, so the
+  // result waits out the drain, and the abort lands inside it.
+  var pending = run("sleep 3 & echo done", { signal: ac.signal });
+  await sleep(100);
+  ac.abort();
+  var result = await pending;
+  assert.match(result.output, /done/);
+  assert.equal(result.interrupted, false);
+  assert.equal(result.exitCode, 0);
+});
+
 test("a directory that does not exist is a result that says so, not a throw", { skip: !posix }, async function () {
   var result = await run("echo hi", { cwd: path.join(os.tmpdir(), "user-shell-no-such-dir-" + process.pid) });
   assert.equal(result.exitCode, null);
