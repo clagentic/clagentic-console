@@ -209,6 +209,17 @@ test("OS-user mode refuses with the reason; nothing runs as the daemon's user", 
   });
 });
 
+test("with the setting off a blank or oversized ! line also goes on as ordinary text", async function () {
+  await withShell({ config: { userShellEnabled: false } }, async function (h) {
+    await h.say("   ", { vendor: "claude" });
+    var big = "x".repeat(70 * 1024);
+    await h.say(big);
+    assert.deepEqual(h.forwarded.map(function (f) { return f.text; }), ["!   ", "!" + big]);
+    assertNothingRan(h, "setting off");
+    assert.equal(h.refusals().length, 0, "nothing is refused while the mode is off");
+  });
+});
+
 test("the checks decide in order: setting, then OS-user mode, then plan mode, then the gate", async function () {
   await withShell({ config: { userShellEnabled: false }, osUsers: true }, async function (h) {
     h.session.permissionMode = "plan";
@@ -436,7 +447,7 @@ test("messages of other types are not the handler's", async function () {
   });
 });
 
-test("a chat send during a running command queues, and reaches the handle only after the command finishes", async function () {
+test("the server holds no chat: a send that reaches it during a command (a second client) goes to the handle as before", async function () {
   var finish;
   await withShell({ run: function () { return new Promise(function (resolve) { finish = resolve; }); } }, async function (h) {
     var delivered = [];
@@ -447,12 +458,12 @@ test("a chat send during a running command queues, and reaches the handle only a
 
     h.server.bridge.pushMessage(h.session, "typed meanwhile", null, "human", "m-wait");
     await settle();
-    assert.deepEqual(delivered, [], "the handle has not seen it while the command runs");
+    assert.deepEqual(delivered, ["typed meanwhile"], "nothing is held or dropped server-side");
 
     finish(ok("done"));
     await settle();
     assert.equal(h.recorded().length, 1, "the result is recorded");
-    assert.deepEqual(delivered, ["typed meanwhile"], "it goes on once the command is done");
+    assert.equal(h.session.isProcessing, false);
   });
 });
 
@@ -478,41 +489,13 @@ test("a turn that started while the approval waited means the command does not r
   });
 });
 
-test("a held message that cannot be delivered does not strand the ones behind it", async function () {
-  var finish;
-  await withShell({ run: function () { return new Promise(function (resolve) { finish = resolve; }); } }, async function (h) {
-    var delivered = [];
-    h.handle.pushMessage = function (text) {
-      if (text === "first") throw new Error("push failed");
-      delivered.push(text);
-    };
+test("a command that fails to run or is stopped leaves the session idle again", async function () {
+  await withShell({ run: function () { return Promise.reject(new Error("spawn failed")); } }, async function (h) {
     await h.say(READ_ONLY);
-    h.server.bridge.pushMessage(h.session, "first", null, "human", "m1");
-    h.server.bridge.pushMessage(h.session, "second", null, "human", "m2");
-    finish(ok("done"));
-    await settle();
-    assert.equal(h.recorded().length, 1);
-    assert.deepEqual(delivered, ["second"], "the rest are still released");
+    assert.equal(h.session.isProcessing, false, "an adapter failure");
   });
-});
-
-test("when every release fails the session is not left busy", async function () {
-  var finish;
-  await withShell({ run: function () { return new Promise(function (resolve) { finish = resolve; }); } }, async function (h) {
-    h.handle.pushMessage = function () { throw new Error("push failed"); };
+  await withShell({ run: function () { return Promise.resolve({ exitCode: null, durationMs: 9, output: "", truncated: false, timedOut: true }); } }, async function (h) {
     await h.say(READ_ONLY);
-    h.server.bridge.pushMessage(h.session, "lost", null, "human", "m1");
-    finish(ok("done"));
-    await settle();
-    assert.equal(h.session.isProcessing, false);
-  });
-});
-
-test("a held message dropped at the bound is announced", async function () {
-  await withShell({ run: function () { return new Promise(function () {}); } }, async function (h) {
-    await h.say(READ_ONLY);
-    for (var i = 0; i < 21; i++) h.server.bridge.pushMessage(h.session, "m" + i, null, "human", "id" + i);
-    var diagnostics = h.client.inbox.filter(function (m) { return m.type === "diagnostic" && m.source === "message-buffer"; });
-    assert.equal(diagnostics.length, 1, "one announcement, for the one message dropped");
+    assert.equal(h.session.isProcessing, false, "a timeout");
   });
 });

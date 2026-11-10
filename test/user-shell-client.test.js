@@ -92,3 +92,62 @@ test("the composer routes a ! line to the shell request and the page registers t
   assert.match(messages, /shell_result: handleShellResult/);
   assert.match(messages, /user_shell_settings: handleUserShellSettings/);
 });
+
+// ---------------------------------------------------------------- chat typed during a command
+
+function makeQueue(m, hooks) {
+  var shown = [];
+  var hidden = [];
+  var queue = m.createChatQueue({
+    show: function (label) { shown.push(label); return label; },
+    hide: function (handle) { hidden.push(handle); },
+    onError: hooks && hooks.onError,
+  });
+  return { queue: queue, shown: shown, hidden: hidden };
+}
+
+test("messages typed during a command show as queued and are sent in order once it ends", async function () {
+  var m = await import("../lib/public/modules/shell-queue.js");
+  var sent = [];
+  var q = makeQueue(m);
+  q.queue.add("first", function () { sent.push("first"); });
+  q.queue.add("second", function () { sent.push("second"); });
+  assert.deepEqual(q.shown, ["first", "second"], "both are shown as queued at once");
+  assert.deepEqual(sent, [], "nothing is sent while the command runs");
+  q.queue.flush();
+  assert.deepEqual(sent, ["first", "second"], "sent in the order typed");
+  assert.deepEqual(q.hidden, ["first", "second"], "the queued lines are removed as each is sent");
+  assert.equal(q.queue.size(), 0);
+  q.queue.flush();
+  assert.deepEqual(sent, ["first", "second"], "a second flush sends nothing twice");
+});
+
+test("a send that fails keeps that message and the ones behind it queued, and the next flush sends them", async function () {
+  var m = await import("../lib/public/modules/shell-queue.js");
+  var sent = [];
+  var errors = [];
+  var broken = true;
+  var q = makeQueue(m, { onError: function (err) { errors.push(err.message); } });
+  q.queue.add("a", function () { sent.push("a"); });
+  q.queue.add("b", function () { if (broken) throw new Error("socket closed"); sent.push("b"); });
+  q.queue.add("c", function () { sent.push("c"); });
+  q.queue.flush();
+  assert.deepEqual(sent, ["a"]);
+  assert.deepEqual(errors, ["socket closed"], "the failure is reported");
+  assert.equal(q.queue.size(), 2, "nothing is dropped");
+  broken = false;
+  q.queue.flush();
+  assert.deepEqual(sent, ["a", "b", "c"]);
+  assert.equal(q.queue.size(), 0);
+});
+
+test("every way a command can end flushes the queue, and the composer queues instead of sending while one runs", function () {
+  var base = path.join(__dirname, "..", "lib", "public", "modules");
+  var shell = fs.readFileSync(path.join(base, "user-shell.js"), "utf8");
+  // One flush after the result handler's own bookkeeping, for refused, denied,
+  // errored, timed-out and stopped results alike: they all arrive as a shell_result.
+  assert.match(shell, /if \(pending\.size === 0\) chatQueue\.flush\(\);/);
+  var input = fs.readFileSync(path.join(base, "input.js"), "utf8");
+  assert.match(input, /if \(isShellPending\(\)\) \{[\s\S]*queueChatDuringShell\(/);
+  assert.match(input, /dispatchChat\(text, images, pastes, steerNow\)/);
+});

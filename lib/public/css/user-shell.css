@@ -53,3 +53,24 @@
 
 .shell-result.failed .shell-status,
 .shell-result.error .shell-status { color: var(--error); }
+
+/* A chat message typed while a command runs, waiting for it to end (shell-queue.js). */
+.shell-queued {
+  max-width: var(--content-width);
+  margin: 8px auto;
+  padding: 6px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.shell-queued .shell-queued-tag {
+  margin-right: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-dimmer);
+  user-select: none;
+}
