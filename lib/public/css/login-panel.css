@@ -1,0 +1,73 @@
+/* --- Sign-in panel above a login terminal --- */
+.login-panel {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  max-width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.login-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.login-panel-title { font-weight: 600; min-width: 0; }
+.login-panel-host { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+.login-panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.login-panel-btn,
+.login-panel-dismiss {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.login-panel-dismiss { min-height: 28px; padding: 0 8px; color: var(--text-muted); }
+.login-panel-btn:hover,
+.login-panel-dismiss:hover { background: rgba(var(--overlay-rgb), 0.06); }
+.login-panel-label { color: var(--text-muted); }
+.login-panel-code-value {
+  font-family: var(--font-mono, monospace);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  min-width: 0;
+}
+.login-panel-code-input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  /* 16px stops iOS from zooming the page when the field takes focus. */
+  font-size: 16px;
+}
+.login-panel-identity { margin-top: 8px; color: var(--text-muted); font-size: 12px; }
+
+@media (max-width: 480px) {
+  .login-panel { padding: 10px; }
+  .login-panel-links .login-panel-btn,
+  .login-panel-shown-code .login-panel-btn,
+  .login-panel-code-entry .login-panel-btn { flex: 1 1 100%; }
+}
