@@ -254,6 +254,9 @@ test("ambiguous: an address matching several sessions answers none and lists can
   var b = liveSession(2);
   var w = makeWorld([a, b]);
   var p = open(w, a, "permission", BASH, "tu-1");
+  // Both sessions wait on a prompt, so they share the prompt-blocked tier; a
+  // running twin of a prompt-blocked session would outrank it.
+  open(w, b, "permission", BASH, "tu-2");
   var r = w.input.answerPrompt({ to: "@p", requestId: p.requestId, decision: "allow" });
   assert.equal(r.ok, false);
   assert.equal(r.result, "ambiguous");
