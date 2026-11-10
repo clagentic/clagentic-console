@@ -267,6 +267,29 @@ test("a failing prompt settle is reported: ok false, failures names prompts, res
   assert.deepEqual(entries[0].failures, r.failures);
 });
 
+test("a throwing announcement is reported and the later steps still run", function () {
+  var s = liveSession(12);
+  var w = makeWorld([s]);
+  var opened = openPrompt(w, s, "tu-12");
+  var sessionReclaim = require("../lib/session-reclaim");
+  var originalAnnounce = sessionReclaim.announceLiveAgentReclaim;
+  sessionReclaim.announceLiveAgentReclaim = function () { throw new Error("announce broke"); };
+  var original = console.error;
+  console.error = function () {};
+  var r;
+  try { r = w.input.endSession({ projectSlug: "p", sessionId: "12" }); }
+  finally {
+    console.error = original;
+    sessionReclaim.announceLiveAgentReclaim = originalAnnounce;
+  }
+  assert.equal(r.ok, false);
+  assert.equal(r.result, "ended");
+  assert.deepEqual(r.failures, [{ step: "announce", error: "announce broke" }]);
+  assert.equal(promptsFor(w.sm).lookup(opened.requestId), null);
+  assert.equal(s.abortController.aborted, 1);
+  assert.equal(s.queryInstance.closed, 1);
+});
+
 test("the IPC handler passes the end_session fields through", function () {
   var seen;
   var fake = { endSession: function (req) { seen = req; return { ok: true }; } };
