@@ -143,9 +143,39 @@ test("a new snapshot redraws the open section without a reload, and the live nud
   assert.ok(m.els["team-view-body"].textContent.indexOf("third note") >= 0, "the thread shows the new message in place");
 
   var before = sentFrames.length;
-  m.am.handleTeamTrafficChanged();
+  var realNow = Date.now;
+  Date.now = function () { return realNow() + 2 * 1000; };
+  try { m.am.handleTeamTrafficChanged(); } finally { Date.now = realNow; }
   assert.equal(sentFrames.length, before + 1);
   assert.equal(sentFrames[sentFrames.length - 1].type, "team_traffic_request");
+});
+
+test("a live nudge after the view closes sends no request", async function () {
+  var m = await load();
+  m.els["team-view"].appendChild(m.els["team-view-body"]);
+  m.view.openTeamView();
+  m.am.handleTeamTraffic(snapshot());
+  m.view.closeTeamView();
+
+  var realNow = Date.now;
+  Date.now = function () { return realNow() + 60 * 1000; };
+  var before = sentFrames.length;
+  try {
+    m.am.handleTeamTrafficChanged();
+    m.am.handleTeamTrafficChanged();
+  } finally { Date.now = realNow; }
+  assert.equal(sentFrames.length, before, "a closed section asks for nothing, even outside the gap");
+});
+
+test("nudges inside the request gap never send more than one request per gap", async function () {
+  var m = await load();
+  m.els["team-view"].appendChild(m.els["team-view-body"]);
+  m.view.openTeamView();
+  m.am.handleTeamTraffic(snapshot());
+  var before = sentFrames.length;
+  for (var i = 0; i < 5; i++) m.am.handleTeamTrafficChanged();
+  assert.equal(sentFrames.length, before, "a burst right after a request waits for the gap");
+  m.view.closeTeamView();
 });
 
 test("the empty state says why: nothing recorded, withheld from this user, ledger off, or unreadable", async function () {

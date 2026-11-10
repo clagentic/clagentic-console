@@ -277,6 +277,22 @@ function sessionInputFor(t, hooks) {
   return { input: input, recorded: recorded };
 }
 
+test("an internal read error reaches the client as a generic reason, with the detail logged server-side", function () {
+  var broken = build();
+  fs.mkdirSync(path.join(broken.dir, "outbound"), { recursive: true });
+  fs.writeFileSync(path.join(broken.dir, "outbound", "sessions"), "not a directory");
+  var logged = [];
+  var realError = console.error;
+  console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+  var err;
+  try { err = broken.traffic.snapshot(OWNER); } finally { console.error = realError; }
+  assert.equal(err.ok, false);
+  assert.equal(err.reason, "the agent messages could not be read");
+  assert.equal("code" in err, false);
+  assert.doesNotMatch(JSON.stringify(err), /ENOTDIR|outbound|sessions/, "no error detail or path on the wire");
+  assert.ok(logged.some(function (l) { return /ENOTDIR|EEXIST|not a directory/i.test(l); }), "the detail is in the server log");
+});
+
 test("a scheduled firing leaves no ledger entry and is filled from the target's history in the same view", function () {
   var t = build();
   var fired = 0;
@@ -292,7 +308,7 @@ test("a scheduled firing leaves no ledger entry and is filled from the target's 
   assert.equal(fired, 1);
   assert.equal(t.ledger.readAttributed().concat(t.ledger.readUnattributed()).length, 1, "only the send-input is in the ledger");
 
-  // The fixture's history is not the clock under test: stamp the firing at NOW.
+  // The fixture's history is not the clock under test: stamp the firing at NOW - HOUR, as the input clock above does.
   t.held.work.sm.sessions.get(100).history.forEach(function (h) { if (h.senderKind === "automation") h._ts = NOW - HOUR; });
   var snap = t.traffic.snapshot(OWNER);
   assert.equal(snap.pairs.length, 2);
