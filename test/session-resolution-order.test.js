@@ -8,6 +8,8 @@ var assert = require("node:assert/strict");
 
 var directory = require("../lib/session-directory");
 
+test.before(function () { return require("../lib/prompt-kinds/codecs").load(); });
+
 // A session as the manager holds it. runtime: "running" | "idle" | "reaped";
 // blocked adds a pending permission prompt (only meaningful with a runtime).
 function session(localId, runtime, blocked) {
