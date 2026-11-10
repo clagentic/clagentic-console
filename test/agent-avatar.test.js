@@ -206,7 +206,7 @@ async function loadTeam(innerWidth) {
 }
 
 function agent(key, over) {
-  return Object.assign({ key: key, firstSeen: Date.now() - 3600 * 1000, lastSeen: Date.now() - 60 * 1000, places: [{ source: "session", project: "proj-1", session: "3", lastSeen: Date.now() - 60 * 1000 }], avatar: null }, over || {});
+  return Object.assign({ key: key, firstSeen: Date.now() - 3600 * 1000, lastSeen: Date.now() - 60 * 1000, places: [{ source: "session", project: "proj-1", lastSeen: Date.now() - 60 * 1000 }], avatar: null }, over || {});
 }
 
 test("the roster is a Team view section that asks for the roster when drawn", async function () {
@@ -233,15 +233,16 @@ test("each roster entry shows its avatar, first seen, last seen and where it was
 
   m.roster.handleAgentRoster({ type: "agent_roster", agents: [
     agent("agent-a"),
-    agent("helper-x", { places: [{ source: "subagent", project: "proj-2", session: "8", lastSeen: Date.now() }, { source: "sender", project: null, session: null, lastSeen: Date.now() }] }),
+    agent("helper-x", { places: [{ source: "subagent", project: "proj-2", lastSeen: Date.now() }, { source: "sender", project: null, lastSeen: Date.now() }] }),
   ] });
   var rows = body.querySelectorAll(".ar-row");
   assert.equal(rows.length, 2);
   assert.match(rows[0].textContent, /agent-a/);
   assert.match(rows[0].textContent, /First seen 1h ago/);
   assert.match(rows[0].textContent, /Last seen 1m ago/);
-  assert.match(rows[0].textContent, /session agent in proj-1, session 3/);
-  assert.match(rows[1].textContent, /sub-agent in proj-2, session 8/);
+  assert.match(rows[0].textContent, /session agent in proj-1/);
+  assert.doesNotMatch(rows[0].textContent, /session \d/);
+  assert.match(rows[1].textContent, /sub-agent in proj-2/);
   assert.match(rows[1].textContent, /sender/);
   var avatarImg = rows[0].querySelector(".ar-avatar");
   assert.equal(avatarImg.dataset.agentKey, "agent-a");

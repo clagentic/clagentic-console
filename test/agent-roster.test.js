@@ -37,6 +37,8 @@ function fileWriter(file, value) {
   return next;
 }
 
+var CALLER = { user: null, authenticated: true };
+
 function makeRoster(file, over) {
   var clockNow = 1000;
   var changes = { n: 0 };
@@ -45,6 +47,7 @@ function makeRoster(file, over) {
     writeJson: fileWriter,
     clock: function () { return clockNow; },
     onChange: function () { changes.n++; },
+    mayReadProject: function () { return true; },
   }, over || {}));
   return { roster: r, changes: changes, setNow: function (t) { clockNow = t; } };
 }
@@ -63,7 +66,7 @@ test("a session agent, a sub-agent and an injected sender are each recorded with
   var helper = list.filter(function (a) { return a.key === "helper-x"; })[0];
   assert.equal(helper.firstSeen, 2000);
   assert.equal(helper.lastSeen, 2000);
-  assert.deepEqual(helper.places, [{ source: "subagent", project: "proj-1", session: "3", lastSeen: 2000 }]);
+  assert.deepEqual(helper.places, [{ source: "subagent", project: "proj-1", lastSeen: 2000 }]);
   assert.equal(helper.avatar, null);
   assert.equal(m.changes.n, 3);
 });
@@ -129,12 +132,12 @@ test("the places kept per agent are bounded, keeping the most recent", function 
   var m = makeRoster(tmpFile());
   for (var i = 0; i < roster.MAX_PLACES + 5; i++) {
     m.setNow(1000 + i);
-    m.roster.observe({ key: "agent-a", source: "session", project: "proj-1", sessionId: String(i) });
+    m.roster.observe({ key: "agent-a", source: "session", project: "proj-" + i });
   }
   var a = m.roster.list()[0];
   assert.equal(a.places.length, roster.MAX_PLACES);
-  assert.ok(a.places.some(function (p) { return p.session === String(roster.MAX_PLACES + 4); }), "the newest place is kept");
-  assert.ok(!a.places.some(function (p) { return p.session === "0"; }), "the oldest place is dropped");
+  assert.ok(a.places.some(function (p) { return p.project === "proj-" + (roster.MAX_PLACES + 4); }), "the newest place is kept");
+  assert.ok(!a.places.some(function (p) { return p.project === "proj-0"; }), "the oldest place is dropped");
 });
 
 test("the roster and each avatar choice are restored unchanged after a restart", async function () {
@@ -144,8 +147,8 @@ test("the roster and each avatar choice are restored unchanged after a restart",
   first.roster.observe({ key: "agent-a", source: "session", project: "proj-1", sessionId: "3" });
   first.setNow(2000);
   first.roster.observe({ key: "helper-x", source: "subagent", project: "proj-1", sessionId: "3" });
-  assert.equal(first.roster.setAvatar("agent-a", { style: "pixel-art", seed: "seed-1" }).ok, true);
-  assert.equal(first.roster.setAvatar("helper-x", { custom: "team-icon" }).ok, true);
+  assert.equal(first.roster.setAvatar(CALLER, "agent-a", { style: "pixel-art", seed: "seed-1" }).ok, true);
+  assert.equal(first.roster.setAvatar(CALLER, "helper-x", { custom: "team-icon" }).ok, true);
   await first.roster.flush();
 
   var second = makeRoster(file);
@@ -214,20 +217,20 @@ test("setAvatar validates the reference, reports an unseen agent, and null clear
   var m = makeRoster(tmpFile());
   m.roster.observe({ key: "agent-a", source: "session" });
 
-  assert.equal(m.roster.setAvatar("never-seen", { style: "bottts", seed: "s" }).ok, false);
+  assert.equal(m.roster.setAvatar(CALLER, "never-seen", { style: "bottts", seed: "s" }).ok, false);
   assert.equal(m.roster.list().length, 1, "an unseen agent is not created");
 
   [{ style: "Bad Style", seed: "s" }, { style: "bottts" }, { style: "bottts", seed: "" }, { style: "bottts", seed: "a\nb" },
     { custom: "Has Space" }, { custom: 5 }, "robot", [], { custom: "x".repeat(65) }].forEach(function (bad) {
-    var out = m.roster.setAvatar("agent-a", bad);
+    var out = m.roster.setAvatar(CALLER, "agent-a", bad);
     assert.equal(out.ok, false, JSON.stringify(bad));
     assert.equal(typeof out.error, "string");
   });
   assert.equal(m.roster.list()[0].avatar, null, "a refused choice changes nothing");
 
-  assert.deepEqual(m.roster.setAvatar("agent-a", { style: "bottts", seed: "s" }).agent.avatar, { style: "bottts", seed: "s" });
-  assert.deepEqual(m.roster.setAvatar("agent-a", { custom: "team-icon", extra: "ignored" }).agent.avatar, { custom: "team-icon" });
-  assert.equal(m.roster.setAvatar("agent-a", null).agent.avatar, null);
+  assert.deepEqual(m.roster.setAvatar(CALLER, "agent-a", { style: "bottts", seed: "s" }).agent.avatar, { style: "bottts", seed: "s" });
+  assert.deepEqual(m.roster.setAvatar(CALLER, "agent-a", { custom: "team-icon", extra: "ignored" }).agent.avatar, { custom: "team-icon" });
+  assert.equal(m.roster.setAvatar(CALLER, "agent-a", null).agent.avatar, null);
 });
 
 test("renaming a custom icon moves the choices that named it, and only those", async function () {
@@ -236,9 +239,9 @@ test("renaming a custom icon moves the choices that named it, and only those", a
   m.roster.observe({ key: "agent-a", source: "session" });
   m.roster.observe({ key: "agent-b", source: "session" });
   m.roster.observe({ key: "agent-c", source: "session" });
-  m.roster.setAvatar("agent-a", { custom: "old-icon" });
-  m.roster.setAvatar("agent-b", { custom: "other-icon" });
-  m.roster.setAvatar("agent-c", { style: "bottts", seed: "s" });
+  m.roster.setAvatar(CALLER, "agent-a", { custom: "old-icon" });
+  m.roster.setAvatar(CALLER, "agent-b", { custom: "other-icon" });
+  m.roster.setAvatar(CALLER, "agent-c", { style: "bottts", seed: "s" });
 
   assert.equal(m.roster.renameCustomIcon("old-icon", "new-icon"), 1);
   await m.roster.flush();
@@ -273,8 +276,7 @@ test("the ws handlers answer a request, set an avatar, and report a refusal to t
   var m = makeRoster(tmpFile());
   m.roster.observe({ key: "agent-a", source: "session" });
   var sent = [];
-  var view = { listFor: function () { return m.roster.list(); }, setAvatar: m.roster.setAvatar };
-  var h = rosterWs.createWsHandlers({ service: view, sendTo: function (ws, obj) { sent.push(obj); } });
+  var h = rosterWs.createWsHandlers({ service: m.roster, sendTo: function (ws, obj) { sent.push(obj); } });
 
   assert.equal(h.handle({}, { type: "something_else" }), false);
   assert.equal(h.handle({}, { type: "agent_roster_request" }), true);
