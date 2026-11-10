@@ -421,7 +421,7 @@ test("a query that closes with the message never taken drops it: not recorded, a
     queuedChat.dropAll(h.session);
     assert.equal(h.records().length, 0);
     assert.deepEqual(h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled"; }),
-      [{ type: "queued_message_cancelled", messageId: ID_A, result: "dropped", text: "orphan", pastes: [], imageCount: 0 }]);
+      [{ type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "closed", text: "orphan", pastes: [], imageCount: 0 }]);
   } finally { h.done(); }
 });
 
