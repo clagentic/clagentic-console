@@ -194,40 +194,47 @@ function failingFs(failures) {
   });
   return wrapped;
 }
-function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 function onDisk(file) { return JSON.parse(fs.readFileSync(file, "utf8")).vendors.claude.five_hour; }
 var REC = function (u) { return { rateLimitType: "five_hour", utilization: u, resetsAt: FUTURE, status: "allowed" }; };
 
-test("a write that fails once is retried and persists the latest record", async function () {
-  var t = tmpFile();
+// The store's throttle and retry run on the global setTimeout. Mock it so the
+// test advances time explicitly; t.mock restores real timers when the test ends.
+test("a write that fails once is retried and persists the latest record", function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var f = tmpFile();
   var logs = [];
-  var s = createUsageStore({ file: t.file, fs: failingFs(1), throttleMs: 20, log: function (m) { logs.push(m); } });
+  var s = createUsageStore({ file: f.file, fs: failingFs(1), throttleMs: 20, log: function (m) { logs.push(m); } });
   s.record("claude", REC(0.3), { now: NOW });
-  await wait(40);
-  assert.equal(fs.existsSync(t.file), false);
-  s.record("claude", REC(0.6), { now: NOW });
-  await wait(80);
-  assert.equal(onDisk(t.file).utilization, 0.6);
+  t.mock.timers.tick(20);
+  assert.equal(fs.existsSync(f.file), false);
   assert.equal(logs.length, 1);
-  assert.equal(fs.existsSync(t.file + ".tmp"), false);
+  s.record("claude", REC(0.6), { now: NOW });
+  t.mock.timers.tick(20);
+  assert.equal(onDisk(f.file).utilization, 0.6);
+  assert.equal(logs.length, 1);
+  assert.equal(fs.existsSync(f.file + ".tmp"), false);
 });
 
-test("a failed write retries on its own without a new record", async function () {
-  var t = tmpFile();
-  var s = createUsageStore({ file: t.file, fs: failingFs(1), throttleMs: 20, log: function () {} });
+test("a failed write retries on its own without a new record", function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var f = tmpFile();
+  var s = createUsageStore({ file: f.file, fs: failingFs(1), throttleMs: 20, log: function () {} });
   s.record("claude", REC(0.5), { now: NOW });
-  await wait(120);
-  assert.equal(onDisk(t.file).utilization, 0.5);
+  t.mock.timers.tick(20);
+  assert.equal(fs.existsSync(f.file), false);
+  t.mock.timers.tick(20);
+  assert.equal(onDisk(f.file).utilization, 0.5);
 });
 
-test("flush after a failed write still writes", async function () {
-  var t = tmpFile();
-  var s = createUsageStore({ file: t.file, fs: failingFs(1), throttleMs: 20, log: function () {} });
+test("flush after a failed write still writes", function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  var f = tmpFile();
+  var s = createUsageStore({ file: f.file, fs: failingFs(1), throttleMs: 20, log: function () {} });
   s.record("claude", REC(0.7), { now: NOW });
-  await wait(40);
-  assert.equal(fs.existsSync(t.file), false);
+  t.mock.timers.tick(20);
+  assert.equal(fs.existsSync(f.file), false);
   s.flush();
-  assert.equal(onDisk(t.file).utilization, 0.7);
+  assert.equal(onDisk(f.file).utilization, 0.7);
 });
 
 test("a failed rename leaves no tmp file behind and keeps the change pending", function () {
