@@ -117,6 +117,9 @@ var ORIGINAL_CASE_LABELS = [
   // The Team view's agent messages: the answer to a request, and the content-free
   // nudge that makes the section ask again.
   "team_traffic", "team_traffic_changed",
+  // The agent roster, the content-free nudge that makes a client ask for it
+  // again, and the outcome of choosing an agent's avatar.
+  "agent_roster", "agent_roster_changed", "agent_avatar_set_result",
   // A send-now message that fell back to the queue; drops its false mark.
 ];
 
