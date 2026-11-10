@@ -9,6 +9,7 @@ var fs = require("fs");
 var path = require("path");
 
 var { schema } = require("../lib/ws-schema");
+var dom = require("./fake-dom-prompt-cards");
 
 function shellLine() { return import("../lib/public/modules/shell-line.js"); }
 
@@ -39,6 +40,33 @@ test("every way a command can end reads in words", async function () {
   assert.equal(m.describeResult({ denied: true }).state, "denied");
   assert.deepEqual(m.describeResult({ refused: true, reason: "Plan mode." }), { state: "refused", status: "Plan mode." });
   assert.equal(m.describeResult({ error: true, output: "boom" }).state, "error");
+});
+
+test("the result card shows output as text, replaces its running line, and takes its style from the outcome", async function () {
+  dom.setupGlobals();
+  var card = await import(dom.moduleUrl("shell-card.js"));
+  var el = card.buildCard("echo hi", "pending");
+  assert.equal(el.querySelector(".shell-cmd").textContent, "!echo hi");
+  card.showRunning(el);
+  assert.equal(el.querySelectorAll(".shell-status").length, 1);
+  assert.equal(el.querySelector(".shell-status").textContent, "Running…");
+
+  var hostile = "<img src=x onerror=alert(1)>\n</pre><script>1</script>";
+  card.fillCard(el, { command: "echo hi", exitCode: 1, durationMs: 20, output: hostile, truncated: false });
+  assert.equal(el.className, "shell-result failed");
+  assert.equal(el.querySelectorAll(".shell-status").length, 1, "the running line was replaced, not added to");
+  assert.equal(el.querySelector(".shell-status").textContent, "exit 1 · 20 ms");
+  var out = el.querySelector(".shell-output");
+  assert.equal(out.textContent, hostile);
+  assert.equal(out.children.length, 0, "no element was made from the output");
+
+  card.fillCard(el, { command: "echo hi", exitCode: 0, durationMs: 5, output: "", truncated: false });
+  assert.equal(el.className, "shell-result ok");
+  assert.equal(el.querySelector(".shell-output"), null, "a command with no output shows none");
+
+  card.fillCard(el, { command: "echo hi", denied: true, reason: "Not approved." });
+  assert.equal(el.className, "shell-result denied");
+  assert.equal(el.querySelector(".shell-status").textContent, "Not approved.");
 });
 
 test("the new message types are in the WebSocket registry with handlers that exist", function () {
