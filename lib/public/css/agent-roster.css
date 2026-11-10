@@ -1,0 +1,93 @@
+/* agent-roster.css - the agent roster section of the Team view, the avatar
+   picker, and the sub-agent label in the transcript. Drawn in the desktop view
+   and the phone sheet alike; the phone stacks each row's parts. */
+
+.ar-list { display: flex; flex-direction: column; gap: 8px; }
+
+.ar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.ar-row.open { border-color: var(--accent, var(--text)); }
+
+.ar-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.ar-avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; object-fit: cover; }
+
+.ar-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.ar-name { font-weight: 700; overflow-wrap: anywhere; }
+.ar-seen { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-dim); font-size: 12px; }
+.ar-places { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+
+.ar-place {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(var(--overlay-rgb), 0.08);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ar-change, .ar-reset {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 44px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ar-change:hover, .ar-reset:hover { color: var(--text); background: rgba(var(--overlay-rgb), 0.06); }
+
+.ar-picker { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ar-picker-title { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+
+.ar-seed-row, .ar-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.ar-seed { flex: 1; min-width: 120px; min-height: 36px; font: inherit; font-size: 16px; }
+
+.ar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+
+.ar-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.ar-choice:hover { background: rgba(var(--overlay-rgb), 0.06); }
+.ar-choice.selected { border-color: var(--accent, var(--text)); }
+.ar-choice-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar-preview { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+
+.ar-note, .ar-failure, .ar-empty { color: var(--text-dim); font-size: 12px; }
+.ar-failure { color: var(--text); }
+.ar-empty { font-size: 13px; padding: 12px 0; }
+
+.tool-agent { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; margin-right: 6px; }
+.tool-agent-avatar { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
+.tool-agent-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+
+@media (max-width: 768px) {
+  .ar-head { flex-wrap: wrap; }
+  .ar-change { width: 100%; }
+}
