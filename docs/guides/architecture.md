@@ -415,6 +415,28 @@ The Claude adapter follows the Claude Agent SDK's `SDKMessageOrigin` contract. E
 
 The Codex adapter identifies the product in the app-server `initialize` handshake (`clientInfo.name` is `clagentic-console`, `version` the package version); that value is what Codex records as the rollout's originator. Codex carries one bit of per-turn provenance, `turnTrigger` (from Codex 0.151.0): the adapter reads the initiator from the same `pushMessage` argument the Claude adapter does and maps typed turns to no trigger and every other initiator to the automation trigger, for a Codex that has the field (see "The Codex the console runs"). On an older Codex, and for the finer distinction between kinds of automation, a Codex turn is delivered without one.
 
+### The `!` command line (server side)
+
+A `shell` request (`{command, requestId?}`) is handled by `lib/project-user-shell.js`, attached in `lib/project.js` ahead of the sessions handler (it also sees `stop`, which it uses and then lets the sessions handler have). The composer that sends it is not part of this section. The `!` line is human input: its refusals bound what a person may type, and none of it is offered to an agent.
+
+**Gate order.** The first check that applies decides. Every outcome, a refusal included, is recorded in the session history (`sm.sendAndRecord`) and sent as `shell_result`, so a reconnect or replay shows it.
+
+1. The setting is off: refused, reason `disabled`. An empty command is refused here too, reason `empty`. Only leading whitespace is stripped from the command; the rest reaches the gate and the adapter as received.
+2. OS-user isolation is on: refused, reason `os_users`. No run-as-user helper exists, and the daemon's account is never used for a user.
+3. The session is in plan mode: refused, reason `plan`. In multi-user mode a user without the terminal permission is refused here, reason `no_terminal`.
+4. A turn or another `!` command is running: refused, reason `busy`.
+5. The session has no live query: refused, reason `no_query`.
+6. The query handle has no `runUserShellCommand`: refused, reason `unsupported`.
+7. The permission gate: `sdk.handleCanUseTool(session, "Bash", {command})`, the function every Bash tool call goes through, never `checkToolWhitelist` alone. Modes, allow and deny rules and Allow for Session grants decide as they do for a Bash call; otherwise the permission prompt opens.
+
+**Busy.** The session is not busy while the approval prompt is open, but a second request then is refused as `busy`. On approval the handler re-checks that no turn started during the prompt (a turn that did makes the command a `busy` refusal and leaves that turn's state alone), then sets `session.isProcessing`, the state a model turn uses, and calls `runUserShellCommand(command, cwd, timeoutMs, maxOutputBytes, {signal})`. The state is cleared when the result has been recorded, on every exit path: result, error, timeout, stop, and a failing record.
+
+**Stop** cancels a pending approval prompt and aborts a running command through the signal; the outcome is a recorded result with `interrupted`.
+
+**Chat during a command.** The server holds nothing. A chat send while a command runs takes the path it takes during a busy turn in `lib/project-user-message.js`.
+
+**Settings** (`lib/user-shell-settings.js`, in `daemon.json`, read at each request): `userShellEnabled` (default on), `userShellTimeoutMinutes` (default 10) and `userShellMaxOutputKiB` (default 256). An admin changes them with `set_user_shell_settings`; every client gets `user_shell_settings` on connect and after a change.
+
 ## Agent-runtime environment
 
 Settings hold two environment texts of `KEY=VALUE` lines (the pages write each row as `export KEY=VALUE`): the **shared** text (`sharedEnv` on the daemon config, administrators only) and one per **project** (`envrc` on the project's record). `daemon-env-settings.js` stores them; `server.js` hands its callbacks to every project, which is how the Settings pages reach them.

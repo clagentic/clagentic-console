@@ -108,6 +108,8 @@ var ORIGINAL_CASE_LABELS = [
   // The server-wide permission settings, and the result of applying a new
   // default mode to the running sessions.
   "permission_settings", "permission_mode_applied",
+  // The ! command line: the outcome of a command, and its settings.
+  "shell_result", "user_shell_settings",
   // A send-now message that fell back to the queue; drops its false mark.
 ];
 
