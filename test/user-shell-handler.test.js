@@ -271,6 +271,22 @@ test("an empty command and an over-long one are refused with a reason", async fu
   });
 });
 
+test("the typed tail is preserved through the gate, the run and the record", async function () {
+  await withShell({}, async function (h) {
+    var typed = "echo a\\ ";
+    await h.say("  " + typed);
+    assert.equal(h.server.heldPromptIds().length, 1, "the gate was asked about the command");
+    var request = h.client.inbox.filter(function (m) { return m.type === "prompt_request" || m.type === "permission_request"; }).pop();
+    assert.equal(request.toolInput.command, typed);
+    h.prompts().respond(h.server.heldPromptIds()[0], { decision: "allow" });
+    await settle();
+    assert.equal(h.runs.length, 1);
+    assert.equal(h.runs[0].command, typed, "leading space dropped, trailing escaped space kept");
+    assert.equal(h.results()[0].command, typed);
+    assert.equal(h.recorded()[0].command, typed);
+  });
+});
+
 // ---------------------------------------------------------------- limits, interrupt, reconnect, failure
 
 test("the configured timeout and output cap are what the adapter is given", async function () {
@@ -459,5 +475,44 @@ test("a turn that started while the approval waited means the command does not r
     assert.equal(h.results()[0].reason, REASONS.busy);
     assert.equal(h.session.isProcessing, true, "the running turn's busy state is left alone");
     h.session.isProcessing = false;
+  });
+});
+
+test("a held message that cannot be delivered does not strand the ones behind it", async function () {
+  var finish;
+  await withShell({ run: function () { return new Promise(function (resolve) { finish = resolve; }); } }, async function (h) {
+    var delivered = [];
+    h.handle.pushMessage = function (text) {
+      if (text === "first") throw new Error("push failed");
+      delivered.push(text);
+    };
+    await h.say(READ_ONLY);
+    h.server.bridge.pushMessage(h.session, "first", null, "human", "m1");
+    h.server.bridge.pushMessage(h.session, "second", null, "human", "m2");
+    finish(ok("done"));
+    await settle();
+    assert.equal(h.recorded().length, 1);
+    assert.deepEqual(delivered, ["second"], "the rest are still released");
+  });
+});
+
+test("when every release fails the session is not left busy", async function () {
+  var finish;
+  await withShell({ run: function () { return new Promise(function (resolve) { finish = resolve; }); } }, async function (h) {
+    h.handle.pushMessage = function () { throw new Error("push failed"); };
+    await h.say(READ_ONLY);
+    h.server.bridge.pushMessage(h.session, "lost", null, "human", "m1");
+    finish(ok("done"));
+    await settle();
+    assert.equal(h.session.isProcessing, false);
+  });
+});
+
+test("a held message dropped at the bound is announced", async function () {
+  await withShell({ run: function () { return new Promise(function () {}); } }, async function (h) {
+    await h.say(READ_ONLY);
+    for (var i = 0; i < 21; i++) h.server.bridge.pushMessage(h.session, "m" + i, null, "human", "id" + i);
+    var diagnostics = h.client.inbox.filter(function (m) { return m.type === "diagnostic" && m.source === "message-buffer"; });
+    assert.equal(diagnostics.length, 1, "one announcement, for the one message dropped");
   });
 });

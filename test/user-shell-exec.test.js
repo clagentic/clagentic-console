@@ -63,27 +63,38 @@ test("output past the cap is cut, marked, and the result says so; reading goes o
 
 test("a command that runs past its timeout is killed, with what it started, and the result says timed out", { skip: !posix }, async function () {
   var started = Date.now();
-  var result = await run("echo $$; sleep 30", { timeoutMs: 300 });
+  var result = await run("sleep 30 & echo $$ $!; wait", { timeoutMs: 300 });
   assert.equal(result.timedOut, true);
   assert.equal(result.exitCode, null);
   assert.ok(Date.now() - started < 10000, "it did not wait out the sleep");
-  var pid = parseInt(result.output.split("\n")[0], 10);
-  assert.ok(pid > 0);
+  var pids = result.output.split("\n")[0].split(" ").map(function (p) { return parseInt(p, 10); });
+  assert.ok(pids[0] > 0 && pids[1] > 0);
   await sleep(100);
-  assert.equal(alive(pid), false, "the shell the command ran in is gone");
+  assert.equal(alive(pids[0]), false, "the shell the command ran in is gone");
+  assert.equal(alive(pids[1]), false, "the sleep it started is gone");
 });
 
 test("an interrupt kills the command and the result says interrupted", { skip: !posix }, async function () {
   var ac = new AbortController();
-  var pending = run("echo $$; sleep 30", { signal: ac.signal });
+  var pending = run("sleep 30 & echo $$ $!; wait", { signal: ac.signal });
   await sleep(300);
   ac.abort();
   var result = await pending;
   assert.equal(result.interrupted, true);
   assert.equal(result.timedOut, false);
-  var pid = parseInt(result.output.split("\n")[0], 10);
+  var pids = result.output.split("\n")[0].split(" ").map(function (p) { return parseInt(p, 10); });
+  assert.ok(pids[0] > 0 && pids[1] > 0);
   await sleep(100);
-  assert.equal(alive(pid), false);
+  assert.equal(alive(pids[0]), false, "the shell is gone");
+  assert.equal(alive(pids[1]), false, "the sleep it started is gone");
+});
+
+test("a command that exits just before its timeout is not recorded as timed out", { skip: !posix }, async function () {
+  // The shell exits at once but a background process holds the pipes through the
+  // drain, which outlasts the timeout.
+  var result = await run("sleep 5 & echo done", { timeoutMs: 100 });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.timedOut, false);
 });
 
 test("an interrupt that comes before the command starts runs nothing", { skip: !posix }, async function () {

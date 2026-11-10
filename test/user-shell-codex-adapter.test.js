@@ -146,11 +146,13 @@ test("an interrupt sends turn/interrupt and the result says interrupted", async 
   var ac = new AbortController();
   var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024, { signal: ac.signal });
   await tick();
+  fake.dispatch("turn/started", { turn: { id: "turn-shell" } });
   ac.abort();
   await tick();
   assert.equal(fake.callsTo("turn/interrupt").length, 1);
   assert.equal(fake.callsTo("turn/interrupt")[0].params.threadId, "thread-1");
-  commandTurn(fake, { command: "sleep 999", aggregatedOutput: "", status: "failed" }, "interrupted");
+  fake.dispatch("item/completed", { item: { type: "commandExecution", id: "cmd-1", command: "sleep 999", aggregatedOutput: "", status: "failed" } });
+  fake.dispatch("turn/completed", { turn: { id: "turn-shell", status: "interrupted" } });
   var result = await pending;
   assert.equal(result.interrupted, true);
   await finish(h);
@@ -228,5 +230,56 @@ test("a model turn that ends inside the window of a settled command is delivered
   } finally {
     test.mock.timers.reset();
   }
+  await finish(h);
+});
+
+test("an interrupt before the command's turn starts is sent once the turn is known", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  var ac = new AbortController();
+  var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024, { signal: ac.signal });
+  await tick();
+  ac.abort();
+  await tick();
+  assert.equal(fake.callsTo("turn/interrupt").length, 0, "no turn to interrupt yet");
+  fake.dispatch("turn/started", { turn: { id: "turn-shell" } });
+  await tick();
+  assert.equal(fake.callsTo("turn/interrupt").length, 1, "sent once the shell turn began");
+  fake.dispatch("item/completed", { item: { type: "commandExecution", id: "cmd-1", command: "sleep 999", aggregatedOutput: "", status: "failed" } });
+  fake.dispatch("turn/completed", { turn: { id: "turn-shell", status: "interrupted" } });
+  assert.equal((await pending).interrupted, true);
+  await finish(h);
+});
+
+test("an interrupt that never reaches a turn is not reported as interrupted", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  test.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    var ac = new AbortController();
+    var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024, { signal: ac.signal });
+    await tick();
+    ac.abort();
+    test.mock.timers.tick(3000);
+    var result = await pending;
+    assert.equal(result.interrupted, false, "the command may still be running");
+    assert.equal(fake.callsTo("turn/interrupt").length, 0);
+  } finally {
+    test.mock.timers.reset();
+  }
+  await finish(h);
+});
+
+test("failure text cannot push the output past the cap", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  var pending = h.handle.runUserShellCommand("big", null, 1000, 50);
+  await tick();
+  fake.dispatch("turn/started", { turn: { id: "turn-shell" } });
+  fake.dispatch("item/started", { item: { type: "commandExecution", id: "cmd-1", command: "big", aggregatedOutput: "q".repeat(50), status: "inProgress" } });
+  fake.dispatch("turn/failed", { turn: { id: "turn-shell", status: "failed" }, error: { message: "boom ".repeat(40) } });
+  var result = await pending;
+  assert.ok(Buffer.byteLength(result.output) <= 50 + "\n[output truncated at 50 bytes]".length);
+  assert.equal(result.truncated, true);
   await finish(h);
 });
