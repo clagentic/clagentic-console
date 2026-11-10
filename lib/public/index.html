@@ -1240,6 +1240,29 @@
               </label>
             </div>
           </div>
+          <div class="settings-card settings-admin-only">
+            <div class="settings-field">
+              <label class="settings-toggle-row">
+                <div>
+                  <span class="settings-label">Run commands typed with !</span>
+                  <div class="settings-hint">On (the default): a message that starts with <code>!</code> runs as a shell command in the session's folder and its output is added to the conversation without starting a turn. It asks first exactly as the agent's own Bash call would, and it is not available in plan mode or while OS-user isolation is on. Off: such a message is sent as ordinary text. Only an admin can change this.</div>
+                </div>
+                <input type="checkbox" id="ss-user-shell-enabled" checked>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <div class="settings-field">
+              <label class="settings-label" for="ss-user-shell-timeout">Stop a command after (minutes)</label>
+              <div class="settings-hint">Whole minutes, 1 to 1440. A command that runs longer is stopped and its card says so.</div>
+              <input type="number" id="ss-user-shell-timeout" class="settings-budget-input" min="1" max="1440" step="1" value="10">
+            </div>
+            <div class="settings-field">
+              <label class="settings-label" for="ss-user-shell-cap">Keep at most this much output (KiB)</label>
+              <div class="settings-hint">Whole KiB, 1 to 4096. Output beyond it is cut and the card says so.</div>
+              <input type="number" id="ss-user-shell-cap" class="settings-budget-input" min="1" max="4096" step="1" value="256">
+              <div class="settings-hint" id="ss-user-shell-problem" role="alert"></div>
+            </div>
+          </div>
           <div class="settings-card">
             <div class="settings-field">
               <label class="settings-label">Mode for sessions opened by the CLI or a trigger</label>
