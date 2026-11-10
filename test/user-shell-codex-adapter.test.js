@@ -54,11 +54,18 @@ function fakeAppServer(shellBehavior) {
 async function idleHandle(fake) {
   var handle = codexAdapter._test_createCodexQueryHandle(fake.appServer, { approvalPolicy: "on-request" });
   var events = [];
-  (async function () { for await (var e of handle) events.push(e); })().catch(function () {});
+  // A reader that dies fails the test that ends the handle (see finish), so a
+  // dead stream cannot make the "nothing reached the stream" checks pass.
+  var reader = (async function () { for await (var e of handle) events.push(e); })();
   handle.pushMessage("first", null, "human", "m1");
   for (var i = 0; i < 100 && fake.callsTo("turn/start").length === 0; i++) await tick();
   for (i = 0; i < 10; i++) await tick();
-  return { handle: handle, events: events };
+  return { handle: handle, events: events, reader: reader };
+}
+
+async function finish(h) {
+  h.handle.close();
+  await h.reader;
 }
 
 function commandTurn(fake, item, turnStatus) {
@@ -80,7 +87,7 @@ test("the request carries the thread, the command exactly as typed, and the cons
   commandTurn(fake, { command: typed, aggregatedOutput: "ok", exitCode: 0, durationMs: 9, status: "completed" });
   var result = await pending;
   assert.deepEqual(result, { exitCode: 0, durationMs: 9, output: "ok", truncated: false, timedOut: false, interrupted: false });
-  h.handle.close();
+  await finish(h);
 });
 
 test("the command's own turn and items never reach the event stream", async function () {
@@ -94,7 +101,7 @@ test("the command's own turn and items never reach the event stream", async func
   await pending;
   await tick();
   assert.equal(h.events.length, baseline, "no turn_start, tool or result event came from the command");
-  h.handle.close();
+  await finish(h);
 });
 
 test("output that forges markup comes back as plain output text", async function () {
@@ -106,7 +113,7 @@ test("output that forges markup comes back as plain output text", async function
   commandTurn(fake, { command: "cat file", aggregatedOutput: hostile, exitCode: 0, durationMs: 3, status: "completed" });
   var result = await pending;
   assert.equal(result.output, hostile, "the adapter hands back text; the console draws it as text and the Claude record escapes it");
-  h.handle.close();
+  await finish(h);
 });
 
 test("output past the cap is cut with the marker and the result says so", async function () {
@@ -118,7 +125,7 @@ test("output past the cap is cut with the marker and the result says so", async 
   var result = await pending;
   assert.equal(result.truncated, true);
   assert.equal(result.output, "z".repeat(100) + "\n[output truncated at 100 bytes]");
-  h.handle.close();
+  await finish(h);
 });
 
 test("a command the app-server stopped for its timeout reports timedOut", async function () {
@@ -130,7 +137,7 @@ test("a command the app-server stopped for its timeout reports timedOut", async 
   var result = await pending;
   assert.equal(result.timedOut, true);
   assert.equal(result.exitCode, null);
-  h.handle.close();
+  await finish(h);
 });
 
 test("an interrupt sends turn/interrupt and the result says interrupted", async function () {
@@ -146,7 +153,7 @@ test("an interrupt sends turn/interrupt and the result says interrupted", async 
   commandTurn(fake, { command: "sleep 999", aggregatedOutput: "", status: "failed" }, "interrupted");
   var result = await pending;
   assert.equal(result.interrupted, true);
-  h.handle.close();
+  await finish(h);
 });
 
 test("after a command, the next real turn is delivered as usual", async function () {
@@ -162,7 +169,7 @@ test("after a command, the next real turn is delivered as usual", async function
   for (i = 0; i < 10; i++) await tick();
   assert.ok(h.events.length > before, "the second turn's events were not swallowed");
   assert.ok(h.events.slice(before).some(function (e) { return e.yokeType === "turn_start"; }));
-  h.handle.close();
+  await finish(h);
 });
 
 test("a request the app-server refuses rejects, and a second command may follow", async function () {
@@ -177,7 +184,7 @@ test("a request the app-server refuses rejects, and a second command may follow"
   await tick();
   commandTurn(fake, { command: "ls", aggregatedOutput: "x", exitCode: 0, durationMs: 1, status: "completed" });
   assert.equal((await pending).exitCode, 0);
-  h.handle.close();
+  await finish(h);
 });
 
 test("one command at a time, and none without a running thread", async function () {
@@ -188,8 +195,38 @@ test("one command at a time, and none without a running thread", async function 
   await tick();
   commandTurn(fake, { command: "ls", aggregatedOutput: "", exitCode: 0, durationMs: 1, status: "completed" });
   await first;
-  h.handle.close();
+  await finish(h);
 
   var cold = codexAdapter._test_createCodexQueryHandle(fakeAppServer().appServer, { approvalPolicy: "on-request" });
   await assert.rejects(cold.runUserShellCommand("ls", null, 1000, 1024), /no running Codex thread/);
+});
+
+test("a model turn that ends inside the window of a settled command is delivered, and the command turn's own late ending is not", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  test.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    var pending = h.handle.runUserShellCommand("ls", null, 1000, 1024);
+    await tick();
+    // The command's item completes and its turn's ending is late: the result is
+    // given when the grace time runs out.
+    fake.dispatch("turn/started", { turn: { id: "turn-shell" } });
+    fake.dispatch("item/completed", { item: { type: "commandExecution", id: "cmd-1", command: "ls", aggregatedOutput: "x", exitCode: 0, durationMs: 1, status: "completed" } });
+    test.mock.timers.tick(3000);
+    assert.equal((await pending).exitCode, 0);
+
+    var before = h.events.length;
+    fake.dispatch("turn/started", { turn: { id: "turn-model" } });
+    fake.dispatch("turn/completed", { turn: { id: "turn-model", status: "completed" } });
+    await tick();
+    assert.ok(h.events.length > before, "the model turn's events reached the stream");
+
+    var afterModel = h.events.length;
+    fake.dispatch("turn/completed", { turn: { id: "turn-shell", status: "completed" } });
+    await tick();
+    assert.equal(h.events.length, afterModel, "the command turn's late ending stayed out of the stream");
+  } finally {
+    test.mock.timers.reset();
+  }
+  await finish(h);
 });
