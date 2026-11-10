@@ -471,6 +471,7 @@ test("a cancelled reply carries the message text; other answers do not", async f
 // coalesced-batch member, the batch representative and a held-back uuid.
 
 var ID_C = "33333333-3333-4333-8333-333333333333";
+var ID_D = "44444444-4444-4444-8444-444444444444";
 function frameOf(h, isResult) { queuedChat.settleTurn(h.session, isResult); }
 function droppedReplies(h) { return h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled" && m.result === "dropped"; }); }
 function answers(h) { return h.replies().map(function (r) { return r.result; }); }
@@ -588,8 +589,99 @@ test("a plain message already consumed: cancel is already_delivered and it is de
   } finally { h.done(); }
 });
 
-test("the message processor settles unconfirmed messages on each frame it handles", function () {
-  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "sdk-message-processor.js"), "utf8");
-  assert.ok(/queuedChat\.settleTurn\(session, parsed\.yokeType === "result"\)/.test(src));
-  assert.ok(src.indexOf("queuedChat.consume(session") < src.indexOf("queuedChat.settleTurn("), "consume first, so a message named on the result frame is delivered");
+test("a cancel of one message that puts a waiting sibling in doubt tells the sibling's page, and the sibling's own cancel still reaches the agent", async function () {
+  var asked = [];
+  var h = await harness({ cancelQueuedMessage: function (s, id) { asked.push(id); return Promise.resolve(id === ID_B); } });
+  try {
+    h.send({ type: "message", text: "first", messageId: ID_A });
+    h.send({ type: "message", text: "second", messageId: ID_B });
+    frameOf(h, true);
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    var told = h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled" && m.result === "pending"; });
+    assert.deepEqual(told.map(function (m) { return m.messageId; }), [ID_B], "the sibling's page is told it is in doubt");
+    h.send({ type: "cancel_queued_message", messageId: ID_B });
+    await tick(); await tick();
+    assert.deepEqual(asked, [ID_A, ID_B], "the sibling's cancel reached the agent");
+    assert.deepEqual(h.replies().map(function (r) { return [r.messageId, r.result]; }), [[ID_A, "pending"], [ID_B, "cancelled"]]);
+    assert.equal(h.replies()[1].text, "second", "restored once");
+    assert.equal(queuedChat.has(h.session, ID_B), false);
+    queuedChat.consume(h.session, [ID_B]);
+    assert.equal(h.delivered().length, 0, "a withdrawn message never runs as delivered");
+  } finally { h.done(); }
+});
+
+test("a dropped reply names its cause: not taken by the turn, or the query closed", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "one", messageId: ID_A });
+    h.send({ type: "message", text: "two", messageId: ID_B });
+    frameOf(h, true);
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    frameOf(h, false);
+    frameOf(h, true);
+    assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.cause]; }), [[ID_A, "not_taken"], [ID_B, "not_taken"]]);
+    h.send({ type: "message", text: "three", messageId: ID_C });
+    queuedChat.dropAll(h.session);
+    assert.equal(droppedReplies(h)[2].cause, "closed");
+  } finally { h.done(); }
+});
+
+test("a representative cancel drops the batch dequeued for the running turn; a message pushed during that turn is not in it and stays queued", async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "first", messageId: ID_A });
+    h.send({ type: "message", text: "second", messageId: ID_B });
+    frameOf(h, true); // the turn they were queued in ends: they are the next turn's batch
+    h.send({ type: "message", text: "pushed during the batch's turn", messageId: ID_C });
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    var pendingTold = h.out.toSession.filter(function (m) { return m.result === "pending"; }).map(function (m) { return m.messageId; });
+    assert.deepEqual(pendingTold, [ID_B], "the batch mate is in doubt; the later message is not");
+    frameOf(h, false);
+    queuedChat.consume(h.session, [ID_C]); // folded into the running turn
+    frameOf(h, true);
+    assert.deepEqual(droppedReplies(h).map(function (m) { return m.messageId; }), [ID_A, ID_B]);
+    assert.deepEqual(h.delivered().map(function (m) { return m.messageId; }), [ID_C]);
+  } finally { h.done(); }
+});
+
+test("the message processor delivers a message named on a frame before it settles the turn: through the frame path, consume then settle", function () {
+  var { attachMessageProcessor } = require("../lib/sdk-message-processor.js");
+  var sm = {
+    skillMeta: [], workflowMeta: [], skillNames: [], slashCommands: null, currentModel: null, _savedDefaultModel: null,
+    sendAndRecord: function () {}, sendToSession: function () {}, saveSessionFile: function () {}, broadcastSessionList: function () {},
+    modelsByVendor: {}, availableModels: [], availableVendors: [], installedVendors: [],
+  };
+  var processor = attachMessageProcessor({
+    sm: sm, send: function () {}, slug: "t", cwd: "/tmp", pushModule: null,
+    getNotificationsModule: function () { return null; }, adapter: { vendor: "claude" },
+    onProcessingChanged: function () {}, onTurnDone: null, onAutoTitle: null, opts: {},
+    discoverSkillDirs: function () { return []; }, mergeSkills: function () { return []; }, discoverWorkflows: function () { return []; },
+    discoverSkillsWithMeta: function () { return []; }, mergeSkillsWithMeta: function () { return []; }, getSDK: null,
+  });
+  var session = {
+    localId: "s1", cliSessionId: null, vendor: "claude", history: [], messageUUIDs: [], blocks: {}, sentToolResults: {},
+    pendingPermissions: {}, pendingElicitations: {}, pendingAskUser: {}, activeTaskToolIds: {}, taskIdMap: {},
+    streamedText: false, responsePreview: "", isProcessing: true, loop: null, lastActivityAt: 0,
+  };
+  var events = [];
+  function hooks(id) {
+    return { onDelivered: function () { events.push(["delivered", id]); }, onDropped: function (cause) { events.push(["dropped", id, cause]); } };
+  }
+  queuedChat.register(session, ID_A, hooks(ID_A));
+  queuedChat.register(session, ID_B, hooks(ID_B));
+  queuedChat.register(session, ID_C, hooks(ID_C));
+  queuedChat.register(session, ID_D, hooks(ID_D));
+  queuedChat.cancel(session, ID_A, function () { return Promise.resolve(false); });
+  queuedChat.cancel(session, ID_D, function () { return Promise.resolve(false); });
+  return tick().then(function () {
+    processor.processSDKMessage(session, { yokeType: "status", status: null });
+    assert.deepEqual(events, [], "nothing is settled mid-turn");
+    processor.processSDKMessage(session, { yokeType: "result", userMessageUuids: [ID_A] });
+    assert.deepEqual(events, [["delivered", ID_A], ["dropped", ID_D, "not_taken"]], "named on the result frame: delivered; not named: dropped after it");
+    assert.equal(queuedChat.has(session, ID_B), true, "a message never in doubt keeps waiting");
+    assert.equal(queuedChat.has(session, ID_C), true);
+  });
 });

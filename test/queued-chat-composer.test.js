@@ -376,3 +376,26 @@ test("a pending answer keeps the item queued with its controls disabled; deliver
   assert.deepEqual(queuedTexts(), []);
   assert.equal(env.ctx.inputEl.value, "never ran");
 });
+
+test("a dropped reply is worded by its cause: a turn that did not take it, or the closed session; a sibling put in doubt unasked has its controls disabled", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "sibling");
+  var id = chat(env)[0].messageId;
+  answer(env, id, "pending");
+  var q = queuedEls()[0];
+  assert.equal(btn(q, "shell-queued-cancel").getAttribute("aria-disabled"), "true", "disabled though this page never asked");
+  assert.ok(sysText().some(function (t) { return /Withdrawing another message may have dropped this one/.test(t); }));
+  answer(env, id, "dropped", { text: "sibling", cause: "not_taken" });
+  assert.ok(sysText().some(function (t) { return /agent did not run this message/.test(t); }));
+
+  type(env, "turn passed it by");
+  var id2 = chat(env)[1].messageId;
+  answer(env, id2, "dropped", { text: "turn passed it by", cause: "not_taken" });
+  assert.equal(sysText().filter(function (t) { return /session ended/.test(t); }).length, 0, "the session is alive: it is not said to have ended");
+  assert.equal(sysText().filter(function (t) { return /agent did not run this message/.test(t); }).length, 2);
+
+  type(env, "query closed");
+  var id3 = chat(env)[2].messageId;
+  answer(env, id3, "dropped", { text: "query closed", cause: "closed" });
+  assert.ok(sysText().some(function (t) { return /session ended before this message was delivered/.test(t); }));
+});
