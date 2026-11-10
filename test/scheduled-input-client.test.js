@@ -268,10 +268,12 @@ test("the outbox items are drawn from the list, one per input, and their buttons
     assert.match(wraps[2].querySelector(".scheduled-queued-time").textContent, /^Automatic resume after rate limit · Sends at /);
     click(wraps[1].querySelector(".scheduled-queued-fire"));
     click(wraps[0].querySelector(".scheduled-queued-cancel"));
-    assert.deepEqual(sentFrames, [
+    // The outbox adds a requestId to each request; the panel's own frames carry none.
+    assert.deepEqual(sentFrames.map(function (f) { return { type: f.type, id: f.id }; }), [
       { type: "send_scheduled_now", id: "si_2" },
       { type: "cancel_scheduled_message", id: "si_1" },
     ]);
+    assert.ok(sentFrames.every(function (f) { return typeof f.requestId === "string"; }));
 
     // The list changes (one input fired): the bubbles follow it, not events.
     rl.applyScheduledInputList({ type: "scheduled_input_list", localId: "A", limit: 5, inputs: [

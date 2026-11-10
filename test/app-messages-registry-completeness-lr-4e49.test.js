@@ -105,6 +105,8 @@ var ORIGINAL_CASE_LABELS = [
   "restart_for_build_update_result",
   // A session's armed scheduled inputs, in full, after every change.
   "scheduled_input_list",
+  // The answer to a Fire now or Cancel that carried a requestId; frees that row.
+  "scheduled_request_result",
   // The server-wide permission settings, and the result of applying a new
   // default mode to the running sessions.
   "permission_settings", "permission_mode_applied",
