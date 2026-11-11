@@ -533,6 +533,27 @@ test("Send now: each path draws the item as sending or queued, and the text is n
     { name: "no turn running: queued again, with the reason", run: function (env, id) { sendNowAnswer(env, id, "no_turn"); }, tag: "Queued", actions: true, note: /No turn is running/ },
     { name: "agent could not interrupt: queued again, with the reason", run: function (env, id) { sendNowAnswer(env, id, "error", { message: "worker gone" }); }, tag: "Queued", actions: true, note: /worker gone/ },
     { name: "already delivered: sending until message_delivered", run: function (env, id) { sendNowAnswer(env, id, "already_delivered"); }, tag: "Sending", actions: false },
+    { name: "delivery ends the sending item once, as the normal message", run: function (env, id) { sendNowAnswer(env, id, "requested"); delivered(env, id); }, gone: true, shown: ["row 5"] },
+    {
+      name: "receipt miss, then delivered after all: the restore notice is replaced and the untouched composer text cleared",
+      run: function (env, id) {
+        sendNowAnswer(env, id, "missed");
+        answer(env, id, "dropped", { text: "row 6", cause: "send_now_missed" });
+        assert.equal(env.ctx.inputEl.value, "row 6", "restored first");
+        delivered(env, id);
+      },
+      gone: true, composer: "", shown: [], notes: [/delivered after all/], noNotes: [/no longer held this message/],
+    },
+    {
+      name: "receipt miss, then delivered after all: an edited composer is left alone, and nothing is sent",
+      run: function (env, id) {
+        sendNowAnswer(env, id, "missed");
+        answer(env, id, "dropped", { text: "row 7", cause: "send_now_missed" });
+        env.ctx.inputEl.value = "row 7 edited";
+        delivered(env, id);
+      },
+      gone: true, composer: "row 7 edited", shown: [], notes: [/delivered after all/], noNotes: [/no longer held this message/],
+    },
   ];
   for (var i = 0; i < rows.length; i++) {
     var env = await setup(CAN_CANCEL);
@@ -540,24 +561,20 @@ test("Send now: each path draws the item as sending or queued, and the text is n
     var id = chat(env)[0].messageId;
     btn(queuedEls()[0], "shell-queued-send-now").click();
     rows[i].run(env, id);
-    var drawn = sendNowItem();
-    assert.equal(drawn.tag, rows[i].tag, rows[i].name);
-    assert.equal(drawn.actionsShown, rows[i].actions, rows[i].name + ": controls");
+    if (rows[i].gone) {
+      assert.deepEqual(queuedTexts(), [], rows[i].name + ": no queued item");
+      assert.deepEqual(env.shown, rows[i].shown, rows[i].name + ": shown");
+      if (rows[i].composer !== undefined) assert.equal(env.ctx.inputEl.value, rows[i].composer, rows[i].name + ": composer");
+    } else {
+      var drawn = sendNowItem();
+      assert.equal(drawn.tag, rows[i].tag, rows[i].name);
+      assert.equal(drawn.actionsShown, rows[i].actions, rows[i].name + ": controls");
+    }
     if (rows[i].note) assert.ok(sysText().some(function (t) { return rows[i].note.test(t); }), rows[i].name + ": note");
+    (rows[i].notes || []).forEach(function (re) { assert.ok(sysText().some(function (t) { return re.test(t); }), rows[i].name + ": note " + re); });
+    (rows[i].noNotes || []).forEach(function (re) { assert.ok(!sysText().some(function (t) { return re.test(t); }), rows[i].name + ": no note " + re); });
     assert.equal(chat(env).length, 1, rows[i].name + ": the text is never sent again");
   }
-});
-
-test("Send now: delivery ends the sending item once, as the normal message", async function () {
-  var env = await setup(CAN_CANCEL);
-  type(env, "now please");
-  var id = chat(env)[0].messageId;
-  btn(queuedEls()[0], "shell-queued-send-now").click();
-  sendNowAnswer(env, id, "requested");
-  delivered(env, id);
-  assert.deepEqual(queuedTexts(), []);
-  assert.deepEqual(env.shown, ["now please"]);
-  assert.equal(chat(env).length, 1);
 });
 
 test("Send now: a receipt miss puts the text in the composer with a notice, and nothing is sent again", async function () {
