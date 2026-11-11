@@ -1027,13 +1027,29 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
     { name: "untracked id: no interrupt", id: ID_C, receipt: { stillQueued: [] }, result: "already_delivered", interrupts: 0, tracked: true },
     { name: "no turn running: no interrupt, truthful no-op", before: function (h) { h.session.isProcessing = false; }, receipt: { stillQueued: [] }, result: "no_turn", interrupts: 0, tracked: true },
     { name: "double frame: one interrupt", twice: true, receipt: { stillQueued: [ID_A] }, result: "requested", interrupts: 1, tracked: true },
+    {
+      name: "pushed into an older query that was replaced: no interrupt of the live query, truthful no-op",
+      setup: function (h) { h.session.queryInstance = { name: "query A" }; },
+      before: function (h) { h.session.queryInstance = { name: "query B" }; },
+      receipt: { stillQueued: [ID_A] }, result: "no_turn", interrupts: 0, tracked: true,
+    },
+    { name: "agent cannot interrupt: unsupported, nothing interrupted", unsupported: true, result: "unsupported", interrupts: 0, tracked: false, pushed: 0, delivered: 0 },
+    {
+      name: "failed interrupt: error, left queued and unmarked, and can be asked again",
+      interrupt: function (n) { return n === 1 ? Promise.reject(new Error("worker gone")) : Promise.resolve({ stillQueued: [ID_A] }); },
+      result: "error", interrupts: 1, tracked: true, unmarked: true,
+      again: { result: "requested", interrupts: 2 },
+    },
   ];
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
     var interrupts = 0;
-    var h = await harness({ interruptKeepingQueued: function () { interrupts++; return Promise.resolve(row.receipt); } });
+    var h = await harness(Object.assign({
+      interruptKeepingQueued: function () { interrupts++; return row.interrupt ? row.interrupt(interrupts) : Promise.resolve(row.receipt); },
+    }, row.unsupported ? { canCancelQueued: function () { return false; } } : {}));
     try {
-      h.send({ type: "message", text: "row " + i, messageId: ID_A });
+      if (row.setup) row.setup(h);
+      if (!row.unsupported) h.send({ type: "message", text: "row " + i, messageId: ID_A });
       if (row.before) row.before(h);
       var id = row.id || ID_A;
       h.send({ type: "send_now_queued_message", messageId: id });
@@ -1042,44 +1058,29 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
       assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), row.twice ? [row.result, row.result] : [row.result], row.name + ": reply");
       assert.equal(interrupts, row.interrupts, row.name + ": interrupt() calls");
       assert.equal(h.out.cancelled.length, 0, row.name + ": the agent's queue is kept: no cancel");
-      assert.equal(h.out.pushed.length, 1, row.name + ": pushed once, never again");
+      assert.equal(h.out.pushed.length, row.pushed === undefined ? 1 : row.pushed, row.name + ": pushed once, never again");
       assert.equal(queuedChat.has(h.session, ID_A), row.tracked, row.name + ": tracked");
       assert.equal(droppedReplies(h).length, row.dropped ? 1 : 0, row.name + ": dropped replies");
       if (row.dropped) {
         assert.deepEqual(droppedReplies(h)[0], { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "send_now_missed", text: "row " + i, pastes: [], imageCount: 0 });
       }
+      if (row.unmarked) {
+        assert.equal(queuedChat.pending(h.session)[0].sendNow, undefined, row.name + ": not marked");
+        h.send({ type: "send_now_queued_message", messageId: id });
+        await settle();
+        assert.equal(sendNowReplies(h)[1].result, row.again.result, row.name + ": asked again");
+        assert.equal(interrupts, row.again.interrupts, row.name + ": interrupt() calls after asking again");
+      }
+      // A miss can still be followed by the agent reporting the message consumed (the
+      // receipt raced the SDK taking it into the interrupted turn): it ran, so it is
+      // reported once; a second report changes nothing.
       queuedChat.consume(h.session, [ID_A]);
-      assert.equal(h.delivered().length, row.dropped ? 0 : 1, row.name + ": delivered at most once");
-      assert.equal(h.records().length, row.dropped ? 0 : 1, row.name + ": recorded at most once");
+      queuedChat.consume(h.session, [ID_A]);
+      var once = row.delivered === undefined ? 1 : row.delivered;
+      assert.equal(h.delivered().length, once, row.name + ": delivered at most once");
+      assert.equal(h.records().length, once, row.name + ": recorded at most once");
     } finally { h.done(); }
   }
-});
-
-test("Send now: an agent that cannot interrupt answers unsupported and interrupts nothing", async function () {
-  var h = await harness({ canCancelQueued: function () { return false; }, interruptKeepingQueued: function () { throw new Error("must not be called"); } });
-  try {
-    h.send({ type: "send_now_queued_message", messageId: ID_A });
-    await settle();
-    assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), ["unsupported"]);
-  } finally { h.done(); }
-});
-
-test("Send now: a failed interrupt answers error, leaves the message queued and unmarked, and can be asked again", async function () {
-  var calls = 0;
-  var h = await harness({ interruptKeepingQueued: function () { calls++; return calls === 1 ? Promise.reject(new Error("worker gone")) : Promise.resolve({ stillQueued: [ID_A] }); } });
-  try {
-    h.send({ type: "message", text: "retry me", messageId: ID_A });
-    h.send({ type: "send_now_queued_message", messageId: ID_A });
-    await settle();
-    assert.equal(sendNowReplies(h)[0].result, "error");
-    assert.match(sendNowReplies(h)[0].message, /worker gone/);
-    assert.equal(queuedChat.pending(h.session)[0].sendNow, undefined, "not marked");
-    h.send({ type: "send_now_queued_message", messageId: ID_A });
-    await settle();
-    assert.equal(sendNowReplies(h)[1].result, "requested");
-    assert.equal(calls, 2);
-    assert.equal(h.out.pushed.length, 1);
-  } finally { h.done(); }
 });
 
 test("Send now: a hit tells the other pages, and a frame in flight is one interrupt answered alike", async function () {
