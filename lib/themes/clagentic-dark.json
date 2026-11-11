@@ -2,9 +2,16 @@
   "name": "Dark",
   "author": "Clagentic",
   "variant": "dark",
-  "base00": "060810", "base01": "111827", "base02": "1E2E48", "base03": "3D5068",
-  "base04": "7A8FA6", "base05": "C8D4E0", "base06": "E0EAF4", "base07": "F0F6FF",
-  "base08": "FF4D6A", "base09": "00CFFF", "base0A": "4A7FE8", "base0B": "29D9A8",
-  "base0C": "7B3FE4", "base0D": "4A7FE8", "base0E": "A855F7", "base0F": "6366F1",
-  "accent2": "4A7FE8"
+  "base00": "1C2433", "base01": "242E40", "base02": "364257", "base03": "8E9DB3",
+  "base04": "A7B5C8", "base05": "C5D0DE", "base06": "EAF0F8", "base07": "F5F9FF",
+  "base08": "FF8094", "base09": "00CFFF", "base0A": "7BA7F7", "base0B": "29D9A8",
+  "base0C": "A78BFA", "base0D": "7BA7F7", "base0E": "C084FC", "base0F": "818CF8",
+  "accent2": "7BA7F7",
+  "tokens": {
+    "sidebar-bg": "141B28", "sidebar-active": "263245", "user-bubble": "2E3A4F",
+    "input-bg": "374359", "code-bg": "101722",
+    "border-subtle": "2A3548", "border-strong": "8294AE",
+    "warning": "F59E0B", "on-accent": "0B1220", "on-av": "0B1220",
+    "av0": "7FD8F0", "av1": "B9A3F5", "av2": "7FE0C2", "av3": "F2C879"
+  }
 }

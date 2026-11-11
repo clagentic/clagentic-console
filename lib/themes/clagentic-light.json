@@ -2,9 +2,16 @@
   "name": "Light",
   "author": "Clagentic",
   "variant": "light",
-  "base00": "F4F7FB", "base01": "DCE6F2", "base02": "B4C6D9", "base03": "8FA4BA",
-  "base04": "4A5D72", "base05": "1E2A38", "base06": "0D1421", "base07": "060A12",
-  "base08": "D4193A", "base09": "0099CC", "base0A": "2D5EB8", "base0B": "1BA87E",
+  "base00": "F1F4F9", "base01": "FFFFFF", "base02": "CBD5E3", "base03": "566680",
+  "base04": "4A5B72", "base05": "2B3A4F", "base06": "0F1724", "base07": "060A12",
+  "base08": "B3122D", "base09": "006D94", "base0A": "2D5EB8", "base0B": "0A6B4A",
   "base0C": "6128B8", "base0D": "2D5EB8", "base0E": "7C3AED", "base0F": "4F46E5",
-  "accent2": "2D5EB8"
+  "accent2": "2D5EB8",
+  "tokens": {
+    "sidebar-bg": "E2E8F1", "sidebar-active": "D3DEEE", "user-bubble": "D9E6F7",
+    "input-bg": "FFFFFF", "code-bg": "E9EEF5",
+    "border-subtle": "DDE4EE", "border-strong": "73849C",
+    "warning": "8A5300", "on-accent": "FFFFFF", "on-av": "FFFFFF",
+    "av0": "0B6E8A", "av1": "6A3FC4", "av2": "0D7A55", "av3": "9A5B00"
+  }
 }
