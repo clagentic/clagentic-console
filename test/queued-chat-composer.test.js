@@ -448,11 +448,10 @@ test("a tracked frame in doubt is drawn with its controls disabled", async funct
   assert.equal(btn(queuedEls()[0], "shell-queued-cancel").getAttribute("aria-disabled"), "true");
 });
 
-// The server echoes a delivered message to every socket but the sender's. Each row
-// counts the transcript's copies: the item's own render plus the echo it receives.
-function copiesInTranscript(env, echoReachesPage) {
-  return env.shown.length + (echoReachesPage ? 1 : 0);
-}
+// The server echoes a delivered message to every socket but the sender's
+// (sendToSessionOthers, covered in queued-chat-delivery.test.js). These rows hold
+// only what this page draws for itself: env.shown is the item's own render, and
+// the echo is the server's to send.
 
 test("the sending socket switches session away and back while the chat is queued: delivery shows the message once", async function () {
   var env = await setup(CAN_CANCEL);
@@ -466,7 +465,6 @@ test("the sending socket switches session away and back while the chat is queued
   delivered(env, id);
   assert.deepEqual(queuedTexts(), []);
   assert.deepEqual(env.shown, ["across a switch"], "this socket gets no echo, so its item draws the message");
-  assert.equal(copiesInTranscript(env, false), 1);
 });
 
 test("a reloaded page (a new socket) shows the delivered message once, from the server's echo", async function () {
@@ -480,7 +478,6 @@ test("a reloaded page (a new socket) shows the delivered message once, from the 
   tracked(env, { messageId: id, text: "across a reload" });
   delivered(env, id);
   assert.deepEqual(env.shown, [], "the item draws nothing: the echo does");
-  assert.equal(copiesInTranscript(env, true), 1);
 });
 
 test("a second tab shows the delivered message once, from the server's echo", async function () {
@@ -489,8 +486,7 @@ test("a second tab shows the delivered message once, from the server's echo", as
   env.us.handleHistoryReplayed();
   tracked(env, { messageId: "5e1f5e1f-0000-4000-8000-000000000002", text: "typed in the other tab" });
   delivered(env, "5e1f5e1f-0000-4000-8000-000000000002");
-  assert.deepEqual(env.shown, []);
-  assert.equal(copiesInTranscript(env, true), 1);
+  assert.deepEqual(env.shown, [], "the item draws nothing: the echo does");
 });
 
 // A message that ends while the page shows another session leaves no sender record
