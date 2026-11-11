@@ -843,7 +843,7 @@ Three readers apply it, and none holds a colour of its own:
 - **After scripts load.** `modules/theme.js` applies `deriveVars` of the active theme to `<html>`, and rebuilds the terminal and Mermaid (`base` theme) colours from it.
 - **`base.css`** declares no colour.
 
-The one copy outside the files is the built-in palettes in `modules/theme-prefs.js`, kept so the theme module has a palette before `/api/themes` answers; `test/theme-palette.test.js` holds it equal to the files and fails if a palette value appears in any file that paints the shell. The same test checks that every variable the frontend reads is defined in both themes and in a custom theme, that Dark and Light equal `docs/brand/BRAND.md`, and that text and boundary pairs meet WCAG AA.
+The client holds no copy of the palettes: `modules/theme.js` imports them from `/modules/theme-builtin.js`, a module the server generates from the theme files (`lib/theme-seed.js`), the way it generates `/theme-seed.css`. `test/theme-palette.test.js` fails if a palette value appears in any shipped script, page or manifest. The same test checks that every variable the frontend reads is defined in both themes and in a custom theme, that Dark and Light equal `docs/brand/BRAND.md`, and that text and boundary pairs meet WCAG AA.
 
 ## Server Connection Log
 
