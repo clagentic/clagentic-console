@@ -41,6 +41,8 @@ var TYPES = {
     server.sdk({ yokeType: "tool_start", blockId: 0, toolId: "tu-ask", toolName: "AskUserQuestion" });
     server.sdk({ yokeType: "tool_input_delta", blockId: 0, partialJson: JSON.stringify(ASK) });
     server.sdk({ yokeType: "block_stop", blockId: 0 });
+    // The push follows the prompt the permission callback opens.
+    server.ask("AskUserQuestion", ASK, { toolUseID: "tu-ask" });
   },
   done: function (server) {
     server.sdk({ yokeType: "result", cost: 0.01, duration: 10, sessionId: "cli" });
