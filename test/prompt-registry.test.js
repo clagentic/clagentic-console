@@ -12,11 +12,13 @@ var path = require("path");
 var { EventEmitter } = require("events");
 
 var { createPromptRegistry, promptsFor } = require("../lib/prompt-registry");
+var { idsByType, sameIdsForEveryType } = require("./dismissed-banner-keys");
 
 function makeRegistry() {
   var recorded = [];
   var saved = [];
-  var dismissed = [];
+  var dismissedKeys = [];
+  var dismissedRequests = [];
   var notified = [];
   var badgeRefreshes = 0;
   var sessions = new Map();
@@ -29,14 +31,11 @@ function makeRegistry() {
     getNotificationsModule: function () {
       return {
         show: function (type, data) { notified.push(data.requestId); },
-        // One key per banner type for each id (permission, ask_user and
-        // elicitation all register a banner); what is recorded is the ids.
-        dismissKeys: function (keys) {
-          keys.map(function (k) { return k.split(":").pop(); }).forEach(function (id, i, all) {
-            if (all.indexOf(id) === i) dismissed.push(id);
-          });
-        },
-        dismissRequest: function (slug, id) { dismissed.push(id); },
+        // Every raw key of every call, undeduplicated: the core sends one key
+        // per banner type for each id (permission, ask_user and elicitation all
+        // register a banner), and an id sent twice for one type is a defect.
+        dismissKeys: function (keys) { keys.forEach(function (k) { dismissedKeys.push(k); }); },
+        dismissRequest: function (slug, id) { dismissedRequests.push(id); },
       };
     },
     onProcessingChanged: function () { badgeRefreshes++; },
@@ -47,7 +46,7 @@ function makeRegistry() {
     return s;
   }
   return {
-    registry: registry, recorded: recorded, saved: saved, dismissed: dismissed, notified: notified, index: index,
+    registry: registry, recorded: recorded, saved: saved, dismissedKeys: dismissedKeys, dismissedRequests: dismissedRequests, notified: notified, index: index,
     addSession: addSession, badgeRefreshes: function () { return badgeRefreshes; },
   };
 }
@@ -135,10 +134,11 @@ test("an answer settles exactly once; a second answer is stale and still retires
   assertEmptyTable(s.pendingPermissions);
   assert.equal(h.index[opened.requestId], undefined);
   // The core also closes the tool-use id's key (a question's push is keyed by
-  // it), which names no banner here: the request id's banner is retired twice.
-  // Resolve closes the request key and the tool-use key; the stale second
-  // answer retires the request id again.
-  assert.deepEqual(h.dismissed, [opened.requestId, "tu-1", opened.requestId]);
+  // it), which names no banner here. Resolve closes the request key and the
+  // tool-use key under each banner type; the stale second answer names no
+  // session, so it retires the request's banners once, by request id.
+  assert.deepEqual(idsByType(h.dismissedKeys), sameIdsForEveryType([opened.requestId, "tu-1"]));
+  assert.deepEqual(h.dismissedRequests, [opened.requestId]);
 });
 
 test("permission decisions map to the vendor outcome and anything unknown fails closed", async function () {
@@ -445,7 +445,7 @@ test("cancelSession without recording settles every resolver and emits no event"
   assert.deepEqual(await a.answer, { behavior: "deny", message: "Session deleted" });
   assert.deepEqual(await ask.answer, { behavior: "deny", message: "Cancelled" });
   assert.equal(eventsOf(h, "prompt_cancel").length, 0);
-  assert.deepEqual(h.dismissed, [a.requestId, "tu-a", "tu-ask"]);
+  assert.deepEqual(idsByType(h.dismissedKeys), sameIdsForEveryType([a.requestId, "tu-a", "tu-ask"]));
 });
 
 test("shutdown ends every pending prompt, recorded, sub-agent ones included", async function () {

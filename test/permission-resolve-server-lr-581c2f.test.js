@@ -13,6 +13,7 @@ var os = require("os");
 
 var { createSDKBridge } = require("../lib/sdk-bridge");
 var { attachSessions } = require("../lib/project-sessions");
+var { idsByType, sameIdsForEveryType } = require("./dismissed-banner-keys");
 
 var IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -39,17 +40,14 @@ function makeSessionManager(tmpHome, notifications) {
 }
 
 function makeNotifications() {
-  var dismissed = [];
+  var dismissedKeys = [];
   return {
-    dismissed: dismissed,
+    dismissedKeys: dismissedKeys,
     show: function () {},
-    // One key per banner type for each id (permission, ask_user and elicitation
-    // all register a banner); what is recorded is the ids.
-    dismissKeys: function (keys) {
-      keys.map(function (k) { return k.split(":").pop(); }).forEach(function (id, i, all) {
-        if (all.indexOf(id) === i) dismissed.push(id);
-      });
-    },
+    // Every raw key of every call, undeduplicated: the core sends one key per
+    // banner type for each id (permission, ask_user and elicitation all
+    // register a banner), and an id sent twice for one type is a defect.
+    dismissKeys: function (keys) { keys.forEach(function (k) { dismissedKeys.push(k); }); },
   };
 }
 
@@ -163,7 +161,7 @@ test("resolving a request dismisses its notification", function () {
     h.handlers.handleSessionsMessage({ _session: session }, { type: "permission_response", requestId: requestId, decision: "allow" });
 
     // The request-keyed banner and the tool-use-keyed one the core also closes.
-    assert.deepEqual(h.notifications.dismissed, [requestId, "tu-2"]);
+    assert.deepEqual(idsByType(h.notifications.dismissedKeys), sameIdsForEveryType([requestId, "tu-2"]));
     return decision;
   } finally {
     cleanup(h);
@@ -179,7 +177,7 @@ test("a response for an unknown request gets an explicit stale reply and its ban
     h.handlers.handleSessionsMessage({ _session: session }, { type: "permission_response", requestId: "does-not-exist", decision: "allow_always" });
 
     assert.deepEqual(h.sent, [{ type: "permission_cancel", requestId: "does-not-exist", reason: "stale" }]);
-    assert.deepEqual(h.notifications.dismissed, ["does-not-exist"]);
+    assert.deepEqual(idsByType(h.notifications.dismissedKeys), sameIdsForEveryType(["does-not-exist"]));
   } finally {
     cleanup(h);
   }
@@ -207,7 +205,7 @@ test("aborting a pending request dismisses its notification", function () {
 
     ac.abort();
 
-    assert.deepEqual(h.notifications.dismissed, [requestId, "tu-3"]);
+    assert.deepEqual(idsByType(h.notifications.dismissedKeys), sameIdsForEveryType([requestId, "tu-3"]));
     return decision;
   } finally {
     cleanup(h);
