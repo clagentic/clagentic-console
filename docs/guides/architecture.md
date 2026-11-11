@@ -833,6 +833,18 @@ A browser must run the client code of the daemon it is connected to, including a
 - `GET /sw.js` stamps the service-worker cache name with the build id, so a restart onto a new build changes the worker's bytes and the browser installs it.
 - The WebSocket `info` message and the authenticated `GET /info` carry `buildId`. The client remembers the id its page booted with; a different id on any connect, including a reconnect while the tab stayed open, reloads the page, or shows a banner when there is unsent input a reload would drop (`lib/public/modules/build-guard.js`).
 
+## Colour: one source, one derivation
+
+A colour for a theme is decided in exactly one place: the theme file (`lib/themes/clagentic-dark.json`, `clagentic-light.json`, or a custom file in the console home, format in `docs/guides/THEMES.md`). One function turns a theme into every colour the console draws: `deriveVars` in `lib/public/theme-core.js`, with `deriveTerminalTheme` and `deriveMermaidVars` beside it. It is a plain script so that Node (`require`) and the browser share the one copy; the browser's handle on it is `lib/public/modules/theme-colors.js`.
+
+Three readers apply it, and none holds a colour of its own:
+
+- **Before scripts run.** The server builds `/theme-seed.css` from the two bundled files (`lib/theme-seed.js`): a root block for Dark, a `light-theme` block, and a system-light block for a visitor with no script. The shell links it before the first-paint script in `index.html`, which only puts the mode class on `<html>` (stored mode, else the system preference; a chosen custom theme paints from its cached variables). The same module fills in the manifest colours, the offline page of the service worker (`GET /sw.js`) and the variables of the sign-in and setup pages (`lib/pages.js`).
+- **After scripts load.** `modules/theme.js` applies `deriveVars` of the active theme to `<html>`, and rebuilds the terminal and Mermaid (`base` theme) colours from it.
+- **`base.css`** declares no colour.
+
+The one copy outside the files is the built-in palettes in `modules/theme-prefs.js`, kept so the theme module has a palette before `/api/themes` answers; `test/theme-palette.test.js` holds it equal to the files and fails if a palette value appears in any file that paints the shell. The same test checks that every variable the frontend reads is defined in both themes and in a custom theme, that Dark and Light equal `docs/brand/BRAND.md`, and that text and boundary pairs meet WCAG AA.
+
 ## Server Connection Log
 
 `handleConnection` and `handleDisconnection` (`lib/project-connection.js`) each log one `[connection]` journal line per browser socket: `[connection] connect: project=<slug> client=<id> user=<id|-> session=<localId|->` and `[connection] disconnect: ...` with the same fields plus `duration_s`. `client` is the per-connection label (`c-` and eight hex digits) made once and stored on the socket (`clientIdOf`, `lib/prompt-source.js`), so a connect and its disconnect share it and it matches the `client=` on a prompt-settle line. `user` is the internal user id; `session` is the session the socket is on at that moment. Every value passes `lib/log-field.js`. Never logged: the ws ticket, cookies, headers, tokens, the remote address, the username or the email. A tab that holds two sockets shows as two connect lines without a disconnect.

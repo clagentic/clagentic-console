@@ -47,15 +47,38 @@ The list is read each time the console loads. There is no restart.
 | `base00` to `base0F` | yes | A base16 palette: six hex digits each, no leading `#`. |
 | `variant` | no | `dark` or `light`. When absent it is derived from the brightness of `base00`. It decides whether the console draws light or dark chrome around the palette. |
 | `accent2` | no | A second accent, six hex digits. Defaults to `base0D`. |
+| `tokens` | no | Exact colours for the surface and state tokens listed below. Any token you leave out is derived from the sixteen colours. |
 
-The base16 roles the console uses: `base00` page background, `base01` raised surfaces, `base02` borders, `base03` muted and comments, `base04` secondary text, `base05` body text, `base06` headings, `base07` brightest text, `base08` errors and variables, `base09` the main accent and numbers, `base0A` warnings and types, `base0B` success and strings, `base0C` regular expressions, `base0D` functions, `base0E` keywords, `base0F` meta. The same palette drives the terminal and diagram colours.
+The base16 roles the console uses: `base00` page background, `base01` raised surfaces, `base02` borders, `base03` timestamps, labels and comments, `base04` secondary text, `base05` body text, `base06` headings, `base07` brightest text, `base08` errors and variables, `base09` the main accent and numbers, `base0A` types (and warnings, unless you state a `warning` token), `base0B` success and strings, `base0C` regular expressions, `base0D` functions, `base0E` keywords, `base0F` meta. The same palette drives the terminal and diagram colours.
+
+### Derivation: one file, every variable
+
+A file with only the sixteen colours is fully styled: the console derives every CSS variable from them, in one place (`lib/public/theme-core.js`), for the page, the terminal, diagrams and code highlighting alike. Nothing else in the console holds a colour for a theme. The page is also painted from your files before any script runs, so Dark and Light show no flash.
+
+`tokens` is for exact control. Each key is a token name, each value six hex digits. Anything you state is used as written, and the colours that depend on it (for example the sidebar hover row) follow it. Unknown keys are ignored; a value that is not six hex digits skips the file.
+
+| Token | Role | Derived from the sixteen colours when you leave it out |
+|---|---|---|
+| `sidebar-bg` | Sidebar | the page colour, darkened (by 30% in Dark, 3% in Light) |
+| `sidebar-active` | Selected session row | `base01` mixed toward `base02` |
+| `user-bubble` | Your own messages | `base01` mixed toward `base02` |
+| `input-bg` | Composer input | `base01` mixed toward `base02` (Light: the page colour, darkened) |
+| `code-bg` | Code blocks and the terminal | the page colour, darkened |
+| `border-subtle` | Hairlines | `base00` mixed toward `base02` |
+| `border-strong` | Input, button and control outlines | `base04` mixed with `base00` |
+| `warning` | Caution | `base0A` |
+| `on-accent` | Text on an accent fill | `base00` or `base06`, whichever reads better on `base09` |
+| `on-av` | Initials on an avatar | `base00` or `base06`, whichever reads better on `av0` |
+| `av0` to `av3` | Avatar tints | `base09`, `base0E`, `base0B`, `base0A`, lightened (Dark) or darkened (Light) |
+
+Dark and Light themselves are written this way: their files state the approved values in `tokens`. If you state tokens, keep text on its surface at 4.5:1 and control outlines at 3:1 (WCAG AA); the console does not adjust a colour you state.
 
 ### Files that are skipped
 
 A file is left out of the list, and the rest still load, when:
 
 - it is not valid JSON, cannot be read, is not a regular file, or is larger than 16 KiB;
-- `name` is missing, empty or too long, or any of `base00` to `base0F` is missing or not six hex digits, or `variant` or `accent2` is present and invalid;
+- `name` is missing, empty or too long, or any of `base00` to `base0F` is missing or not six hex digits, or `variant`, `accent2` or a `tokens` value is present and invalid;
 - its id is not a legal id, or is `clagentic-dark` or `clagentic-light` (the ids of the two built-in themes cannot be replaced).
 
 ## Upgrading from earlier versions

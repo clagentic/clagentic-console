@@ -192,7 +192,7 @@ test("built-in fallback palettes equal the shipped theme files", async function 
     var file = JSON.parse(fs.readFileSync(path.join(THEMES_DIR, id + ".json"), "utf8"));
     var built = id === "clagentic-dark" ? p.CLAGENTIC_DARK : p.CLAGENTIC_LIGHT;
     Object.keys(built).forEach(function (k) {
-      assert.equal(built[k], file[k], id + " " + k);
+      assert.deepEqual(built[k], file[k], id + " " + k);
     });
   });
 });
