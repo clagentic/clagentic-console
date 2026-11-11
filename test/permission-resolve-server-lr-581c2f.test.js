@@ -43,7 +43,13 @@ function makeNotifications() {
   return {
     dismissed: dismissed,
     show: function () {},
-    dismissKeys: function (keys) { keys.forEach(function (k) { dismissed.push(k.split(":").pop()); }); },
+    // One key per banner type for each id (permission, ask_user and elicitation
+    // all register a banner); what is recorded is the ids.
+    dismissKeys: function (keys) {
+      keys.map(function (k) { return k.split(":").pop(); }).forEach(function (id, i, all) {
+        if (all.indexOf(id) === i) dismissed.push(id);
+      });
+    },
   };
 }
 

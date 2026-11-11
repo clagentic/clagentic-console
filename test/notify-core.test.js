@@ -414,5 +414,14 @@ test("one notify() reaches the surfaces the content names and the type registers
   assert.equal(w.push.sent.length, 1);
   assert.equal(w.live().length, 1, "the repeat collapses");
   w.core.notify("ask_user", { slug: "p", sessionId: 4, requestId: "toolu_x" }, { push: { title: "T", body: "B" }, banner: BANNER }, aud({ ownerId: "u1" }));
-  assert.equal(w.live().length, 1, "a type that registers no banner shows none");
+  assert.equal(w.live().length, 2, "ask_user registers a banner, and it shows beside the permission one");
+});
+
+test("a type that registers no banner shows none, whatever the emitter passes", function () {
+  var registry = createTypeRegistry();
+  registry.register("quiet", { category: "approval", collapse: "request", persistent: true });
+  var shown = [];
+  var c = notify.createNotifyCore({ registry: registry, push: fakePush(), inApp: { show: function () { shown.push(1); }, dismissKeys: function () {} } });
+  c.notify("quiet", { slug: "p", sessionId: 4, requestId: "r1" }, { push: { title: "T", body: "B" }, banner: BANNER }, aud({ ownerId: "u1" }));
+  assert.equal(shown.length, 0);
 });
