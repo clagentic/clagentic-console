@@ -111,7 +111,7 @@ var ORIGINAL_CASE_LABELS = [
   // default mode to the running sessions.
   "permission_settings", "permission_mode_applied",
   // A queued chat message the agent took in, and the answer to withdrawing one.
-  "message_delivered", "queued_message_cancelled",
+  "message_delivered", "queued_message_cancelled", "queued_message_tracked",
   // The ! command line: the outcome of a command, and its settings.
   "shell_result", "user_shell_settings",
   // The Team view's agent messages: the answer to a request, and the content-free

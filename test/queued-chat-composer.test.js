@@ -399,3 +399,51 @@ test("a dropped reply is worded by its cause: a turn that did not take it, or th
   answer(env, id3, "dropped", { text: "query closed", cause: "closed" });
   assert.ok(sysText().some(function (t) { return /session ended before this message was delivered/.test(t); }));
 });
+
+var TRACKED_ID = "5e1f5e1f-0000-4000-8000-000000000001";
+function tracked(env, extra) {
+  env.us.handleQueuedMessageTracked(Object.assign({ type: "queued_message_tracked", messageId: TRACKED_ID, text: "from before the reload", pastes: [], imageCount: 0, unconfirmed: false }, extra || {}));
+}
+
+test("after a reload the server's tracked frame draws the waiting message as queued, with working controls", async function () {
+  var env = await setup(CAN_CANCEL);
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  assert.deepEqual(queuedTexts(), []);
+  tracked(env);
+  assert.deepEqual(queuedTexts(), ["from before the reload"]);
+  tracked(env);
+  assert.equal(queuedEls().length, 1, "a second frame for the same id draws nothing more");
+  btn(queuedEls()[0], "shell-queued-cancel").click();
+  assert.deepEqual(frames(env, "cancel_queued_message"), [{ type: "cancel_queued_message", messageId: TRACKED_ID }]);
+  answer(env, TRACKED_ID, "cancelled", { text: "from before the reload", pastes: [], imageCount: 0 });
+  assert.deepEqual(queuedTexts(), []);
+});
+
+test("a redrawn item turns into nothing on delivery: the transcript already gets the message from the server, so it is not shown twice", async function () {
+  var env = await setup(CAN_CANCEL);
+  tracked(env);
+  delivered(env, TRACKED_ID);
+  assert.deepEqual(queuedTexts(), []);
+  assert.deepEqual(env.shown, [], "the message arrives as the session's own user message, not from the item");
+});
+
+test("a redrawn item that was dropped hands its text to the composer, and one withdrawn on another page just goes", async function () {
+  var env = await setup(CAN_CANCEL);
+  tracked(env);
+  answer(env, TRACKED_ID, "dropped", { text: "from before the reload", cause: "closed" });
+  assert.deepEqual(queuedTexts(), []);
+  assert.equal(env.ctx.inputEl.value, "from before the reload");
+
+  var env2 = await setup(CAN_CANCEL);
+  tracked(env2);
+  answer(env2, TRACKED_ID, "cancelled");
+  assert.deepEqual(queuedTexts(), [], "withdrawn elsewhere: the item is dropped");
+  assert.equal(env2.ctx.inputEl.value, "", "no text came with it, so nothing lands in this composer");
+});
+
+test("a tracked frame in doubt is drawn with its controls disabled", async function () {
+  var env = await setup(CAN_CANCEL);
+  tracked(env, { unconfirmed: true });
+  assert.equal(btn(queuedEls()[0], "shell-queued-cancel").getAttribute("aria-disabled"), "true");
+});

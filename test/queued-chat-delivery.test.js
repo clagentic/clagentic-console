@@ -849,7 +849,20 @@ test("(a) the daemon restarts with chat queued: the next time the session is sho
   } finally { h.done(); }
 });
 
-test("(a) a message delivered before the restart is not handed back", async function () {
+test("(a) a long queued message comes back whole: it does not break reading the session file back", async function () {
+  var h = await harness();
+  try {
+    var long = "x".repeat(20000);
+    h.send({ type: "message", text: long, messageId: ID_A });
+    var r = h.restart();
+    assert.ok(r.session, "the session still loads");
+    var tab = { id: "tab" };
+    r.sm.switchSession(r.session.localId, tab);
+    assert.equal(framesTo(r.shown, tab, "queued_message_cancelled")[0].text, long);
+  } finally { h.done(); }
+});
+
+test("(a) a message delivered before the restart is not handed back",async function () {
   var h = await harness();
   try {
     h.send({ type: "message", text: "taken in", messageId: ID_A });
