@@ -9,6 +9,7 @@ Agents are first-class users of Clagentic: Console. A script, a CI job or an AI 
 - `clagentic-console list-sessions` lists the console's sessions with their state and any prompts they are waiting on.
 - `clagentic-console list-outbound` lists what one session sent out with `send-input` and `open-session`: the target, the prompt, the time and the initiator. It only reads.
 - `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
+- `clagentic-console settings` reads and changes server-wide settings by key (`get`, `set`, `list`), starting with the prompt expiry, and prints JSON.
 
 This guide is the canonical reference for these verbs. [architecture.md](./architecture.md) describes how they are built; where the two ever differ, fix the difference in the same change. Writers who cannot run the CLI can use the file drop, covered in [EXTERNAL-TRIGGERS.md](./EXTERNAL-TRIGGERS.md) and not repeated here.
 
@@ -26,6 +27,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [list-sessions](#list-sessions)
 - [list-outbound](#list-outbound)
 - [Scheduled input](#scheduled-input)
+- [settings](#settings)
 - [Delivery semantics](#delivery-semantics)
 - [Results and exit codes](#results-and-exit-codes)
 - [The sender record](#the-sender-record)
@@ -625,6 +627,40 @@ Exit codes: `0` when the request was acted on (scheduled, listed, deleted), `1` 
 - **At most once.** The record is advanced and saved before its text is delivered, so a restart or crash around a delivery can lose that one send but never makes it twice. If the list cannot be saved, nothing is delivered: the project's firing stops, is logged, and is retried every 30 seconds until a save works. `schedule-input list` then answers `store` (one project) or `storeErrors` (all projects) with `state` `unhealthy`. If a store file is unreadable and cannot be moved aside, the project's store is `read-only`: nothing is saved or delivered and the file is left as it is, until the file is fixed and the daemon restarted. Creating or deleting a record whose change cannot be saved is refused with `error`. If the list cannot be saved after a text was delivered, the record keeps its saved `sending` outcome and is not delivered again.
 - **The browser's limit.** At 5 armed records the clock button still opens the panel, where Send now and Cancel work; only Schedule is off, with the reason shown.
 
+## settings
+
+`settings` reads and changes server-wide settings by key, so an agent needs no browser. The only key today is `promptExpiryMinutes`: how many minutes an unanswered operator prompt waits before it expires (a whole number from 0, meaning no expiry, up to 35791; default 30). A value applies to the next prompt opened; a prompt already open keeps its deadline.
+
+```bash
+clagentic-console settings get <key>
+clagentic-console settings set <key> <value>
+clagentic-console settings list
+```
+
+`<value>` is read as JSON when it parses (`10` is a number, `true` a boolean) and as a string otherwise. The daemon validates it with the same rule the Settings page uses, so a value the page refuses is refused here, with the same reason, and nothing is saved.
+
+```bash
+clagentic-console settings set promptExpiryMinutes 10
+# { "ok": true, "result": "saved", "key": "promptExpiryMinutes", "value": 10, "default": 30 }
+
+clagentic-console settings get promptExpiryMinutes
+# { "ok": true, "result": "read", "key": "promptExpiryMinutes", "value": 10, "default": 30 }
+
+clagentic-console settings list
+# { "ok": true, "result": "listed", "settings": [ { "key": "promptExpiryMinutes", "value": 10, "default": 30 } ] }
+
+clagentic-console settings set promptExpiryMinutes -1
+# { "ok": false, "result": "refused", "reason": "promptExpiryMinutes must be a whole number of minutes from 0 (no expiry) to 35791.", "key": "promptExpiryMinutes", "value": 10, "default": 30 }
+```
+
+`value` in a `saved` answer is read back from the daemon's own state after the change, not echoed from the request. A `refused` answer shows the unchanged current value. Setting the default removes the key from `daemon.json`. Open Settings pages receive the new value at once.
+
+Exit 0 for `read`, `saved` and `listed`; exit 1 for `refused`, `unknown-key` and `error`. A usage error (a missing key or value, an extra argument) prints usage to stderr and exits 1 without contacting the daemon; `settings --help` prints usage and exits 0.
+
+### Who may set
+
+The IPC path has no per-user authorisation. The socket sits in a config directory with mode 0700, so any process running as the daemon's OS user can set server-wide settings. That is the same trust the other IPC writers (`set_mem_available_threshold`, `set_keep_awake` and the rest) rely on. The WebSocket path keeps its own admin check; this verb does not go through it.
+
 ## Delivery semantics
 
 - **Push, not poll.** Input is pushed into the target session when the call is made. There is no inbox to poll and no queue the receiver must drain. The call returns after the session's query has actually started or accepted the input.
@@ -656,6 +692,8 @@ The `result` field of the JSON, and the process exit code:
 | `error` | Delivery was attempted and failed, or the daemon could not be reached. `retryable` says whether sending again can help. | 1 |
 
 `schedule-input` answers `scheduled`, `listed` or `deleted` (exit 0), and `refused` (an invalid request: a bad interval or time, no end on a repeat, the limit of 5, an unknown project), `not-found` (an unknown session or id), `busy` (a delete of a record that is being sent) or `error` (exit 1). See [Scheduled input](#scheduled-input).
+
+`settings` answers `read`, `saved` or `listed` (exit 0), and `refused` (the value is not valid for the key, `reason` says why), `unknown-key` or `error` (exit 1). See [settings](#settings).
 
 A CLI usage mistake (an unknown option, a missing value, a missing target or `--prompt`) prints the usage line to stderr and exits 1 without contacting the daemon.
 
@@ -720,11 +758,15 @@ This is a suggestion only. Clagentic: Console never reads or writes your Claude 
       "Bash(clagentic-console open-session *)",
       "Bash(clagentic-console schedule-input create *)",
       "Bash(clagentic-console schedule-input list *)",
-      "Bash(clagentic-console schedule-input delete *)"
+      "Bash(clagentic-console schedule-input delete *)",
+      "Bash(clagentic-console settings get *)",
+      "Bash(clagentic-console settings list)"
     ]
   }
 }
 ```
+
+`settings set` is left out of these defaults on purpose: it changes a server-wide setting for every user and session of the daemon, so the operator grants it by adding `"Bash(clagentic-console settings set *)"` to their own rules. `settings get` and `settings list` only read.
 
 `list-sessions`, `list-outbound` and `schedule-input list` only read. `list-outbound` returns prompt text other sessions were sent (see [list-outbound](#list-outbound)), so allow it only where an agent may see that. `send-input` and `open-session` start work in other sessions, so allow them only where you want agents to be able to do that. `schedule-input create` does too, later: the text it schedules is sent into the session you name, which can be any session of the project, so allow it only where you would allow `send-input`. `schedule-input delete` cancels a schedule, including one a person made in the browser.
 

@@ -102,6 +102,11 @@ if (args[0] === "schedule-input") {
   return;
 }
 
+if (args[0] === "settings") {
+  require("../lib/cli/settings-subcommands").runSettingsVerb(args.slice(1));
+  return;
+}
+
 var port = _isDev ? 2635 : 2633;
 var useHttps = true;
 var forceMkcert = false;
@@ -210,6 +215,9 @@ for (var i = 0; i < args.length; i++) {
   console.log("         <dur> is minutes or parts like 90, 10m, 1h30m; <time> is a local HH:MM (a past one means tomorrow)");
   console.log("         <address> is <agent>@<project>, <vendor>@<project> (a plain session) or @<project>, each with an optional /<session-name>");
   console.log("         Several matches resolve live over idle over reaped; /<session-name> names one session exactly");
+  console.log("       clagentic-console settings get <key>  Print one server-wide setting's value and default as JSON (agent-readable; known keys: promptExpiryMinutes)");
+  console.log("       clagentic-console settings set <key> <value>  Change a server-wide setting; prints the value read back from the daemon (value is JSON when it parses; exit 1 if refused)");
+  console.log("       clagentic-console settings list  List the settings with their values and defaults as JSON");
   console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");
   console.log("       clagentic-console daemon            Run the daemon in the foreground (used by the systemd unit)");
     console.log("");
