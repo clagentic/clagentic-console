@@ -312,7 +312,7 @@ test("the no-service refusal carries the requestId when the request had one, and
 test("a sendNow that rejects or throws answers once with the requestId and generic text; the detail is only logged", async function () {
   var modes = {
     reject: function () { return Promise.reject(new Error("secret-detail-reject")); },
-    throws: function () { throw new Error("secret-detail-throw"); },
+    throws: function () { throw new Error("secret-detail-throws"); },
   };
   var logged = [];
   var realError = console.error;
