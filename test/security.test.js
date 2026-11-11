@@ -994,16 +994,16 @@ test("PUT /api/user/theme-mode: rejects unauthenticated request with 401", funct
   assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
 });
 
-test("PUT /api/user/theme-brand: rejects unauthenticated request with 401", function () {
+test("PUT /api/user/theme-id: rejects unauthenticated request with 401", function () {
   var { attachSettings } = require("../lib/server-settings");
   var ctx = makeSettingsCtx(false, false);
   var handler = attachSettings(ctx).handleRequest;
 
-  var req = makeReq("PUT", "/api/user/theme-brand");
+  var req = makeReq("PUT", "/api/user/theme-id");
   var res = makeRes();
-  handler(req, res, "/api/user/theme-brand");
+  handler(req, res, "/api/user/theme-id");
 
-  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/theme-brand gets 401");
+  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/theme-id gets 401");
   assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
 });
 

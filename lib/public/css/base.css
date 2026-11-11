@@ -124,7 +124,7 @@ img.emoji {
 /* PWA standalone: home indicator safe area still applies on notched devices */
 
 ::selection {
-  background: rgba(80, 250, 123, 0.25);
+  background: var(--accent-25);
 }
 
 html, body {

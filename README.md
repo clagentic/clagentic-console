@@ -85,6 +85,8 @@ npm install -g @clagentic/console --ignore-scripts
 
 - **MCP servers.** Built-in ask-user and browser servers. User-configured MCPs via `~/.clagentic/mcp.json`. Works in both Claude and Codex sessions.
 
+- **Themes.** Dark, Light, or Follow system, from User Settings, Appearance (on a phone, the More sheet). Drop your own theme file into `~/.clagentic/console/themes/` to add a custom theme to the same choice; see [Themes](docs/guides/THEMES.md).
+
 - **Your data, your machine.** Sessions are JSONL, settings are JSON, knowledge is Markdown. No cloud relay, no proprietary database.
 
 - **Clagentic: Lite (optional).** If [Clagentic: Lite](https://clagentic.ai/tools) is installed, project settings surface per-project enrollment controls and system settings add a global auto-enroll toggle. Console detects it passively — nothing changes if it isn't present.
