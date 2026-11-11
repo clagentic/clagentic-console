@@ -42,14 +42,78 @@ test("the SDK keeps a message the CLI has not consumed and runs it as a later tu
     types.indexOf("the drain loop starts the next queued turn immediately") !== -1, "the next queued turn starts at once");
 });
 
-test("a message is dropped only when the query closes: the bridge calls dropAll in one place, the query's close, never at a turn's result", function () {
-  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "sdk-bridge.js"), "utf8");
-  var calls = src.split("queuedChat.dropAll(").length - 1;
-  assert.equal(calls, 1);
-  var at = src.indexOf("queuedChat.dropAll(");
-  var before = src.slice(Math.max(0, at - 900), at);
-  assert.ok(/session\.queryInstance === myQueryInstance/.test(before), "inside the query-close cleanup");
-  assert.ok(/finally/.test(src.slice(0, at).split("\n").slice(-60).join("\n")), "in the stream's finally block");
+// A query the bridge can run over: frames are fed in by the test, then the stream
+// closes (finish) or breaks (fail), as a worker that dies does.
+function fakeQuery() {
+  var inbox = [];
+  var waiting = null;
+  function deliver(item) {
+    if (waiting) { var w = waiting; waiting = null; if (item.error) w.reject(item.error); else w.resolve(item.result); }
+    else inbox.push(item);
+  }
+  var q = {
+    _adapterState: null,
+    pushed: [],
+    [Symbol.asyncIterator]: function () {
+      return {
+        next: function () {
+          if (inbox.length) { var item = inbox.shift(); return item.error ? Promise.reject(item.error) : Promise.resolve(item.result); }
+          return new Promise(function (resolve, reject) { waiting = { resolve: resolve, reject: reject }; });
+        },
+      };
+    },
+    pushMessage: function (text, images, initiator, messageId) { q.pushed.push(messageId); },
+    endInput: function () {},
+    close: function () { deliver({ result: { value: undefined, done: true } }); },
+    abort: function () { deliver({ result: { value: undefined, done: true } }); },
+    emit: function (frame) { deliver({ result: { value: frame, done: false } }); },
+    finish: function () { deliver({ result: { value: undefined, done: true } }); },
+    fail: function (err) { deliver({ error: err }); },
+  };
+  return q;
+}
+
+// The real bridge over the harness's real session manager, with the agent's queries
+// supplied by the test. The handler pushes through the bridge, as in the daemon.
+function bridgeFor(h, queries) {
+  var modPath = require.resolve("../lib/sdk-bridge");
+  delete require.cache[modPath];
+  var { createSDKBridge } = require("../lib/sdk-bridge");
+  var next = 0;
+  var adapter = {
+    vendor: "claude",
+    createQuery: function () { return Promise.resolve(queries[next++]); },
+    init: function () { return Promise.resolve({ models: [], skills: [] }); },
+    supportedModels: function () { return Promise.resolve([]); },
+    generateTitle: null, renameSession: null, forkSession: null,
+  };
+  return createSDKBridge({
+    cwd: h.tmpHome, slug: "p", sessionManager: h.sm, send: function () {},
+    adapter: adapter, adapters: { claude: adapter }, onProcessingChanged: function () {}, getConfig: null,
+  });
+}
+
+async function settle() { for (var i = 0; i < 6; i++) await tick(); }
+
+test("a message is dropped only when the query closes: a turn's result frame drops nothing, the stream's close drops it once", async function () {
+  var query = fakeQuery();
+  var bridge = null;
+  var h = await harness({ pushMessage: function () { return bridge.pushMessage.apply(null, arguments); } });
+  try {
+    bridge = bridgeFor(h, [query]);
+    await bridge.startQuery(h.session, "first", null, null);
+    h.session.isProcessing = true;
+    h.send({ type: "message", text: "waits for a later turn", messageId: ID_A });
+    assert.deepEqual(query.pushed.slice(-1), [ID_A], "pushed into the live query");
+    query.emit({ yokeType: "result" });
+    await settle();
+    assert.equal(droppedReplies(h).length, 0, "a turn's result frame drops nothing");
+    assert.equal(queuedChat.has(h.session, ID_A), true);
+    query.finish();
+    await settle();
+    assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.cause, m.text]; }), [[ID_A, "closed", "waits for a later turn"]]);
+    assert.equal(queuedChat.has(h.session, ID_A), false);
+  } finally { h.done(); }
 });
 
 // ------------------------------------------------------------ the adapter
@@ -242,15 +306,18 @@ async function harness(sdkOver) {
   var reload = ["../lib/config", "../lib/sessions", "../lib/utils"];
   reload.forEach(function (m) { delete require.cache[require.resolve(m)]; });
   var noop = function () {};
-  var sm = require("../lib/sessions").createSessionManager({ cwd: tmpHome, send: noop, sendTo: noop, sendEach: noop });
+  var out = { toSender: [], toSession: [], toOthers: [], pushed: [], cancelled: [], toWs: [] };
+  // Every frame the session manager sends to one socket (a session shown), by socket.
+  function recordTo(to, obj) { out.toWs.push({ ws: to, obj: obj }); }
+  var sm = require("../lib/sessions").createSessionManager({ cwd: tmpHome, send: noop, sendTo: recordTo, sendEach: noop });
   var session = sm.createSessionRaw({});
   session.cliSessionId = "queued-chat-1";
   session.vendor = "claude";
   session.title = "t";
   session.isProcessing = true;
   sm.saveSessionFile(session);
-  var out = { toSender: [], toSession: [], toOthers: [], pushed: [], cancelled: [] };
   var ws = { id: "sender" };
+  var clients = new Set([ws]);
   var sdk = Object.assign({
     canSteer: function () { return true; },
     steerMessage: function () { return Promise.resolve({ steered: true }); },
@@ -265,7 +332,7 @@ async function harness(sdkOver) {
     sendTo: function (to, obj) { out.toSender.push(obj); },
     sendToSession: function (id, obj) { out.toSession.push(obj); },
     sendToSessionOthers: function (w, id, obj) { out.toOthers.push(obj); },
-    clients: new Set(), opts: {}, usersModule: {},
+    clients: clients, opts: {}, usersModule: {},
     getSessionForWs: function () { return session; },
     getLinuxUserForSession: function () { return null; },
     ensureProjectAccessForSession: function () { return null; },
@@ -278,8 +345,19 @@ async function harness(sdkOver) {
     adapter: { renameSession: function () { return Promise.resolve(); } },
   });
   return {
-    out: out, session: session, ws: ws,
+    out: out, session: session, ws: ws, sm: sm, clients: clients, tmpHome: tmpHome,
+    // A second tab on the same session: its own socket, shown the session, viewing it.
+    sendFrom: function (from, msg) { handler.handleUserMessage(from, msg); },
     send: function (msg) { handler.handleUserMessage(ws, msg); },
+    // The daemon restarted: a new session manager reads the same session files.
+    restart: function () {
+      reload.forEach(function (m) { delete require.cache[require.resolve(m)]; });
+      var shown = [];
+      var rsm = require("../lib/sessions").createSessionManager({ cwd: tmpHome, send: noop, sendTo: function (to, obj) { shown.push({ ws: to, obj: obj }); }, sendEach: noop });
+      var again = null;
+      rsm.sessions.forEach(function (s) { if (s.cliSessionId === session.cliSessionId) again = s; });
+      return { sm: rsm, session: again, shown: shown };
+    },
     records: function () { return session.history.filter(function (h) { return h.type === "user_message"; }); },
     delivered: function () { return out.toSession.filter(function (m) { return m.type === "message_delivered"; }); },
     replies: function () { return out.toSender.filter(function (m) { return m.type === "queued_message_cancelled"; }); },
@@ -439,31 +517,33 @@ test("a message sent after the turn already ended is recorded at once and announ
 
 test("a dropped reply carries the message text, pastes and image count so the page can restore it", async function () {
   var t = await harness();
-  t.send({ type: "message", text: "wait for me", pastes: ["a paste"], images: [{ mediaType: "image/png", data: "AA==" }], messageId: ID_A });
-  assert.equal(queuedChat.dropAll(t.session).length, 1);
-  var dropped = t.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled"; });
-  assert.equal(dropped.length, 1);
-  assert.equal(dropped[0].result, "dropped");
-  assert.equal(dropped[0].text, "wait for me");
-  assert.deepEqual(dropped[0].pastes, ["a paste"]);
-  assert.equal(dropped[0].imageCount, 1);
-  t.done();
+  try {
+    t.send({ type: "message", text: "wait for me", pastes: ["a paste"], images: [{ mediaType: "image/png", data: "AA==" }], messageId: ID_A });
+    assert.equal(queuedChat.dropAll(t.session).length, 1);
+    var dropped = t.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled"; });
+    assert.equal(dropped.length, 1);
+    assert.equal(dropped[0].result, "dropped");
+    assert.equal(dropped[0].text, "wait for me");
+    assert.deepEqual(dropped[0].pastes, ["a paste"]);
+    assert.equal(dropped[0].imageCount, 1);
+  } finally { t.done(); }
 });
 
 test("a cancelled reply carries the message text; other answers do not", async function () {
   var t = await harness();
-  t.send({ type: "message", text: "take it back", messageId: ID_A });
-  t.send({ type: "cancel_queued_message", messageId: ID_A });
-  await tick(); await tick();
-  var r = t.replies();
-  assert.equal(r.length, 1);
-  assert.equal(r[0].result, "cancelled");
-  assert.equal(r[0].text, "take it back");
-  t.send({ type: "cancel_queued_message", messageId: ID_A });
-  await tick(); await tick();
-  assert.equal(t.replies()[1].result, "already_delivered");
-  assert.equal("text" in t.replies()[1], false);
-  t.done();
+  try {
+    t.send({ type: "message", text: "take it back", messageId: ID_A });
+    t.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    var r = t.replies();
+    assert.equal(r.length, 1);
+    assert.equal(r[0].result, "cancelled");
+    assert.equal(r[0].text, "take it back");
+    t.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    assert.equal(t.replies()[1].result, "already_delivered");
+    assert.equal("text" in t.replies()[1], false);
+  } finally { t.done(); }
 });
 
 // ------------------------------------------------------------ cancelled:false (SDK 0.3.318 notes)
@@ -735,5 +815,180 @@ test("a message cancelled during an already-running turn stays pending through t
     assert.equal(h.records().length, 1);
     assert.equal(h.delivered().length, 1);
     assert.equal(droppedReplies(h).length, 0);
+  } finally { h.done(); }
+});
+
+// ------------------------------------------------------------ what happens to queued text
+// One test per case: the message is pushed to the agent, not yet taken in, and
+//   (a) the daemon restarts, (b) the worker dies, (c) the page reloads with the
+//   daemon alive, (d) a rewind replaces the query. In none may the text vanish.
+
+function framesTo(shown, who, type) {
+  return shown.filter(function (m) { return m.ws === who && m.obj.type === type; }).map(function (m) { return m.obj; });
+}
+
+test("(a) the daemon restarts with chat queued: the next time the session is shown its text comes back, once", async function () {
+  var h = await harness();
+  try {
+    h.send({ type: "message", text: "queued at restart", pastes: ["a paste"], images: [{ mediaType: "image/png", data: "AA==" }], messageId: ID_A });
+    var r = h.restart();
+    assert.ok(r.session, "the session is read back from its file");
+    var tab = { id: "tab" };
+    r.sm.switchSession(r.session.localId, tab);
+    assert.deepEqual(framesTo(r.shown, tab, "queued_message_cancelled"), [
+      { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "restart", text: "queued at restart", pastes: ["a paste"], imageCount: 1 },
+    ]);
+    assert.deepEqual(framesTo(r.shown, tab, "queued_message_tracked"), [], "it is not drawn as queued: nothing in this daemon holds it");
+    var other = { id: "other tab" };
+    r.sm.switchSession(r.session.localId, other);
+    assert.deepEqual(framesTo(r.shown, other, "queued_message_cancelled"), [], "handed back once");
+    var again = h.restart();
+    var third = { id: "after another restart" };
+    again.sm.switchSession(again.session.localId, third);
+    assert.deepEqual(framesTo(again.shown, third, "queued_message_cancelled"), [], "and not again after the next restart");
+  } finally { h.done(); }
+});
+
+test("(a) a long queued message comes back whole: it does not break reading the session file back", async function () {
+  var h = await harness();
+  try {
+    var long = "x".repeat(20000);
+    h.send({ type: "message", text: long, messageId: ID_A });
+    var r = h.restart();
+    assert.ok(r.session, "the session still loads");
+    var tab = { id: "tab" };
+    r.sm.switchSession(r.session.localId, tab);
+    assert.equal(framesTo(r.shown, tab, "queued_message_cancelled")[0].text, long);
+  } finally { h.done(); }
+});
+
+test("(a) a message delivered before the restart is not handed back",async function () {
+  var h = await harness();
+  try {
+    h.send({ type: "message", text: "taken in", messageId: ID_A });
+    queuedChat.consume(h.session, [ID_A]);
+    var r = h.restart();
+    var tab = { id: "tab" };
+    r.sm.switchSession(r.session.localId, tab);
+    assert.deepEqual(framesTo(r.shown, tab, "queued_message_cancelled"), []);
+  } finally { h.done(); }
+});
+
+test("(a) a query that closes with nobody viewing the session keeps the text for the next time it is shown", async function () {
+  var h = await harness();
+  try {
+    h.send({ type: "message", text: "nobody watched", messageId: ID_A });
+    queuedChat.dropAll(h.session);
+    var tab = { id: "late tab" };
+    h.sm.switchSession(h.session.localId, tab);
+    assert.deepEqual(framesTo(h.out.toWs, tab, "queued_message_cancelled").map(function (m) { return [m.messageId, m.result, m.cause, m.text]; }),
+      [[ID_A, "dropped", "closed", "nobody watched"]]);
+    h.sm.switchSession(h.session.localId, { id: "another" });
+    assert.equal(h.out.toWs.filter(function (m) { return m.obj.type === "queued_message_cancelled"; }).length, 1, "once");
+  } finally { h.done(); }
+});
+
+test("(b) the worker dies with chat queued: the stream breaks, the query closes, and the text comes back through the dropped reply", async function () {
+  var query = fakeQuery();
+  var bridge = null;
+  var h = await harness({ pushMessage: function () { return bridge.pushMessage.apply(null, arguments); } });
+  try {
+    bridge = bridgeFor(h, [query]);
+    h.ws._clagenticActiveSession = h.session.localId;
+    await bridge.startQuery(h.session, "first", null, null);
+    h.session.isProcessing = true;
+    h.send({ type: "message", text: "worker will die", messageId: ID_A });
+    query.fail(new Error("Worker killed by SIGKILL"));
+    await settle();
+    assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.cause, m.text]; }), [[ID_A, "closed", "worker will die"]]);
+    assert.equal(queuedChat.has(h.session, ID_A), false);
+  } finally { h.done(); }
+});
+
+test("(c) the page reloads while the daemon is alive: the message still waiting is drawn as queued again, and its delivery clears it once", async function () {
+  var h = await harness();
+  try {
+    h.send({ type: "message", text: "still waiting", pastes: ["p"], images: [{ mediaType: "image/png", data: "AA==" }], messageId: ID_A });
+    var reloaded = { id: "reloaded page" };
+    h.sm.switchSession(h.session.localId, reloaded);
+    assert.deepEqual(framesTo(h.out.toWs, reloaded, "queued_message_tracked"), [
+      { type: "queued_message_tracked", messageId: ID_A, text: "still waiting", pastes: ["p"], imageCount: 1, unconfirmed: false },
+    ]);
+    assert.equal(queuedChat.has(h.session, ID_A), true, "the server still tracks it");
+    queuedChat.consume(h.session, [ID_A]);
+    assert.equal(h.delivered().length, 1, "delivery is announced to the session, the reloaded page included");
+    var later = { id: "later" };
+    h.sm.switchSession(h.session.localId, later);
+    assert.deepEqual(framesTo(h.out.toWs, later, "queued_message_tracked"), [], "a delivered message is not drawn as queued");
+  } finally { h.done(); }
+});
+
+test("(c) a cancel from the second page replies to it with the text and tells the first page to drop its item, without the text",async function () {
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(true); } });
+  try {
+    h.send({ type: "message", text: "withdraw me", messageId: ID_A });
+    var tab = { id: "second tab" };
+    h.clients.add(tab);
+    h.sendFrom(tab, { type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    assert.deepEqual(h.out.toSender.filter(function (m) { return m.type === "queued_message_cancelled"; }).map(function (m) { return [m.result, m.text]; }), [["cancelled", "withdraw me"]]);
+    assert.deepEqual(h.out.toOthers.filter(function (m) { return m.type === "queued_message_cancelled"; }),
+      [{ type: "queued_message_cancelled", messageId: ID_A, result: "cancelled" }], "the other page drops its item; no text, so nothing lands in its composer");
+  } finally { h.done(); }
+});
+
+test("(d) a rewind replaces the query with chat queued on the old one: the old entry is dropped with its text, the new query's stays queued", async function () {
+  var a = fakeQuery();
+  var b = fakeQuery();
+  var bridge = null;
+  var h = await harness({ pushMessage: function () { return bridge.pushMessage.apply(null, arguments); } });
+  try {
+    bridge = bridgeFor(h, [a, b]);
+    h.ws._clagenticActiveSession = h.session.localId;
+    await bridge.startQuery(h.session, "first", null, null);
+    h.session.isProcessing = true;
+    h.send({ type: "message", text: "queued on the old query", messageId: ID_A });
+    assert.deepEqual(a.pushed.slice(-1), [ID_A]);
+
+    // rewind_execute: the old query is aborted and unlinked from the session, then a
+    // message starts a new one while the old stream is still unwinding.
+    h.session.queryInstance = null;
+    h.session.isProcessing = false;
+    await bridge.startQuery(h.session, "after the rewind", null, null);
+    h.session.isProcessing = true;
+    h.send({ type: "message", text: "queued on the new query", messageId: ID_B });
+    assert.deepEqual(b.pushed.slice(-1), [ID_B]);
+
+    a.finish();
+    await settle();
+    assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.cause, m.text]; }), [[ID_A, "closed", "queued on the old query"]],
+      "the old query's message is no longer drawn as queued: its text goes back");
+    assert.equal(queuedChat.has(h.session, ID_A), false);
+    assert.equal(queuedChat.has(h.session, ID_B), true, "the live query's message is left alone");
+    b.finish();
+    await settle();
+  } finally { h.done(); }
+});
+
+test("two tabs on one session and a dropped reply: the text is sent to the session once and never pushed to the agent again", async function () {
+  var h = await harness();
+  try {
+    var tab = { id: "second tab" };
+    h.ws._clagenticActiveSession = h.session.localId;
+    tab._clagenticActiveSession = h.session.localId;
+    h.clients.add(tab);
+    h.send({ type: "message", text: "in two composers at most", messageId: ID_A });
+    queuedChat.dropAll(h.session);
+    assert.equal(droppedReplies(h).length, 1, "one reply for the session: each tab hands it to its own composer, never to the agent");
+    assert.equal(h.out.pushed.length, 1, "only the original push ever reached the agent");
+    h.sendFrom(tab, { type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    assert.deepEqual(h.replies().map(function (r) { return r.result; }), ["already_delivered"], "the second tab cannot withdraw or restore it again");
+    assert.equal(queuedChat.dropAll(h.session).length, 0);
+    assert.equal(h.out.pushed.length, 1);
+    var restarted = h.restart();
+    var viewer = { id: "after" };
+    restarted.sm.switchSession(restarted.session.localId, viewer);
+    assert.deepEqual(framesTo(restarted.shown, viewer, "queued_message_cancelled"), [], "a viewer saw the reply, so nothing is kept to hand back later");
   } finally { h.done(); }
 });

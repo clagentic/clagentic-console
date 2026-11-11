@@ -399,3 +399,120 @@ test("a dropped reply is worded by its cause: a turn that did not take it, or th
   answer(env, id3, "dropped", { text: "query closed", cause: "closed" });
   assert.ok(sysText().some(function (t) { return /session ended before this message was delivered/.test(t); }));
 });
+
+var TRACKED_ID = "5e1f5e1f-0000-4000-8000-000000000001";
+function tracked(env, extra) {
+  env.us.handleQueuedMessageTracked(Object.assign({ type: "queued_message_tracked", messageId: TRACKED_ID, text: "from before the reload", pastes: [], imageCount: 0, unconfirmed: false }, extra || {}));
+}
+
+test("after a reload the server's tracked frame draws the waiting message as queued, with working controls", async function () {
+  var env = await setup(CAN_CANCEL);
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  assert.deepEqual(queuedTexts(), []);
+  tracked(env);
+  assert.deepEqual(queuedTexts(), ["from before the reload"]);
+  tracked(env);
+  assert.equal(queuedEls().length, 1, "a second frame for the same id draws nothing more");
+  btn(queuedEls()[0], "shell-queued-cancel").click();
+  assert.deepEqual(frames(env, "cancel_queued_message"), [{ type: "cancel_queued_message", messageId: TRACKED_ID }]);
+  answer(env, TRACKED_ID, "cancelled", { text: "from before the reload", pastes: [], imageCount: 0 });
+  assert.deepEqual(queuedTexts(), []);
+});
+
+test("a redrawn item turns into nothing on delivery: the transcript already gets the message from the server, so it is not shown twice", async function () {
+  var env = await setup(CAN_CANCEL);
+  tracked(env);
+  delivered(env, TRACKED_ID);
+  assert.deepEqual(queuedTexts(), []);
+  assert.deepEqual(env.shown, [], "the message arrives as the session's own user message, not from the item");
+});
+
+test("a redrawn item that was dropped hands its text to the composer, and one withdrawn on another page just goes", async function () {
+  var env = await setup(CAN_CANCEL);
+  tracked(env);
+  answer(env, TRACKED_ID, "dropped", { text: "from before the reload", cause: "closed" });
+  assert.deepEqual(queuedTexts(), []);
+  assert.equal(env.ctx.inputEl.value, "from before the reload");
+
+  var env2 = await setup(CAN_CANCEL);
+  tracked(env2);
+  answer(env2, TRACKED_ID, "cancelled");
+  assert.deepEqual(queuedTexts(), [], "withdrawn elsewhere: the item is dropped");
+  assert.equal(env2.ctx.inputEl.value, "", "no text came with it, so nothing lands in this composer");
+});
+
+test("a tracked frame in doubt is drawn with its controls disabled", async function () {
+  var env = await setup(CAN_CANCEL);
+  tracked(env, { unconfirmed: true });
+  assert.equal(btn(queuedEls()[0], "shell-queued-cancel").getAttribute("aria-disabled"), "true");
+});
+
+// The server echoes a delivered message to every socket but the sender's. Each row
+// counts the transcript's copies: the item's own render plus the echo it receives.
+function copiesInTranscript(env, echoReachesPage) {
+  return env.shown.length + (echoReachesPage ? 1 : 0);
+}
+
+test("the sending socket switches session away and back while the chat is queued: delivery shows the message once", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "across a switch");
+  var id = chat(env)[0].messageId;
+  els.messages._children = [];
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  tracked(env, { messageId: id, text: "across a switch" });
+  assert.deepEqual(queuedTexts(), ["across a switch"]);
+  delivered(env, id);
+  assert.deepEqual(queuedTexts(), []);
+  assert.deepEqual(env.shown, ["across a switch"], "this socket gets no echo, so its item draws the message");
+  assert.equal(copiesInTranscript(env, false), 1);
+});
+
+test("a reloaded page (a new socket) shows the delivered message once, from the server's echo", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "across a reload");
+  var id = chat(env)[0].messageId;
+  els.messages._children = [];
+  env.ctx.ws = { readyState: 1, send: function () {} };
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  tracked(env, { messageId: id, text: "across a reload" });
+  delivered(env, id);
+  assert.deepEqual(env.shown, [], "the item draws nothing: the echo does");
+  assert.equal(copiesInTranscript(env, true), 1);
+});
+
+test("a second tab shows the delivered message once, from the server's echo", async function () {
+  var env = await setup(CAN_CANCEL);
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  tracked(env, { messageId: "5e1f5e1f-0000-4000-8000-000000000002", text: "typed in the other tab" });
+  delivered(env, "5e1f5e1f-0000-4000-8000-000000000002");
+  assert.deepEqual(env.shown, []);
+  assert.equal(copiesInTranscript(env, true), 1);
+});
+
+// A message that ends while the page shows another session leaves no sender record
+// behind: seen through a later tracked frame for the same id, which is drawn as
+// redrawn (the echo shows the message) only when no record of this socket's send remains.
+test("a delivery or a final answer for a message with no item leaves no sender record", async function () {
+  var ends = [
+    function (env, id) { delivered(env, id); },
+    function (env, id) { answer(env, id, "cancelled"); },
+    function (env, id) { answer(env, id, "dropped", { text: "x", cause: "closed" }); },
+  ];
+  for (var i = 0; i < ends.length; i++) {
+    var env = await setup(CAN_CANCEL);
+    type(env, "ended elsewhere " + i);
+    var id = chat(env)[0].messageId;
+    env.us.handleSessionShown(new FakeElement("textarea"));
+    env.us.handleHistoryReplayed();
+    ends[i](env, id);
+    els.messages._children = [];
+    env.shown.length = 0;
+    tracked(env, { messageId: id, text: "same id again" });
+    delivered(env, id);
+    assert.deepEqual(env.shown, [], "row " + i + ": no record of the earlier send, so the item is a redrawn one");
+  }
+});
