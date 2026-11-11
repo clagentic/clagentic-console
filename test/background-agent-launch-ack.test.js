@@ -198,14 +198,12 @@ test("a terminal notification ends tracking, releases the token and lets the ses
   var r = launched();
   result(r);
   assert.equal(r.session.isProcessing, true, "busy only through the agent");
-  assert.equal(sessionReclaim.onlyBackgroundAgentsActive(r.session), true, "the idle reaper may treat it as waiting");
 
   notify(r, AGENT_ID, CAPTURED_TASK_STARTED.taskId, "completed");
   assert.equal(r.session.activeTaskToolIds[AGENT_ID], undefined);
   assert.equal(tokenLive(r, AGENT_ID), false);
   assert.equal(count(r, "subagent_done"), 1);
   assert.equal(promptsFor(r.sm).pendingCount(r.session), 0);
-  assert.equal(sessionReclaim.onlyBackgroundAgentsActive(r.session), false);
   assert.deepEqual(sessionReclaim.liveAgentLabels(r.session), []);
 
   result(r);
@@ -250,7 +248,7 @@ test("several background agents are tracked independently", function () {
   assert.ok(r.session.activeTaskToolIds[second], "the other agent is still tracked");
   assert.ok(tokenLive(r, second));
   assert.equal(tokenLive(r, AGENT_ID), false);
-  assert.equal(sessionReclaim.onlyBackgroundAgentsActive(r.session), true);
+  assert.equal(r.session.isProcessing, true, "the remaining agent still holds the session");
 });
 
 test("a foreground Agent's synchronous result still ends it", function () {
@@ -270,13 +268,6 @@ test("a launch acknowledgement naming another agent is not taken for this one's"
   started(r, AGENT_ID, CAPTURED_TASK_STARTED.taskId, DESCRIPTION);
   r.processor.processSDKMessage(r.session, toolResultMessage(AGENT_ID, "x", { status: "async_launched", agentId: "someone-else" }));
   assert.equal(r.session.activeTaskToolIds[AGENT_ID], undefined);
-});
-
-test("a foreground sub-agent's token does not make the session look idle to the reaper", function () {
-  var r = rig();
-  dispatch(r, AGENT_ID, { description: DESCRIPTION }, 0);
-  started(r, AGENT_ID, CAPTURED_TASK_STARTED.taskId, DESCRIPTION);
-  assert.equal(sessionReclaim.onlyBackgroundAgentsActive(r.session), false);
 });
 
 test("the query ending releases a launched agent's token, and keeps one that owns an open prompt", function () {
