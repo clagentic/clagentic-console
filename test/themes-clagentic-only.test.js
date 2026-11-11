@@ -179,21 +179,8 @@ test("labels: the shipped themes are named Light and Dark, never Clagentic Light
   var light = JSON.parse(fs.readFileSync(path.join(THEMES_DIR, "clagentic-light.json"), "utf8"));
   assert.equal(dark.name, "Dark");
   assert.equal(light.name, "Light");
-  assert.equal(p.CLAGENTIC_DARK.name, "Dark");
-  assert.equal(p.CLAGENTIC_LIGHT.name, "Light");
   p.buildThemeOptions([]).forEach(function (o) {
     assert.ok(!/clagentic/i.test(o.label + " " + o.description), o.key);
-  });
-});
-
-test("built-in fallback palettes equal the shipped theme files", async function () {
-  var p = await prefs();
-  ["clagentic-dark", "clagentic-light"].forEach(function (id) {
-    var file = JSON.parse(fs.readFileSync(path.join(THEMES_DIR, id + ".json"), "utf8"));
-    var built = id === "clagentic-dark" ? p.CLAGENTIC_DARK : p.CLAGENTIC_LIGHT;
-    Object.keys(built).forEach(function (k) {
-      assert.deepEqual(built[k], file[k], id + " " + k);
-    });
   });
 });
 

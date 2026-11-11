@@ -269,6 +269,22 @@ test("the server serves the first-paint stylesheet and the stamped manifest from
   assert.match(server, /urlPath === "\/theme-seed\.css"[\s\S]*themeSeed\.firstPaintCss\(\)/);
   assert.match(server, /urlPath === "\/manifest\.json"[\s\S]*themeSeed\.stampManifest/);
   assert.match(server, /themeSeed\.stampServiceWorker\(/);
+  assert.match(server, /urlPath === "\/modules\/theme-builtin\.js"[\s\S]*themeSeed\.builtinPalettesModule/);
+});
+
+test("the built-in palettes the client imports are generated from the theme files", async function () {
+  var src = themeSeed.builtinPalettesModule();
+  var mod = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"));
+  assert.deepEqual(mod.CLAGENTIC_DARK, THEMES.dark);
+  assert.deepEqual(mod.CLAGENTIC_LIGHT, THEMES.light);
+  assert.ok(!fs.existsSync(path.join(PUBLIC, "modules", "theme-builtin.js")), "generated, never a second file");
+  assert.match(read(path.join(PUBLIC, "modules", "theme.js")), /from '\.\/theme-builtin\.js'/);
+});
+
+test("a themed route that fails is logged with its route and message, then falls through", function () {
+  var server = read(path.join(ROOT, "lib", "server.js"));
+  var fn = server.slice(server.indexOf("function serveThemed"), server.indexOf("function serveStatic"));
+  assert.match(fn, /catch \(e\) \{[^}]*console\.error\([^)]*urlPath[^)]*e\.message[^}]*return false;/);
 });
 
 test("the sign-in and setup pages take the variables of the theme files", function () {
@@ -467,6 +483,21 @@ var COLOUR_VALUE = /^(#[0-9A-Fa-f]{6}|rgba\(\d+, \d+, \d+, [0-9.]+\)|\d+, \d+, \
   });
 });
 
+test("custom theme: on-av is chosen against the stated avatar fills, not the derived ones", function () {
+  [["dark", sixteen], ["light", sixteenLight]].forEach(function (row) {
+    var base = row[1]();
+    var derived = core.resolveTokens(themeFiles.normalizeTheme(base));
+    // A fill the derived on-av would fail on: the opposite end of the range.
+    var fill = row[0] === "dark" ? "0A0904" : "F5FAFD";
+    var themed = themeFiles.normalizeTheme(Object.assign({}, base, { tokens: { av0: fill, av1: fill, av2: fill, av3: fill } }));
+    var t = core.resolveTokens(themed);
+    ["av0", "av1", "av2", "av3"].forEach(function (k) {
+      assert.ok(core.contrast(t["on-av"], t[k]) >= 4.5, row[0] + " on-av on stated " + k);
+    });
+    assert.notEqual(t["on-av"], derived["on-av"], row[0] + ": the stated fill changed the choice");
+  });
+});
+
 test("custom theme: a tokens object states exact colours, the rest stay derived, a bad value skips the file", function () {
   var bare = core.deriveVars(themeFiles.normalizeTheme(sixteen()));
   var themed = themeFiles.normalizeTheme(sixteen({ tokens: { "sidebar-bg": "112233", "warning": "FFAA00", "unknown": "zz" } }));
@@ -521,7 +552,7 @@ test("single source: no stylesheet or script sets a theme variable to a literal 
   assert.deepEqual(offenders, []);
 });
 
-test("single source: the files that paint the shell hold no palette value of Dark or Light", function () {
+test("single source: no shipped script, page or manifest holds a palette value of Dark or Light", function () {
   var palette = {};
   ["dark", "light"].forEach(function (mode) {
     Object.keys(FILES[mode]).forEach(function (k) {
@@ -534,12 +565,17 @@ test("single source: the files that paint the shell hold no palette value of Dar
   // palette choice.
   delete palette.FFFFFF;
   delete palette["000000"];
-  var hold = [
-    path.join(PUBLIC, "index.html"), path.join(PUBLIC, "css", "base.css"), path.join(PUBLIC, "modules", "theme.js"),
-    path.join(PUBLIC, "modules", "theme-colors.js"), path.join(PUBLIC, "theme-core.js"), path.join(PUBLIC, "sw.js"),
-    path.join(PUBLIC, "manifest.json"), path.join(ROOT, "lib", "pages.js"),
-    path.join(ROOT, "lib", "theme-seed.js"), path.join(ROOT, "lib", "theme-files.js")
-  ];
+  // Every shipped script, page and manifest is scanned. These files carry a
+  // colour that only coincides with a palette value (a user's default colour,
+  // the logo mark, component styles in the page body): it is not a theme token,
+  // and replacing it belongs to the colour sweep, so a hit there is not a
+  // second declaration of a token.
+  var notTokens = ["users.js", "server-settings.js", "server-auth.js", "project-user-mention.js", "server-dm.js",
+                   "server.js", "daemon.js", "mention.js", "console-logo.js", "profile.js"];
+  var hold = sourceFiles(path.join(ROOT, "lib"), [".js", ".json", ".html"]).filter(function (file) {
+    return file.indexOf(THEMES_DIR + path.sep) !== 0 && path.basename(file) !== "emoji-data.json" &&
+      notTokens.indexOf(path.basename(file)) === -1;
+  }).concat([path.join(PUBLIC, "css", "base.css")]);
   var found = [];
   hold.forEach(function (file) {
     var m;
@@ -553,13 +589,10 @@ test("single source: the files that paint the shell hold no palette value of Dar
   assert.deepEqual(found, []);
 });
 
-test("single source: the theme module's built-in palettes are the theme files, token for token", async function () {
-  var prefs = await import(pathToFileURL(path.join(PUBLIC, "modules", "theme-prefs.js")).href);
-  [["dark", prefs.CLAGENTIC_DARK], ["light", prefs.CLAGENTIC_LIGHT]].forEach(function (row) {
-    var file = Object.assign({}, FILES[row[0]]);
-    delete file.author;
-    assert.deepEqual(row[1], file, row[0]);
-  });
+test("single source: the theme module declares no palette of its own", function () {
+  var prefs = read(path.join(PUBLIC, "modules", "theme-prefs.js"));
+  assert.ok(!/CLAGENTIC_(DARK|LIGHT)\s*=/.test(prefs));
+  assert.ok(!/base0[0-9A-F]\s*:/.test(prefs));
 });
 
 test("single source: one derivation, used by the browser and the server", function () {
