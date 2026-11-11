@@ -1243,7 +1243,13 @@ detector:**
    declines nothing: the type is registered `survivesClearAll`, so
    `dismissAll` in `lib/project-notifications.js` leaves it held and neither
    resolves it nor reports it to the daemon; `notification_dismissed_all`
-   carries `kept` (the ids left standing). Push is unchanged: the offer's push
+   carries `kept` (the ids left standing), computed per viewer so a
+   non-admin is never told an admin-only id. The diagnostics panel's clear-all
+   keeps the offer entry and its pop-up the same way. A refresh of the offer
+   reaches the page as a `notification_dismissed` marked `replaced: true`
+   followed by the new notification: the page keeps the pop-up on screen and
+   swaps it, and only a dismissal without `replaced` (a resolve or decline)
+   withdraws the offer. Push is unchanged: the offer's push
    follows the user's system push preference. The banner does not survive a daemon restart (the type
    is `ephemeral`). The restart confirmation (`confirm_build_update_restart`)
    is a diagnostic answering the operator's own click, not a notification: it

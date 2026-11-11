@@ -392,3 +392,95 @@ test("a connecting page is sent its preferences before the notification state, s
   store.sendConnectionState({ _clagenticUser: { id: ADMIN } }, function (ws, m) { order.push(m.type); }, null);
   assert.deepEqual(order, ["notification_prefs", "notifications_state"]);
 });
+
+// ---------------------------------------------------------------------------
+// Fold round 2.
+// ---------------------------------------------------------------------------
+
+test("R-573-1: a non-admin's clear-all message carries no admin-only id; the admin's names the offer", function () {
+  var VIEWERS = [ADMIN, "member-2"];
+  var out = {};
+  var store = attachNotifications({
+    broadcastAll: function () {},
+    broadcastPerViewer: function (build) { VIEWERS.forEach(function (v) { out[v] = build(v); }); },
+    sendToUser: function () {},
+    isMultiUser: MULTI,
+    listAdmins: function () { return [ADMIN]; },
+  });
+  var env = { push: null, inApp: store, isMultiUser: MULTI, listAdmins: function () { return [ADMIN]; } };
+  buildNotify.showBuildOffer(env, composeNotice(stale("r1"), LISTED));
+  var held = null;
+  store.sendConnectionState({ _clagenticUser: { id: ADMIN } }, function (ws, m) { held = m; }, null);
+  var offerId = held.notifications.filter(function (n) { return n.type === "build_update_offer"; })[0].id;
+  assert.ok(offerId, "the admin holds the offer");
+  assert.equal(store.handleNotificationMessage({ _clagenticUser: { id: ADMIN } }, { type: "notification_dismiss_all" }), true);
+  assert.deepEqual(out[ADMIN].kept, [offerId], "the admin is told what stands");
+  assert.deepEqual(out["member-2"].kept, [], "the member is told no admin-only id");
+  assert.ok(JSON.stringify(out["member-2"]).indexOf(offerId) === -1, "the id appears nowhere in the member's message");
+});
+
+test("R-573-2: a refresh of an offer on screen, through show(), keeps one pop-up with the updated content", async function (t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  w.poll(); w.poll();
+  page.deliver(w);
+  assert.equal(page.popups().length, 1);
+  var before = page.popups()[0].textContent;
+  var from = w.frames.length;
+  await w.settle();
+  var refresh = w.frames.slice(from);
+  assert.deepEqual(refresh.map(function (m) { return m.type; }), ["notification_dismissed", "notification_created"]);
+  assert.equal(refresh[0].replaced, true, "the dismissal says a replacement follows");
+  // The dismissal and the replacement are separate frames; the page's own
+  // animation can finish between them.
+  page.receive(refresh[0]);
+  t.mock.timers.tick(300);
+  assert.equal(page.popups().length, 1, "the pop-up is not lost on the dismissal");
+  page.receive(refresh[1]);
+  t.mock.timers.tick(300);
+  assert.equal(page.popups().length, 1, "still one pop-up");
+  assert.notEqual(page.popups()[0].textContent, before, "carrying the refreshed content");
+});
+
+test("R-573-2: a resolve (no replacement) still withdraws the offer and its pop-up", async function (t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  w.poll(); w.poll();
+  await w.settle();
+  page.deliver(w);
+  var from = w.frames.length;
+  buildNotify.resolveBuildOffer({ push: w.push, inApp: w.store, isMultiUser: MULTI, listAdmins: function () { return [ADMIN]; } });
+  page.deliver(w, from);
+  t.mock.timers.tick(300);
+  assert.equal(page.popups().length, 0, "gone");
+});
+
+test("R-573-3: the diagnostics clear-all keeps the offer entry and its pop-up, declines nothing, and clears the rest", async function (t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  var panel = new dom.FakeElement("div");
+  var list = new dom.FakeElement("div");
+  var toggle = new dom.FakeElement("button");
+  var badge = new dom.FakeElement("span");
+  var clearAll = new dom.FakeElement("button");
+  clearAll.className = "diagnostics-panel-clear-all";
+  panel.appendChild(clearAll);
+  var byId = { "diagnostic-toast-container": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-list": list, "diagnostics-panel-btn": toggle, "diagnostics-panel-badge": badge };
+  global.document.getElementById = function (id) { return byId[id] || null; };
+  page.diagnostics.initDiagnostics();
+  w.poll(); w.poll();
+  await w.settle();
+  page.deliver(w);
+  page.diagnostics.addDiagnostic({ type: "diagnostic", severity: "warning", source: "other-source", message: "something else" });
+  assert.equal(list.querySelectorAll(".diagnostics-item").length, 2);
+  page.sent.length = 0;
+  clearAll.click();
+  t.mock.timers.tick(300);
+  assert.equal(list.querySelectorAll(".diagnostics-item").length, 1, "only the offer's entry is left");
+  assert.equal(page.popups().length, 1, "its pop-up is still there");
+  assert.equal(page.toasts.querySelectorAll('[data-diag-source="other-source"]').length, 0, "other toasts went");
+  assert.deepEqual(page.sent, [], "nothing was declined");
+  // Its own entry's dismiss is a decline.
+  list.querySelectorAll(".diagnostics-item-dismiss")[0].click();
+  assert.equal(page.sent.filter(function (m) { return m.type === "notification_dismiss"; }).length, 1);
+});
