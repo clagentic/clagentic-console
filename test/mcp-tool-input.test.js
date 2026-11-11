@@ -42,8 +42,9 @@ test("why ajv decides: zod's own converter alone accepts what these schemas reje
   var widened = [
     [{ type: "object", required: ["k"] }, {}],
     [{ type: "string", enum: ["fast", 1] }, 1],
-    [{ type: "array", uniqueItems: true }, [1, 1]],
   ];
+  // zod 4.6 enforces uniqueItems itself, so it is no longer a widened case; the
+  // "gate: uniqueItems rejects duplicates" test still covers the behavior.
   widened.forEach(function (pair) {
     assert.equal(z.fromJSONSchema(pair[0]).safeParse(pair[1]).success, true, JSON.stringify(pair[0]));
   });
