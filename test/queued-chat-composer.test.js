@@ -447,3 +447,48 @@ test("a tracked frame in doubt is drawn with its controls disabled", async funct
   tracked(env, { unconfirmed: true });
   assert.equal(btn(queuedEls()[0], "shell-queued-cancel").getAttribute("aria-disabled"), "true");
 });
+
+// The server echoes a delivered message to every socket but the sender's. Each row
+// counts the transcript's copies: the item's own render plus the echo it receives.
+function copiesInTranscript(env, echoReachesPage) {
+  return env.shown.length + (echoReachesPage ? 1 : 0);
+}
+
+test("the sending socket switches session away and back while the chat is queued: delivery shows the message once", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "across a switch");
+  var id = chat(env)[0].messageId;
+  els.messages._children = [];
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  tracked(env, { messageId: id, text: "across a switch" });
+  assert.deepEqual(queuedTexts(), ["across a switch"]);
+  delivered(env, id);
+  assert.deepEqual(queuedTexts(), []);
+  assert.deepEqual(env.shown, ["across a switch"], "this socket gets no echo, so its item draws the message");
+  assert.equal(copiesInTranscript(env, false), 1);
+});
+
+test("a reloaded page (a new socket) shows the delivered message once, from the server's echo", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "across a reload");
+  var id = chat(env)[0].messageId;
+  els.messages._children = [];
+  env.ctx.ws = { readyState: 1, send: function () {} };
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  tracked(env, { messageId: id, text: "across a reload" });
+  delivered(env, id);
+  assert.deepEqual(env.shown, [], "the item draws nothing: the echo does");
+  assert.equal(copiesInTranscript(env, true), 1);
+});
+
+test("a second tab shows the delivered message once, from the server's echo", async function () {
+  var env = await setup(CAN_CANCEL);
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  tracked(env, { messageId: "5e1f5e1f-0000-4000-8000-000000000002", text: "typed in the other tab" });
+  delivered(env, "5e1f5e1f-0000-4000-8000-000000000002");
+  assert.deepEqual(env.shown, []);
+  assert.equal(copiesInTranscript(env, true), 1);
+});
