@@ -142,8 +142,8 @@ test("a re-issued offer notification replaces the entry in place: one action but
   c.diagnostics.addDiagnostic(confirmOffer("tok-5"));
   c.diagnostics.applyBuildOffer(offerNotification("n2", "A newer build is installed (changes read)."));
   c.settle();
-  assert.equal(c.container.querySelectorAll("button").filter(function (b) { return b.textContent === "Restart to apply update"; }).length, 0, "the offer shows no toast: its banner is the alert");
-  assert.equal(c.toastsOf("build-update").length, 1, "only the confirmation the operator asked for is a toast");
+  assert.equal(c.container.querySelectorAll("button").filter(function (b) { return b.textContent === "Restart to apply update"; }).length, 1, "the offer is a pop-up with the restart action, replaced in place by the re-issue");
+  assert.equal(c.toastsOf("build-update").length, 2, "the offer's pop-up and the confirmation the operator asked for");
   assert.ok(c.button("Restart now"), "the confirmation the operator is reading was not replaced");
   assert.deepEqual(c.sent, []);
   // The re-issue was applied: the offer now held is the second notification, so
