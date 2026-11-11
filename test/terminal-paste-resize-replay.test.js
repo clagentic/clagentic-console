@@ -27,6 +27,7 @@ var WIRE_PAYLOAD = LF_PAYLOAD.replace(/\n/g, "\r");
 
 var OSC11_QUERY = "\x1b]11;?\x07";
 var OSC11_REPLY = "\x1b]11;rgb:0505/0707/0e0e\x07";
+var PASTE_DURING = "echo pasted\r";
 
 async function harness(opts) {
   opts = opts || {};
@@ -145,6 +146,37 @@ test("replay: query replies emitted while replaying are not forwarded, later key
   h.flushWrites();
   h.xterm.emit("l");
   assert.deepEqual(h.inputs().map(function (m) { return m.data; }), ["l"]);
+});
+
+test("replay: user input typed during a replay reaches the PTY, replies do not", async function () {
+  var h = await harness();
+  h.T.handleTermOutput({ id: "t1", data: "big scrollback", replay: true });
+  h.xterm.emit("ls\r");
+  h.xterm.emit(OSC11_REPLY);
+  h.xterm.emit("\x1b[12;40R");
+  h.xterm.emit("\x1b[?62;4c");
+  h.xterm.emit(PASTE_DURING);
+  assert.deepEqual(h.inputs().map(function (m) { return m.data; }), ["ls\r", PASTE_DURING]);
+});
+
+test("replay: a chunk mixing a reply and user bytes is forwarded without the reply", async function () {
+  var h = await harness();
+  h.T.handleTermOutput({ id: "t1", data: "big scrollback", replay: true });
+  h.xterm.emit("a" + OSC11_REPLY + "b\x1b[1;1Rc");
+  assert.deepEqual(h.inputs().map(function (m) { return m.data; }), ["abc"]);
+});
+
+test("replay: a write callback that never fires cannot leave the tab suppressed", async function () {
+  var h = await harness();
+  h.T.handleTermOutput({ id: "t1", data: "first", replay: true });
+  // The callback is lost (xterm reset or disposed mid-write); the next replay takes over.
+  h.T.handleTermOutput({ id: "t1", data: "second", replay: true });
+  h.flushWrites();
+  h.xterm.emit("k");
+  assert.deepEqual(h.inputs().map(function (m) { return m.data; }), ["k"]);
+  // A stale callback from the superseded replay must not clear a newer replay.
+  h.T.handleTermOutput({ id: "t1", data: "third " + OSC11_QUERY, replay: true });
+  assert.equal(h.inputs().length, 1);
 });
 
 test("live output that asks a query is still answered", async function () {
