@@ -277,6 +277,91 @@ test("a context built without the service answers an error rather than throwing"
   assert.equal(sent[0].type, "error");
 });
 
+// Every cancel or send-now carrying a requestId ends in exactly one answer that carries it.
+var ANSWERED = ["cancel_scheduled_message", "send_scheduled_now"];
+
+function answerHarness(service, session) {
+  var sent = [];
+  var handlers = createWsHandlers({ slug: SLUG, service: service, getSessionForWs: function () { return session; }, sendTo: function (w, o) { sent.push(o); } });
+  return { sent: sent, handlers: handlers };
+}
+
+var SEND_FAILS = [
+  { name: "rejects", sendNow: function () { return Promise.reject(new Error("secret-detail")); }, detail: "secret-detail" },
+  { name: "throws", sendNow: function () { throw new Error("secret-detail"); }, detail: "secret-detail" },
+  { name: "resolves to undefined", sendNow: function () { return Promise.resolve(undefined); }, detail: "undefined" },
+  { name: "resolves to null", sendNow: function () { return Promise.resolve(null); }, detail: "null" },
+  { name: "resolves to a primitive", sendNow: function () { return Promise.resolve("secret-detail"); }, detail: "string" },
+];
+
+var ANSWER_ROWS = [
+  { name: "no session: one error naming the requestId; without one, nothing", run: function () {
+    ANSWERED.forEach(function (type) {
+      var h = answerHarness(null, null);
+      assert.equal(h.handlers.handle({}, { type: type, requestId: "sr_n" }), true);
+      assert.equal(h.sent.length, 1, type);
+      assert.equal(h.sent[0].type, "error");
+      assert.equal(h.sent[0].requestId, "sr_n");
+      assert.match(h.sent[0].text, /^Clagentic: Console /);
+      h.sent.length = 0;
+      h.handlers.handle({}, { type: type });
+      assert.deepEqual(h.sent, [], type + " without a requestId stays silent");
+    });
+  } },
+  { name: "no service: the refusal carries the requestId when the request had one, and only then", run: function () {
+    ANSWERED.forEach(function (type) {
+      var h = answerHarness(null, {});
+      h.handlers.handle({}, { type: type, requestId: "sr_s" });
+      assert.equal(h.sent.length, 1, type);
+      assert.equal(h.sent[0].requestId, "sr_s");
+      h.sent.length = 0;
+      h.handlers.handle({}, { type: type });
+      assert.equal(h.sent.length, 1, type);
+      assert.equal("requestId" in h.sent[0], false);
+    });
+  } },
+].concat(SEND_FAILS.map(function (row) {
+  return { name: "sendNow " + row.name + ": one generic error naming the requestId, the detail only logged, no unhandled rejection", run: async function () {
+    var logged = [];
+    var unhandled = [];
+    var onUnhandled = function (e) { unhandled.push(e); };
+    var realError = console.error;
+    console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      var h = answerHarness({ sendNow: row.sendNow, armedForSession: function () { return []; } }, {});
+      h.handlers.handle({}, { type: "send_scheduled_now", id: "si_1", requestId: "sr_f" });
+      await fakes.flush();
+      await new Promise(function (resolve) { setImmediate(resolve); });
+      assert.equal(h.sent.length, 1);
+      assert.equal(h.sent[0].type, "error");
+      assert.equal(h.sent[0].requestId, "sr_f");
+      assert.equal(h.sent[0].text, "Clagentic: Console could not send that now");
+      assert.ok(logged.some(function (l) { return l.indexOf(row.detail) !== -1; }), "detail logged");
+      assert.deepEqual(unhandled, []);
+    } finally {
+      console.error = realError;
+      process.removeListener("unhandledRejection", onUnhandled);
+    }
+  } };
+})).concat([
+  { name: "the logged id is capped at 64 characters and stripped of control characters", run: async function () {
+    var logged = [];
+    var realError = console.error;
+    console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+    try {
+      var h = answerHarness({ sendNow: function () { return Promise.reject(new Error("x")); }, armedForSession: function () { return []; } }, {});
+      h.handlers.handle({}, { type: "send_scheduled_now", id: "a\nb\u001b[31m" + "z".repeat(200), requestId: "sr_l" });
+      await fakes.flush();
+      assert.equal(logged.length, 1);
+      assert.equal(/[\u0000-\u001f\u007f]/.test(logged[0]), false);
+      assert.equal(logged[0].indexOf("z".repeat(65)), -1);
+    } finally { console.error = realError; }
+  } },
+]);
+
+ANSWER_ROWS.forEach(function (row) { test(row.name, row.run); });
+
 // --- the CLI: parsing ---
 
 function local(y, mo, d, h, mi) {
