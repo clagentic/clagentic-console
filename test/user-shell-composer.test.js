@@ -87,7 +87,16 @@ async function setup(opts) {
     addUserMessage: function (text) { env.shown.push(text); },
     messageUuidMap: function () { return []; },
   };
+  // initInput registers the paste handler on the document; keep it so a test can
+  // fire a paste the way the browser would.
+  env.pasteListeners = [];
+  var addListener = global.document.addEventListener;
+  global.document.addEventListener = function (type, fn) {
+    if (type === "paste") env.pasteListeners.push(fn);
+    return addListener.apply(this, arguments);
+  };
   input.initInput(env.ctx);
+  global.document.addEventListener = addListener;
   return env;
 }
 
@@ -662,6 +671,112 @@ test("Ctrl+Enter puts queued ! entries ahead of queued chat, with no draft neede
   assert.equal(lastShell(env).command, "cmd");
 });
 
+// ---------------------------------------------------------------- ! with a collapsed paste
+
+var HEREDOC = "bash -euo pipefail <<'EOF'\n" + "echo line\n".repeat(60) + "EOF\n";
+
+// A paste of 500+ characters collapses to a chip instead of entering the textarea.
+function paste(env, text) {
+  var ev = {
+    target: {},
+    prevented: false,
+    preventDefault: function () { ev.prevented = true; },
+    clipboardData: { files: [], items: [], getData: function (t) { return t === "text/plain" ? text : ""; } },
+  };
+  env.pasteListeners.forEach(function (fn) { fn(ev); });
+  return ev;
+}
+
+// An image paste goes through FileReader, which the test runtime lacks.
+function pasteImage(env) {
+  var saved = global.FileReader;
+  global.FileReader = function () {
+    var self = this;
+    this.readAsDataURL = function () { self.onload({ target: { result: "data:image/png;base64,AAAA" } }); };
+  };
+  var ev = {
+    target: {},
+    preventDefault: function () {},
+    clipboardData: { files: [{ type: "image/png", name: "" }], items: [], getData: function () { return ""; } },
+  };
+  try { env.pasteListeners.forEach(function (fn) { fn(ev); }); } finally { global.FileReader = saved; }
+}
+
+test("! plus a collapsed paste runs the paste as one shell command, never as chat", async function () {
+  assert.ok(HEREDOC.length >= 500);
+  var env = await setup();
+  assert.equal(paste(env, HEREDOC).prevented, true, "the paste became a chip");
+  type(env, "!");
+  var shell = frames(env, "shell");
+  assert.equal(shell.length, 1);
+  assert.equal(shell[0].command, HEREDOC);
+  assert.equal(frames(env, "message").length, 0);
+  assert.equal(env.ctx.inputEl.value, "", "the composer is cleared");
+  assert.equal(cards().length, 1, "one running card");
+  assert.equal(env.us.isShellPending(), true);
+});
+
+test("the typed command comes first, then each paste in paste order", async function () {
+  var env = await setup();
+  var a = "first " + "a".repeat(500);
+  var b = "second " + "b".repeat(500);
+  paste(env, a);
+  type(env, "!bash -s");
+  assert.equal(frames(env, "shell")[0].command, "bash -s\n" + a);
+
+  var env2 = await setup();
+  paste(env2, a);
+  paste(env2, b);
+  type(env2, "!bash -s");
+  assert.equal(frames(env2, "shell")[0].command, "bash -s\n" + a + "\n" + b);
+  assert.equal(frames(env2, "message").length, 0);
+});
+
+test("! plus a paste during a turn is queued as a shell entry, not chat", async function () {
+  var env = await setup();
+  env.store.set({ processing: true });
+  paste(env, HEREDOC);
+  type(env, "!");
+  assert.equal(frames(env, "shell").length, 0);
+  assert.equal(frames(env, "message").length, 0);
+  assert.equal(queuedTexts().length, 1);
+  endTurn(env);
+  assert.equal(lastShell(env).command, HEREDOC, "runs when the turn ends");
+  assert.equal(frames(env, "message").length, 0);
+});
+
+test("! plus a paste plus an image stays chat", async function () {
+  var env = await setup();
+  paste(env, HEREDOC);
+  pasteImage(env);
+  type(env, "!");
+  assert.equal(frames(env, "shell").length, 0);
+  var msgs = frames(env, "message");
+  assert.equal(msgs.length, 1);
+  assert.deepEqual(msgs[0].pastes, [HEREDOC]);
+});
+
+test("with ! mode off, ! plus a paste stays chat", async function () {
+  var env = await setup();
+  env.us.handleUserShellSettings({ userShellEnabled: false, userShellTimeoutMinutes: 10, userShellMaxOutputKiB: 256 });
+  paste(env, HEREDOC);
+  type(env, "!");
+  assert.equal(frames(env, "shell").length, 0);
+  assert.equal(frames(env, "message").length, 1);
+});
+
+test("Ctrl+Enter on ! plus a paste takes the shell path", async function () {
+  var env = await setup();
+  env.store.set({ processing: true, vendorCapabilities: CAN_STEER });
+  paste(env, HEREDOC);
+  env.ctx.inputEl.value = "!";
+  press(env, { key: "Enter", ctrlKey: true });
+  assert.equal(frames(env, "message").length, 0, "not sent into the turn as chat");
+  assert.equal(queuedTexts().length, 1, "queued as a command");
+  endTurn(env);
+  assert.equal(lastShell(env).command, HEREDOC);
+});
+
 test("Up from an empty composer takes back only the last queued ! entry when nothing else is queued", async function () {
   var env = await setup();
   env.store.set({ processing: true });
@@ -946,4 +1061,22 @@ test("parseShellLine drops only the ! and the whitespace after it", async functi
   ["!", "!   ", "!\n", "ls", "hello !", "", null, undefined, 5].forEach(function (line) {
     assert.equal(m.parseShellLine(line), null, JSON.stringify(line));
   });
+});
+
+test("shellCommandFrom puts the typed tail first, then the pastes in order", async function () {
+  var m = await import(dom.moduleUrl("shell-line.js"));
+  assert.equal(m.shellCommandFrom("!", ["cat <<EOF\nx\nEOF"]), "cat <<EOF\nx\nEOF");
+  assert.equal(m.shellCommandFrom("  !  bash -s", ["a", "b"]), "bash -s\na\nb");
+  assert.equal(m.shellCommandFrom("!ls", []), "ls");
+  assert.equal(m.shellCommandFrom("!ls", undefined), "ls");
+  assert.equal(m.shellCommandFrom("!", ["a\n", "b"]), "a\n\nb");
+});
+
+test("shellCommandFrom is null for a blank result or a line that is not a command", async function () {
+  var m = await import(dom.moduleUrl("shell-line.js"));
+  assert.equal(m.shellCommandFrom("!", []), null);
+  assert.equal(m.shellCommandFrom("!  ", ["  ", "\n"]), null);
+  assert.equal(m.shellCommandFrom("ls", ["a"]), null, "no leading !");
+  assert.equal(m.shellCommandFrom("hello !", ["a"]), null);
+  assert.equal(m.shellCommandFrom(null, ["a"]), null);
 });
