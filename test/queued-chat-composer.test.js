@@ -542,7 +542,7 @@ test("Send now: each path draws the item as sending or queued, and the text is n
         assert.equal(env.ctx.inputEl.value, "row 6", "restored first");
         delivered(env, id);
       },
-      gone: true, composer: "", shown: [], notes: [/delivered after all/], noNotes: [/no longer held this message/],
+      gone: true, composer: "", shown: ["row 6"], notes: [/delivered after all/], noNotes: [/no longer held this message/],
     },
     {
       name: "receipt miss, then delivered after all: an edited composer is left alone, and nothing is sent",
@@ -552,7 +552,44 @@ test("Send now: each path draws the item as sending or queued, and the text is n
         env.ctx.inputEl.value = "row 7 edited";
         delivered(env, id);
       },
-      gone: true, composer: "row 7 edited", shown: [], notes: [/delivered after all/], noNotes: [/no longer held this message/],
+      gone: true, composer: "row 7 edited", shown: ["row 7"], notes: [/delivered after all/], noNotes: [/no longer held this message/],
+    },
+    {
+      name: "receipt miss: the text is in the composer with a notice, and it is not shown as delivered",
+      run: function (env, id) {
+        sendNowAnswer(env, id, "missed");
+        answer(env, id, "dropped", { text: "row 8", cause: "send_now_missed" });
+      },
+      gone: true, composer: "row 8", shown: [], notes: [/interrupted the turn, but the agent no longer held this message/], noNotes: [/delivered after all/],
+    },
+    {
+      name: "receipt miss, then delivered while another session is shown: that session's composer is left alone, nothing is drawn",
+      run: function (env, id) {
+        sendNowAnswer(env, id, "missed");
+        answer(env, id, "dropped", { text: "row 9", cause: "send_now_missed" });
+        env.store.set({ activeSessionId: env.sid + 1000 });
+        els.messages._children = [];
+        env.us.handleSessionShown(new FakeElement("textarea"));
+        env.ctx.inputEl.value = "row 9";
+        delivered(env, id);
+      },
+      gone: true, composer: "row 9", shown: [], noNotes: [/delivered after all/],
+    },
+    {
+      name: "receipt miss, delivered while another session is shown, then back: settled once from the replayed history, nothing drawn twice",
+      run: function (env, id) {
+        sendNowAnswer(env, id, "missed");
+        answer(env, id, "dropped", { text: "row 10", cause: "send_now_missed" });
+        env.store.set({ activeSessionId: env.sid + 1000 });
+        els.messages._children = [];
+        env.us.handleSessionShown(new FakeElement("textarea"));
+        delivered(env, id);
+        env.store.set({ activeSessionId: env.sid });
+        els.messages._children = [];
+        env.us.handleSessionShown(new FakeElement("textarea"));
+        env.us.handleHistoryReplayed();
+      },
+      gone: true, shown: [], notes: [/delivered after all/],
     },
   ];
   for (var i = 0; i < rows.length; i++) {
@@ -575,21 +612,6 @@ test("Send now: each path draws the item as sending or queued, and the text is n
     (rows[i].noNotes || []).forEach(function (re) { assert.ok(!sysText().some(function (t) { return re.test(t); }), rows[i].name + ": no note " + re); });
     assert.equal(chat(env).length, 1, rows[i].name + ": the text is never sent again");
   }
-});
-
-test("Send now: a receipt miss puts the text in the composer with a notice, and nothing is sent again", async function () {
-  var env = await setup(CAN_CANCEL);
-  type(env, "lost in the interrupt");
-  var id = chat(env)[0].messageId;
-  btn(queuedEls()[0], "shell-queued-send-now").click();
-  sendNowAnswer(env, id, "missed");
-  answer(env, id, "dropped", { text: "lost in the interrupt", cause: "send_now_missed" });
-  assert.deepEqual(queuedTexts(), []);
-  assert.equal(env.ctx.inputEl.value, "lost in the interrupt");
-  assert.ok(sysText().some(function (t) { return /interrupted the turn, but the agent no longer held this message/.test(t); }));
-  assert.equal(chat(env).length, 1, "the page never pushes it again");
-  delivered(env, id);
-  assert.deepEqual(env.shown, [], "not shown as delivered");
 });
 
 test("Send now: a tracked frame with sendNow (a reload, a switch back, a second tab) draws the item as sending, never queued", async function () {
