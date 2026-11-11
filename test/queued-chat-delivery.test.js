@@ -553,8 +553,16 @@ test("a cancelled reply carries the message text; other answers do not", async f
 var ID_C = "33333333-3333-4333-8333-333333333333";
 var ID_D = "44444444-4444-4444-8444-444444444444";
 // A turn's frames reach the session only through the message processor; the end of a turn
-// settles nothing, it only records where the next batch starts.
-function frameOf(h, isResult) { if (isResult) queuedChat.markTurnEnd(h.session); }
+// settles nothing, it only records where the next batch starts. A mid-turn frame goes
+// through the real processor, so one that settled or dropped anything would show in the
+// assertions that follow it. The end of a turn is recorded directly: a real result frame
+// also ends the session's processing, which would turn the next send into an idle one
+// that is never queued, and those rows need the message queued behind the turn.
+function frameOf(h, isResult) {
+  if (isResult) { queuedChat.markTurnEnd(h.session); return; }
+  h.processor = h.processor || processorFor();
+  h.processor.processSDKMessage(h.session, { yokeType: "status", status: null });
+}
 function droppedReplies(h) { return h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled" && m.result === "dropped"; }); }
 function answers(h) { return h.replies().map(function (r) { return r.result; }); }
 
@@ -661,6 +669,50 @@ test("the grace timer after a false cancel settles an idle session", async funct
   } finally { timers.reset(); h.done(); }
 });
 
+test("N pending cancels on one session arm exactly one idle-settle timer, and the settlement happens once", async function () {
+  var timers = require("node:test").mock.timers;
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  var realSet = null;
+  var realClear = null;
+  try {
+    h.send({ type: "message", text: "one", messageId: ID_A });
+    h.send({ type: "message", text: "two", messageId: ID_B });
+    h.send({ type: "message", text: "three", messageId: ID_C });
+    timers.enable({ apis: ["setTimeout"] });
+    // The mocked clock has no count of its live timers, so count them here: a
+    // grace-period timer is live from its arming until it fires or is cleared.
+    var live = new Set();
+    realSet = globalThis.setTimeout;
+    realClear = globalThis.clearTimeout;
+    globalThis.setTimeout = function (fn, ms) {
+      var args = Array.prototype.slice.call(arguments);
+      var handle = null;
+      if (ms === 10000) {
+        args[0] = function () { live.delete(handle); return fn.apply(this, arguments); };
+      }
+      handle = realSet.apply(this, args);
+      if (ms === 10000) live.add(handle);
+      return handle;
+    };
+    globalThis.clearTimeout = function (handle) { live.delete(handle); return realClear.apply(this, arguments); };
+    [ID_A, ID_B, ID_C].forEach(function (id) { h.send({ type: "cancel_queued_message", messageId: id }); });
+    await tick(); await tick();
+    assert.deepEqual(answers(h), ["pending", "pending", "pending"]);
+    assert.equal(live.size, 1, "one idle-settle timer for the session, not one per cancel");
+    h.session.isProcessing = false;
+    timers.tick(10000);
+    assert.deepEqual(droppedReplies(h).map(function (m) { return m.messageId; }), [ID_A, ID_B, ID_C], "each message is settled once");
+    assert.equal(live.size, 0, "nothing is left armed once nothing is unconfirmed");
+    timers.tick(10000);
+    assert.equal(droppedReplies(h).length, 3, "no second settlement");
+  } finally {
+    if (realSet) globalThis.setTimeout = realSet;
+    if (realClear) globalThis.clearTimeout = realClear;
+    timers.reset();
+    h.done();
+  }
+});
+
 test("a plain message already consumed: cancel is already_delivered and it is delivered once (unchanged)", async function () {
   var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
   try {
@@ -737,19 +789,7 @@ test("a representative cancel drops the batch dequeued for the running turn; a m
 });
 
 test("the message processor delivers a message named on a frame; the result frame drops nothing, only the idle settle does", function () {
-  var { attachMessageProcessor } = require("../lib/sdk-message-processor.js");
-  var sm = {
-    skillMeta: [], workflowMeta: [], skillNames: [], slashCommands: null, currentModel: null, _savedDefaultModel: null,
-    sendAndRecord: function () {}, sendToSession: function () {}, saveSessionFile: function () {}, broadcastSessionList: function () {},
-    modelsByVendor: {}, availableModels: [], availableVendors: [], installedVendors: [],
-  };
-  var processor = attachMessageProcessor({
-    sm: sm, send: function () {}, slug: "t", cwd: "/tmp", pushModule: null,
-    getNotificationsModule: function () { return null; }, adapter: { vendor: "claude" },
-    onProcessingChanged: function () {}, onTurnDone: null, onAutoTitle: null, opts: {},
-    discoverSkillDirs: function () { return []; }, mergeSkills: function () { return []; }, discoverWorkflows: function () { return []; },
-    discoverSkillsWithMeta: function () { return []; }, mergeSkillsWithMeta: function () { return []; }, getSDK: null,
-  });
+  var processor = processorFor();
   var session = {
     localId: "s1", cliSessionId: null, vendor: "claude", history: [], messageUUIDs: [], blocks: {}, sentToolResults: {},
     pendingPermissions: {}, pendingElicitations: {}, pendingAskUser: {}, activeTaskToolIds: {}, taskIdMap: {},
