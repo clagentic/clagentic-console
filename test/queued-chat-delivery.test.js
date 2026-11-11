@@ -1026,7 +1026,7 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
     { name: "already delivered: no interrupt", before: function (h) { queuedChat.consume(h.session, [ID_A]); }, receipt: { stillQueued: [] }, result: "already_delivered", interrupts: 0, tracked: false },
     { name: "untracked id: no interrupt", id: ID_C, receipt: { stillQueued: [] }, result: "already_delivered", interrupts: 0, tracked: true },
     { name: "no turn running: no interrupt, truthful no-op", before: function (h) { h.session.isProcessing = false; }, receipt: { stillQueued: [] }, result: "no_turn", interrupts: 0, tracked: true },
-    { name: "double frame: one interrupt", twice: true, receipt: { stillQueued: [ID_A] }, result: "requested", interrupts: 1, tracked: true },
+    { name: "double frame, the first still in flight: one interrupt, marked at once, the other pages told", twice: true, held: true, receipt: { stillQueued: [ID_A] }, result: "requested", interrupts: 1, tracked: true, told: true },
     {
       name: "pushed into an older query that was replaced: no interrupt of the live query, truthful no-op",
       setup: function (h) { h.session.queryInstance = { name: "query A" }; },
@@ -1044,8 +1044,13 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
     var interrupts = 0;
+    var release;
     var h = await harness(Object.assign({
-      interruptKeepingQueued: function () { interrupts++; return row.interrupt ? row.interrupt(interrupts) : Promise.resolve(row.receipt); },
+      interruptKeepingQueued: function () {
+        interrupts++;
+        if (row.held) return new Promise(function (resolve) { release = resolve; });
+        return row.interrupt ? row.interrupt(interrupts) : Promise.resolve(row.receipt);
+      },
     }, row.unsupported ? { canCancelQueued: function () { return false; } } : {}));
     try {
       if (row.setup) row.setup(h);
@@ -1054,6 +1059,11 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
       var id = row.id || ID_A;
       h.send({ type: "send_now_queued_message", messageId: id });
       if (row.twice) h.send({ type: "send_now_queued_message", messageId: id });
+      if (row.held) {
+        await tick();
+        assert.equal(queuedChat.pending(h.session)[0].sendNow, true, row.name + ": marked as soon as asked, so a page shown now draws it as sending");
+        release(row.receipt);
+      }
       await settle();
       assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), row.twice ? [row.result, row.result] : [row.result], row.name + ": reply");
       assert.equal(interrupts, row.interrupts, row.name + ": interrupt() calls");
@@ -1063,6 +1073,11 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
       assert.equal(droppedReplies(h).length, row.dropped ? 1 : 0, row.name + ": dropped replies");
       if (row.dropped) {
         assert.deepEqual(droppedReplies(h)[0], { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "send_now_missed", text: "row " + i, pastes: [], imageCount: 0 });
+      }
+      if (row.told) {
+        var told = h.out.toOthers.filter(function (m) { return m.type === "queued_message_send_now"; });
+        assert.ok(told.length >= 1, row.name + ": the other pages are told");
+        told.forEach(function (m) { assert.deepEqual(m, { type: "queued_message_send_now", messageId: ID_A, result: "requested" }, row.name + ": the same idempotent frame each time"); });
       }
       if (row.unmarked) {
         assert.equal(queuedChat.pending(h.session)[0].sendNow, undefined, row.name + ": not marked");
@@ -1081,26 +1096,6 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
       assert.equal(h.records().length, once, row.name + ": recorded at most once");
     } finally { h.done(); }
   }
-});
-
-test("Send now: a hit tells the other pages, and a frame in flight is one interrupt answered alike", async function () {
-  var release;
-  var calls = 0;
-  var h = await harness({ interruptKeepingQueued: function () { calls++; return new Promise(function (resolve) { release = resolve; }); } });
-  try {
-    h.send({ type: "message", text: "in flight", messageId: ID_A });
-    h.send({ type: "send_now_queued_message", messageId: ID_A });
-    h.send({ type: "send_now_queued_message", messageId: ID_A });
-    await tick();
-    assert.equal(queuedChat.pending(h.session)[0].sendNow, true, "marked as soon as asked: a page shown now draws it as sending");
-    release({ stillQueued: [ID_A] });
-    await settle();
-    assert.equal(calls, 1);
-    assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), ["requested", "requested"]);
-    var told = h.out.toOthers.filter(function (m) { return m.type === "queued_message_send_now"; });
-    assert.ok(told.length >= 1, "the other pages are told");
-    told.forEach(function (m) { assert.deepEqual(m, { type: "queued_message_send_now", messageId: ID_A, result: "requested" }, "the same idempotent frame each time"); });
-  } finally { h.done(); }
 });
 
 test("Send now: delivery that lands before the receipt wins, whatever the receipt says; nothing is handed back", async function () {
