@@ -58,9 +58,9 @@ Three stops. Always used as a set — never cherry-pick individual stops.
 
 Light mode values are shifted for WCAG AA contrast on light backgrounds. The perceptual identity is the same.
 
-### Refresh palettes (proposed, pending operator sign-off)
+### Refresh palettes (approved)
 
-The values below are the proposed refresh, shown value for value in `preview-dark.html` and `preview-light.html`, where every text and boundary pair carries its computed contrast ratio. The brand spectrum above is the mark's gradient and is unchanged; the UI accent tokens below are the AA-safe values for text and controls on the new surfaces (the dark `--accent2` is lifted, the light `--accent` is deepened). Text pairs meet 4.5:1 and control boundaries 3:1. `--text-dimmer` is used only on the sidebar, page, raised and code surfaces (never on the own-message surface, the input or the selected row; those take `--text-muted`).
+The operator approved the values below, shown value for value in `preview-dark.html` and `preview-light.html`, where every text and boundary pair carries its computed contrast ratio. The brand spectrum above is the mark's gradient and is unchanged; the UI accent tokens below are the AA-safe values for text and controls on the new surfaces (the dark `--accent2` is lifted, the light `--accent` is deepened). Text pairs meet 4.5:1 and control boundaries 3:1. `--text-dimmer` is used only on the sidebar, page, raised and code surfaces (never on the own-message surface, the input or the selected row; those take `--text-muted`).
 
 ### Dark Theme Palette (`clagentic-dark`)
 
@@ -218,8 +218,10 @@ DM Mono at small sizes in uppercase with generous tracking is the "console voice
 |------|---------|
 | `lib/themes/clagentic-dark.json` | Base16 palette, dark |
 | `lib/themes/clagentic-light.json` | Base16 palette, light |
-| `lib/public/css/base.css` | Font imports, CSS variable seeds, global reset |
-| `lib/public/modules/theme.js` | `computeVars()` — derives all CSS vars from palette |
+| `lib/public/css/base.css` | Global reset and non-colour variables; declares no colour |
+| `lib/public/theme-core.js` | `deriveVars()` — the one derivation of every CSS variable, terminal and diagram colour from a theme file |
+| `lib/public/modules/theme.js` | Applies the active theme and keeps the choice |
+| `lib/theme-seed.js` | Builds the first-paint stylesheet, manifest colours, offline page and sign-in page variables from the theme files |
 | `docs/brand/BRAND.md` | This document |
 | `docs/brand/preview-dark.html` | Standalone dark theme preview |
 | `docs/brand/preview-light.html` | Standalone light theme preview |
