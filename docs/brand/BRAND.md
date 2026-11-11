@@ -58,42 +58,102 @@ Three stops. Always used as a set — never cherry-pick individual stops.
 
 Light mode values are shifted for WCAG AA contrast on light backgrounds. The perceptual identity is the same.
 
+### Refresh palettes (proposed, pending operator sign-off)
+
+The values below are the proposed refresh, shown value for value in `preview-dark.html` and `preview-light.html`, where every text and boundary pair carries its computed contrast ratio. The brand spectrum above is the mark's gradient and is unchanged; the UI accent tokens below are the AA-safe values for text and controls on the new surfaces (the dark `--accent2` is lifted, the light `--accent` is deepened). Text pairs meet 4.5:1 and control boundaries 3:1. `--text-dimmer` is used only on the sidebar, page, raised and code surfaces (never on the own-message surface, the input or the selected row; those take `--text-muted`).
+
 ### Dark Theme Palette (`clagentic-dark`)
+
+Surface tiers, darkest to lightest, with lightness (L*) and the step from the tier before: sidebar 9.7, page 14.1 (+4.4), raised 18.8 (+4.7), own-message 24.2 (+5.4), input 28.2 (+4.0). The page is 11.8 L* lighter than the old `#060810` (2.2).
 
 | CSS var             | Value      | Role |
 |---------------------|------------|------|
-| `--bg`              | `#080A0F`  | Main canvas — near void |
-| `--bg-alt`          | `#0D1017`  | Sidebar, secondary surfaces |
-| `--bg-surface`      | `#111827`  | Cards, overlays, code block headers |
-| `--bg-surface-2`    | `#1A2233`  | Input fields, code body, deep cards |
-| `--border`          | `#1A2233`  | Standard border |
-| `--border-subtle`   | `#111827`  | Dividers, hairlines |
-| `--border-bright`   | `#2A3A52`  | Hover states, focus rings |
-| `--text`            | `#E0EAF4`  | Primary text |
-| `--text-secondary`  | `#C8D4E0`  | Body copy, assistant messages |
-| `--text-muted`      | `#7A8FA6`  | Labels, secondary UI |
-| `--text-dimmer`     | `#3A4A5C`  | Captions, placeholders, idle icons |
+| `--sidebar-bg`      | `#141B28`  | Sidebar, tier 1 |
+| `--bg`              | `#1C2433`  | Page, tier 2 |
+| `--bg-alt`          | `#242E40`  | Raised cards and overlays, tier 3 |
+| `--user-bubble`     | `#2E3A4F`  | Own-message surface, tier 4 |
+| `--input-bg`        | `#374359`  | Composer input, tier 5 |
+| `--code-bg`         | `#101722`  | Code blocks |
+| `--sidebar-active`  | `#263245`  | Selected session row |
+| `--text`            | `#EAF0F8`  | Primary text |
+| `--text-secondary`  | `#C5D0DE`  | Body copy |
+| `--text-muted`      | `#A7B5C8`  | Labels, secondary UI, placeholders |
+| `--text-dimmer`     | `#8E9DB3`  | Timestamps and labels (page, sidebar, raised, code only) |
+| `--border`          | `#364257`  | Decorative divider |
+| `--border-subtle`   | `#2A3548`  | Hairline |
+| `--border-strong`   | `#8294AE`  | Input, button and control boundary (3:1 or better) |
 | `--accent`          | `#00CFFF`  | Primary interactive (brand-cyan) |
-| `--accent2`         | `#4A7FE8`  | Secondary interactive (brand-blue) |
-| `--error`           | `#FF4D6A`  | Destructive, failure |
+| `--accent2`         | `#7BA7F7`  | Links, secondary interactive |
+| `--error`           | `#FF8094`  | Destructive, failure |
 | `--success`         | `#29D9A8`  | Success, connected, live |
 | `--warning`         | `#F59E0B`  | Caution |
+| `--on-accent`       | `#0B1220`  | Text on an accent fill |
+| `--on-av`           | `#0B1220`  | Initials on an avatar tint |
+| `--av0` to `--av3`  | `#7FD8F0`, `#B9A3F5`, `#7FE0C2`, `#F2C879` | Avatar tints |
+
+Base16 file (`lib/themes/clagentic-dark.json` after the build):
+
+| Key      | Value      | Key      | Value      |
+|----------|------------|----------|------------|
+| `base00` | `#1C2433`  | `base08` | `#FF8094`  |
+| `base01` | `#242E40`  | `base09` | `#00CFFF`  |
+| `base02` | `#364257`  | `base0A` | `#7BA7F7`  |
+| `base03` | `#8E9DB3`  | `base0B` | `#29D9A8`  |
+| `base04` | `#A7B5C8`  | `base0C` | `#A78BFA`  |
+| `base05` | `#C5D0DE`  | `base0D` | `#7BA7F7`  |
+| `base06` | `#EAF0F8`  | `base0E` | `#C084FC`  |
+| `base07` | `#F5F9FF`  | `base0F` | `#818CF8`  |
+| `accent2`| `#7BA7F7`  |          |            |
 
 ### Light Theme Palette (`clagentic-light`)
 
-Same structure. Key surface values:
+Lightness (L*): sidebar 91.8, page 96.1, raised 100, own-message 90.8, input 100. Steps around the page: sidebar to page +4.3, page to raised +3.9, page to own-message 5.3 lower, page to input +3.9. Raised cards and the input are both white; the input is told apart by its `--border-strong` outline.
 
-| CSS var           | Value      |
-|-------------------|------------|
-| `--bg`            | `#F4F7FB`  |
-| `--bg-alt`        | `#EBF0F7`  |
-| `--bg-surface`    | `#FFFFFF`  |
-| `--bg-surface-2`  | `#E4ECF5`  |
-| `--text`          | `#0D1421`  |
-| `--accent`        | `#0099CC`  |
-| `--accent2`       | `#2D5EB8`  |
+| CSS var             | Value      | Role |
+|---------------------|------------|------|
+| `--sidebar-bg`      | `#E2E8F1`  | Sidebar |
+| `--bg`              | `#F1F4F9`  | Page, cool off-white |
+| `--bg-alt`          | `#FFFFFF`  | Raised cards and overlays |
+| `--user-bubble`     | `#D9E6F7`  | Own-message surface |
+| `--input-bg`        | `#FFFFFF`  | Composer input, outlined |
+| `--code-bg`         | `#E9EEF5`  | Code blocks |
+| `--sidebar-active`  | `#D3DEEE`  | Selected session row |
+| `--text`            | `#0F1724`  | Primary text |
+| `--text-secondary`  | `#2B3A4F`  | Body copy |
+| `--text-muted`      | `#4A5B72`  | Labels, secondary UI, placeholders |
+| `--text-dimmer`     | `#566680`  | Timestamps and labels (page, sidebar, raised, code only) |
+| `--border`          | `#CBD5E3`  | Decorative divider |
+| `--border-subtle`   | `#DDE4EE`  | Hairline |
+| `--border-strong`   | `#73849C`  | Input, button and control boundary (3:1 or better) |
+| `--accent`          | `#006D94`  | Primary interactive (AA text on light; the brand cyan stays in the mark) |
+| `--accent2`         | `#2D5EB8`  | Links, secondary interactive |
+| `--error`           | `#B3122D`  | Destructive, failure |
+| `--success`         | `#0A6B4A`  | Success, connected, live |
+| `--warning`         | `#8A5300`  | Caution |
+| `--on-accent`       | `#FFFFFF`  | Text on an accent fill |
+| `--on-av`           | `#FFFFFF`  | Initials on an avatar fill |
+| `--av0` to `--av3`  | `#0B6E8A`, `#6A3FC4`, `#0D7A55`, `#9A5B00` | Avatar fills |
 
-All other vars follow the dark structure with adjusted values (see `clagentic-light.json`).
+Base16 file (`lib/themes/clagentic-light.json` after the build):
+
+| Key      | Value      | Key      | Value      |
+|----------|------------|----------|------------|
+| `base00` | `#F1F4F9`  | `base08` | `#B3122D`  |
+| `base01` | `#FFFFFF`  | `base09` | `#006D94`  |
+| `base02` | `#CBD5E3`  | `base0A` | `#2D5EB8`  |
+| `base03` | `#566680`  | `base0B` | `#0A6B4A`  |
+| `base04` | `#4A5B72`  | `base0C` | `#6128B8`  |
+| `base05` | `#2B3A4F`  | `base0D` | `#2D5EB8`  |
+| `base06` | `#0F1724`  | `base0E` | `#7C3AED`  |
+| `base07` | `#060A12`  | `base0F` | `#4F46E5`  |
+| `accent2`| `#2D5EB8`  |          |            |
+
+### Chat layout, as previewed
+
+- One layout; the viewer's own messages on the right. Width steps (screens wider than 768 px): Compact 640 px, Comfortable 820 px (default, today's `--content-width`), Wide 1040 px, Full (pane width). Phone is always full width.
+- Other speakers: avatar, name, label and time on one 24 px header line; the own side is the same line mirrored (time, name, avatar), right-aligned. Own header shows time only in a one-person session, avatar, name and time when two or more humans have spoken.
+- Shared collapsible component options: `lines` (default 3), `size` (normal, compact), `controls` (row, inline, header). Injected message and loop: 3, normal, header. Pending scheduled card: 1, compact, inline. Expand stays reachable in every configuration; touch targets are at least 44 by 44 px.
+- Avatars: 20 px in the session list, on by default, switchable in Appearance.
 
 ---
 
