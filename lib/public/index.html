@@ -11,7 +11,7 @@
   if(!isIOS){var l=document.createElement("link");l.rel="manifest";l.href="/manifest.json";document.head.appendChild(l)}
 })();
 </script>
-<meta name="theme-color" content="#282a36">
+<meta name="theme-color" content="#060810">
 <link rel="icon" type="image/png" href="favicon-banded.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Clagentic: Console</title>
@@ -20,7 +20,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@300;400;500&family=Roboto+Mono:wght@400;500;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.min.css">
 <script>
-(function(){try{var k="clagentic-theme-vars",kOld="clay-theme-vars",v=localStorage.getItem(k)||localStorage.getItem(kOld),r=document.documentElement;if(v){var o=JSON.parse(v),p;for(p in o)r.style.setProperty(p,o[p]);var vt=localStorage.getItem(k.replace("-vars","-variant"))||localStorage.getItem(kOld.replace("-vars","-variant"));if(vt==="light"){r.classList.add("light-theme");r.classList.remove("dark-theme")}else{r.classList.add("dark-theme");r.classList.remove("light-theme")}var m=document.querySelector('meta[name="theme-color"]');if(m&&o["--bg"])m.setAttribute("content",o["--bg"])}else{var sl=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches;if(sl){r.classList.add("light-theme");r.classList.remove("dark-theme")}}}catch(e){}})();
+(function(){try{var s=localStorage,k="clagentic-theme",id=s.getItem(k),r=document.documentElement,m=document.querySelector('meta[name="theme-color"]'),ok=s.getItem("clagentic-theme-migrated")==="2"||id==="clagentic-dark"||id==="clagentic-light",v=ok&&s.getItem(k+"-vars"),light;if(v){var o=JSON.parse(v),p;for(p in o)r.style.setProperty(p,o[p]);light=s.getItem(k+"-variant")==="light";if(m&&o["--bg"])m.setAttribute("content",o["--bg"])}else{var sv=s.getItem(k+"-variant");light=sv==="light"||sv==="dark"?sv==="light":!!(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches);if(light){r.style.setProperty("--bg","#F4F7FB");r.style.setProperty("--text","#0D1421")}if(m)m.setAttribute("content",light?"#F4F7FB":"#060810")}if(light){r.classList.add("light-theme");r.classList.remove("dark-theme")}else{r.classList.add("dark-theme");r.classList.remove("light-theme")}}catch(e){}})();
 </script>
 <script>if(window.navigator.standalone||window.matchMedia("(display-mode:standalone)").matches){document.documentElement.classList.add("pwa-standalone")}</script>
 <link rel="stylesheet" href="style.css?v=20260407">
@@ -945,34 +945,9 @@
         <div class="us-section" data-section="us-appearance">
           <h2>Appearance</h2>
           <div class="settings-card">
-            <div class="settings-label" style="margin-bottom:10px;">Brand</div>
-            <div class="layout-switcher" id="us-brand-switcher">
-              <button class="layout-option" data-brand="clagentic">
-                <span class="layout-option-icon">✦</span>
-                <span class="layout-option-label">Clagentic</span>
-                <span class="layout-option-desc">Spacey and minimal. Cyan-to-violet on near-void dark.</span>
-              </button>
-              <button class="layout-option" data-brand="classic">
-                <span class="layout-option-icon">◈</span>
-                <span class="layout-option-label">Classic</span>
-                <span class="layout-option-desc">The original Clagentic: Console look. Dracula dark, Ayu light.</span>
-              </button>
-            </div>
-          </div>
-          <div class="settings-card">
             <div class="settings-label" style="margin-bottom:10px;">Theme</div>
-            <div class="layout-switcher" id="us-theme-switcher">
-              <button class="layout-option" data-theme="light">
-                <span class="layout-option-icon">☀️</span>
-                <span class="layout-option-label">Light</span>
-                <span class="layout-option-desc">For people who open curtains. Bright, clean, productive.</span>
-              </button>
-              <button class="layout-option" data-theme="dark">
-                <span class="layout-option-icon">🌙</span>
-                <span class="layout-option-label">Dark</span>
-                <span class="layout-option-desc">For those who thrive after sunset. Your screen, your cave.</span>
-              </button>
-            </div>
+            <!-- Filled by modules/theme-choice.js: Dark, Light, Follow system and any custom theme -->
+            <div class="layout-switcher" id="us-theme-switcher"></div>
           </div>
           <div class="settings-card">
             <div class="settings-label" style="margin-bottom:10px;">Chat layout</div>
