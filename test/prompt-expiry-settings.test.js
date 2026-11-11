@@ -12,13 +12,15 @@ var { createProjectAccess } = require("../lib/project-access");
 var { createPromptRegistry } = require("../lib/prompt-registry");
 var settings = require("../lib/prompt-expiry-settings");
 var expiry = require("../lib/prompt-expiry");
+var { MALFORMED_MINUTES } = require("./prompt-expiry-rows");
 
 var client = world.client;
 var MIN = 60000;
 
 test("the default is 30 minutes and an absent or malformed key reads as the default", function () {
   assert.equal(expiry.DEFAULT_MINUTES, 30);
-  [null, {}, { promptExpiryMinutes: -1 }, { promptExpiryMinutes: "5" }, { promptExpiryMinutes: 1e9 }].forEach(function (cfg) {
+  var cfgs = [null, {}].concat(MALFORMED_MINUTES.map(function (bad) { return { promptExpiryMinutes: bad }; }));
+  cfgs.forEach(function (cfg) {
     assert.equal(expiry.readExpiryMinutes(cfg), 30, JSON.stringify(cfg));
   });
   assert.equal(expiry.readExpiryMinutes({ promptExpiryMinutes: 0 }), 0);

@@ -10,6 +10,7 @@ var { createExpiryReader } = require("../lib/prompt-expiry");
 var claudeAdapter = require("../lib/yoke/adapters/claude");
 var { startWorkerProcess } = require("./helpers/worker-process");
 var world = require("./prompt-harness-world");
+var { MALFORMED_MINUTES } = require("./prompt-expiry-rows");
 
 var HOUR = 3600000;
 var DAY = 24 * HOUR;
@@ -92,17 +93,17 @@ test("promptExpiryMinutes sets the bound; 0 disables it", async function (t) {
 test("a malformed or negative promptExpiryMinutes falls back to the default with one warning naming the key", function (t) {
   var warnings = silenceWarnings(t);
   var read = createExpiryReader();
-  [-5, "10", NaN, Infinity, true, {}, 1e9].forEach(function (bad) {
+  MALFORMED_MINUTES.forEach(function (bad) {
     assert.equal(read({ promptExpiryMinutes: bad }), DEFAULT_BOUND, JSON.stringify(bad));
   });
   read({ promptExpiryMinutes: -5 });
   read({ promptExpiryMinutes: -5 });
-  assert.equal(warnings.filter(function (w) { return /promptExpiryMinutes/.test(w); }).length, 7, "one per distinct value");
+  assert.equal(warnings.filter(function (w) { return /promptExpiryMinutes/.test(w); }).length, MALFORMED_MINUTES.length, "one per distinct value");
   assert.equal(read({}), DEFAULT_BOUND);
   assert.equal(read(null), DEFAULT_BOUND);
   assert.equal(read({ promptExpiryMinutes: 0 }), 0);
   assert.equal(read({ promptExpiryMinutes: 1.5 }), 90000);
-  assert.equal(warnings.length, 7, "absent and valid values do not warn");
+  assert.equal(warnings.length, MALFORMED_MINUTES.length, "absent and valid values do not warn");
 });
 
 test("the registry warns once for a malformed value across many prompts", function (t) {
