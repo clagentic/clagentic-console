@@ -269,16 +269,16 @@ test("the server serves the first-paint stylesheet and the stamped manifest from
   assert.match(server, /urlPath === "\/theme-seed\.css"[\s\S]*themeSeed\.firstPaintCss\(\)/);
   assert.match(server, /urlPath === "\/manifest\.json"[\s\S]*themeSeed\.stampManifest/);
   assert.match(server, /themeSeed\.stampServiceWorker\(/);
-  assert.match(server, /urlPath === "\/modules\/theme-builtin\.js"[\s\S]*themeSeed\.builtinPalettesModule/);
+  assert.match(server, /urlPath === "\/theme-core\.js"[\s\S]*themeSeed\.themeCoreScript/);
 });
 
-test("the built-in palettes the client imports are generated from the theme files", async function () {
-  var src = themeSeed.builtinPalettesModule();
-  var mod = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"));
-  assert.deepEqual(mod.CLAGENTIC_DARK, THEMES.dark);
-  assert.deepEqual(mod.CLAGENTIC_LIGHT, THEMES.light);
-  assert.ok(!fs.existsSync(path.join(PUBLIC, "modules", "theme-builtin.js")), "generated, never a second file");
-  assert.match(read(path.join(PUBLIC, "modules", "theme.js")), /from '\.\/theme-builtin\.js'/);
+test("the built-in palettes come from the theme files, in the browser's script and under Node", function () {
+  var sandbox = {};
+  vm.runInNewContext(themeSeed.themeCoreScript(), sandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.ClagenticThemeCore.builtin)), { dark: THEMES.dark, light: THEMES.light }, "served script");
+  assert.deepEqual(core.builtin, { dark: FILES.dark, light: FILES.light }, "Node");
+  assert.deepEqual(typeof sandbox.ClagenticThemeCore.deriveVars, "function", "the derivation is the served file's own");
+  assert.match(read(path.join(PUBLIC, "modules", "theme-colors.js")), /CLAGENTIC_DARK = core\.builtin\.dark/);
 });
 
 test("a themed route that fails is logged with its route and message, then falls through", function () {
