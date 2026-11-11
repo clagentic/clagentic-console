@@ -209,15 +209,18 @@ test("delivery that arrives before the already_delivered answer leaves one messa
   assert.equal(env.ctx.inputEl.value, "");
 });
 
-test("Send now on a queued chat never sends a second copy", async function () {
+test("Send now on a queued chat never sends a second copy: it asks the server to interrupt, once", async function () {
   var env = await setup(CAN_CANCEL);
   type(env, "already there");
+  var id = chat(env)[0].messageId;
   var send = btn(queuedEls()[0], "shell-queued-send-now");
   assert.equal(send.getAttribute("aria-disabled"), "false", "available while the agent can take a message into the turn");
   send.click();
+  send.click();
   assert.equal(chat(env).length, 1, "no second send");
   assert.equal(frames(env, "cancel_queued_message").length, 0, "and no cancel");
-  assert.ok(sysText().some(function (t) { return /already with the agent/.test(t); }));
+  assert.deepEqual(frames(env, "send_now_queued_message"), [{ type: "send_now_queued_message", messageId: id }], "one frame for a double click");
+  assert.ok(sysText().some(function (t) { return /Interrupting the running turn/.test(t); }));
   assert.deepEqual(queuedTexts(), ["already there"]);
 });
 
@@ -511,4 +514,81 @@ test("a delivery or a final answer for a message with no item leaves no sender r
     delivered(env, id);
     assert.deepEqual(env.shown, [], "row " + i + ": no record of the earlier send, so the item is a redrawn one");
   }
+});
+
+// ------------------------------------------------------------ Send now (interrupt-and-send)
+// After Send now the item is never drawn queued again: no QUEUED label, no controls,
+// on this page, on a redrawn page (a reload, a switch away and back) and on a second page.
+
+function sendNowItem() {
+  var q = queuedEls()[0];
+  return { tag: els.messages.querySelectorAll(".shell-queued-tag")[0].textContent, actionsShown: q.querySelector(".shell-queued-actions").style.display !== "none" };
+}
+function sendNowAnswer(env, id, result, extra) { env.us.handleQueuedMessageSendNow(Object.assign({ type: "queued_message_send_now", messageId: id, result: result }, extra || {})); }
+
+test("Send now: each path draws the item as sending or queued, and the text is never sent again", async function () {
+  var rows = [
+    { name: "pressed: sending at once, no controls", run: function () {}, tag: "Sending", actions: false },
+    { name: "requested answer", run: function (env, id) { sendNowAnswer(env, id, "requested"); }, tag: "Sending", actions: false },
+    { name: "no turn running: queued again, with the reason", run: function (env, id) { sendNowAnswer(env, id, "no_turn"); }, tag: "Queued", actions: true, note: /No turn is running/ },
+    { name: "agent could not interrupt: queued again, with the reason", run: function (env, id) { sendNowAnswer(env, id, "error", { message: "worker gone" }); }, tag: "Queued", actions: true, note: /worker gone/ },
+    { name: "already delivered: sending until message_delivered", run: function (env, id) { sendNowAnswer(env, id, "already_delivered"); }, tag: "Sending", actions: false },
+  ];
+  for (var i = 0; i < rows.length; i++) {
+    var env = await setup(CAN_CANCEL);
+    type(env, "row " + i);
+    var id = chat(env)[0].messageId;
+    btn(queuedEls()[0], "shell-queued-send-now").click();
+    rows[i].run(env, id);
+    var drawn = sendNowItem();
+    assert.equal(drawn.tag, rows[i].tag, rows[i].name);
+    assert.equal(drawn.actionsShown, rows[i].actions, rows[i].name + ": controls");
+    if (rows[i].note) assert.ok(sysText().some(function (t) { return rows[i].note.test(t); }), rows[i].name + ": note");
+    assert.equal(chat(env).length, 1, rows[i].name + ": the text is never sent again");
+  }
+});
+
+test("Send now: delivery ends the sending item once, as the normal message", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "now please");
+  var id = chat(env)[0].messageId;
+  btn(queuedEls()[0], "shell-queued-send-now").click();
+  sendNowAnswer(env, id, "requested");
+  delivered(env, id);
+  assert.deepEqual(queuedTexts(), []);
+  assert.deepEqual(env.shown, ["now please"]);
+  assert.equal(chat(env).length, 1);
+});
+
+test("Send now: a receipt miss puts the text in the composer with a notice, and nothing is sent again", async function () {
+  var env = await setup(CAN_CANCEL);
+  type(env, "lost in the interrupt");
+  var id = chat(env)[0].messageId;
+  btn(queuedEls()[0], "shell-queued-send-now").click();
+  sendNowAnswer(env, id, "missed");
+  answer(env, id, "dropped", { text: "lost in the interrupt", cause: "send_now_missed" });
+  assert.deepEqual(queuedTexts(), []);
+  assert.equal(env.ctx.inputEl.value, "lost in the interrupt");
+  assert.ok(sysText().some(function (t) { return /interrupted the turn, but the agent no longer held this message/.test(t); }));
+  assert.equal(chat(env).length, 1, "the page never pushes it again");
+  delivered(env, id);
+  assert.deepEqual(env.shown, [], "not shown as delivered");
+});
+
+test("Send now: a tracked frame with sendNow (a reload, a switch back, a second tab) draws the item as sending, never queued", async function () {
+  var env = await setup(CAN_CANCEL);
+  env.us.handleSessionShown(new FakeElement("textarea"));
+  env.us.handleHistoryReplayed();
+  tracked(env, { sendNow: true });
+  assert.deepEqual(sendNowItem(), { tag: "Sending", actionsShown: false });
+  btn(queuedEls()[0], "shell-queued-send-now").click();
+  assert.equal(frames(env, "send_now_queued_message").length, 0, "a second press on a sending item sends nothing");
+  delivered(env, TRACKED_ID);
+  assert.deepEqual(queuedTexts(), []);
+
+  var second = await setup(CAN_CANCEL);
+  tracked(second);
+  assert.deepEqual(sendNowItem(), { tag: "Queued", actionsShown: true });
+  sendNowAnswer(second, TRACKED_ID, "requested");
+  assert.deepEqual(sendNowItem(), { tag: "Sending", actionsShown: false }, "another page's press reaches this page");
 });

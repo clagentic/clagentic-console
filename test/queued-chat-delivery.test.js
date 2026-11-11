@@ -1010,6 +1010,196 @@ test("(d) a rewind replaces the query with chat queued on the old one: the old e
   } finally { h.done(); }
 });
 
+// ------------------------------------------------------------ Send now: interrupt and send
+// Send now on a message already with the agent interrupts the running turn with the
+// agent's queue kept (Query.interrupt(), never cancel_queued, never a re-push) and
+// reads the receipt. A hit keeps the message tracked as send-now; a miss hands its
+// text back and never pushes it again.
+
+function sendNowReplies(h) { return h.out.toSender.filter(function (m) { return m.type === "queued_message_send_now"; }); }
+
+test("Send now on a queued message: one interrupt per path, the receipt decides, the text reaches the agent at most once", async function () {
+  var rows = [
+    { name: "receipt hit: marked send-now, still delivered once", receipt: { stillQueued: [ID_A] }, result: "requested", interrupts: 1, tracked: true },
+    { name: "no receipt (older CLI): cannot say, stays marked and tracked", receipt: { stillQueued: null }, result: "requested", interrupts: 1, tracked: true },
+    { name: "receipt miss: ended, text handed back with a cause, never re-pushed", receipt: { stillQueued: [ID_B] }, result: "missed", interrupts: 1, tracked: false, dropped: true },
+    { name: "already delivered: no interrupt", before: function (h) { queuedChat.consume(h.session, [ID_A]); }, receipt: { stillQueued: [] }, result: "already_delivered", interrupts: 0, tracked: false },
+    { name: "untracked id: no interrupt", id: ID_C, receipt: { stillQueued: [] }, result: "already_delivered", interrupts: 0, tracked: true },
+    { name: "no turn running: no interrupt, truthful no-op", before: function (h) { h.session.isProcessing = false; }, receipt: { stillQueued: [] }, result: "no_turn", interrupts: 0, tracked: true },
+    { name: "double frame: one interrupt", twice: true, receipt: { stillQueued: [ID_A] }, result: "requested", interrupts: 1, tracked: true },
+  ];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var interrupts = 0;
+    var h = await harness({ interruptKeepingQueued: function () { interrupts++; return Promise.resolve(row.receipt); } });
+    try {
+      h.send({ type: "message", text: "row " + i, messageId: ID_A });
+      if (row.before) row.before(h);
+      var id = row.id || ID_A;
+      h.send({ type: "send_now_queued_message", messageId: id });
+      if (row.twice) h.send({ type: "send_now_queued_message", messageId: id });
+      await settle();
+      assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), row.twice ? [row.result, row.result] : [row.result], row.name + ": reply");
+      assert.equal(interrupts, row.interrupts, row.name + ": interrupt() calls");
+      assert.equal(h.out.cancelled.length, 0, row.name + ": the agent's queue is kept: no cancel");
+      assert.equal(h.out.pushed.length, 1, row.name + ": pushed once, never again");
+      assert.equal(queuedChat.has(h.session, ID_A), row.tracked, row.name + ": tracked");
+      assert.equal(droppedReplies(h).length, row.dropped ? 1 : 0, row.name + ": dropped replies");
+      if (row.dropped) {
+        assert.deepEqual(droppedReplies(h)[0], { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "send_now_missed", text: "row " + i, pastes: [], imageCount: 0 });
+      }
+      queuedChat.consume(h.session, [ID_A]);
+      assert.equal(h.delivered().length, row.dropped ? 0 : 1, row.name + ": delivered at most once");
+      assert.equal(h.records().length, row.dropped ? 0 : 1, row.name + ": recorded at most once");
+    } finally { h.done(); }
+  }
+});
+
+test("Send now: an agent that cannot interrupt answers unsupported and interrupts nothing", async function () {
+  var h = await harness({ canCancelQueued: function () { return false; }, interruptKeepingQueued: function () { throw new Error("must not be called"); } });
+  try {
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await settle();
+    assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), ["unsupported"]);
+  } finally { h.done(); }
+});
+
+test("Send now: a failed interrupt answers error, leaves the message queued and unmarked, and can be asked again", async function () {
+  var calls = 0;
+  var h = await harness({ interruptKeepingQueued: function () { calls++; return calls === 1 ? Promise.reject(new Error("worker gone")) : Promise.resolve({ stillQueued: [ID_A] }); } });
+  try {
+    h.send({ type: "message", text: "retry me", messageId: ID_A });
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await settle();
+    assert.equal(sendNowReplies(h)[0].result, "error");
+    assert.match(sendNowReplies(h)[0].message, /worker gone/);
+    assert.equal(queuedChat.pending(h.session)[0].sendNow, undefined, "not marked");
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await settle();
+    assert.equal(sendNowReplies(h)[1].result, "requested");
+    assert.equal(calls, 2);
+    assert.equal(h.out.pushed.length, 1);
+  } finally { h.done(); }
+});
+
+test("Send now: a hit tells the other pages, and a frame in flight is one interrupt answered alike", async function () {
+  var release;
+  var calls = 0;
+  var h = await harness({ interruptKeepingQueued: function () { calls++; return new Promise(function (resolve) { release = resolve; }); } });
+  try {
+    h.send({ type: "message", text: "in flight", messageId: ID_A });
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await tick();
+    assert.equal(queuedChat.pending(h.session)[0].sendNow, true, "marked as soon as asked: a page shown now draws it as sending");
+    release({ stillQueued: [ID_A] });
+    await settle();
+    assert.equal(calls, 1);
+    assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), ["requested", "requested"]);
+    var told = h.out.toOthers.filter(function (m) { return m.type === "queued_message_send_now"; });
+    assert.ok(told.length >= 1, "the other pages are told");
+    told.forEach(function (m) { assert.deepEqual(m, { type: "queued_message_send_now", messageId: ID_A, result: "requested" }, "the same idempotent frame each time"); });
+  } finally { h.done(); }
+});
+
+test("Send now: delivery that lands before the receipt wins, whatever the receipt says; nothing is handed back", async function () {
+  var release;
+  var h = await harness({ interruptKeepingQueued: function () { return new Promise(function (resolve) { release = resolve; }); } });
+  try {
+    h.send({ type: "message", text: "photo finish", messageId: ID_A });
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await tick();
+    queuedChat.consume(h.session, [ID_A]);
+    release({ stillQueued: [] });
+    await settle();
+    assert.deepEqual(sendNowReplies(h).map(function (r) { return r.result; }), ["already_delivered"]);
+    assert.equal(droppedReplies(h).length, 0);
+    assert.equal(h.delivered().length, 1);
+    assert.equal(h.records().length, 1);
+  } finally { h.done(); }
+});
+
+test("Send now: a page shown after the press (a switch back, a reload) is told sendNow, never a plain queued item", async function () {
+  var h = await harness({ interruptKeepingQueued: function () { return Promise.resolve({ stillQueued: [ID_A] }); } });
+  try {
+    h.send({ type: "message", text: "keep me sending", messageId: ID_A });
+    var before = { id: "before" };
+    h.sm.switchSession(h.session.localId, before);
+    assert.equal(framesTo(h.out.toWs, before, "queued_message_tracked")[0].sendNow, undefined, "not pressed yet: queued");
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await settle();
+    var back = { id: "back" };
+    h.sm.switchSession(h.session.localId, back);
+    assert.deepEqual(framesTo(h.out.toWs, back, "queued_message_tracked"), [
+      { type: "queued_message_tracked", messageId: ID_A, text: "keep me sending", pastes: [], imageCount: 0, unconfirmed: false, sendNow: true },
+    ]);
+    queuedChat.consume(h.session, [ID_A]);
+    var later = { id: "later" };
+    h.sm.switchSession(h.session.localId, later);
+    assert.deepEqual(framesTo(h.out.toWs, later, "queued_message_tracked"), [], "delivered: no longer drawn");
+  } finally { h.done(); }
+});
+
+test("Send now: the idle grace does not hand back a message the receipt says is still queued, and still settles one it does not cover", async function () {
+  var h = await harness({
+    cancelQueuedMessage: function () { return Promise.resolve(false); },
+    interruptKeepingQueued: function () { return Promise.resolve({ stillQueued: [ID_A] }); },
+  });
+  try {
+    h.send({ type: "message", text: "marked", messageId: ID_A });
+    h.send({ type: "message", text: "plain", messageId: ID_B });
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    h.send({ type: "cancel_queued_message", messageId: ID_B });
+    await settle();
+    assert.equal(queuedChat.hasUnconfirmed(h.session), true);
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await settle();
+    assert.deepEqual(queuedChat.settleIdle(h.session, false), [ID_B], "only the message Send now was not pressed on is settled");
+    assert.equal(queuedChat.has(h.session, ID_A), true, "it is still tracked and still ends delivered");
+    assert.equal(queuedChat.hasUnconfirmed(h.session), false);
+    queuedChat.consume(h.session, [ID_A]);
+    assert.equal(h.delivered().length, 1);
+  } finally { h.done(); }
+});
+
+test("Send now: the Claude handles interrupt through Query.interrupt() with the queue kept and read the receipt", async function () {
+  var calls = [];
+  var queue = { push: function () {}, end: function () {} };
+  var handle = claudeAdapter._test_createQueryHandle({
+    interrupt: function () { calls.push(arguments.length); return Promise.resolve({ still_queued: [ID_A, 7] }); },
+  }, queue, null);
+  assert.deepEqual(await handle.interruptKeepingQueued(), { stillQueued: [ID_A] });
+  assert.deepEqual(calls, [0], "called with no options: cancelQueued is never set");
+  var older = claudeAdapter._test_createQueryHandle({ interrupt: function () { return Promise.resolve(undefined); } }, queue, null);
+  assert.deepEqual(await older.interruptKeepingQueued(), { stillQueued: null }, "no receipt");
+  await assert.rejects(claudeAdapter._test_createQueryHandle({}, queue, null).interruptKeepingQueued(), /cannot interrupt/);
+
+  var worker = { sent: [], handler: null, process: null, exitPromise: null };
+  worker.onMessage = function (fn) { worker.handler = fn; };
+  worker.send = function (msg) { worker.sent.push(msg); };
+  var viaWorker = claudeAdapter._test_createWorkerQueryHandle(worker, null, null, null);
+  var hit = viaWorker.interruptKeepingQueued();
+  var failing = viaWorker.interruptKeepingQueued();
+  var asks = worker.sent.filter(function (m) { return m.type === "interrupt_query"; });
+  assert.equal(asks.length, 2);
+  worker.handler({ type: "interrupt_response", requestId: asks[0].requestId, receipt: { still_queued: [ID_B] } });
+  worker.handler({ type: "interrupt_response", requestId: asks[1].requestId, error: "no such query" });
+  assert.deepEqual(await hit, { stillQueued: [ID_B] });
+  await assert.rejects(failing, /no such query/);
+  var pending = viaWorker.interruptKeepingQueued();
+  worker.handler({ type: "query_done" });
+  await assert.rejects(pending, /query ended/);
+});
+
+test("Send now uses neither the undocumented priority field nor a cancel-and-re-push", function () {
+  var root = path.join(__dirname, "..", "lib");
+  ["project-user-message.js", "queued-chat.js", "sdk-bridge.js", path.join("yoke", "adapters", "claude.js"), path.join("yoke", "adapters", "claude-worker.js")].forEach(function (file) {
+    var src = fs.readFileSync(path.join(root, file), "utf8");
+    assert.equal(/priority\s*:\s*["']now["']/.test(src), false, file + ": no SDKUserMessage.priority");
+    assert.equal(/cancelQueued\s*:\s*true|cancel_queued\s*:\s*true/.test(src), false, file + ": the interrupt never cancels queued input");
+  });
+});
+
 test("two tabs on one session and a dropped reply: the text is sent to the session once and never pushed to the agent again", async function () {
   var h = await harness();
   try {
