@@ -492,3 +492,27 @@ test("a second tab shows the delivered message once, from the server's echo", as
   assert.deepEqual(env.shown, []);
   assert.equal(copiesInTranscript(env, true), 1);
 });
+
+// A message that ends while the page shows another session leaves no sender record
+// behind: seen through a later tracked frame for the same id, which is drawn as
+// redrawn (the echo shows the message) only when no record of this socket's send remains.
+test("a delivery or a final answer for a message with no item leaves no sender record", async function () {
+  var ends = [
+    function (env, id) { delivered(env, id); },
+    function (env, id) { answer(env, id, "cancelled"); },
+    function (env, id) { answer(env, id, "dropped", { text: "x", cause: "closed" }); },
+  ];
+  for (var i = 0; i < ends.length; i++) {
+    var env = await setup(CAN_CANCEL);
+    type(env, "ended elsewhere " + i);
+    var id = chat(env)[0].messageId;
+    env.us.handleSessionShown(new FakeElement("textarea"));
+    env.us.handleHistoryReplayed();
+    ends[i](env, id);
+    els.messages._children = [];
+    env.shown.length = 0;
+    tracked(env, { messageId: id, text: "same id again" });
+    delivered(env, id);
+    assert.deepEqual(env.shown, [], "row " + i + ": no record of the earlier send, so the item is a redrawn one");
+  }
+});
