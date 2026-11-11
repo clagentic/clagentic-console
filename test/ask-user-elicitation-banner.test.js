@@ -85,6 +85,20 @@ Object.keys(OPENERS).forEach(function (kind) {
   });
 });
 
+test("an ask_user call an autonomous loop denies raises no banner, since no prompt opens to close it", async function () {
+  await world.withServer(async function (server) {
+    var seen = observe(server);
+    server.session.loop = { active: true, role: "execute" };
+    server.sdk({ yokeType: "tool_start", blockId: 0, toolId: "tu-loop", toolName: "AskUserQuestion" });
+    server.sdk({ yokeType: "tool_input_delta", blockId: 0, partialJson: JSON.stringify(ASK_INPUT) });
+    server.sdk({ yokeType: "block_stop", blockId: 0 });
+    var asked = server.ask("AskUserQuestion", ASK_INPUT, { toolUseID: "tu-loop" });
+    assert.equal((await asked.promise).behavior, "deny");
+    assert.equal(asked.id, null, "no prompt opened");
+    assert.deepEqual(seen.created("ask_user"), [], "no banner left with nothing to close it");
+  });
+});
+
 test("switching the approval banner off in the user's preferences suppresses an ask_user or elicitation banner", async function () {
   var storage = {};
   global.localStorage = { getItem: function (k) { return storage[k] || null; }, setItem: function (k, v) { storage[k] = String(v); } };
