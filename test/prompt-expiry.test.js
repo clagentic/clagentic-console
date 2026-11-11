@@ -10,9 +10,12 @@ var { createExpiryReader } = require("../lib/prompt-expiry");
 var claudeAdapter = require("../lib/yoke/adapters/claude");
 var { startWorkerProcess } = require("./helpers/worker-process");
 var world = require("./prompt-harness-world");
+var { MALFORMED_MINUTES } = require("./prompt-expiry-rows");
 
 var HOUR = 3600000;
 var DAY = 24 * HOUR;
+// What a prompt waits when promptExpiryMinutes is not set.
+var DEFAULT_BOUND = 30 * 60000;
 
 function makeRegistry(config) {
   var recorded = [];
@@ -53,7 +56,7 @@ Object.keys(OPENERS).forEach(function (kind) {
     var settled = false;
     opened.answer.then(function () { settled = true; });
 
-    t.mock.timers.tick(DAY - 1);
+    t.mock.timers.tick(DEFAULT_BOUND - 1);
     await Promise.resolve();
     assert.equal(settled, false, "still pending a moment before the bound");
     assert.equal(cancels(h).length, 0);
@@ -90,17 +93,17 @@ test("promptExpiryMinutes sets the bound; 0 disables it", async function (t) {
 test("a malformed or negative promptExpiryMinutes falls back to the default with one warning naming the key", function (t) {
   var warnings = silenceWarnings(t);
   var read = createExpiryReader();
-  [-5, "10", NaN, Infinity, true, {}, 1e9].forEach(function (bad) {
-    assert.equal(read({ promptExpiryMinutes: bad }), DAY, JSON.stringify(bad));
+  MALFORMED_MINUTES.forEach(function (bad) {
+    assert.equal(read({ promptExpiryMinutes: bad }), DEFAULT_BOUND, JSON.stringify(bad));
   });
   read({ promptExpiryMinutes: -5 });
   read({ promptExpiryMinutes: -5 });
-  assert.equal(warnings.filter(function (w) { return /promptExpiryMinutes/.test(w); }).length, 7, "one per distinct value");
-  assert.equal(read({}), DAY);
-  assert.equal(read(null), DAY);
+  assert.equal(warnings.filter(function (w) { return /promptExpiryMinutes/.test(w); }).length, MALFORMED_MINUTES.length, "one per distinct value");
+  assert.equal(read({}), DEFAULT_BOUND);
+  assert.equal(read(null), DEFAULT_BOUND);
   assert.equal(read({ promptExpiryMinutes: 0 }), 0);
   assert.equal(read({ promptExpiryMinutes: 1.5 }), 90000);
-  assert.equal(warnings.length, 7, "absent and valid values do not warn");
+  assert.equal(warnings.length, MALFORMED_MINUTES.length, "absent and valid values do not warn");
 });
 
 test("the registry warns once for a malformed value across many prompts", function (t) {
@@ -118,7 +121,7 @@ test("an answer just before the bound wins and the prompt does not also expire",
   t.mock.timers.enable({ apis: ["setTimeout"] });
   var h = makeRegistry(null);
   var opened = OPENERS.permission(h);
-  t.mock.timers.tick(DAY - 1);
+  t.mock.timers.tick(DEFAULT_BOUND - 1);
   var outcome = h.registry.respond(opened.requestId, { decision: "allow" }, {});
   assert.equal(outcome.status, "resolved");
   t.mock.timers.tick(10);
@@ -152,15 +155,15 @@ test("a reconnect, a replay and a history page do not reset the deadline", async
   t.mock.timers.enable({ apis: ["setTimeout"] });
   var h = makeRegistry(null);
   var opened = OPENERS.permission(h);
-  t.mock.timers.tick(DAY / 2);
+  t.mock.timers.tick(DEFAULT_BOUND / 2);
   // What a reconnecting client causes: the prompt is re-presented and a
   // replayed history is annotated against it.
   h.registry.pendingMessages(h.session);
   h.registry.pendingInfo(h.session);
   h.registry.replayAnnotator(h.session, h.recorded, 0);
   h.registry.lookup(opened.requestId);
-  t.mock.timers.tick(DAY / 2);
-  assert.equal(cancels(h).length, 1, "expired DAY after open(), not DAY after the reconnect");
+  t.mock.timers.tick(DEFAULT_BOUND / 2);
+  assert.equal(cancels(h).length, 1, "expired at the bound after open(), not the bound after the reconnect");
 });
 
 test("a changed setting applies to the next prompt, not to one already open", function (t) {
@@ -176,7 +179,7 @@ test("an in-process permission prompt expires through the registry, with the SDK
   await world.withServer(async function (server) {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     var asked = server.ask("Bash", { command: "make" });
-    t.mock.timers.tick(DAY);
+    t.mock.timers.tick(DEFAULT_BOUND);
     var value = await asked.promise;
     assert.equal(value.behavior, "deny");
     var cancel = server.session.history.filter(function (m) { return m.type === "prompt_cancel"; })[0];
@@ -191,7 +194,7 @@ test("a Codex approval prompt, which reaches canUseTool with only an abort signa
     var ac = new AbortController();
     var pending = server.bridge.handleCanUseTool(server.session, "Bash", { command: "make" }, { signal: ac.signal });
     assert.equal(server.heldPromptIds().length, 1);
-    t.mock.timers.tick(DAY);
+    t.mock.timers.tick(DEFAULT_BOUND);
     var value = await pending;
     assert.equal(value.behavior, "deny");
     assert.equal(server.heldPromptIds().length, 0);
@@ -214,7 +217,7 @@ test("the invariant harness sees the expiry as one terminal event with source ti
       if (r) reqs.push(r);
     }
     assert.ok(reqs.length >= 3);
-    await h.expire(function () { t.mock.timers.tick(DAY); });
+    await h.expire(function () { t.mock.timers.tick(DEFAULT_BOUND); });
     reqs.forEach(function (r) {
       assert.equal(r.settled, true, r.id + " settled");
       assert.equal(h.terminalEvents[r.id], 1, r.id + " recorded exactly one terminal event");

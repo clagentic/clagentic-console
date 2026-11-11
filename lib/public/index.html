@@ -1262,6 +1262,14 @@
               <div class="settings-hint" id="ss-user-shell-problem" role="alert"></div>
             </div>
           </div>
+          <div class="settings-card settings-admin-only">
+            <div class="settings-field">
+              <label class="settings-label" for="ss-prompt-expiry">Expire unanswered prompts after (minutes)</label>
+              <div class="settings-hint">Whole minutes, 0 to 35791. A permission, plan, question or elicitation prompt nobody answers in that time is denied or declined and its card says it expired. 0 disables expiry: a prompt then waits until it is answered. The default is 30. A change applies to the next prompt. Only an admin can change this.</div>
+              <input type="number" id="ss-prompt-expiry" class="settings-budget-input" min="0" max="35791" step="1" value="30">
+              <div class="settings-hint" id="ss-prompt-expiry-problem" role="alert"></div>
+            </div>
+          </div>
           <div class="settings-card">
             <div class="settings-field">
               <label class="settings-label">Mode for sessions opened by the CLI or a trigger</label>

@@ -110,6 +110,8 @@ var ORIGINAL_CASE_LABELS = [
   // The server-wide permission settings, and the result of applying a new
   // default mode to the running sessions.
   "permission_settings", "permission_mode_applied",
+  // The unanswered-prompt expiry setting.
+  "prompt_expiry_settings",
   // A queued chat message the agent took in, and the answer to withdrawing one.
   "message_delivered", "queued_message_cancelled", "queued_message_tracked", "queued_message_send_now",
   // The ! command line: the outcome of a command, and its settings.
