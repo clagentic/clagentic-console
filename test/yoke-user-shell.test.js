@@ -156,9 +156,9 @@ test("a cap that falls inside a multibyte character backs off to the character b
 
   var cap = 60;
   var r = cap - Buffer.byteLength(markerFor(cap));
-  var cut = userShell.capText("a".repeat(r - 1) + "éé", cap);
+  var cut = userShell.capText("a".repeat(r - 1) + "éé" + "b".repeat(100), cap);
   assert.equal(cut.output, "a".repeat(r - 1) + markerFor(cap));
-  var whole = userShell.capText("a".repeat(r - 2) + "éé", cap);
+  var whole = userShell.capText("a".repeat(r - 2) + "éé" + "b".repeat(100), cap);
   assert.equal(whole.output, "a".repeat(r - 2) + "é" + markerFor(cap), "a character that fits whole is kept");
   assert.ok(Buffer.byteLength(whole.output) <= cap);
 });
