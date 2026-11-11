@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clagentic: Console - refresh preview, dark</title>
+<style>
+/* Self-contained: no network, no external fonts or images. DM Sans and DM Mono
+   are named first and fall back to the system faces when not installed. */
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 "DM Sans",system-ui,sans-serif}
+.mono{font-family:"DM Mono",ui-monospace,Menlo,monospace}
+main{max-width:1360px;margin:0 auto;padding:24px 20px 96px}
+h1{font-size:24px;font-weight:300;letter-spacing:.12em;margin:0 0 4px}
+h2{font-size:19px;margin:48px 0 6px;padding-top:14px;border-top:1px solid var(--border)}
+h3{font-size:15px;margin:22px 0 6px}
+p,li{max-width:96ch}
+.note{color:var(--text-muted);font-size:13px;max-width:100ch;margin:4px 0 10px}
+code{font-family:"DM Mono",ui-monospace,Menlo,monospace;font-size:12.5px;background:var(--code-bg);padding:1px 5px;border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:6px 0 12px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border-subtle);vertical-align:top}
+th{color:var(--text-muted);font-weight:500}
+.sw{display:inline-block;width:30px;height:18px;border-radius:4px;border:1px solid var(--border-strong);vertical-align:middle;margin-right:6px}
+.pass{color:var(--success);font-weight:600}
+.fail{color:var(--error);font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.card{background:var(--bg-alt);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.tier{border-radius:8px;padding:10px 12px;font-size:13px;border:1px solid var(--border-strong)}
+.cap{font-size:12px;color:var(--text-muted);margin:0 0 4px}
+/* frames */
+.frame{background:var(--bg);border:1px solid var(--border-strong);border-radius:10px;overflow:hidden;flex:0 0 auto;max-width:100%}
+.frame-h{font-size:12px;color:var(--text-muted);padding:6px 10px;background:var(--sidebar-bg);border-bottom:1px solid var(--border)}
+.pane{padding:var(--pt) var(--px) var(--pb)}
+.av{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;font-weight:700;font-size:12px;color:var(--on-av);line-height:1}
+.clamp3{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
+.tool{display:flex;gap:8px;align-items:center;padding:6px 12px;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;font-size:13px;margin:0 var(--mx) var(--gu)}
+.tool b{color:var(--accent);font-weight:500}.tool span{color:var(--text-muted)}
+.perm{padding:10px 12px;background:var(--bg-alt);border:1px solid var(--border);border-left:3px solid var(--warning);border-radius:8px;font-size:13px;margin:0 var(--mx) var(--gu)}
+.perm .bt{display:flex;gap:8px;margin-top:8px}
+.pbtn{border:1px solid var(--border-strong);background:transparent;color:var(--text);border-radius:18px;padding:0 16px;font:inherit;font-size:13px;min-height:var(--pbh)}
+.pbtn.go{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+.notice{text-align:center;font-size:12px;color:var(--text-muted);margin:0 var(--mx) var(--gu)}
+/* today layout */
+.t-msg{display:flex;flex-direction:column;padding:0 var(--mx);margin:0 0 var(--gu)}
+.t-msg.own{align-items:flex-end}
+.t-hd{display:flex;gap:8px;align-items:baseline;font-size:15px;line-height:1.6}
+.t-hd b{font-weight:700}.t-hd i{font-style:normal;font-size:12px;color:var(--text-dimmer)}
+.t-label{font-size:12px;color:var(--text-dimmer);margin:2px 0 4px;line-height:1.6}
+.t-bub{background:var(--user-bubble);border-radius:20px 20px 20px 4px;padding:12px 18px;max-width:85%;font-size:15px;line-height:1.55}
+.t-msg.own .t-bub{border-radius:20px 20px 4px 20px}
+.t-msg.inj .t-bub{border:1px dashed var(--text-dimmer)}
+.t-exp{font-size:12px;line-height:16px;margin-top:2px;color:var(--accent);background:none;border:0;padding:0;font-family:inherit;text-align:left}
+.t-act{min-height:28px;padding-top:2px;display:flex;align-items:center;font-size:11px;color:var(--text-dimmer)}
+.t-asst{padding:4px var(--mx);margin:0 0 var(--ga);font-size:15px;line-height:1.7}
+.t-sq{margin:8px var(--mx);padding:6px 12px;border:1px dashed var(--text-dimmer);border-radius:6px;font-size:13px;color:var(--text-muted);line-height:1.6}
+.t-sq .tg{font-size:11px;text-transform:uppercase;color:var(--text-dimmer);margin-right:8px}
+.t-sq .tm{font-size:12px;color:var(--accent)}
+.t-sq .ac{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.t-sq .ac button{min-height:36px;padding:0 14px;border:1px solid var(--border);border-radius:18px;background:transparent;color:var(--text);font-size:13px;font-family:inherit}
+/* proposed layout */
+.n-msg{padding:0 var(--mx);margin:0 0 var(--gu)}
+.n-hd{display:flex;align-items:center;gap:6px;height:24px;font-size:12px;color:var(--text-dimmer);white-space:nowrap}
+.n-hd .nm{font-size:15px;font-weight:700;color:var(--text);line-height:24px}
+.n-hd .lb{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.n-hd.own{flex-direction:row-reverse}
+.tg{position:relative;margin-left:auto;min-width:44px;text-align:center;background:none;border:0;padding:0;font:inherit;font-size:12px;font-weight:500;color:var(--accent);cursor:pointer;white-space:nowrap}
+.tg::after{content:"";position:absolute;inset:-10px 0}
+.n-hd.own .tg{margin-left:0;margin-right:auto}
+.n-bub{padding:8px 12px;border-radius:12px;background:var(--user-bubble);max-width:85%;width:fit-content;font-size:15px;line-height:1.5}
+.n-msg.own .n-bub{margin-left:auto}
+.n-msg.inj .n-bub{border:1px dashed var(--text-dimmer)}
+.n-asst{padding:0 var(--mx);margin:0 0 var(--gu);font-size:15px;line-height:1.6}
+.cc{display:flex;align-items:center;gap:8px;margin:0 var(--mx);border:1px dashed var(--text-dimmer);border-radius:8px;padding:4px 8px;font-size:13px}
+.cc .meta{font-size:12px;color:var(--accent);white-space:nowrap}
+.cc .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)}
+.cc .bt{display:flex;gap:6px;flex:0 0 auto}
+.cc .b{height:28px;padding:0 10px;border:1px solid var(--border-strong);border-radius:14px;background:transparent;color:var(--text);font:inherit;font-size:13px}
+.cc .b svg{display:none}
+.phone .cc .b{width:44px;height:44px;padding:0;border:0;border-radius:8px;display:inline-flex;align-items:center;justify-content:center}
+.phone .cc .b span{display:none}
+.phone .cc .b svg{display:block;width:20px;height:20px}
+.phone .cc .bt{gap:0}
+.phone .cc .meta .lg{display:none}
+.cc.open{flex-wrap:wrap}
+.cc.open .meta{flex:1;white-space:normal}
+.cc.open .txt{flex:1 1 100%;order:3;white-space:pre-wrap;overflow:visible;color:var(--text-secondary)}
+.dim{font-size:12px;color:var(--text-dimmer)}
+/* annotation chips */
+.chip{display:inline-block;font-size:11px;font-family:"DM Mono",ui-monospace,monospace;border:1px solid var(--border-strong);border-radius:10px;padding:0 7px;color:var(--text-muted)}
+.hit{outline:1px dashed var(--accent);outline-offset:-1px}
+/* lists and phone flow */
+.sl{background:var(--sidebar-bg);border:1px solid var(--border);border-radius:10px;padding:6px;width:280px}
+.sl.ph{width:390px}
+.sli{display:flex;align-items:center;gap:8px;padding:0 10px;height:30px;border-radius:8px;font-size:13px;font-weight:600;color:var(--text-muted);position:relative}
+.sl.ph .sli{height:44px;font-size:15px}
+.sli.act{background:var(--sidebar-active);color:var(--text)}
+.sli.act::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--accent)}
+.sli .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sli .tm{font-size:12px;font-weight:400;color:var(--text-muted)}
+.sli .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.sl.today .sli{height:34px}
+.scr{width:390px;height:620px;background:var(--bg);border:1px solid var(--border-strong);border-radius:22px;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.scr .top{display:flex;align-items:center;gap:4px;height:44px;padding:0 4px;background:var(--sidebar-bg);border-bottom:1px solid var(--border);font-weight:600}
+.scr .top button,.scr .lrow,.scr .seg button,.tab{min-height:44px}
+.scr .bk{width:44px;height:44px;border:0;background:none;color:var(--text);display:flex;align-items:center;justify-content:center}
+.scr .bk svg{width:22px;height:22px}
+.scr .body{flex:1;overflow:hidden}
+.lrow{display:flex;align-items:center;gap:12px;padding:0 16px;font-size:15px;color:var(--text-secondary);border-bottom:1px solid var(--border-subtle);height:44px}
+.lrow .v{margin-left:auto;color:var(--text-muted);font-size:13px}
+.lrow svg{width:18px;height:18px;color:var(--text-muted)}
+.lh{font:500 11px "DM Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);padding:14px 16px 4px}
+.tabs{display:flex;height:56px;background:var(--sidebar-bg);border-top:1px solid var(--border)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted);position:relative}
+.tab.on{color:var(--accent)}
+.tap{position:absolute;right:8px;top:2px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:700 12px/22px "DM Sans",sans-serif;text-align:center}
+.seg{display:flex;margin:8px 16px;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:none;color:var(--text-secondary);font:inherit;font-size:15px}
+.seg button.on{background:var(--accent);color:var(--on-accent);font-weight:600}
+.sw2{width:44px;height:26px;border-radius:13px;border:1px solid var(--border-strong);background:var(--accent);position:relative;margin-left:auto}
+.sw2::after{content:"";position:absolute;right:2px;top:2px;width:20px;height:20px;border-radius:50%;background:var(--on-accent)}
+.sheet{position:absolute;left:0;right:0;bottom:56px;background:var(--bg-alt);border-top:1px solid var(--border-strong);border-radius:14px 14px 0 0;padding:8px 0}
+</style>
+</head>
+<body>
+<main id="root"><noscript>This preview computes its contrast table and spacing figures in the page. Enable scripting to read them.</noscript></main>
+<script>
+(function () {
+/* ---------- data: proposed dark palette (identical to docs/brand/BRAND.md) ---------- */
+var MODE = "dark";
+var BASE = {
+  base00:"1C2433", base01:"242E40", base02:"364257", base03:"8E9DB3",
+  base04:"A7B5C8", base05:"C5D0DE", base06:"EAF0F8", base07:"F5F9FF",
+  base08:"FF8094", base09:"00CFFF", base0A:"7BA7F7", base0B:"29D9A8",
+  base0C:"A78BFA", base0D:"7BA7F7", base0E:"C084FC", base0F:"818CF8", accent2:"7BA7F7"
+};
+var TODAY = {
+  base00:"060810", base01:"111827", base02:"1E2E48", base03:"3D5068",
+  base04:"7A8FA6", base05:"C8D4E0", base06:"E0EAF4", base07:"F0F6FF",
+  base08:"FF4D6A", base09:"00CFFF", base0A:"4A7FE8", base0B:"29D9A8",
+  base0C:"7B3FE4", base0D:"4A7FE8", base0E:"A855F7", base0F:"6366F1", accent2:"4A7FE8"
+};
+var ROLE = {
+  base00:"page background", base01:"raised surface", base02:"decorative border", base03:"dimmer text",
+  base04:"muted text", base05:"secondary text", base06:"primary text", base07:"strongest text",
+  base08:"error", base09:"accent (cyan)", base0A:"blue", base0B:"success",
+  base0C:"violet", base0D:"blue (links)", base0E:"keyword purple", base0F:"indigo", accent2:"secondary accent"
+};
+var TOK = {
+  "sidebar-bg":"141B28", "bg":"1C2433", "bg-alt":"242E40", "user-bubble":"2E3A4F", "input-bg":"374359",
+  "code-bg":"101722", "sidebar-active":"263245",
+  "text":"EAF0F8", "text-secondary":"C5D0DE", "text-muted":"A7B5C8", "text-dimmer":"8E9DB3",
+  "border":"364257", "border-subtle":"2A3548", "border-strong":"8294AE",
+  "accent":"00CFFF", "accent2":"7BA7F7", "error":"FF8094", "success":"29D9A8", "warning":"F59E0B",
+  "on-accent":"0B1220", "on-av":"0B1220",
+  "av0":"7FD8F0", "av1":"B9A3F5", "av2":"7FE0C2", "av3":"F2C879"
+};
+var TOK_ROLE = {
+  "sidebar-bg":"sidebar, tier 1 (darkest chrome)", "bg":"page, tier 2", "bg-alt":"raised card, tier 3",
+  "user-bubble":"own-message surface, tier 4", "input-bg":"composer input, tier 5", "code-bg":"code blocks",
+  "sidebar-active":"selected session row", "text":"primary text", "text-secondary":"body text",
+  "text-muted":"labels, secondary UI, placeholders", "text-dimmer":"timestamps, labels on page, sidebar, raised, code",
+  "border":"decorative divider", "border-subtle":"hairline", "border-strong":"input, button and control boundary",
+  "accent":"interactive, live, focus", "accent2":"links", "error":"failure", "success":"success", "warning":"caution",
+  "on-accent":"text on accent fill", "on-av":"initials on avatar tint",
+  "av0":"avatar tint 1", "av1":"avatar tint 2", "av2":"avatar tint 3", "av3":"avatar tint 4"
+};
+var SURF = ["sidebar-bg","bg","bg-alt","user-bubble","input-bg","code-bg","sidebar-active"];
+var SURF_NAME = {"sidebar-bg":"sidebar","bg":"page","bg-alt":"raised","user-bubble":"own-message","input-bg":"input","code-bg":"code","sidebar-active":"selected row"};
+var TEXT_ON = {
+  "text":SURF, "text-secondary":SURF, "text-muted":SURF,
+  "text-dimmer":["sidebar-bg","bg","bg-alt","code-bg"],
+  "accent":["sidebar-bg","bg","bg-alt","user-bubble","code-bg"],
+  "accent2":["sidebar-bg","bg","bg-alt","user-bubble","code-bg"],
+  "error":["sidebar-bg","bg","bg-alt","user-bubble","code-bg"],
+  "success":["sidebar-bg","bg","bg-alt","user-bubble","code-bg"],
+  "warning":["sidebar-bg","bg","bg-alt","user-bubble","code-bg"]
+};
+var TIER_PAIRS = [["sidebar-bg","bg"],["bg","bg-alt"],["bg-alt","user-bubble"],["user-bubble","input-bg"]];
+var TODAY_SURF = {"sidebar-bg":"04060B","bg":"060810","bg-alt":"111827","user-bubble":"151F31","input-bg":"172338","code-bg":"05070E"};
+
+/* ---------- spacing constants: the single source for the style vars and the accounting ---------- */
+var SP = {
+  t: {av:38, name:24, label:25.2, bpy:12, bpx:18, bline:23.25, exp:18, act:30, gu:8, ga:12, ln:20.8, btn:36},
+  n: {head:24, bpy:8, bpx:12, bline:22.5, gu:6, grp:2, btn:28, card:38, cardPh:54}
+};
+var STEPS = [
+  {name:"Compact", w:640}, {name:"Comfortable (default)", w:820}, {name:"Wide", w:1040}, {name:"Full", w:1280, full:true}
+];
+
+/* ---------- helpers ---------- */
+function lin(c){c/=255;return c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4)}
+function Y(h){return 0.2126*lin(parseInt(h.substr(0,2),16))+0.7152*lin(parseInt(h.substr(2,2),16))+0.0722*lin(parseInt(h.substr(4,2),16))}
+function cr(a,b){var x=Y(a),y=Y(b),hi=Math.max(x,y),lo=Math.min(x,y);return (hi+0.05)/(lo+0.05)}
+function Ls(h){var y=Y(h);return y<=216/24389?y*24389/27:116*Math.cbrt(y)-16}
+function r1(n){return Math.round(n*10)/10}
+function r2(n){return (Math.round(n*100)/100).toFixed(2)}
+function T(n){return TOK[n]}
+function sw(h){return '<span class="sw" style="background:#'+h+'"></span>'}
+function okc(v,min){return v>=min?'<span class="pass">'+r2(v)+':1 pass</span>':'<span class="fail">'+r2(v)+':1 FAIL</span>'}
+function av(i,ch,size,rad){return '<span class="av" style="width:'+size+'px;height:'+size+'px;border-radius:'+rad+';background:var(--av'+i+')">'+ch+'</span>'}
+var ICON = {
+  play:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>',
+  right:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>'
+};
+function vars(o){var s='';for(var k in o){s+='--'+k+':'+o[k]+';'}return s}
+
+/* ---------- sample content, shared by both layouts ---------- */
+var INJ = "Review finished for the scheduler change.\nThe stale-SHA check now runs before the lock read.\nTwo findings remain: the retry cap is not configurable,\nand the timeout message omits the schedule id.\nBoth are filed as follow-ups.";
+var SCHED = "Check the build status and report any failing job with its first error line.";
+
+/* ---------- today layout ---------- */
+function tMsg(o){
+  var s='<div class="t-msg'+(o.own?' own':'')+(o.inj?' inj':'')+'">';
+  if(!o.own){
+    s+='<div style="margin-top:2px;height:36px">'+av(o.tint,o.init,36,'6px')+'</div>';
+    s+='<div class="t-hd"><b>'+o.name+'</b><i>'+o.time+'</i></div>';
+    if(o.label) s+='<div class="t-label">'+o.label+'</div>';
+  }
+  s+='<div class="t-bub">'+(o.clamp?'<span class="clamp3">'+o.text+'</span>':o.text)+'</div>';
+  if(o.clamp) s+='<button class="t-exp" type="button">Expand</button>';
+  s+='<div class="t-act">'+(o.own?'time on hover, then copy, fork, rewind':'copy, fork, rewind')+'</div></div>';
+  return s;
+}
+function tSched(){
+  return '<div class="t-sq"><span class="tg">Scheduled</span><span class="tm">Scheduled repeat - Next at 01:16 PM (8m 18s) - every 20 min - 6 of 9 left</span>'+
+    '<div class="clamp3">'+SCHED+' Include the run id and the branch for each failing job. Skip jobs marked flaky.</div>'+
+    '<div class="ac"><button type="button">Fire now</button><button type="button">Cancel</button><button type="button">Expand</button></div></div>';
+}
+function tFrame(w,phone){
+  var p=SP.t, mx=20, px=16;
+  var st=vars({pt:'20px',px:px+'px',pb:'12px',mx:mx+'px',gu:p.gu+'px',ga:p.ga+'px',pbh:'36px'});
+  var s='<div class="frame'+(phone?' phone':'')+'" style="width:'+w+'px;'+st+'"><div class="frame-h">Today, frame '+w+' px</div><div class="pane">';
+  s+=tMsg({name:'Dana',init:'D',tint:1,time:'01:05 PM',text:'Can the retry guard read the lock first?'});
+  s+=tMsg({own:true,text:'Run the checks again after the reorder.'});
+  s+='<div class="t-asst">I found the failing check. The retry guard compares the stale SHA before it reads the lock. Reordering the two reads fixes it.</div>';
+  s+=tMsg({name:'review-agent',init:'R',tint:0,time:'01:09 PM',label:'trigger · extracted',inj:true,clamp:true,text:INJ});
+  s+='<div class="tool"><b>Read</b><span>lib/daemon.js</span><span>212 lines</span></div>';
+  s+='<div class="perm">Bash wants to run: <code>npm test</code><div class="bt"><button class="pbtn go" type="button">Allow</button><button class="pbtn" type="button">Deny</button></div></div>';
+  s+='<div class="notice">Context 62% used - session resumed</div>';
+  s+=tSched();
+  return s+'</div></div>';
+}
+
+/* ---------- proposed layout, one header line, mirrored ---------- */
+function nHead(o){
+  var s='<div class="n-hd'+(o.own?' own':'')+'">';
+  if(!o.noav) s+=av(o.tint,o.init,24,'50%');
+  if(!o.noname) s+='<span class="nm">'+o.name+'</span>';
+  if(o.label) s+='<span class="lb">'+o.label+'</span>';
+  s+='<span>'+o.time+'</span>';
+  if(o.tg) s+='<button class="tg" type="button">'+o.tg+'</button>';
+  return s+'</div>';
+}
+function nMsg(o){
+  return '<div class="n-msg'+(o.own?' own':'')+(o.inj?' inj':'')+'">'+nHead(o)+
+    '<div class="n-bub">'+(o.clamp?'<span class="clamp3">'+o.text+'</span>':o.text)+'</div></div>';
+}
+/* The shared collapsible component, configured by lines, size and controls. */
+function ccCard(open,phone){
+  var meta=open?'SCHEDULED · Next at 01:16 PM (8m 18s) · every 20 min · 6 of 9 left':'SCHEDULED · <span class="lg">in </span>8m 18s <span class="lg">· every 20 min</span>';
+  var full=SCHED+' Include the run id and the branch for each failing job. Skip jobs marked flaky.';
+  var tgl=open?'Collapse':'Expand';
+  var tgi=open?ICON.up:ICON.down;
+  var s='<div class="cc'+(open?' open':'')+'"><span class="meta">'+meta+'</span>';
+  s+='<span class="txt">'+(open?full:SCHED)+'</span>';
+  s+='<span class="bt"><button class="b" type="button" aria-label="Fire now">'+ICON.play+'<span>Fire now</span></button>'+
+     '<button class="b" type="button" aria-label="Cancel">'+ICON.x+'<span>Cancel</span></button>'+
+     '<button class="b" type="button" aria-label="'+tgl+'">'+tgi+'<span>'+tgl+'</span></button></span></div>';
+  return s;
+}
+function nFrame(w,phone){
+  var mx=phone?4:0, px=phone?8:12;
+  var st=vars({pt:'12px',px:px+'px',pb:'8px',mx:mx+'px',gu:SP.n.gu+'px',pbh:phone?'44px':'28px'});
+  var s='<div class="frame'+(phone?' phone':'')+'" style="width:'+w+'px;'+st+'"><div class="frame-h">Proposed, frame '+w+' px</div><div class="pane">';
+  s+=nMsg({name:'Dana',init:'D',tint:1,time:'01:05 PM',text:'Can the retry guard read the lock first?'});
+  s+=nMsg({own:true,name:'Alex',init:'A',tint:2,time:'01:07 PM',text:'Run the checks again after the reorder.'});
+  s+='<div class="n-asst">I found the failing check. The retry guard compares the stale SHA before it reads the lock. Reordering the two reads fixes it.</div>';
+  s+=nMsg({name:'review-agent',init:'R',tint:0,time:'01:09 PM',label:'trigger · extracted',inj:true,clamp:true,text:INJ,tg:'Expand'});
+  s+='<div class="tool"><b>Read</b><span>lib/daemon.js</span><span>212 lines</span></div>';
+  s+='<div class="perm">Bash wants to run: <code>npm test</code><div class="bt"><button class="pbtn go" type="button">Allow</button><button class="pbtn" type="button">Deny</button></div></div>';
+  s+='<div class="notice">Context 62% used - session resumed</div>';
+  s+=ccCard(false,phone);
+  s+='<div style="height:'+SP.n.gu+'px"></div>'+ccCard(true,phone);
+  return s+'</div></div>';
+}
+
+/* ---------- space accounting ---------- */
+function accounting(phone){
+  var t=SP.t, n=SP.n;
+  var hdT=t.av+t.name+t.label, bubT=2*t.bpy+2, bubN=2*n.bpy+2;
+  var injT=hdT+bubT+3*t.bline+t.exp+t.act, injN=n.head+bubN+3*n.bline;
+  var ownT=2*t.bpy+t.bline+t.act, ownN=n.head+2*n.bpy+n.bline;
+  var schT=2+12+(phone?2:1)*t.ln+3*t.ln+6+t.btn, schN=phone?n.cardPh:n.card;
+  var rows=[
+    ["Message header, other speaker",hdT,n.head,"avatar row 38 + name row 24 + label row 25.2 become one 24 px line"],
+    ["Own message: time, identity, actions",t.act,n.head,"the 30 px action row under the bubble becomes the 24 px header line; actions overlay it"],
+    ["Gap between messages",t.gu,n.gu,"8 (12 after an assistant message) becomes 6; a same-speaker run takes 2"],
+    ["Collapse control",t.exp,0,"Expand moves into the header line; 44 px hit area comes from a pseudo-element, 0 layout px"],
+    ["Bubble padding, vertical",2*t.bpy,2*n.bpy,"12 + 12 becomes 8 + 8; horizontal 18 becomes 12"],
+    ["Pending scheduled card"+(phone?" (phone)":" (desktop)"),schT,schN,(phone?"5 rows plus a wrapped meta line, 36 px pills, becomes 1 row of 44 px icon buttons":"5 rows (meta, 3 prompt lines, actions) becomes 1 row of 28 px buttons")],
+    ["Injected message, 3 collapsed lines, whole block",injT,injN,"header + bubble + text + collapse row + action row"],
+    ["Own message, one line, whole block",ownT,ownN,"bubble + action row becomes header line + bubble"],
+    ["Side padding, each edge",36,phone?12:12,"pane 16 + message 20 becomes "+(phone?"pane 8 + message 4":"pane 12")+" (text column wider by "+(phone?"48":"48")+" px)"]
+  ];
+  var s='<div class="card" style="flex:1 1 360px;min-width:300px"><div class="cap">Space accounting, '+(phone?'phone':'desktop')+', px, same content. Computed from the spacing constants that style both frames.</div><table><tr><th>Item</th><th>Today</th><th>Proposed</th><th>Saved</th></tr>';
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    s+='<tr><td>'+r[0]+'<div class="dim">'+r[3]+'</div></td><td>'+r1(r[1])+'</td><td>'+r1(r[2])+'</td><td class="'+(r[2]<r[1]?'pass':'fail')+'">'+r1(r[1]-r[2])+(r[2]<r[1]?'':' NOT SMALLER')+'</td></tr>';
+  }
+  s+='</table><div class="dim">Line heights: today inherits 1.6 from the body (15 px name = 24 px, 12 px label = 19.2 px plus 2 + 4 margin) and 1.55 in the bubble; the toggle is a button at the browser default line height, taken as 16 px plus 2 margin. Proposed message text uses 1.5. Pending card row count: <b>1 on desktop, 1 on phone</b> (today 5 rows on desktop, 6 on phone because the meta line wraps).</div></div>';
+  return s;
+}
+
+/* ---------- sections ---------- */
+function secPalette(){
+  var s='<h2 id="palette">1. Palette and tokens</h2><p class="note">Mode: dark. Every text and boundary pair below is computed in the page from the hex values and tested against WCAG AA: 4.5:1 for body text, 3:1 for large text and UI boundaries. The same values are in <code>docs/brand/BRAND.md</code>.</p>';
+  s+='<h3>Surface tiers and lightness steps</h3><div class="grid3">';
+  for(var i=0;i<SURF.length;i++){var k=SURF[i];s+='<div class="tier" style="background:var(--'+k+')"><b>'+SURF_NAME[k]+'</b> <span class="mono">#'+T(k)+'</span><br><span class="dim" style="color:var(--text-muted)">L* '+r1(Ls(T(k)))+' - '+TOK_ROLE[k]+'</span></div>'}
+  s+='</div><table><tr><th>Page background</th><th>Today</th><th>Proposed</th><th>Lift</th></tr><tr><td>--bg</td><td>#'+TODAY.base00+', L* '+r1(Ls(TODAY.base00))+'</td><td>#'+T('bg')+', L* '+r1(Ls(T('bg')))+'</td><td class="pass">+'+r1(Ls(T('bg'))-Ls(TODAY.base00))+' L*, lighter than #060810</td></tr></table>';
+  s+='<table><tr><th>Adjacent tiers</th><th>Proposed L* low</th><th>Proposed L* high</th><th>Proposed step (L*)</th><th>Today step (L*)</th></tr>';
+  for(var j=0;j<TIER_PAIRS.length;j++){var a=TIER_PAIRS[j][0],b=TIER_PAIRS[j][1];var d=Math.abs(Ls(T(b))-Ls(T(a)));
+    var dt=(TODAY_SURF[a]&&TODAY_SURF[b])?'+'+r1(Math.abs(Ls(TODAY_SURF[b])-Ls(TODAY_SURF[a]))):'derived in theme.js';
+    s+='<tr><td>'+SURF_NAME[a]+' to '+SURF_NAME[b]+'</td><td>'+r1(Ls(T(a)))+'</td><td>'+r1(Ls(T(b)))+'</td><td class="'+(d>=3.5?'pass':'fail')+'">+'+r1(d)+'</td><td>'+dt+'</td></tr>'}
+  s+='</table><div class="note">Every proposed step is about 4 to 5.4 L*. Today\'s steps are uneven: the sidebar to page step is under 1 L*, so those two read as one surface. The order is the sidebar, then the page, then raised cards, the own-message surface and the composer input. Today\'s input value (#172338) is the fallback in theme.js; the live value derives from the base palette.</div>';
+  s+='<h3>Base colours (16 + accent2)</h3><table><tr><th>Token</th><th>Role</th><th>Today</th><th>Proposed</th></tr>';
+  for(var b2 in BASE){s+='<tr><td class="mono">'+b2+'</td><td>'+ROLE[b2]+'</td><td>'+sw(TODAY[b2])+'#'+TODAY[b2]+'</td><td>'+sw(BASE[b2])+'#'+BASE[b2]+'</td></tr>'}
+  s+='</table><h3>Derived tokens</h3><table><tr><th>CSS var</th><th>Role</th><th>Today</th><th>Proposed</th></tr>';
+  for(var t2 in TOK){s+='<tr><td class="mono">--'+t2+'</td><td>'+TOK_ROLE[t2]+'</td><td>'+(TODAY_SURF[t2]?sw(TODAY_SURF[t2])+'#'+TODAY_SURF[t2]:'<span class="dim">from base palette</span>')+'</td><td>'+sw(TOK[t2])+'#'+TOK[t2]+'</td></tr>'}
+  s+='</table><h3>Contrast, text on surface</h3><table><tr><th>Text token</th><th>On</th><th>Ratio</th></tr>';
+  for(var tx in TEXT_ON){var list=TEXT_ON[tx];for(var q=0;q<list.length;q++){
+    s+='<tr><td><span class="sw" style="background:#'+T(tx)+'"></span>--'+tx+' #'+T(tx)+'</td><td><span class="sw" style="background:#'+T(list[q])+'"></span>'+SURF_NAME[list[q]]+' #'+T(list[q])+'</td><td>'+okc(cr(T(tx),T(list[q])),4.5)+'</td></tr>'}}
+  s+='<tr><td>--on-accent</td><td>accent fill</td><td>'+okc(cr(T('on-accent'),T('accent')),4.5)+'</td></tr>';
+  for(var a2=0;a2<4;a2++){s+='<tr><td>--on-av initials</td><td>avatar tint '+(a2+1)+' #'+T('av'+a2)+'</td><td>'+okc(cr(T('on-av'),T('av'+a2)),4.5)+'</td></tr>'}
+  s+='</table><div class="note">Not listed on purpose: <code>--text-dimmer</code> is not used on the own-message surface, the input or the selected row (it is under 4.5:1 there); those use <code>--text-muted</code>. Placeholders use <code>--text-muted</code>.</div>';
+  s+='<h3>Contrast, UI boundaries and graphics (3:1)</h3><table><tr><th>Element</th><th>Against</th><th>Ratio</th></tr>';
+  var ui=["sidebar-bg","bg","bg-alt","user-bubble","input-bg"];
+  for(var u=0;u<ui.length;u++){s+='<tr><td>--border-strong (input, button outline)</td><td>'+SURF_NAME[ui[u]]+'</td><td>'+okc(cr(T('border-strong'),T(ui[u])),3)+'</td></tr>'}
+  var ui2=["sidebar-bg","bg","bg-alt","input-bg"];
+  for(var u2=0;u2<ui2.length;u2++){s+='<tr><td>--accent (focus ring, active control)</td><td>'+SURF_NAME[ui2[u2]]+'</td><td>'+okc(cr(T('accent'),T(ui2[u2])),3)+'</td></tr>'}
+  var ui3=["sidebar-bg","bg","bg-alt","sidebar-active"];
+  for(var a3=0;a3<4;a3++){for(var u3=0;u3<ui3.length;u3++){s+='<tr><td>avatar tint '+(a3+1)+'</td><td>'+SURF_NAME[ui3[u3]]+'</td><td>'+okc(cr(T('av'+a3),T(ui3[u3])),3)+'</td></tr>'}}
+  s+='</table><div class="note">Decorative dividers (<code>--border</code>, <code>--border-subtle</code>) carry no information and are exempt from the 3:1 rule; every control outline uses <code>--border-strong</code>.</div>';
+  return s;
+}
+function secWidth(){
+  var s='<h2 id="width">2. One chat layout, width steps and the session view</h2>';
+  s+='<p>The bubble and channel views are replaced by one layout. The viewer\'s own messages sit on the right; every other speaker shows an avatar and name on a single header line. A width preference sets the content column on screens wider than 768 px.</p>';
+  s+='<table><tr><th>Step</th><th>Content column</th><th>Note</th></tr>';
+  for(var i=0;i<STEPS.length;i++){var st=STEPS[i];s+='<tr><td>'+st.name+'</td><td>'+(st.full?'pane width':st.w+' px')+'</td><td>'+(st.w===820?'Default. Equal to today\'s --content-width of 820 px, so the first run looks the same width as now.':st.full?'Fills the pane (today\'s channel width). Frame drawn at 1280 px.':'')+'</td></tr>'}
+  s+='<tr><td>Phone (768 px and narrower)</td><td>pane width, 8 px pane padding</td><td>The preference does not apply; the pane is always full width. Frame drawn at 390 px.</td></tr></table>';
+  s+='<p class="note">Setting: Appearance, "Chat width", four steps. Chat width replaces the bubble and channel switch; channel is removed. Each step below shows today\'s layout, the proposed layout and the space accounting for the same content. The pending scheduled card is drawn at the end of each frame, collapsed and expanded.</p>';
+  for(var k=0;k<STEPS.length;k++){var w=STEPS[k].w;
+    s+='<h3>'+STEPS[k].name+', '+(STEPS[k].full?'full pane':w+' px')+'</h3><div class="row">'+tFrame(w,false)+nFrame(w,false)+accounting(false)+'</div>';}
+  s+='<h3>Phone, 390 px</h3><div class="row">'+tFrame(390,true)+nFrame(390,true)+accounting(true)+'</div>';
+  s+='<div class="card" style="margin-top:14px"><div class="cap">Touch targets on phone (all at least 44 by 44 CSS px) and text sizes</div><ul>'+
+   '<li>Header Expand/Collapse: 44 px wide button, 44 px tall hit area (24 px line plus 10 px above and below from a pseudo-element). The hit area overlaps only non-interactive text.</li>'+
+   '<li>Sender name tap (shows the sender session): hit area extended the same way.</li>'+
+   '<li>Scheduled card: Fire now, Cancel and Expand are 44 by 44 icon buttons with accessible names, side by side with no gap; today they are 36 px pills.</li>'+
+   '<li>Permission prompt Allow and Deny: 44 px tall on phone (36 px today).</li>'+
+   '<li>No text shrinks: name 15 px, message text 15 px, header label and time 12 px, card prompt 13 px, card meta 12 px, all equal to or above today\'s sizes. Space comes from padding, rows and line height, not from type size.</li></ul></div>';
+  return s;
+}
+function secOwn(){
+  var s='<h2 id="own">3. Mirrored header and the own side</h2>';
+  s+='<div class="row"><div class="frame" style="width:560px;'+vars({pt:'12px',px:'12px',pb:'8px',mx:'0px',gu:'6px'})+'"><div class="frame-h">Mirror check, one header line each side, 24 px, gap 6 px</div><div class="pane">'+
+    nMsg({name:'review-agent',init:'R',tint:0,time:'01:09 PM',label:'trigger · extracted',inj:true,clamp:true,text:'Left: avatar, name, label, time, then the control at the far end.',tg:'Expand'})+
+    nMsg({own:true,name:'Alex',init:'A',tint:2,time:'01:11 PM',clamp:true,text:'Right: the same line reversed. Time, then name, then avatar, with the control at the far left. A long paste of mine collapses with the same component.',tg:'Expand'})+
+    '</div></div><div class="card" style="flex:1 1 340px"><div class="cap">What the own side shows, and why</div>'+
+    '<table><tr><th>Session</th><th>Own header shows</th><th>Reason</th></tr>'+
+    '<tr><td>One person (solo)</td><td>time only</td><td>You know whose message it is. A name and avatar on every message repeat what the right-hand alignment already says. The line stays 24 px so the action icons and the Expand control have the same slot as on the left.</td></tr>'+
+    '<tr><td>Several people typing (two or more humans)</td><td>avatar, name, time</td><td>Others\' messages carry name and avatar, so the viewer\'s own show the same fields, reversed, to keep one design and to stay unambiguous in screenshots and when the same account is open on two devices. On the other participants\' screens Alex appears on the left with the same three fields.</td></tr></table>'+
+    '<p class="note">The switch is automatic: more than one human has spoken in the session. Agents do not count as people. Own header never shows the label field; labels belong to injected input.</p></div></div>';
+  s+='<h3>Several people typing in one session</h3><div class="row">';
+  var multi=function(phone,w){
+    var st=vars({pt:'12px',px:(phone?8:12)+'px',pb:'8px',mx:(phone?4:0)+'px',gu:'6px'});
+    return '<div class="frame'+(phone?' phone':'')+'" style="width:'+w+'px;'+st+'"><div class="frame-h">Alex\'s screen</div><div class="pane">'+
+     nMsg({name:'Dana',init:'D',tint:1,time:'01:05 PM',text:'Can the retry guard read the lock first?'})+
+     nMsg({name:'Sam',init:'S',tint:3,time:'01:06 PM',text:'I can take the timeout message.'})+
+     nMsg({own:true,name:'Alex',init:'A',tint:2,time:'01:07 PM',text:'Run the checks again after the reorder.'})+
+     '<div class="n-asst">Running the checks now.</div></div></div>';};
+  var solo='<div class="frame" style="width:560px;'+vars({pt:'12px',px:'12px',pb:'8px',mx:'0px',gu:'6px'})+'"><div class="frame-h">Solo session, own header is time only</div><div class="pane">'+
+     nMsg({own:true,noav:true,noname:true,time:'01:07 PM',text:'Run the checks again after the reorder.'})+'<div class="n-asst">Running the checks now.</div></div></div>';
+  s+=multi(false,560)+solo+'</div>';
+  return s;
+}
+function demo(title,lines,size,controls,users){
+  var cls='cc'+(size==='compact'?'':' ');
+  var hdr=controls==='header'?'<div class="n-hd"><span class="nm" style="font-size:15px">review-agent</span><span class="lb">trigger · extracted</span><button class="tg hit" type="button">Expand</button></div>':'';
+  var body='<span class="clamp3" style="-webkit-line-clamp:'+lines+';line-clamp:'+lines+';font-size:'+(size==='compact'?13:15)+'px;line-height:'+(size==='compact'?1.4:1.5)+'">'+INJ+'</span>';
+  var ctr='';
+  if(controls==='inline') ctr='<button class="b hit" style="height:28px;padding:0 10px;border:1px solid var(--border-strong);border-radius:14px;background:none;color:var(--text);font:inherit;font-size:13px" type="button">Expand</button>';
+  if(controls==='row') ctr='<div style="margin-top:4px"><button class="hit" style="height:28px;padding:0 10px;border:1px solid var(--border-strong);border-radius:14px;background:none;color:var(--text);font:inherit;font-size:13px" type="button">Expand</button></div>';
+  var inner=controls==='inline'?'<div style="display:flex;gap:8px;align-items:center"><div style="flex:1;min-width:0">'+body+'</div>'+ctr+'</div>':body+ctr;
+  return '<div class="card" style="width:330px"><div class="cap">'+title+'</div>'+hdr+'<div style="border:1px dashed var(--text-dimmer);border-radius:8px;padding:'+(size==='compact'?'4px 8px':'8px 12px')+';margin-top:2px">'+inner+'</div><div class="dim" style="margin-top:6px">'+users+'</div></div>';
+}
+function secComponent(){
+  var s='<h2 id="component">4. The shared collapsible component, configurable per use</h2>';
+  s+='<p>One component, <code>collapsible-text.js</code>, stays the single collapsible for every surface that shows long pushed-in input. It gains per-use options; nothing here is a separate scheduled-card widget. Drawn, not built.</p>';
+  s+='<table><tr><th>Option</th><th>Values</th><th>Default</th><th>Effect</th></tr>'+
+   '<tr><td class="mono">lines</td><td>1, 2, 3, ...</td><td>3 (today\'s COLLAPSE_LINES, set deliberately in the earlier collapse change)</td><td>Collapsed line count; the stored text is never cut, CSS clamps it.</td></tr>'+
+   '<tr><td class="mono">size</td><td>normal, compact</td><td>normal</td><td>Compact trims padding and line height (13 px text stays 13 px); control height 28 px on desktop, 44 px on phone.</td></tr>'+
+   '<tr><td class="mono">controls</td><td>row, inline, header</td><td>row</td><td>Where Expand/Collapse sits: on its own row, inline on the collapsed line beside the host\'s other controls, or in the host message\'s header line.</td></tr>'+
+   '<tr><td class="mono">controls hit area</td><td>fixed</td><td>44 px on touch</td><td>Not an option: every configuration keeps at least 44 by 44 px on a coarse pointer.</td></tr></table>';
+  s+='<table><tr><th>Current user</th><th>lines</th><th>size</th><th>controls</th><th>Why</th></tr>'+
+   '<tr><td>Injected message (trigger, extracted, scheduled-now delivery)</td><td>3</td><td>normal</td><td>header</td><td>Not asked to change: keeps the 3-line default. Expand moves up beside the label, removing its own row.</td></tr>'+
+   '<tr><td>Loop iteration input</td><td>3</td><td>normal</td><td>header</td><td>Same render path as the injected message; same setting.</td></tr>'+
+   '<tr><td>Pending scheduled card (composer outbox)</td><td><b>1</b></td><td><b>compact</b></td><td><b>inline</b></td><td>The prompt is context, not content; one line is enough and Fire now, Cancel and Expand share that line.</td></tr>'+
+   '<tr><td>Any other user</td><td colspan="4">None found: in <code>lib/</code> only <code>app-rendering.js</code> (injected and loop) and <code>scheduled-outbox.js</code> call the component. Queued chat and ! lines and the schedule panel list do not use it and are unchanged.</td></tr></table>';
+  s+='<h3>Expand is reachable in every configuration</h3><div class="row">'+
+    demo('lines 3, normal, controls header (injected message, loop)',3,'normal','header','Expand sits in the header line; 44 px target on phone.')+
+    demo('lines 1, compact, controls inline (pending scheduled card)',1,'compact','inline','Expand is the inline control; with 1 line it is always shown, because the card\'s next-at, cadence and remaining count live in the expanded view.')+
+    demo('lines 3, normal, controls row (default for a new user)',3,'normal','row','Own row, as the component does today.')+'</div>';
+  s+='<h3>Pending scheduled card, today against the proposal</h3><div class="row">'+
+    '<div><div class="cap">Today, desktop: 5 rows, 139.2 px</div><div class="frame" style="width:560px;'+vars({pt:'8px',px:'12px',pb:'8px',mx:'0px',gu:'8px',ga:'12px',pbh:'36px'})+'"><div class="pane">'+tSched()+'</div></div></div>'+
+    '<div><div class="cap">Proposed, desktop: 1 row, 38 px (collapsed); expanded below</div><div class="frame" style="width:560px;'+vars({pt:'8px',px:'12px',pb:'8px',mx:'0px',gu:'6px',pbh:'28px'})+'"><div class="pane">'+ccCard(false,false)+'<div style="height:6px"></div>'+ccCard(true,false)+'</div></div></div>'+
+    '<div><div class="cap">Proposed, phone: 1 row, 54 px, 44 px icon buttons; expanded below</div><div class="frame phone" style="width:390px;'+vars({pt:'8px',px:'8px',pb:'8px',mx:'0px',gu:'6px',pbh:'44px'})+'"><div class="pane">'+ccCard(false,true)+'<div style="height:6px"></div>'+ccCard(true,true)+'</div></div></div></div>';
+  s+='<p class="note">Row count: desktop 1 (today 5), phone 1 (today 6, the meta line wraps). Open choice for the operator: on phone the three controls are icons (play, x, chevron) to hold one row at 44 px; a labelled alternative puts the text buttons on a second 44 px row (2 rows, 98 px).</p>';
+  return s;
+}
+function secList(){
+  var rows=[["Fix scheduler retry guard","now",1,0],["Review lock ordering","12m",0,0],["Release notes draft","1h",0,0],["Triage inbox","3h",0,1],["Docs pass: brand","1d",0,0]];
+  function list(cls,on,today){
+    var s='<div class="sl '+cls+'">';
+    for(var i=0;i<rows.length;i++){var r=rows[i];
+      s+='<div class="sli'+(i===0?' act':'')+'">'+(on?av(i%4,'FRDTB'.charAt(i),20,'50%'):'')+'<span class="t">'+r[0]+'</span>'+(r[3]?'<span class="dot"></span>':'')+'<span class="tm">'+r[1]+'</span></div>';}
+    return s+'</div>';
+  }
+  var s='<h2 id="list">5. Session list, avatars on and off</h2>';
+  s+='<p>Avatar treatment: a 20 px round avatar leads each row, the agent\'s image when it has one, otherwise its initial on one of four tints (deterministic per agent). A setting in Appearance, "Avatars in session list", turns it on or off; default on. Off removes the avatar and its 8 px gap, so the title gains 28 px of width; row height is unchanged. Initials are 12 px bold on the tint, 4.5:1 or better (section 1).</p>';
+  s+='<div class="row"><div><div class="cap">Today, desktop: row 34 px, no avatar</div>'+list('today',false,true)+'</div>'+
+     '<div><div class="cap">Proposed, desktop, avatars on: row 30 px (4 px smaller)</div>'+list('',true)+'</div>'+
+     '<div><div class="cap">Proposed, desktop, avatars off: row 30 px, title +28 px</div>'+list('',false)+'</div></div>';
+  s+='<div class="row" style="margin-top:14px"><div><div class="cap">Phone, avatars on: row 44 px (the touch floor)</div>'+list('ph',true)+'</div><div><div class="cap">Phone, avatars off</div>'+list('ph',false)+'</div></div>';
+  s+='<p class="note">Space recovered here: desktop row 34 to 30 px (5 rows save 20 px); phone rows sit at the 44 px floor and are not shrunk; avatars off give 28 px of title width.</p>';
+  return s;
+}
+function secFlow(){
+  var tabs='<div class="tabs"><div class="tab">Projects</div><div class="tab">Chat</div><div class="tab">Team</div><div class="tab MORE">More</div></div>';
+  function scr(title,body,extra,back){return '<div><div class="cap">'+title+'</div><div class="scr"><div class="top">'+(back?'<button class="bk" type="button" aria-label="Back">'+ICON.back+'</button>':'')+'<span style="margin-left:'+(back?0:12)+'px">'+(back||'Chat')+'</span></div><div class="body">'+body+'</div>'+extra+'</div></div>';}
+  var chat='<div class="pane" style="'+vars({pt:'12px',px:'8px',pb:'8px',mx:'4px',gu:'6px'})+'">'+
+    nMsg({name:'Dana',init:'D',tint:1,time:'01:05 PM',text:'Can the retry guard read the lock first?'})+
+    nMsg({own:true,name:'Alex',init:'A',tint:2,time:'01:07 PM',text:'Run the checks again after the reorder.'})+'</div>';
+  var more='<div class="tabs"><div class="tab">Projects</div><div class="tab">Chat</div><div class="tab">Team</div><div class="tab on">More<span class="tap">1</span></div></div>';
+  var sheet='<div class="sheet"><div class="lrow" style="border:0">Settings<span class="tap" style="position:static;margin-left:auto">2</span></div><div class="lrow" style="border:0">Other More items, unchanged</div></div>';
+  var list='<div class="lh">Personal</div><div class="lrow">Appearance<span class="v">Dark</span><span class="tap" style="position:static">3</span></div><div class="lrow">Chat</div><div class="lrow">Account</div>'+
+    '<div class="lh">Project</div><div class="lrow">Model</div><div class="lrow">Instructions</div><div class="lrow">Environment</div>'+
+    '<div class="lh">Server</div><div class="lrow">Status</div><div class="lrow">Notifications</div><div class="lrow">Security</div><div class="lrow">Storage</div>';
+  var app='<div class="lh">Theme</div><div class="seg"><button class="" type="button">System</button><button class="on" type="button">Dark</button><button type="button">Light</button></div>'+
+    '<div class="lh">Session list</div><div class="lrow">Avatars in session list<span class="sw2"></span></div>'+
+    '<div class="lh">Chat</div><div class="lrow">Chat width<span class="v">Comfortable</span></div><div class="dim" style="padding:2px 16px">Four steps apply above 768 px. On a phone the chat is always full width.</div>';
+  var s='<h2 id="flow">6. Phone settings flow, tap by tap</h2>';
+  s+='<p>One path replaces the separate user, project and server settings screens: <b>More, Settings, a section</b>. Appearance lives first in the Settings list, under Personal. Every row is 44 px tall (today\'s more-sheet and settings rows are 48 px minimum; the page padding is trimmed with them).</p>';
+  s+='<ol><li>Tap <b>More</b> in the tab bar (44 px tall tabs).</li><li>Tap <b>Settings</b> in the More sheet.</li><li>Tap <b>Appearance</b> (first row, Personal).</li><li>On Appearance: pick Theme (System, Dark, Light; 44 px segments), switch Avatars in session list, and see Chat width. The back arrow (44 by 44) returns to the list; the same back arrow leaves Settings.</li></ol>';
+  s+='<div class="row">'+
+    scr('Screen 1: chat, tap More',chat,more)+
+    scr('Screen 2: More sheet, tap Settings',chat,'<div class="tabs"><div class="tab">Projects</div><div class="tab">Chat</div><div class="tab">Team</div><div class="tab on">More</div></div>'+sheet)+
+    scr('Screen 3: Settings, tap Appearance',list,'','Settings')+
+    scr('Screen 4: Appearance',app,'','Appearance')+'</div>';
+  s+='<p class="note">Settings pages recover space by: rows 48 to 44 px (4 px per row), one path instead of three, and no dropdown section picker.</p>';
+  return s;
+}
+function secRecovered(){
+  return '<h2 id="recovered">7. Where space was recovered</h2><ul>'+
+   '<li><b>Message headers:</b> 87 px of stacked avatar, name and label rows become one 24 px line (other speakers); own messages trade a 30 px action row for the 24 px header line.</li>'+
+   '<li><b>Collapse control:</b> 18 px own row becomes 0 px; Expand sits in the header line (or inline in the scheduled card).</li>'+
+   '<li><b>Gaps and bubbles:</b> inter-message gap 8 or 12 to 6 (2 within a same-speaker run); bubble padding 12 and 18 to 8 and 12.</li>'+
+   '<li><b>Panel padding:</b> message pane 20, 16, 12 to 12, 12, 8; message side padding 20 to 0 on desktop and 4 on phone; text column 48 px wider on phone.</li>'+
+   '<li><b>Pending scheduled card:</b> 139.2 to 38 px on desktop, about 160 to 54 px on phone.</li>'+
+   '<li><b>List rows:</b> 34 to 30 px on desktop; avatars off add 28 px of title width.</li>'+
+   '<li><b>Settings pages:</b> rows 48 to 44 px and one flow in place of three screens.</li></ul>'+
+   '<p class="note">Nothing under <code>lib/</code> changes in this task. This file and its light twin are the whole deliverable; the build tasks wait on sign-off.</p>';
+}
+
+/* ---------- assemble ---------- */
+var root=document.getElementById("root");
+for(var k in TOK){document.documentElement.style.setProperty("--"+k,"#"+TOK[k])}
+var allOk=true,fails=0;
+function chk(a,b,m){if(cr(a,b)<m){fails++}}
+for(var tx in TEXT_ON){for(var q=0;q<TEXT_ON[tx].length;q++){chk(T(tx),T(TEXT_ON[tx][q]),4.5)}}
+var uiList=["sidebar-bg","bg","bg-alt","user-bubble","input-bg"];
+for(var u=0;u<uiList.length;u++){chk(T("border-strong"),T(uiList[u]),3)}
+allOk=fails===0;
+var head='<h1>CLAGENTIC: CONSOLE</h1><div class="note">Refresh preview, <b>dark</b>. Proposal for sign-off; nothing is built. Twin file: preview-light.html. All contrast checks: <span class="'+(allOk?'pass':'fail')+'">'+(allOk?'all pass':fails+' failing')+'</span>. <a href="#palette" style="color:var(--accent2)">Palette</a> | <a href="#width" style="color:var(--accent2)">Session view</a> | <a href="#own" style="color:var(--accent2)">Own side</a> | <a href="#component" style="color:var(--accent2)">Component</a> | <a href="#list" style="color:var(--accent2)">Session list</a> | <a href="#flow" style="color:var(--accent2)">Phone flow</a> | <a href="#recovered" style="color:var(--accent2)">Space recovered</a></div>';
+root.innerHTML=head+secPalette()+secWidth()+secOwn()+secComponent()+secList()+secFlow()+secRecovered();
+})();
+</script>
+</body>
+</html>
