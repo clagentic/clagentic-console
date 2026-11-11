@@ -6,6 +6,7 @@ docs/
 │   ├── AGENT-GUIDE.md                  Agents as console users: open-session, send-input, list-sessions
 │   ├── CLOUD-PROVIDER-AUTH.md          Admins: Claude on Bedrock, Vertex or Foundry host-wide via Settings env
 │   ├── PERMISSION-SETTINGS.md          The permission settings: defaults, who may change them, what off does
+│   ├── THEMES.md                       Dark, Light, Follow system; custom theme files: where, format, how to select
 │   ├── architecture.md                 System overview, SDK, WebSocket protocol
 │   ├── MODULE_MAP.md                   File-by-file module guide
 │   ├── STATE_CONVENTIONS.md            State management patterns
