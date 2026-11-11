@@ -884,11 +884,6 @@
   }
 }
 
-/* ==========  SETTINGS NAV PILL (mobile) ========== */
-.settings-nav-pill {
-  display: none; /* shown only on mobile via media query */
-}
-
 /* ==========  SETTINGS COMMAND PALETTE ========== */
 .settings-palette {
   position: fixed;
@@ -1035,56 +1030,9 @@
   color: var(--error);
 }
 
-/* Mobile media query additions */
+/* Phone: the section list is replaced by the shared settings navigation
+   (settings-nav.css), so the list is not shown. */
 @media (max-width: 768px) {
-  .settings-nav-pill {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: calc(100% - 32px);
-    margin: 0 16px 12px;
-    padding: 10px 12px;
-    background: var(--bg-alt);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text);
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .settings-nav-pill-group {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-
-  .settings-nav-pill-divider {
-    width: 1px;
-    height: 14px;
-    background: var(--border-subtle);
-    flex-shrink: 0;
-  }
-
-  .settings-nav-pill-label {
-    flex: 1;
-  }
-
-  .settings-nav-pill-chevron {
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-  }
-
-  .settings-nav-pill-chevron i {
-    width: 14px;
-    height: 14px;
-  }
-
   .server-settings-nav-items {
     display: none;
   }

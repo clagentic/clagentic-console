@@ -607,11 +607,6 @@
   color: var(--text-muted);
 }
 
-/* --- Mobile nav dropdown (hidden on desktop) --- */
-#user-settings .settings-nav-dropdown {
-  display: none;
-}
-
 /* --- Active state on gear button --- */
 #user-settings-btn.active {
   background: var(--sidebar-hover);
@@ -644,20 +639,6 @@
 
   .us-modal-nav-items {
     display: none;
-  }
-
-  #user-settings .settings-nav-dropdown {
-    display: block;
-    width: 100%;
-    padding: 9px 12px;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-    background: var(--bg-alt);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    cursor: pointer;
   }
 
   .us-modal-content {
