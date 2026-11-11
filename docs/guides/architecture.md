@@ -1225,14 +1225,26 @@ detector:**
    banner and one push, and `resolve()` closes it on the phone and in every
    open page when the build is adopted or the operator declines it. The page
    builds the Diagnostics-panel entry with the restart button from the
-   notification (`applyBuildOffer` in `lib/public/modules/diagnostics.js`); a
-   tap on the banner or the push opens that panel through the shared router
+   notification (`applyBuildOffer` in `lib/public/modules/diagnostics.js`) and,
+   while a tab is open, shows it as a pop-up carrying the restart action, when
+   the offer arrives and when the page connects while it stands. The pop-up
+   shows once per build pair: the same notification again (a reconnect's state)
+   changes nothing, a refresh of the offer replaces a pop-up still on screen
+   but never brings back one the operator closed, and a user who muted the
+   banner surface for the system category gets the entry and no pop-up (the
+   server sends the preferences before the state so the page knows). A tap on
+   the banner or the push opens the panel through the shared router
    (`registerPlace` in `lib/public/modules/notify-client.js`), and does not
-   decline it. Closing the banner, dismissing the entry, clearing all or "Not
-   now" declines it: the notification is dismissed, the core closes it
+   decline it. Closing the banner, dismissing the entry or "Not now" declines
+   it: the notification is dismissed, the core closes it
    everywhere, and the standing offer stays quiet for the cooldown (default one
    hour, `CLAGENTIC_CONSOLE_BUILD_NOTICE_COOLDOWN_MS`) unless a different
-   build is installed. The banner does not survive a daemon restart (the type
+   build is installed. Closing only the pop-up, or clearing all notifications,
+   declines nothing: the type is registered `survivesClearAll`, so
+   `dismissAll` in `lib/project-notifications.js` leaves it held and neither
+   resolves it nor reports it to the daemon; `notification_dismissed_all`
+   carries `kept` (the ids left standing). Push is unchanged: the offer's push
+   follows the user's system push preference. The banner does not survive a daemon restart (the type
    is `ephemeral`). The restart confirmation (`confirm_build_update_restart`)
    is a diagnostic answering the operator's own click, not a notification: it
    carries the one-use token and session titles, which must reach the
