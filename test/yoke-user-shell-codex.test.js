@@ -138,18 +138,22 @@ test("output past the cap is cut with the marker and the result says so", async 
   commandTurn(fake, { command: "big", aggregatedOutput: "z".repeat(5000), exitCode: 0, durationMs: 3, status: "completed" });
   var result = await pending;
   assert.equal(result.truncated, true);
-  assert.equal(result.output, "z".repeat(100) + "\n[output truncated at 100 bytes]");
+  var marker = "\n[output truncated at 100 bytes]";
+  assert.equal(result.output, "z".repeat(100 - Buffer.byteLength(marker)) + marker);
+  assert.equal(Buffer.byteLength(result.output), 100, "the marker is inside the cap");
   await finish(h);
 });
 
 test("a cap inside a multibyte character backs off to the character boundary", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
-  var pending = h.handle.runUserShellCommand("big", null, 1000, 10);
+  // Cap 40 less the 31-byte marker leaves 9 bytes: the first character of "éé" straddles it.
+  var pending = h.handle.runUserShellCommand("big", null, 1000, 40);
   await tick();
-  commandTurn(fake, { command: "big", aggregatedOutput: "a".repeat(9) + "éé", exitCode: 0, durationMs: 3, status: "completed" });
+  commandTurn(fake, { command: "big", aggregatedOutput: "a".repeat(8) + "éé" + "b".repeat(50), exitCode: 0, durationMs: 3, status: "completed" });
   var result = await pending;
-  assert.equal(result.output, "a".repeat(9) + "\n[output truncated at 10 bytes]");
+  assert.equal(result.output, "a".repeat(8) + "\n[output truncated at 40 bytes]");
+  assert.ok(Buffer.byteLength(result.output) <= 40);
   await finish(h);
 });
 
@@ -162,8 +166,7 @@ test("failure text cannot push the output past the cap", async function () {
   fake.dispatch("item/started", { turnId: "turn-shell", item: cmdItem({ command: "big", aggregatedOutput: "q".repeat(50), status: "inProgress" }) });
   fake.dispatch("turn/failed", { turn: { id: "turn-shell", status: "failed" }, error: { message: "boom ".repeat(40) } });
   var result = await pending;
-  var kept = result.output.slice(0, result.output.indexOf("\n[output truncated"));
-  assert.ok(Buffer.byteLength(kept) <= 50);
+  assert.ok(Buffer.byteLength(result.output) <= 50, "failure text and marker are inside the cap");
   assert.equal(result.truncated, true);
   await finish(h);
 });
