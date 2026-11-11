@@ -4,7 +4,7 @@ Clagentic: Console ships two themes, Dark and Light. You can add your own.
 
 ## Choosing a theme
 
-Open **User Settings, Appearance** (on a phone, the **More** sheet, under the same Appearance rows). The Theme choice offers:
+Open **User Settings, Appearance** (on a phone: **More**, **Settings**, **Appearance**). The Theme choice offers:
 
 - **Dark**: the built-in dark theme.
 - **Light**: the built-in light theme.
