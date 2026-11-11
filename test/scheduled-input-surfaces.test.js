@@ -277,6 +277,62 @@ test("a context built without the service answers an error rather than throwing"
   assert.equal(sent[0].type, "error");
 });
 
+// Every cancel or send-now carrying a requestId ends in exactly one answer that carries it.
+var ANSWERED = ["cancel_scheduled_message", "send_scheduled_now"];
+
+test("a request with a requestId on a socket with no session gets one error naming it; without one, nothing", function () {
+  ANSWERED.forEach(function (type) {
+    var sent = [];
+    var handlers = createWsHandlers({ slug: SLUG, service: null, getSessionForWs: function () { return null; }, sendTo: function (w, o) { sent.push(o); } });
+    assert.equal(handlers.handle({}, { type: type, requestId: "sr_n" }), true);
+    assert.equal(sent.length, 1, type);
+    assert.equal(sent[0].type, "error");
+    assert.equal(sent[0].requestId, "sr_n");
+    assert.match(sent[0].text, /^Clagentic: Console /);
+    sent.length = 0;
+    handlers.handle({}, { type: type });
+    assert.deepEqual(sent, [], type + " without a requestId stays silent");
+  });
+});
+
+test("the no-service refusal carries the requestId when the request had one, and only then", function () {
+  ANSWERED.forEach(function (type) {
+    var sent = [];
+    var handlers = createWsHandlers({ slug: SLUG, service: null, getSessionForWs: function () { return {}; }, sendTo: function (w, o) { sent.push(o); } });
+    handlers.handle({}, { type: type, requestId: "sr_s" });
+    assert.equal(sent.length, 1, type);
+    assert.equal(sent[0].requestId, "sr_s");
+    sent.length = 0;
+    handlers.handle({}, { type: type });
+    assert.equal(sent.length, 1, type);
+    assert.equal("requestId" in sent[0], false);
+  });
+});
+
+test("a sendNow that rejects or throws answers once with the requestId and generic text; the detail is only logged", async function () {
+  var modes = {
+    reject: function () { return Promise.reject(new Error("secret-detail-reject")); },
+    throws: function () { throw new Error("secret-detail-throw"); },
+  };
+  var logged = [];
+  var realError = console.error;
+  console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+  try {
+    for (var mode of Object.keys(modes)) {
+      var sent = [];
+      var service = { sendNow: modes[mode], armedForSession: function () { return []; } };
+      var handlers = createWsHandlers({ slug: SLUG, service: service, getSessionForWs: function () { return {}; }, sendTo: function (w, o) { sent.push(o); } });
+      handlers.handle({}, { type: "send_scheduled_now", id: "si_1", requestId: "sr_f" });
+      await fakes.flush();
+      assert.equal(sent.length, 1, mode);
+      assert.equal(sent[0].type, "error");
+      assert.equal(sent[0].requestId, "sr_f");
+      assert.equal(sent[0].text, "Clagentic: Console could not send that now");
+      assert.ok(logged.some(function (l) { return l.indexOf("secret-detail-" + mode) !== -1; }), mode + " detail logged");
+    }
+  } finally { console.error = realError; }
+});
+
 // --- the CLI: parsing ---
 
 function local(y, mo, d, h, mi) {
