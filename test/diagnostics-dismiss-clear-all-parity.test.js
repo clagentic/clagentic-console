@@ -154,10 +154,12 @@ test("diagnostics.js: initDiagnostics wires the clear-all button to clearAllDiag
 test("diagnostics.js: clearAllDiagnostics empties the array and list, and restores the empty state", () => {
   var idx = DIAGNOSTICS_JS.indexOf("function clearAllDiagnostics");
   assert.ok(idx !== -1, "expected clearAllDiagnostics to be defined");
-  var block = DIAGNOSTICS_JS.slice(idx, idx + 500);
+  var block = DIAGNOSTICS_JS.slice(idx, idx + 1500);
 
-  assert.match(block, /diagnostics\s*=\s*\[\]/, "clearAllDiagnostics must empty the diagnostics array");
-  assert.match(block, /panelListEl\.innerHTML\s*=\s*["']["']/, "clearAllDiagnostics must clear the rendered list");
+  // The build-update offer is the one entry a clear-all leaves (it is a pending
+  // decision, declined only by its own close); everything else is emptied.
+  assert.match(block, /diagnostics\s*=\s*standing/, "clearAllDiagnostics must empty the diagnostics array down to the standing offer");
+  assert.match(block, /removeChild\(itemEl\)/, "clearAllDiagnostics must clear the rendered entries it removed");
   assert.match(block, /_restoreEmptyPlaceholder\s*\(\s*\)/, "clearAllDiagnostics must restore the empty-state placeholder");
   assert.match(block, /_updateBadge\s*\(\s*\)/, "clearAllDiagnostics must refresh the badge (hides it since count is now 0)");
 });
