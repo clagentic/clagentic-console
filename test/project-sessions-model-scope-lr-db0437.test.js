@@ -31,6 +31,7 @@ var test = require("node:test");
 var assert = require("node:assert/strict");
 
 var { attachSessions } = require("../lib/project-sessions");
+var { createProjectAccess } = require("../lib/project-access");
 
 function makeSessionManager(overrides) {
   var sessions = new Map();
@@ -99,6 +100,9 @@ function makeCtx(overrides) {
     setUpdateChannel: noop,
     getLatestVersion: function () { return "0.0.0"; },
     setLatestVersion: noop,
+    // Single-user: an authenticated connection is the implicit admin, which
+    // the server-wide default setters ask for.
+    projectAccess: createProjectAccess({ users: {}, onGetProjectAccess: null, isMultiUser: function () { return false; } }),
   }, overrides);
 
   ctx._sent = sent;
@@ -107,7 +111,7 @@ function makeCtx(overrides) {
 }
 
 function makeWs() {
-  return { readyState: 1, send: function () {} };
+  return { readyState: 1, send: function () {}, _clagenticAuthenticated: true };
 }
 
 test("lr-db0437: a new session does not inherit another session's live model choice", function () {

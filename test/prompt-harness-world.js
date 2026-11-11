@@ -169,6 +169,11 @@ async function createServer(opts) {
     send: transport.send, sendTo: transport.sendTo, sendToAdmins: function () {},
     sendToSession: function () {}, sendToSessionOthers: function () {},
     usersModule: { isMultiUser: function () { return false; } },
+    // Single-user: a connection that carries _clagenticAuthenticated is the
+    // implicit admin, which the server-wide setters ask for.
+    projectAccess: require(libPath("project-access")).createProjectAccess({
+      users: {}, onGetProjectAccess: null, isMultiUser: function () { return false; },
+    }),
     userPresence: null, pushModule: null,
     getSessionForWs: function (ws) { return sm.sessions.get(ws._clagenticActiveSession) || null; },
     getLinuxUserForSession: function () { return null; },

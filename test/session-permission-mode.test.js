@@ -211,6 +211,7 @@ test("a push about the effort, betas or a default model carries no mode, so no c
     server.sm.currentPermissionMode = "acceptEdits";
     server.session.permissionMode = "plan";
     var c = client();
+    c.ws._clagenticAuthenticated = true;
     server.connect(c.ws);
     c.inbox.length = 0;
     ["set_server_default_betas", "set_project_default_betas"].forEach(function (type) {
