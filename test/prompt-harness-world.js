@@ -135,6 +135,11 @@ async function createServer(opts) {
     getPushModule: function () { return opts.pushModule || null; },
   });
 
+  // The project has warmed up its default agent, as production does before any
+  // query: a session bound to it does not re-run the agent's init at query
+  // start, which would overwrite the capabilities a test sets.
+  sm.modelsByVendor = Object.assign({}, sm.modelsByVendor, { claude: [] });
+
   var handles = [];
   // The options each query was created with, for tests that check what the
   // bridge asks the adapter to start (permission mode, effort).
@@ -201,6 +206,8 @@ async function createServer(opts) {
   } else {
     session = sm.createSessionRaw({});
     session.cliSessionId = "harness-" + path.basename(home);
+    // A session that has run is bound to its vendor, as the first message binds it.
+    session.vendor = "claude";
     sm.saveSessionFile(session);
   }
 

@@ -171,6 +171,42 @@ test("a session bound to an agent that is not registered is stopped with a named
   });
 });
 
+// A query with no vendor in memory never runs on the default adapter unseen:
+// the vendor comes back from the session's stored meta, or the turn is refused
+// with a line that names the gap.
+[
+  { name: "a session whose meta records its vendor gets it back and runs on it", stored: "fake", refused: false },
+  { name: "a session whose meta records no vendor is refused with a line naming the missing vendor", stored: null, refused: true },
+].forEach(function (row) {
+  test("an empty session vendor at query start: " + row.name, async function () {
+    await withHarness(async function (server) {
+      var registry = lib("yoke").registry;
+      registry.register(fakeDescriptor());
+      try {
+        var session = server.sm.createSessionRaw({});
+        session.cliSessionId = "cli-vendor-restore";
+        if (row.stored) session.vendor = row.stored;
+        server.sm.saveSessionFile(session);
+        session.vendor = undefined;
+        await server.bridge.startQuery(session, "hello", null, null);
+        var refusals = historyOf(session, "error").filter(function (m) { return /no recorded agent/.test(m.text); });
+        if (row.refused) {
+          assert.equal(refusals.length, 1);
+          assert.match(refusals[0].text, /vendor/);
+          assert.equal(historyOf(session, "done")[0].code, 1);
+          assert.equal(server.queryOptions.length, 0, "no query was created on a default adapter");
+          assert.equal(session.vendor, undefined, "nothing was bound by guessing");
+        } else {
+          assert.equal(refusals.length, 0);
+          assert.equal(session.vendor, row.stored, "the vendor was restored from the meta");
+        }
+      } finally {
+        registry.unregister("fake");
+      }
+    });
+  });
+});
+
 test("agent identity follows the RESOLVED agentInjection of the default agent: declared true, live false sends no agent option", async function () {
   await withHarness(async function (server) {
     var registry = lib("yoke").registry;

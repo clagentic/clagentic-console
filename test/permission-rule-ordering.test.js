@@ -96,7 +96,7 @@ function makeBridge() {
 
 function makeSession() {
   return {
-    localId: 9101, queryInstance: null, messageQueue: null, abortController: null, isProcessing: false,
+    localId: 9101, vendor: "claude", queryInstance: null, messageQueue: null, abortController: null, isProcessing: false,
     cliSessionId: "cli-9101", history: [], blocks: {}, sentToolResults: {}, pendingPermissions: {}, pendingAskUser: {},
     pendingElicitations: {}, activeTaskToolIds: {}, singleTurn: false, lastActivityAt: Date.now(),
     _isCountedLive: false, _adapterWorkerState: null, _workerExitPromise: null,
