@@ -114,7 +114,7 @@ server.js is a thin router. It wires all server modules, sets up HTTP/WS, and di
 | `server-auth.js` | `/auth`, `/auth/setup`, `/auth/login`, `/auth/request-otp`, `/auth/verify-otp`, `/auth/register`, `/auth/logout`, `/invite/*`, `/recover/*` | PIN auth, multi-user login, OTP, invite registration, admin recovery, rate limiting |
 | `server-admin.js` | `/api/admin/users*`, `/api/admin/invites*`, `/api/admin/smtp*`, `/api/admin/projects/*/visibility`, `/api/admin/projects/*/owner`, `/api/admin/projects/*/users`, `/api/admin/projects/*/access` | User CRUD, permissions, invites, SMTP config, project access control |
 | `server-skills.js` | `/api/skills`, `/api/skills/search`, `/api/skills/detail` | Skills proxy cache, leaderboard, search, detail page scraping |
-| `server-settings.js` | `/api/profile`, `/api/avatar/*`, `/api/user/pin`, `/api/user/auto-continue`, `/api/user/chat-width` | User profile, avatars, user preferences |
+| `server-settings.js` | `/api/profile`, `/api/avatar/*`, `/api/user/pin`, `/api/user/auto-continue`, `/api/user/chat-width`, `/api/user/session-list-avatars` | User profile, avatars, user preferences |
 | `server-palette.js` | `/api/palette/search` | Cross-project session search (recent + BM25 ranked) |
 | `server-dm.js` | WS: `dm_list`, `dm_open`, `dm_typing`, `dm_send`, `dm_add_favorite`, `dm_remove_favorite` | Cross-project DM messaging, typing indicators, push notifications |
 
