@@ -182,6 +182,8 @@ function boundNotices(session) {
   { name: "the meta's vendor is put back, with no notice", stored: "fake", hasDefault: true, bound: null, refused: false },
   { name: "no meta vendor: bound once to the project default, written to the meta, one notice naming it", stored: null, hasDefault: true, bound: "claude", refused: false },
   { name: "no meta vendor and no default: refused with a visible error, no adapter called", stored: null, hasDefault: false, bound: null, refused: true },
+  { name: "the meta cannot be read: refused, nothing bound and the recorded vendor is not overwritten", stored: "fake", hasDefault: true, bound: null, refused: true, metaError: true },
+  { name: "restored default emits no second notice", stored: null, hasDefault: true, bound: "claude", refused: false, resumed: true },
 ].forEach(function (row) {
   test("an empty session vendor at query start: " + row.name, async function () {
     await withHarness(async function (server) {
@@ -197,15 +199,31 @@ function boundNotices(session) {
           server.adapter.vendor = "";
           server.sm.defaultVendor = null;
         }
-        await server.bridge.startQuery(session, "hello", null, null);
-        var refusals = historyOf(session, "error").filter(function (m) { return /no recorded agent/.test(m.text); });
+        var realLookup = server.sm.lookupMetaVendor;
+        if (row.metaError) {
+          server.sm.lookupMetaVendor = function () { return { state: "error", vendor: null }; };
+        }
+        try {
+          await server.bridge.startQuery(session, "hello", null, null);
+        } finally {
+          server.sm.lookupMetaVendor = realLookup;
+        }
+        if (row.resumed) {
+          // The in-memory vendor is lost again (a reload of the stored session)
+          // and the default is gone: the recorded vendor is what is used.
+          session.vendor = undefined;
+          server.adapter.vendor = "";
+          server.sm.defaultVendor = null;
+          await server.bridge.startQuery(session, "second", null, null);
+        }
+        var refusals = historyOf(session, "error").filter(function (m) { return /no recorded agent|could not be read/.test(m.text); });
         if (row.refused) {
           assert.equal(refusals.length, 1);
-          assert.match(refusals[0].text, /vendor/);
+          assert.match(refusals[0].text, row.metaError ? /could not be read/ : /vendor/);
           assert.equal(historyOf(session, "done")[0].code, 1);
           assert.equal(server.queryOptions.length, 0, "no adapter was called");
           assert.equal(session.vendor, undefined, "nothing was bound");
-          assert.equal(server.sm.readMetaVendor(session), null, "nothing was written to the meta");
+          assert.equal(server.sm.readMetaVendor(session), row.metaError ? "fake" : null, "nothing was written to the meta");
           assert.equal(boundNotices(session).length, 0);
         } else if (row.bound) {
           assert.equal(refusals.length, 0);
@@ -223,24 +241,6 @@ function boundNotices(session) {
         registry.unregister("fake");
       }
     });
-  });
-});
-
-test("a session bound to the project default is resumed from its meta with no second notice", async function () {
-  await withHarness(async function (server) {
-    var session = server.sm.createSessionRaw({});
-    session.cliSessionId = "cli-vendor-resume";
-    server.sm.saveSessionFile(session);
-    await server.bridge.startQuery(session, "first", null, null);
-    assert.equal(boundNotices(session).length, 1);
-    // The in-memory vendor is lost (a reload of the stored session).
-    session.vendor = undefined;
-    server.adapter.vendor = "";
-    server.sm.defaultVendor = null;
-    await server.bridge.startQuery(session, "second", null, null);
-    assert.equal(session.vendor, "claude", "the recorded vendor is used, not the (now absent) default");
-    assert.equal(boundNotices(session).length, 1, "no second notice");
-    assert.equal(historyOf(session, "error").length, 0);
   });
 });
 
