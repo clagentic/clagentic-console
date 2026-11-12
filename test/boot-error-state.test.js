@@ -36,18 +36,26 @@ var RECONNECT_TEXT = "Reconnecting to server";
 var PAGE_URL = "http://localhost/";
 var OWN_SCRIPT = PAGE_URL + "modules/theme-colors.js";
 
-// Fake page for the watchdog: the overlay elements it touches, the module
-// script element, and a window that records its own listeners.
+// Fake page for the watchdog, built in document order like the parser does:
+// the overlay elements exist first (index.html declares them earlier), the
+// watchdog classic script runs next, and only then does the module script
+// element appear. Resource events on that element do not bubble, so they reach
+// only capture-phase window listeners; the window load event reaches all of them.
 function makeWatchdogPage() {
   var els = {};
   ["connect-overlay", "connect-overlay-msg", "connect-overlay-reload-btn",
-   "connect-overlay-signin-btn", "app-module-script"].forEach(function (id) { els[id] = makeElement(id); });
+   "connect-overlay-signin-btn"].forEach(function (id) { els[id] = makeElement(id); });
   els["connect-overlay-msg"].textContent = "Loading Clagentic: Console…";
   els["connect-overlay-reload-btn"].classes.add("hidden");
   els["connect-overlay-signin-btn"].classes.add("hidden");
   var reloads = 0;
-  var win = { listeners: {} };
-  win.addEventListener = function (type, fn) { (win.listeners[type] = win.listeners[type] || []).push(fn); };
+  var win = { listeners: {}, captureListeners: {} };
+  win.addEventListener = function (type, fn, capture) {
+    (win.listeners[type] = win.listeners[type] || []).push(fn);
+    if (capture === true || (capture && capture.capture)) {
+      (win.captureListeners[type] = win.captureListeners[type] || []).push(fn);
+    }
+  };
   var context = {
     document: { getElementById: function (id) { return els[id] || null; } },
     location: { href: PAGE_URL, reload: function () { reloads++; } },
@@ -58,7 +66,23 @@ function makeWatchdogPage() {
   var m = /<script id="boot-watchdog">([\s\S]*?)<\/script>/.exec(html);
   assert.ok(m, "index.html must carry the boot-watchdog classic script");
   vm.runInContext(m[1], context);
-  return { els: els, win: win, reloads: function () { return reloads; } };
+  // The module script is parsed after the watchdog has run.
+  els["app-module-script"] = makeElement("app-module-script");
+  var script = els["app-module-script"];
+  function resourceError(target) {
+    (win.captureListeners.error || []).forEach(function (fn) { fn({ type: "error", target: target }); });
+  }
+  return {
+    els: els,
+    win: win,
+    reloads: function () { return reloads; },
+    // A failed fetch or link of the entry or any import: error on the script element.
+    moduleError: function () { resourceError(script); },
+    // Same event shape for any other element (a CDN script, an image).
+    otherResourceError: function (id) { resourceError(makeElement(id)); },
+    // The deferred module graph has finished running (or failing): window load.
+    graphDone: function () { fire(win, "load", { type: "load", target: win }); },
+  };
 }
 
 function ownError(message, err) {
@@ -70,7 +94,7 @@ var WATCHDOG_ROWS = [
     name: "an import that throws during evaluation",
     run: function (p) {
       fire(p.win, "error", ownError("Uncaught Error: theme boom", new Error("theme boom")));
-      fire(p.els["app-module-script"], "load");
+      p.graphDone();
     },
     shows: "theme boom",
   },
@@ -78,13 +102,13 @@ var WATCHDOG_ROWS = [
     name: "a module that fails to parse",
     run: function (p) {
       fire(p.win, "error", ownError("x", new SyntaxError("Unexpected token '}'")));
-      fire(p.els["app-module-script"], "load");
+      p.graphDone();
     },
     shows: "Unexpected token",
   },
   {
     name: "a missing module (404)",
-    run: function (p) { fire(p.els["app-module-script"], "error"); },
+    run: function (p) { p.moduleError(); },
     shows: "could not be loaded",
   },
   {
@@ -98,7 +122,7 @@ var WATCHDOG_ROWS = [
   },
   {
     name: "a graph that ends without the boot-complete signal",
-    run: function (p) { fire(p.els["app-module-script"], "load"); },
+    run: function (p) { p.graphDone(); },
     shows: "did not finish starting",
   },
 ];
@@ -140,6 +164,10 @@ var IGNORED_ROWS = [
     },
   },
   {
+    name: "a CDN script element that failed to load",
+    run: function (p) { p.otherResourceError("cdn-mermaid-script"); },
+  },
+  {
     name: "an error from a browser extension",
     run: function (p) {
       fire(p.win, "error", { message: "ext", filename: "chrome-extension://abc/content.js", error: new Error("ext") });
@@ -160,7 +188,7 @@ IGNORED_ROWS.forEach(function (row) {
     var p = makeWatchdogPage();
     row.run(p);
     p.win.__clagenticConsoleBooted = true;
-    fire(p.els["app-module-script"], "load");
+    p.graphDone();
     assert.equal(p.els["connect-overlay"].getAttribute("data-state"), null);
     assert.equal(p.els["connect-overlay-msg"].textContent, "Loading Clagentic: Console…");
     assert.equal(p.els["connect-overlay-reload-btn"].classList.contains("hidden"), true);
@@ -170,7 +198,7 @@ IGNORED_ROWS.forEach(function (row) {
 test("an ignored cross-origin error does not hide a real failure that follows", function () {
   var p = makeWatchdogPage();
   fire(p.win, "error", { message: "Script error.", filename: "" });
-  fire(p.els["app-module-script"], "load");
+  p.graphDone();
   assert.equal(p.els["connect-overlay"].getAttribute("data-state"), "boot-error");
 });
 
@@ -183,15 +211,15 @@ test("an app error followed by the boot signal ends in the booted state", functi
   assert.equal(overlay.getAttribute("data-state"), null, "boot-error state cleared");
   assert.equal(p.els["connect-overlay-msg"].textContent, "Reconnecting to server…");
   assert.equal(p.els["connect-overlay-reload-btn"].classList.contains("hidden"), true);
-  // The module load event after the signal must not bring the error back.
-  fire(p.els["app-module-script"], "load");
+  // The window load event after the signal must not bring the error back.
+  p.graphDone();
   assert.equal(overlay.getAttribute("data-state"), null);
 });
 
 test("normal boot: the signal set before the module load event leaves the overlay alone", function () {
   var p = makeWatchdogPage();
   p.win.__clagenticConsoleBooted = true;
-  fire(p.els["app-module-script"], "load");
+  p.graphDone();
   // An error after boot is the app's own business, not a boot failure.
   fire(p.win, "error", ownError("late", new Error("late")));
   fire(p.win, "unhandledrejection", { reason: new Error("late") });
@@ -203,7 +231,7 @@ test("normal boot: the signal set before the module load event leaves the overla
 test("the first boot failure wins; later events do not rewrite the message", function () {
   var p = makeWatchdogPage();
   fire(p.win, "error", ownError("x", new Error("root cause")));
-  fire(p.els["app-module-script"], "load");
+  p.graphDone();
   assert.ok(p.els["connect-overlay-msg"].textContent.indexOf("root cause") !== -1);
 });
 
