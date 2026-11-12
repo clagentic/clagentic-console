@@ -59,7 +59,7 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `prompt-access.js` | Who may answer a prompt: the one session-visibility rule the WS and HTTP answer paths both apply |
 | `permission-mode-policy.js` | The one check every permission mode passes before it is applied: known mode, bypass only when the server allows it, Don't ask and Auto only for a vendor that declares them |
 | `permission-settings.js` | The server-wide permission settings (Auto-approve read-only tools, mode for sessions opened by the CLI or a trigger): defaults, which request fields are accepted, and the precedence that picks an opened session's mode |
-| `project-settings-gate.js` | The one server-side rule for project- and folder-scoped setting writes: the `projectSettings` permission plus access to the target project; every refusal is logged and answered with one fixed error |
+| `project-settings-gate.js` | The one server-side rule for project- and folder-scoped setting writes: the `projectSettings` permission plus access to the target project (for a folder setter, to every project in the named folder; an empty or unknown folder is refused); every refusal is logged and answered with one fixed error |
 | `project-permission-settings.js` | The admin-only `set_permission_settings` message and the admin check shared with the server default mode |
 | `project-user-shell.js` | `shell`, `set_user_shell_settings` and the `stop` that interrupts a command: the `!` command line. Applies the refusals in order, gates the command as a Bash call, holds the session busy until the `shell_result` is recorded |
 | `user-shell-settings.js` | The `!` command line's settings (on or off, timeout, output cap): defaults, ranges, which request fields are accepted |
