@@ -380,13 +380,13 @@ test("no frontend source reads a layout mode", function () {
 
 var sharedMessages = new dom.FakeElement("div");
 
-async function assistantBlock(t, vendor, agentName) {
+async function assistantBlock(t, vendor, agentName, extraState) {
   mockClock(t);
   dom.setupGlobals();
   sharedMessages._children = [];
   document.getElementById = function (id) { return id === "messages" ? sharedMessages : null; };
   var storeMod = await import(dom.moduleUrl("store.js"));
-  storeMod.createStore({ connected: true, currentVendor: vendor, currentAgentName: agentName });
+  storeMod.createStore(Object.assign({ connected: true, currentVendor: vendor, currentAgentName: agentName }, extraState || {}));
   var rendering = await import(dom.moduleUrl("app-rendering.js") + "?assistant=" + (++loads));
   var el = rendering.ensureAssistantBlock();
   return { el: el, header: el.querySelector(".msg-header"), rendering: rendering };
@@ -414,8 +414,32 @@ test("assistant: a session with no agent shows the vendor as before", async func
   var img = env.header.querySelector(".msg-header-avatar");
   assert.equal(img.src, registryMod.VENDOR_AVATARS.codex);
   assert.equal(img.dataset.agentKey, undefined, "a vendor has no roster entry");
-  var fallback = await assistantBlock(t, null, "   ");
-  assert.equal(fallback.header.querySelector(".dm-bubble-name").textContent, registryMod.VENDOR_NAMES.claude, "a blank agent name is no agent");
+  var blank = await assistantBlock(t, "codex", "   ");
+  assert.equal(blank.header.querySelector(".dm-bubble-name").textContent, registryMod.VENDOR_NAMES.codex, "a blank agent name is no agent");
+});
+
+// A header never names a vendor the session did not run on. With no vendor on
+// the page the session list's vendor is used, and with none known the header
+// is a neutral assistant with no vendor picture.
+[
+  { name: "a Codex session whose page vendor was wiped, from the session list", vendor: null, state: { activeSessionId: 7, sessionVendors: { 7: "codex" } }, vendorKey: "codex" },
+  { name: "the page vendor wins over a list entry", vendor: "claude", state: { activeSessionId: 7, sessionVendors: { 7: "codex" } }, vendorKey: "claude" },
+  { name: "no vendor anywhere: neutral, never Claude Code", vendor: null, state: { activeSessionId: 7, sessionVendors: {} }, vendorKey: null },
+].forEach(function (row) {
+  test("assistant: " + row.name, async function (t) {
+    var registryMod = await import(dom.moduleUrl("vendor-registry.js"));
+    var env = await assistantBlock(t, row.vendor, null, row.state);
+    var name = env.header.querySelector(".dm-bubble-name").textContent;
+    var avatar = env.header.querySelector(".msg-header-avatar");
+    if (row.vendorKey) {
+      assert.equal(name, registryMod.VENDOR_NAMES[row.vendorKey]);
+      assert.equal(avatar.src, registryMod.VENDOR_AVATARS[row.vendorKey]);
+    } else {
+      assert.equal(name, "Assistant");
+      assert.notEqual(name, registryMod.VENDOR_NAMES.claude);
+      assert.ok(!avatar.src, "no vendor avatar");
+    }
+  });
 });
 
 test("assistant: the session switch carries the agent to the renderer and a project switch clears it", function () {
