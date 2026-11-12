@@ -182,3 +182,131 @@ test("a server refusal re-enables every Revoke and shows why; the server's list 
   assert.equal(list.querySelectorAll(".session-grants-row").length, 1, "confirmed: the revoked row is gone");
   assert.equal(list.querySelector(".session-grants-error").textContent, "");
 });
+
+// --- what the ask, the card and the banner say of a call --------------------
+
+var GAVE_NO_COMMAND = "a Bash call that gave no command";
+var LONG = "x".repeat(200);
+
+// [name, toolName, toolInput, expected verb, expected target]
+var ASK_ROWS = [
+  ["AC1 the command, never the description", "Bash", { command: "find /var/tmp", description: "placeholder" }, "run", "find /var/tmp"],
+  ["AC1 a long command is trimmed", "Bash", { command: LONG }, "run", "x".repeat(80) + "..."],
+  ["AC4 export prefix shortened to names", "Bash", { command: "export CLAGENTIC_SUBAGENT_ID=af5860c5-1111; find /var/tmp -name x", description: "placeholder" }, "run", "(sets CLAGENTIC_SUBAGENT_ID) find /var/tmp -name x"],
+  ["AC4 inline assignments, quoted value", "Bash", { command: "A=1 B='x y' make test" }, "run", "(sets A, B) make test"],
+  ["AC4 several export statements", "Bash", { command: "export A=1; export B=2 && ls -l" }, "run", "(sets A, B) ls -l"],
+  ["AC4 many names are counted", "Bash", { command: "A=1 B=2 C=3 D=4 E=5 make" }, "run", "(sets A, B, C +2) make"],
+  ["AC4 a value that runs a command is not hidden", "Bash", { command: "A=$(rm -rf x) ls" }, "run", "A=$(rm -rf x) ls"],
+  ["AC4 assignments alone are shown as they are", "Bash", { command: "export A=1" }, "run", "export A=1"],
+  ["AC5 empty command", "Bash", { command: "", description: "placeholder" }, "run", GAVE_NO_COMMAND],
+  ["AC5 missing command", "Bash", { description: "placeholder" }, "run", GAVE_NO_COMMAND],
+  ["AC5 blank command", "Bash", { command: "  \n", description: "placeholder" }, "run", GAVE_NO_COMMAND],
+  ["AC3 override character shown, not interpreted", "Bash", { command: "echo " + String.fromCharCode(0x202e) + "txt.exe" }, "run", "echo \\u202Etxt.exe"],
+  ["AC3 newline is one line in the ask", "Bash", { command: "ls\nrm x" }, "run", "ls rm x"],
+  ["AC7 Write", "Write", { file_path: "/a/b/c/d/e.txt" }, "write to", ".../c/d/e.txt"],
+  ["AC7 Edit", "Edit", { file_path: "/a/b.txt" }, "edit", "/a/b.txt"],
+  ["AC7 Read", "Read", { file_path: "/a/b.txt" }, "read", "/a/b.txt"],
+  ["AC7 Grep", "Grep", { pattern: "foo" }, "search", "foo"],
+  ["AC7 Glob", "Glob", { pattern: "*.js" }, "search for files in", "*.js"],
+  ["AC7 WebFetch", "WebFetch", { url: "https://example.test/" }, "fetch", "https://example.test/"],
+  ["AC7 WebSearch", "WebSearch", { query: "q" }, "search the web for", "q"],
+  ["AC7 another tool", "Other", { description: "d" }, "use Other", ""],
+];
+
+test("askWording names the command, never the description, and leaves the other tools as they were", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  dom.setupGlobals();
+  var mod = await import(dom.moduleUrl("prompt-kinds/permission.js"));
+  ASK_ROWS.forEach(function (row) {
+    var wording = mod.askWording(row[1], row[2]);
+    assert.deepEqual(wording, { verb: row[3], target: row[4] }, row[0]);
+  });
+});
+
+test("the card shows the description as the agent's own, the full command verbatim, and a plain ask", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  var esc = String.fromCharCode(27);
+  var command = "export CLAGENTIC_SUBAGENT_ID=af5860c5-1111; echo hi" + esc + "[31m\n" + String.fromCharCode(0x202e) + "tail " + LONG;
+  env.tools.applyPromptMessage(request("c1", { toolInput: { command: command, description: "placeholder" } }));
+  var card = dom.cardFor(env, "c1");
+  assert.match(card.querySelector(".perm-ask").textContent, /^Can I run \(sets CLAGENTIC_SUBAGENT_ID\) echo hi/);
+  assert.doesNotMatch(card.querySelector(".perm-ask").textContent, /placeholder/, "AC1 the description is not in the ask");
+  assert.equal(card.querySelector(".perm-description").textContent, "Agent's description: placeholder", "AC2");
+  var block = card.querySelector(".perm-command");
+  assert.ok(block, "AC3 the command block is on the card, outside Details");
+  assert.equal(block._parent.className.indexOf("perm-details"), -1);
+  var shown = block.textContent;
+  assert.ok(shown.indexOf("export CLAGENTIC_SUBAGENT_ID=af5860c5-1111; echo hi") === 0, "AC4 the full command keeps its assignments");
+  assert.ok(shown.indexOf("\\x1B[31m\n\\u202Etail ") !== -1, "AC3 controls and overrides are shown visibly; line breaks stay");
+  assert.ok(shown.indexOf(LONG) !== -1, "AC3 verbatim, not trimmed");
+  assert.ok(shown.indexOf(esc) === -1 && shown.indexOf(String.fromCharCode(0x202e)) === -1);
+});
+
+test("a Bash card with no command says so, shows no command block, and does not offer the description as the command", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage(request("c2", { toolInput: { description: "placeholder" } }));
+  var card = dom.cardFor(env, "c2");
+  assert.equal(card.querySelector(".perm-ask").textContent, "Can I run " + GAVE_NO_COMMAND + "?");
+  assert.equal(card.querySelector(".perm-command"), null);
+  assert.equal(card.querySelector(".perm-description").textContent, "Agent's description: placeholder");
+});
+
+test("a card for another tool draws no description or command block", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage(request("c3", { toolName: "Write", toolInput: { file_path: "/work/a.txt", description: "d", command: "c" } }));
+  var card = dom.cardFor(env, "c3");
+  assert.equal(card.querySelector(".perm-description"), null);
+  assert.equal(card.querySelector(".perm-command"), null);
+  assert.equal(card.querySelector(".perm-ask").textContent, "Can I write to /work/a.txt?");
+});
+
+test("the card speaker is the session's vendor, else a neutral identity, never Claude by default", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  var storeMod = await import(dom.moduleUrl("store.js"));
+  function speaker(id, extra) {
+    env.tools.applyPromptMessage(request(id, extra));
+    var card = dom.cardFor(env, id);
+    return { name: card.querySelector(".dm-bubble-name").textContent, avatar: card.querySelector(".dm-bubble-avatar") };
+  }
+
+  var codex = speaker("v1", { vendor: "codex" });
+  assert.equal(codex.name, "Codex");
+  assert.equal(codex.avatar.src, "/codex-avatar.png");
+
+  var claude = speaker("v2", { vendor: "claude" });
+  assert.equal(claude.name, "Claude Code");
+
+  var unknown = speaker("v3", {});
+  assert.equal(unknown.name, "Assistant", "AC6 no vendor anywhere: neutral");
+  assert.equal(unknown.avatar.tagName, "SPAN", "and no vendor avatar");
+  assert.equal(unknown.avatar.src, undefined);
+
+  storeMod.store.set({ sessionVendors: { 7: "codex" }, activeSessionId: 7 });
+  var listed = speaker("v4", {});
+  assert.equal(listed.name, "Codex", "the session list's vendor stands in when the request names none");
+  assert.equal(listed.avatar.src, "/codex-avatar.png");
+});
+
+test("the banner title is the same ask: the command, not the description; its summary shows the command an export prefixes", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  dom.setupGlobals();
+  var storeMod = await import(dom.moduleUrl("store.js"));
+  storeMod.createStore({ connected: true });
+  var notifications = await import(dom.moduleUrl("app-notifications.js"));
+  notifications.initAppNotifications();
+  var container = global.document.body.querySelector(".notif-banner-container");
+  notifications.handleNotificationCreated({
+    unreadCount: 1,
+    notification: {
+      id: "b1", type: "permission_request", slug: "alpha", sessionId: 7, title: "Permission", body: "",
+      meta: {
+        requestId: "r-b1", kind: "permission", toolName: "Bash",
+        toolInput: { command: "export CLAGENTIC_SUBAGENT_ID=af5860c5-1111; find /var/tmp", description: "placeholder" },
+      },
+    },
+  });
+  var banner = container.querySelector('[data-notif-id="b1"]');
+  assert.ok(banner, "the banner is drawn");
+  assert.ok(banner.innerHTML.indexOf("Can I run (sets CLAGENTIC_SUBAGENT_ID) find /var/tmp?") !== -1, "AC1 AC4 the title names the command");
+  assert.equal(banner.innerHTML.indexOf("placeholder"), -1, "the description is not on the banner");
+});

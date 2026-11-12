@@ -115,6 +115,25 @@ test("summary carries no more of a call than the banner body, and none for a que
   assert.equal(JSON.stringify(views).indexOf("private"), -1);
 });
 
+// [name, command, expected summary]
+var SUMMARY_ROWS = [
+  ["export prefix shortened to names", "export CLAGENTIC_SUBAGENT_ID=af5860c5-4f2e-4c1a-9d3b-0123456789ab; find /var/tmp -name x", "(sets CLAGENTIC_SUBAGENT_ID) find /var/tmp -name x"],
+  ["inline assignment", "NAME=value cmd args", "(sets NAME) cmd args"],
+  ["no assignments, unchanged", "ls -l", "ls -l"],
+  ["a value that runs a command is not hidden", "A=`id` ls", "A=`id` ls"],
+];
+
+test("leading environment assignments are shortened so the command they prefix shows", async function () {
+  await promptRegistry.ready();
+  SUMMARY_ROWS.forEach(function (row) {
+    assert.equal(summarize("Bash", { command: row[1] }), row[2], row[0]);
+  });
+
+  var long = summarize("Bash", { command: "export A=" + "v".repeat(300) + "; " + "y".repeat(300) });
+  assert.ok(long.startsWith("(sets A) yyy"), "the command shows within the bound");
+  assert.equal(long.length, SUMMARY_MAX);
+});
+
 test("an empty record or a session with no stores lists nothing", function () {
   var s = makeSession(1);
   s.pendingPermissions.dead = null;

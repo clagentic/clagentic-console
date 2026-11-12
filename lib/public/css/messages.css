@@ -1747,6 +1747,24 @@ pre.mermaid-error {
   color: var(--text);
   margin-bottom: 4px;
 }
+.perm-description {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.perm-command {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  margin: 4px 0 8px;
+  padding: 8px;
+  background: rgba(var(--overlay-rgb), 0.04);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow-y: auto;
+}
 .perm-details {
   margin-bottom: 8px;
   font-size: 12px;
