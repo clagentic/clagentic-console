@@ -23,6 +23,7 @@ var ROOT = path.resolve(__dirname, "..");
 var DAEMON_SCRIPT = path.join(ROOT, "lib", "daemon.js");
 var CLI = path.join(ROOT, "bin", "cli.js");
 var KEY = "promptExpiryMinutes";
+var WIDTH_KEY = "chatWidth";
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -67,7 +68,42 @@ test("registry: an unknown key and inherited names are not settings", function (
   assert.equal(registry.findSetting("nope"), null);
   assert.equal(registry.findSetting("constructor"), null);
   assert.equal(registry.findSetting("__proto__"), null);
-  assert.deepEqual(registry.settingKeys(), [KEY]);
+  assert.deepEqual(registry.settingKeys(), [KEY, WIDTH_KEY]);
+});
+
+// The chat width default: the same list the browser and the profile use, and no
+// bubble/channel entry.
+[
+  ["compact", true],
+  ["comfortable", true],
+  ["wide", true],
+  ["full", true],
+  ["bubble", false],
+  ["channel", false],
+  ["Wide", false],
+  ["", false],
+  [820, false],
+  [undefined, false],
+].forEach(function (row) {
+  test("registry: chatWidth pick " + JSON.stringify(row[0]) + (row[1] ? " is accepted" : " is refused naming the steps"), function () {
+    var picked = registry.findSetting(WIDTH_KEY).pick(row[0]);
+    assert.equal(picked.ok, row[1]);
+    if (row[1]) assert.equal(picked.value, row[0]);
+    else assert.match(picked.reason, /compact, comfortable, wide, full/);
+  });
+});
+
+test("registry: chatWidth reads the default when unset, stores a step and removes the key at the default", function () {
+  var entry = registry.findSetting(WIDTH_KEY);
+  assert.equal(entry.default, "comfortable");
+  assert.equal(entry.read({}), "comfortable");
+  assert.equal(entry.read({ chatWidth: "bubble" }), "comfortable", "a stale value is not a step");
+  var cfg = {};
+  entry.apply(cfg, "full");
+  assert.equal(entry.read(cfg), "full");
+  entry.apply(cfg, "comfortable");
+  assert.equal("chatWidth" in cfg, false);
+  assert.equal(registry.findSetting("chatLayout"), null, "the bubble/channel setting is not offered");
 });
 
 test("the registry validator is the Settings page's pickSettingChange, with no second range check", function () {
@@ -140,7 +176,10 @@ test("handler: an unknown key is unknown-key for get and set; list names the key
     assert.match(res.reason, /promptExpiryMinutes/);
   });
   var listed = handleSettingsCommand(deps, { cmd: "settings_list" });
-  assert.deepEqual(listed, { ok: true, result: "listed", settings: [{ key: KEY, value: 30, default: 30 }] });
+  assert.deepEqual(listed, { ok: true, result: "listed", settings: [
+    { key: KEY, value: 30, default: 30 },
+    { key: WIDTH_KEY, value: "comfortable", default: "comfortable" },
+  ] });
   assert.equal(deps.calls.set.length, 0);
 });
 
@@ -361,7 +400,10 @@ test("cli against the daemon: set 10 reads back 10, get returns 10 and the defau
     return runCli(["settings", "list"], cliEnv);
   }).then(function (r) {
     assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(JSON.parse(r.stdout).settings, [{ key: KEY, value: 10, default: 30 }]);
+    assert.deepEqual(JSON.parse(r.stdout).settings, [
+      { key: KEY, value: 10, default: 30 },
+      { key: WIDTH_KEY, value: "comfortable", default: "comfortable" },
+    ]);
     return runCli(["settings", "set", KEY, "abc"], cliEnv);
   }).then(function (r) {
     assert.equal(r.code, 1);
@@ -374,5 +416,28 @@ test("cli against the daemon: set 10 reads back 10, get returns 10 and the defau
   }).then(function (r) {
     assert.equal(r.code, 0, r.stderr);
     return waitForPersisted(function (c) { return !("promptExpiryMinutes" in c); }, 3000);
+  });
+});
+
+test("cli against the daemon: chatWidth set wide reads back wide and persists, a bubble value is refused, comfortable clears the key", function () {
+  var cliEnv = { CLAGENTIC_HOME: tmpHome, CLAGENTIC_CONFIG: configFile };
+  return runCli(["settings", "set", WIDTH_KEY, "wide"], cliEnv).then(function (r) {
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), { ok: true, result: "saved", key: WIDTH_KEY, value: "wide", default: "comfortable" });
+    return waitForPersisted(function (c) { return c.chatWidth === "wide"; }, 3000);
+  }).then(function () {
+    return runCli(["settings", "get", WIDTH_KEY], cliEnv);
+  }).then(function (r) {
+    assert.deepEqual(JSON.parse(r.stdout), { ok: true, result: "read", key: WIDTH_KEY, value: "wide", default: "comfortable" });
+    return runCli(["settings", "set", WIDTH_KEY, "bubble"], cliEnv);
+  }).then(function (r) {
+    assert.equal(r.code, 1);
+    var out = JSON.parse(r.stdout);
+    assert.equal(out.result, "refused");
+    assert.equal(out.value, "wide", "the refused value saved nothing");
+    return runCli(["settings", "set", WIDTH_KEY, "comfortable"], cliEnv);
+  }).then(function (r) {
+    assert.equal(r.code, 0, r.stderr);
+    return waitForPersisted(function (c) { return !("chatWidth" in c); }, 3000);
   });
 });

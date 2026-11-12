@@ -629,7 +629,10 @@ Exit codes: `0` when the request was acted on (scheduled, listed, deleted), `1` 
 
 ## settings
 
-`settings` reads and changes server-wide settings by key, so an agent needs no browser. The only key today is `promptExpiryMinutes`: how many minutes an unanswered operator prompt waits before it expires (a whole number from 0, meaning no expiry, up to 35791; default 30). A value applies to the next prompt opened; a prompt already open keeps its deadline.
+`settings` reads and changes server-wide settings by key, so an agent needs no browser. Two keys today:
+
+- `promptExpiryMinutes`: how many minutes an unanswered operator prompt waits before it expires (a whole number from 0, meaning no expiry, up to 35791; default 30). A value applies to the next prompt opened; a prompt already open keeps its deadline.
+- `chatWidth`: the conversation width a person gets until they choose their own in Appearance, one of `compact` (640 px), `comfortable` (820 px, the default), `wide` (1040 px) or `full` (the whole pane). A person's own choice always wins; the width applies above 768 px and a phone is always full width. A value applies the next time a page loads.
 
 ```bash
 clagentic-console settings get <key>
@@ -647,7 +650,7 @@ clagentic-console settings get promptExpiryMinutes
 # { "ok": true, "result": "read", "key": "promptExpiryMinutes", "value": 10, "default": 30 }
 
 clagentic-console settings list
-# { "ok": true, "result": "listed", "settings": [ { "key": "promptExpiryMinutes", "value": 10, "default": 30 } ] }
+# { "ok": true, "result": "listed", "settings": [ { "key": "promptExpiryMinutes", "value": 10, "default": 30 }, { "key": "chatWidth", "value": "comfortable", "default": "comfortable" } ] }
 
 clagentic-console settings set promptExpiryMinutes -1
 # { "ok": false, "result": "refused", "reason": "promptExpiryMinutes must be a whole number of minutes from 0 (no expiry) to 35791.", "key": "promptExpiryMinutes", "value": 10, "default": 30 }
