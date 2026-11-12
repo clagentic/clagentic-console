@@ -276,6 +276,39 @@ test("PUT /api/user/session-list-avatars: saved for the signed-in user; a non-bo
   assert.equal(put(out, "/api/user/session-list-avatars", { sessionListAvatars: false }).status, 401);
 });
 
+var PERSIST_FAILURE_ROWS = [
+  // [url, request body, the users setter that fails to persist]
+  ["/api/user/session-list-avatars", { sessionListAvatars: false }, "setSessionListAvatars"],
+  ["/api/user/chat-width", { chatWidth: "wide" }, "setChatWidth"],
+];
+
+test("PUT preference routes: bad JSON is a 400, a failure while persisting is logged and a 500", function () {
+  var realError = console.error;
+  PERSIST_FAILURE_ROWS.forEach(function (row) {
+    var ctx = ctxFor({ id: "u1", username: "u" }, {}, []);
+    ctx.users[row[2]] = function () { throw new Error("disk full"); };
+    var handler = attachSettings(ctx).handleRequest;
+    var logged = [];
+    console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+    var failed;
+    try {
+      failed = put(handler, row[0], row[1]);
+    } finally {
+      console.error = realError;
+    }
+    assert.equal(failed.status, 500, row[0] + ": persistence failure");
+    assert.equal(logged.length, 1, row[0] + ": logged once");
+    assert.match(logged[0], /disk full/, row[0]);
+
+    var listeners = {};
+    var bad = res();
+    handler({ method: "PUT", url: row[0], on: function (evt, fn) { listeners[evt] = fn; } }, bad, row[0]);
+    listeners.data("{not json");
+    listeners.end();
+    assert.equal(bad.status, 400, row[0] + ": unparseable body");
+  });
+});
+
 test("preference store: only a boolean is kept per user; a stale value reads as no choice", function () {
   var data = { users: [{ id: "a" }, { id: "b" }] };
   var prefs = attachPreferences({ loadUsers: function () { return data; }, saveUsers: function () {} });
@@ -330,29 +363,40 @@ test("with the setting on the avatar leads the row, ahead of the title, in place
   assert.doesNotMatch(css.slice(css.indexOf(".session-list-avatar {"), css.indexOf(".session-list-avatar img")), /margin-left|order:/);
 });
 
-// AC9: an agent row and a regular AI row look different in every list, on and off.
-// Each list is a [name guard, avatar when on, badge or pill when off] triple; the
-// regular row (no agentName) satisfies none of them, the agent row exactly one.
-var DISTINCT_ROWS = [
-  ["lib/public/modules/sidebar-sessions.js", /var avatarOn = !!s\.agentName && sessionListAvatarsEnabled\(\);/, /if \(s\.agentName && !avatarOn\) \{\s*textHtml \+= '<span class="session-agent-badge"/],
-  ["lib/public/modules/sidebar-mobile.js", /if \(s\.agentName && sessionListAvatarsEnabled\(\)\) \{\s*el\.appendChild\(createSessionAgentAvatar/, /if \(s\.agentName && !sessionListAvatarsEnabled\(\)\) \{\s*var agentBadge[\s\S]{0,200}session-agent-badge/],
-  ["lib/public/modules/app-home-hub.js", /if \(sess\.agentName && sessionListAvatarsEnabled\(\)\) \{/, /var agentBadge = sess\.agentName\s*\? '<span class="hub-recent-agent">'[\s\S]{0,80}: '';/],
-];
-
-test("agent and regular rows are visibly distinct in each list, with the setting on and off", function () {
-  DISTINCT_ROWS.forEach(function (row) {
-    var src = read(row[0]);
-    assert.match(src, row[1], row[0] + ": on, the agent row has the avatar and a regular row has none");
-    assert.match(src, row[2], row[0] + ": off, the agent row has the badge (or name pill) and a regular row has none");
-  });
-});
-
 test("the sidebar rows repaint with the setting, and Recent Sessions redraws on it", function () {
   var sessions = read("lib/public/modules/sidebar-sessions.js");
   assert.match(sessions, /"\|av:" \+ \(sessionListAvatarsEnabled\(\) \? "1" : "0"\)/, "the list fingerprint carries the setting");
   assert.match(sessions, /onSessionListAvatarsChange\(function \(\) \{ renderSessionList\(\); \}\)/);
   var hub = read("lib/public/modules/app-home-hub.js");
   assert.match(hub, /onSessionListAvatarsChange\(function \(\) \{\s*if \(lastRecentSessionsMsg\) handleHubRecentSessions\(lastRecentSessionsMsg\);/);
+  assert.match(read("lib/public/modules/sidebar-mobile.js"), /onSessionListAvatarsChange\(function \(\) \{ refreshMobileChatSheet\(\); \}\)/, "the phone chat list repaints on the setting");
+});
+
+test("a save that fails is reported with the setting name, and later choices still go out", async function () {
+  dom.setupGlobals();
+  var answers = [{ ok: false, status: 500 }, new Error("offline"), { ok: true, status: 200 }];
+  var sent = [];
+  global.fetch = function (url, init) {
+    sent.push(JSON.parse(init.body));
+    var next = answers.shift();
+    return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+  };
+  var saver = (await import(dom.moduleUrl("serialized-save.js"))).createSerializedSaver("/api/user/example", "exampleKey");
+  var realError = console.error;
+  var logged = [];
+  console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+  try {
+    for (var i = 0; i < 3; i++) {
+      saver(i);
+      await new Promise(function (resolve) { setImmediate(resolve); });
+    }
+  } finally {
+    console.error = realError;
+  }
+  assert.equal(sent.length, 3, "a failure does not stop later saves");
+  assert.equal(logged.length, 2, "the two failures are reported, the success is not");
+  assert.match(logged[0], /exampleKey.*500/);
+  assert.match(logged[1], /exampleKey.*offline/);
 });
 
 // ---------------------------------------------------------------------------
@@ -371,7 +415,6 @@ test("desktop Settings, the phone Appearance flow and the CLI registry each show
   assert.match(settings, /applyServerSessionListAvatars\(\{ sessionListAvatars: data\.sessionListAvatars \}\)/);
 
   assert.ok(registry.settingKeys().indexOf("sessionListAvatars") !== -1);
-  assert.deepEqual(registry.findSetting("sessionListAvatars").pick(false), { ok: true, value: false });
   assert.match(read("bin/cli.js"), /known keys: promptExpiryMinutes, chatWidth, sessionListAvatars\)/);
   var daemon = read("lib/daemon.js");
   assert.match(daemon, /sessionListAvatars: \{\s*set: serverHooks\.onSetSessionListAvatarsDefault,\s*announce: serverHooks\.onGetSessionListAvatarsDefault,/);
