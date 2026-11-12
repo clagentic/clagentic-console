@@ -31,6 +31,7 @@ var ROUTES = [
   { url: "/style.css", root: "lib/public", ct: /text\/css/ },
   { url: "/css/base.css", root: "lib/public subdirectory", ct: /text\/css/ },
   { url: "/modules/theme.js", root: "lib/public/modules", ct: /javascript/ },
+  { url: "/modules/diagnostics.js", root: "lib/public/modules: restart-to-update offer", ct: /javascript/, body: /applyBuildOffer/ },
   { url: "/modules/prompt-kinds/own-key.js", root: "lib/public/modules subdirectory", ct: /javascript/ },
   { url: "/emoji-data.json", root: "lib/public (json)", ct: /json/ },
   { url: "/icon-192.png", root: "lib/public (image)", ct: /image\/png/ },
@@ -117,6 +118,7 @@ test("client files: a swapped install is never served; the loaded build's files 
     var res = await get(s.port, r.url);
     assert.equal(res.status, 200, r.url + " served before the swap");
     assert.match(res.headers["content-type"], r.ct, r.url + " content type");
+    if (r.body) assert.match(res.body.toString("utf8"), r.body, r.url + " body");
     before[r.url] = res;
   }
   var onDisk = fs.readFileSync(path.join(s.libCopy, "public", "app.js"));
@@ -142,12 +144,33 @@ test("client files: a swapped install is never served; the loaded build's files 
   assert.equal(added.status, 404, "a file only the swapped install has is not served");
 });
 
-test("client files: the loaded client still carries the restart-to-update offer", async function (t) {
-  var s = await startFromCopy(t);
-  swapInstall(s.libCopy);
-  var diagnostics = await get(s.port, "/modules/diagnostics.js");
-  assert.equal(diagnostics.status, 200);
-  assert.match(diagnostics.body.toString("utf8"), /applyBuildOffer/, "the offer handler is in the served client");
+// Each row breaks one read in a private copy of lib/ and loads the module the
+// daemon loads at startup; the load must throw and name the path.
+var CAPTURE_FAILURES = [
+  { name: "a client file that cannot be inspected",
+    module: "client-files.js",
+    break: function (lib) { fs.symlinkSync(path.join(lib, "no-such-target"), path.join(lib, "public", "dangling.js")); },
+    named: function (lib) { return path.join(lib, "public", "dangling.js"); } },
+  { name: "a bundled theme is not a readable palette",
+    module: "theme-seed.js",
+    break: function (lib) { fs.writeFileSync(path.join(lib, "themes", "clagentic-dark.json"), "{}"); },
+    named: function (lib) { return path.join(lib, "themes", "clagentic-dark.json"); } },
+];
+
+CAPTURE_FAILURES.forEach(function (row) {
+  test("client files: startup fails and names the path when " + row.name, function (t) {
+    var root = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-capture-"));
+    t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+    var lib = path.join(root, "lib");
+    fs.cpSync(path.join(REPO, "lib"), lib, { recursive: true });
+    fs.symlinkSync(path.join(REPO, "node_modules"), path.join(root, "node_modules"), "dir");
+    row.break(lib);
+    assert.throws(function () { require(path.join(lib, row.module)); }, function (err) {
+      assert.match(err.message, /^Clagentic: Console cannot start: /);
+      assert.ok(err.message.includes(row.named(lib)), "message names " + row.named(lib) + ": " + err.message);
+      return true;
+    });
+  });
 });
 
 test("client files: the pinned set holds the whole tree and reports its size", function () {
