@@ -90,7 +90,7 @@ test("summary is one line, control characters stripped, bounded", function () {
   var c = String.fromCharCode;
   var nasty = "echo a" + c(10) + c(27) + "[31mred" + c(27) + "[0m" + c(13) + c(10) + "b" + c(0) + "c" + c(0x2028) + "d" + c(0x85) + c(0x7f) + "e";
   var line = summarize("Bash", { command: nasty });
-  assert.equal(line, "echo a [31mred [0m b c d e");
+  assert.equal(line, "echo a ⏎ [31mred [0m ⏎ b c ⏎ d e");
   for (var i = 0; i < line.length; i++) {
     var code = line.charCodeAt(i);
     assert.ok(code > 0x1f && (code < 0x7f || code > 0x9f) && code !== 0x2028 && code !== 0x2029, "control character at " + i);
@@ -121,6 +121,7 @@ var SUMMARY_ROWS = [
   ["inline assignment", "NAME=value cmd args", "(sets NAME) cmd args"],
   ["no assignments, unchanged", "ls -l", "ls -l"],
   ["a value that runs a command is not hidden", "A=`id` ls", "A=`id` ls"],
+  ["a line break after a comment shows the next command as separate", "echo ok # note\nrm -rf data", "echo ok # note ⏎ rm -rf data"],
 ];
 
 test("leading environment assignments are shortened so the command they prefix shows", async function () {
