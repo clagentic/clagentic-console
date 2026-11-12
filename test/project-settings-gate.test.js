@@ -175,6 +175,12 @@ test("a multi-user connection with no user is refused", function () {
   assertRefused(row, run(row, true, null), TARGET);
 });
 
+test("set_project_default_mode keeps the owner's right without the permission", function () {
+  var row = ROWS.filter(function (r) { return r.type === "set_project_default_mode"; })[0];
+  var ownerWithoutPermission = { id: USERS.owner.id, username: "owner", role: "user" };
+  assertAllowed(row, run(row, true, ownerWithoutPermission));
+});
+
 test("a slug-taking setter checks the slug in the message, not the connection's project", function () {
   var row = { type: "set_project_title", msg: { slug: "other-project", title: "T" }, optName: "onSetProjectTitle" };
   assertRefused(row, run(row, true, USERS.owner), "other-project");
