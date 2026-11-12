@@ -31,6 +31,33 @@ test("persist and reload keeps observedAt, utilization, utilizationObservedAt", 
   assert.equal(x.state, "fresh");
 });
 
+test("pre-reset fields survive persist and reload; a file without them loads unchanged", function () {
+  var t = tmpFile();
+  var a = createUsageStore({ file: t.file, log: function () {} });
+  a.record("claude", { rateLimitType: "seven_day", utilization: 0.99, resetsAt: FUTURE, status: "allowed_warning" }, { now: NOW });
+  a.record("claude", { rateLimitType: "seven_day", resetsAt: FUTURE, status: "allowed" }, { now: NOW + 1000 });
+  a.flush();
+  var b = createUsageStore({ file: t.file, log: function () {} });
+  b.load();
+  var x = snap(b, NOW + 2000).vendors.claude.buckets.seven_day;
+  assert.equal(x.utilization, null);
+  assert.equal(x.lastKnownUtilization, 0.99);
+  assert.equal(x.lastKnownObservedAt, new Date(NOW).toISOString());
+  assert.equal(x.lastKnownPreReset, true);
+
+  var old = tmpFile();
+  var iso = new Date(NOW).toISOString();
+  fs.writeFileSync(old.file, JSON.stringify({ version: 1, vendors: { claude: { five_hour: {
+    utilization: 0.4, utilizationObservedAt: iso, resetsAt: null, status: "allowed", observedAt: iso, source: null, sessionLocalId: null,
+  } } } }));
+  var c = createUsageStore({ file: old.file, log: function () {} });
+  c.load();
+  var y = snap(c, NOW + 1000).vendors.claude.buckets.five_hour;
+  assert.equal(y.utilization, 0.4);
+  assert.equal(y.lastKnownUtilization, null);
+  assert.equal(y.lastKnownPreReset, false);
+});
+
 test("reloaded old record reads stale, then expired, never re-stamped fresh", function () {
   var t = tmpFile();
   var a = createUsageStore({ file: t.file, log: function () {} });
