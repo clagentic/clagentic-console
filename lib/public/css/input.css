@@ -977,10 +977,6 @@
     display: none;
   }
 
-  .msg-user .bubble {
-    max-width: 90%;
-  }
-
   #input-row {
     border-radius: 8px;
   }
@@ -1358,5 +1354,4 @@
 }
 .collapsible-toggle:hover { text-decoration: underline; }
 .collapsible-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.collapsible-toggle-fired { align-self: flex-start; margin-top: 2px; }
 

@@ -201,40 +201,6 @@
    @Mention Response Block
    ========================================================================== */
 
-.msg-mention {
-  position: relative;
-  max-width: var(--content-width);
-  margin: 0 auto 24px;
-  padding: 4px 20px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--mention-color, #6c5ce7) 6%, transparent);
-  transition: background 0.15s;
-}
-
-.msg-mention:hover {
-  background: color-mix(in srgb, var(--mention-color, #6c5ce7) 10%, transparent);
-}
-
-.mention-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.mention-avatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.mention-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--mention-color, #6c5ce7);
-}
-
 .mention-stop-btn {
   margin-left: auto;
   background: none;
@@ -261,19 +227,8 @@
   color: var(--text);
 }
 
-/* Activity bar inside mention block */
-.msg-mention .mention-activity-bar {
-  margin: 4px 0;
-  padding: 0;
-}
-
-/* Copy hint ("Click to grab this") for mention blocks in project chat */
-.msg-mention:hover .msg-copy-hint { opacity: 1; }
-.msg-mention.copy-primed .msg-copy-hint { opacity: 1; color: var(--accent); }
-.msg-mention.copy-done .msg-copy-hint { opacity: 1; color: var(--success); }
-
 /* ==========================================================================
-   @Mention in Mate DM (DM-style layout)
+   @Mention response: the shared message header carries the avatar and name
    ========================================================================== */
 
 /* Badge next to mate name */
@@ -287,12 +242,7 @@
   border-radius: 4px;
 }
 
-/* DM-style mention: override the DM mate avatar so it uses the mentioned mate's avatar */
-.msg-mention-dm .dm-bubble-avatar-agent {
-  /* Inherits dm-bubble-avatar styling from mates.css */
-}
-
-/* Activity bar inside DM-style mention */
+/* Activity bar inside a mention response */
 .msg-mention-dm .mention-activity-bar {
   margin: 4px 0;
   padding: 0;
@@ -303,16 +253,5 @@
   color: var(--danger, #e74c3c);
   font-size: 13px;
   font-style: italic;
-}
-
-/* ==========================================================================
-   Mobile adjustments
-   ========================================================================== */
-
-@media (max-width: 768px) {
-  .msg-mention {
-    max-width: 100%;
-    padding: 4px 12px;
-  }
 }
 

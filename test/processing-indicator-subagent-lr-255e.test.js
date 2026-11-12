@@ -126,9 +126,9 @@ test("tools.js: resetToolState() clears activeSubagentToolIds", function () {
 
 test("app-messages.js (superseded, lr-66c118): 'result' and 'done' handlers no longer call setActivity", function () {
   var resultIdx = APP_MESSAGES_JS.indexOf("result: function (msg) {");
-  var doneIdx = APP_MESSAGES_JS.indexOf("done: function (msg) {\n    removePreThinking();");
+  var doneIdx = APP_MESSAGES_JS.indexOf("done: function (msg) {\n    // lr-66c118");
   assert.ok(resultIdx !== -1, "expected to find the 'result' handler");
-  assert.ok(doneIdx !== -1, "expected to find the top-level 'done' handler (removePreThinking is unique to it)");
+  assert.ok(doneIdx !== -1, "expected to find the top-level 'done' handler (its lr-66c118 comment opens it)");
 
   var resultBlock = APP_MESSAGES_JS.slice(resultIdx, resultIdx + 900);
   var doneBlock = APP_MESSAGES_JS.slice(doneIdx, doneIdx + 900);
@@ -138,7 +138,7 @@ test("app-messages.js (superseded, lr-66c118): 'result' and 'done' handlers no l
 });
 
 test("app-messages.js: the 'done' handler still calls resetToolState() unconditionally", function () {
-  var idx = APP_MESSAGES_JS.indexOf("done: function (msg) {\n    removePreThinking();");
+  var idx = APP_MESSAGES_JS.indexOf("done: function (msg) {\n    // lr-66c118");
   assert.ok(idx !== -1);
   var block = APP_MESSAGES_JS.slice(idx, idx + 1200);
   assert.match(

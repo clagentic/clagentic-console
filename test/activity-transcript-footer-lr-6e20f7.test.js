@@ -53,15 +53,14 @@ function stripLineComments(src) {
 // ---------------------------------------------------------------------------
 
 var TRANSCRIPT_INDICATOR_CLASSES = [
-  "activity-inline",       // app-favicon.js — bubble-layout footer (presence)
-  "channel-pre-thinking",  // app-rendering.js — channel-layout footer (presence)
+  "activity-inline",       // app-favicon.js — the one footer (presence)
   "thinking-item",         // tools.js — real thinking block (detail, not presence)
 ];
 
-test("enumeration: all 3 transcript indicator classes are actually defined in CSS (sanity — the enumeration itself is not stale)", function () {
+test("enumeration: both transcript indicator classes are actually defined in CSS (sanity — the enumeration itself is not stale)", function () {
   var allCss = [
     readMod("lib/public/css/rewind.css"),
-    readMod("lib/public/css/channel-layout.css"),
+    readMod("lib/public/css/chat-layout.css"),
     readMod("lib/public/css/messages.css"),
   ].join("\n");
   TRANSCRIPT_INDICATOR_CLASSES.forEach(function (cls) {
@@ -131,24 +130,18 @@ test("CI invariant: initActivityFooter is actually wired up at boot (app.js), no
   );
 });
 
-test("CI invariant: the channel-layout footer (.channel-pre-thinking) already had a real clear path (removePreThinking) reachable from every terminal message handler", function () {
-  // Unlike the bubble-layout widget, channel layout's footer was NOT the
-  // stranded one (MILLER: SYMPTOM B's dual-footer pair is footer-vs-
-  // thinking-block in BUBBLE layout specifically, because channel's footer
-  // already has this clear path). Pin that this remains true so a future
-  // change can't silently regress the one footer that already worked.
-  var src = stripLineComments(readMod("lib/public/modules/app-messages.js"));
-  var terminalHandlersThatMustClear = ["done:", "error:", "auth_required:"];
-  terminalHandlersThatMustClear.forEach(function (handlerPrefix) {
-    var idx = src.indexOf("\n  " + handlerPrefix + " function");
-    assert.ok(idx !== -1, "expected to find the " + handlerPrefix + " handler in app-messages.js");
-    var body = src.slice(idx, src.indexOf("\n  },", idx) + 5);
-    assert.match(
-      body,
-      /removePreThinking\(\)/,
-      "the " + handlerPrefix + " handler must call removePreThinking() so .channel-pre-thinking cannot strand the way .activity-inline did"
-    );
-  });
+test("CI invariant: there is one working indicator: the separate pre-thinking widget is gone from the renderer, the handlers and the stylesheet", function () {
+  // A turn that has started and is not yet answered must show exactly one
+  // indicator, so a second one (the channel layout's pre-thinking dots) may not
+  // come back unnoticed.
+  var sources = [
+    stripLineComments(readMod("lib/public/modules/app-rendering.js")),
+    stripLineComments(readMod("lib/public/modules/app-messages.js")),
+    stripLineComments(readMod("lib/public/modules/input.js")),
+    stripLineComments(readMod("lib/public/app.js")),
+  ].join("\n");
+  assert.doesNotMatch(sources, /PreThinking|channel-pre-thinking|channel-thinking/, "no pre-thinking widget or handler remains");
+  assert.doesNotMatch(readMod("lib/public/css/chat-layout.css"), /channel-(pre-)?thinking/);
 });
 
 // ---------------------------------------------------------------------------
@@ -173,40 +166,32 @@ test("POSITIVE invariant: .activity-inline (footer) is driven by a store.subscri
   );
 });
 
-test("POSITIVE invariant: .channel-pre-thinking (footer) is driven by a reactive removal call from every terminal handler, and its raise is layout-gated to never coexist with .activity-inline", function () {
-  var renderingSrc = readMod("lib/public/modules/app-rendering.js");
-  assert.match(
-    renderingSrc,
-    /export function showClaudePreThinking\s*\(\s*\)\s*\{\s*\n\s*if\s*\(getChatLayout\(\)\s*!==\s*"channel"\)\s*return;/,
-    "showClaudePreThinking must be layout-gated to channel only — this is what keeps it mutually exclusive with .activity-inline (bubble-only)"
-  );
-});
-
-test("POSITIVE invariant: the footer render path (reconcileActivityFooter, called by both initActivityFooter's subscriber and every projection call site) is layout-gated to bubble layout only, so it cannot fight .channel-pre-thinking for the same slot", function () {
-  // lr-5edd64 (9th recurrence): the layout gate moved with the render logic
-  // into reconcileActivityFooter() — see the header comment on the prior
-  // test in this file for why. Pinning the gate on reconcileActivityFooter()
-  // covers every caller (the subscriber AND the explicit unconditional
-  // calls from session_list/session_switched), which a gate left behind on
-  // initActivityFooter alone would not.
+test("POSITIVE invariant: the footer render path (reconcileActivityFooter, called by both initActivityFooter's subscriber and every projection call site) is unconditional: one layout, one indicator", function () {
+  // lr-5edd64 (9th recurrence): the render logic lives in
+  // reconcileActivityFooter(), so every caller (the subscriber AND the explicit
+  // unconditional calls from session_list/session_switched) renders the same
+  // footer. It reads the one processing projection and nothing else.
   var favSrc = readMod("lib/public/modules/app-favicon.js");
   var fnStart = favSrc.indexOf("export function reconcileActivityFooter");
   assert.ok(fnStart !== -1, "expected app-favicon.js to export reconcileActivityFooter");
   var fnBody = favSrc.slice(fnStart, favSrc.indexOf("\n}", fnStart) + 2);
-  assert.match(
-    fnBody,
-    /getChatLayout\(\)\s*!==\s*"channel"/,
-    "reconcileActivityFooter must gate on getChatLayout() !== 'channel' (bubble layout only), mirroring input.js's optimistic-raise gate and showClaudePreThinking's channel-only gate"
-  );
+  assert.match(fnBody, /store\.get\('processing'\)/, "the footer follows store.processing");
+  assert.doesNotMatch(fnBody, /Layout|wide-view/, "the footer is not gated on any layout");
 });
 
-test("POSITIVE invariant: .thinking-item's presence spinner is suppressed in bubble layout, where the footer already owns presence", function () {
+test("POSITIVE invariant: .thinking-item's presence spinner is always suppressed, because the footer owns presence", function () {
   var css = readMod("lib/public/css/messages.css");
   assert.match(
     css,
-    /body:not\(\.wide-view\)\s+\.thinking-spinner\s*\{\s*display:\s*none;\s*\}/,
-    "bubble layout (body:not(.wide-view)) must hide .thinking-spinner — the thinking block owns DETAIL, not presence, once the footer is reactive"
+    /\n\.thinking-spinner\s*\{\s*display:\s*none;\s*\}/,
+    ".thinking-spinner must be hidden — the thinking block owns DETAIL, not presence, once the footer is reactive"
   );
+});
+
+test("a turn that started and is not yet answered shows exactly one working indicator: the footer, raised optimistically on send by input.js", function () {
+  var inputSrc = stripLineComments(readMod("lib/public/modules/input.js"));
+  assert.match(inputSrc, /ctx\.setActivity\("thinking"\)/, "the send path raises the one footer");
+  assert.doesNotMatch(inputSrc, /wide-view/, "and does so for every layout");
 });
 
 // ---------------------------------------------------------------------------
