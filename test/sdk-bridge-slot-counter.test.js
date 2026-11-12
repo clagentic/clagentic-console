@@ -217,12 +217,17 @@ function sessionMessages(messages, filterTypes) {
 
 test("lr-29f9 (1): slot counter increments on new query and decrements after stream completes", async function () {
   var queryCount = 0;
+  var countedWhenQueryCreated = null;
+  var session = makeSession();
   var { bridge, sm, messages } = makeBridge(3, async function (opts) {
     queryCount++;
+    // The slot is claimed by the time the adapter is asked for the query. Read
+    // here because the vendor is resolved (and its agent readied) first, so the
+    // claim is no longer visible synchronously after startQuery() is called.
+    countedWhenQueryCreated = session._isCountedLive;
     return makeEmptyHandle();
   });
 
-  var session = makeSession();
   sm.sessions.set(session.localId, session);
 
   // Before: _isCountedLive is false
@@ -230,9 +235,6 @@ test("lr-29f9 (1): slot counter increments on new query and decrements after str
 
   // Start a query
   var startPromise = bridge.startQuery(session, "hello", null, null);
-
-  // After startQuery starts (but before stream completes), slot is claimed
-  assert.equal(session._isCountedLive, true, "_isCountedLive should be true while stream runs");
 
   // Wait for stream to complete
   await startPromise;
@@ -242,6 +244,7 @@ test("lr-29f9 (1): slot counter increments on new query and decrements after str
   // After completion: slot released
   assert.equal(session._isCountedLive, false, "_isCountedLive should be false after stream ends");
   assert.equal(queryCount, 1, "adapter createQuery should have been called once");
+  assert.equal(countedWhenQueryCreated, true, "_isCountedLive should be true while the stream runs");
 });
 
 // ---------------------------------------------------------------------------
