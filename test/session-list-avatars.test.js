@@ -273,7 +273,7 @@ test("each list draws the avatar only for a named agent with the setting on, and
 
 test("the sidebar rows repaint with the setting, and Recent Sessions redraws on it", function () {
   var sessions = read("lib/public/modules/sidebar-sessions.js");
-  assert.match(sessions, /\(s\.agentName && sessionListAvatarsEnabled\(\) \? "av" : ""\)/, "the row fingerprint carries the setting");
+  assert.match(sessions, /"\|av:" \+ \(sessionListAvatarsEnabled\(\) \? "1" : "0"\)/, "the list fingerprint carries the setting");
   assert.match(sessions, /onSessionListAvatarsChange\(function \(\) \{ renderSessionList\(\); \}\)/);
   var hub = read("lib/public/modules/app-home-hub.js");
   assert.match(hub, /onSessionListAvatarsChange\(function \(\) \{\s*if \(lastRecentSessionsMsg\) handleHubRecentSessions\(lastRecentSessionsMsg\);/);
