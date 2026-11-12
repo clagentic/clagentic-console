@@ -90,7 +90,7 @@ test("summary is one line, control characters stripped, bounded", function () {
   var c = String.fromCharCode;
   var nasty = "echo a" + c(10) + c(27) + "[31mred" + c(27) + "[0m" + c(13) + c(10) + "b" + c(0) + "c" + c(0x2028) + "d" + c(0x85) + c(0x7f) + "e";
   var line = summarize("Bash", { command: nasty });
-  assert.equal(line, "echo a [31mred [0m b c d e");
+  assert.equal(line, "echo a ⏎ \\x1B[31mred\\x1B[0m ⏎ b\\x00c ⏎ d\\x85\\x7Fe");
   for (var i = 0; i < line.length; i++) {
     var code = line.charCodeAt(i);
     assert.ok(code > 0x1f && (code < 0x7f || code > 0x9f) && code !== 0x2028 && code !== 0x2029, "control character at " + i);
@@ -113,6 +113,32 @@ test("summary carries no more of a call than the banner body, and none for a que
   assert.equal(views[0].kind, "ask_user");
   assert.equal(views[0].summary, "");
   assert.equal(JSON.stringify(views).indexOf("private"), -1);
+});
+
+// [name, command, expected summary]
+var SUMMARY_ROWS = [
+  ["export prefix shortened to names", "export CLAGENTIC_SUBAGENT_ID=af5860c5-4f2e-4c1a-9d3b-0123456789ab; find /var/tmp -name x", "(sets CLAGENTIC_SUBAGENT_ID) find /var/tmp -name x"],
+  ["inline assignment", "NAME=value cmd args", "(sets NAME) cmd args"],
+  ["no assignments, unchanged", "ls -l", "ls -l"],
+  ["a value that runs a command is not hidden", "A=`id` ls", "A=`id` ls"],
+  ["a dollar-brace default with a space is not shortened", "A=${x:-foo bar} rm -rf data", "A=${x:-foo bar} rm -rf data"],
+  ["a dollar-paren substitution is not shortened", "A=$(id) ls", "A=$(id) ls"],
+  ["a backtick substitution is not shortened", "A=`id` rm -rf data", "A=`id` rm -rf data"],
+  ["a quoted value with a space is not shortened", "A=\"x y\" cmd", "A=\"x y\" cmd"],
+  ["a plain literal still shortens", "export CLAGENTIC_SUBAGENT_ID=af5860c5-1234; find .", "(sets CLAGENTIC_SUBAGENT_ID) find ."],
+  ["a line break after a comment shows the next command as separate", "echo ok # note\nrm -rf data", "echo ok # note ⏎ rm -rf data"],
+  ["a bidirectional control is written out, not passed through", "echo ‮gnp.txt⁦ ok", "echo \\u202Egnp.txt\\u2066 ok"],
+];
+
+test("leading environment assignments are shortened so the command they prefix shows", async function () {
+  await promptRegistry.ready();
+  SUMMARY_ROWS.forEach(function (row) {
+    assert.equal(summarize("Bash", { command: row[1] }), row[2], row[0]);
+  });
+
+  var long = summarize("Bash", { command: "export A=" + "v".repeat(300) + "; " + "y".repeat(300) });
+  assert.ok(long.startsWith("(sets A) yyy"), "the command shows within the bound");
+  assert.equal(long.length, SUMMARY_MAX);
 });
 
 test("an empty record or a session with no stores lists nothing", function () {
