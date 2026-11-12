@@ -2099,18 +2099,33 @@
 <script id="boot-watchdog">
 // Classic script on purpose: a module that fails to evaluate never runs its own
 // handlers, so boot failures can only be observed from outside the module graph.
-// app.js sets window.__clagenticConsoleBooted once boot has run; any failure
-// before that swaps the connect overlay to a boot-error state. The reconnect
-// text belongs to app-connection.js and only appears after a successful boot.
+// app.js sets window.__clagenticConsoleBooted once boot has run; a failure of
+// the app's own module graph before that swaps the connect overlay to a
+// boot-error state. The reconnect text belongs to app-connection.js and only
+// appears after a successful boot.
+//
+// Only errors attributable to the app count: third-party CDN scripts and browser
+// extensions also raise window errors during boot, and none of those mean the
+// app failed. The decision for a missing or non-running graph is the module
+// script's own load/error event. If the signal arrives after an earlier error,
+// the error state is cleared, so a working app is never stranded behind it.
 (function () {
   var BOOTED = "__clagenticConsoleBooted";
+  var booted = !!window[BOOTED];
+  var reloadBound = false;
+  // Directory of the page: the app's modules are same-origin scripts under it.
+  var appBase = String(location.href).split(/[?#]/)[0];
+  appBase = appBase.slice(0, appBase.lastIndexOf("/") + 1);
+  function ownScript(url) {
+    return typeof url === "string" && url.indexOf(appBase) === 0;
+  }
   function describe(reason) {
     if (reason && reason.message) return String(reason.message);
     if (reason === undefined || reason === null || reason === "") return "Unknown error";
     return String(reason);
   }
   function showBootError(detail) {
-    if (window[BOOTED]) return;
+    if (booted) return;
     var overlay = document.getElementById("connect-overlay");
     var msg = document.getElementById("connect-overlay-msg");
     var reload = document.getElementById("connect-overlay-reload-btn");
@@ -2121,15 +2136,40 @@
     if (signin) signin.classList.add("hidden");
     if (reload) {
       reload.classList.remove("hidden");
-      reload.addEventListener("click", function () { location.reload(); });
+      if (!reloadBound) {
+        reloadBound = true;
+        reload.addEventListener("click", function () { location.reload(); });
+      }
     }
     overlay.classList.remove("hidden");
   }
+  function clearBootError() {
+    var overlay = document.getElementById("connect-overlay");
+    if (!overlay || overlay.getAttribute("data-state") !== "boot-error") return;
+    var msg = document.getElementById("connect-overlay-msg");
+    var reload = document.getElementById("connect-overlay-reload-btn");
+    overlay.removeAttribute("data-state");
+    if (msg) msg.textContent = "Reconnecting to server…";
+    if (reload) reload.classList.add("hidden");
+    // The overlay stays as it is: app-connection.js hides it on connect.
+  }
+  Object.defineProperty(window, BOOTED, {
+    configurable: true,
+    get: function () { return booted; },
+    set: function (v) {
+      booted = !!v;
+      if (booted) clearBootError();
+    },
+  });
   window.addEventListener("error", function (e) {
-    showBootError(describe(e && (e.error || e.message)));
+    if (!e || !ownScript(e.filename)) return;
+    showBootError(describe(e.error || e.message));
   });
   window.addEventListener("unhandledrejection", function (e) {
-    showBootError(describe(e && e.reason));
+    var reason = e && e.reason;
+    // A rejection has no filename; its stack names the scripts it came through.
+    if (!reason || String(reason.stack || "").indexOf(appBase) === -1) return;
+    showBootError(describe(reason));
   });
   var entry = document.getElementById("app-module-script");
   if (entry) {
