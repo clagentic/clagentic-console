@@ -2107,7 +2107,7 @@
 // Only errors attributable to the app count: third-party CDN scripts and browser
 // extensions also raise window errors during boot, and none of those mean the
 // app failed. The decision for a missing or non-running graph is the module
-// script's own load/error event. If the signal arrives after an earlier error,
+// script's error event and the window load event. If the signal arrives after an earlier error,
 // the error state is cleared, so a working app is never stranded behind it.
 (function () {
   var BOOTED = "__clagenticConsoleBooted";
@@ -2171,15 +2171,24 @@
     if (!reason || String(reason.stack || "").indexOf(appBase) === -1) return;
     showBootError(describe(reason));
   });
-  var entry = document.getElementById("app-module-script");
-  if (entry) {
-    entry.addEventListener("error", function () {
-      showBootError("A script file could not be loaded (missing or unreachable).");
-    });
-    entry.addEventListener("load", function () {
-      if (!window[BOOTED]) showBootError("The app did not finish starting.");
-    });
-  }
+  // The module script is declared after this script, so it cannot be looked up
+  // here. Its failures are caught from the window instead. A failed fetch or link
+  // of the entry or of any module it imports (missing file, parse error in a
+  // dependency) fires "error" on the entry script element; resource errors do not
+  // bubble, so the listener is capture-phase and matches the target by id. The
+  // window load event fires after the deferred module graph has run or failed;
+  // booted still false by then means the graph ended without the signal.
+  // Trade-off against onerror/onload attributes: no coupling between the tag and
+  // this script's function names, at the cost of one capture listener that sees
+  // every element error and filters it.
+  window.addEventListener("error", function (e) {
+    var t = e && e.target;
+    if (!t || t === window || t.id !== "app-module-script") return;
+    showBootError("A script file could not be loaded (missing or unreachable).");
+  }, true);
+  window.addEventListener("load", function () {
+    if (!window[BOOTED]) showBootError("The app did not finish starting.");
+  });
 })();
 </script>
 <script type="module" src="app.js" id="app-module-script"></script>
