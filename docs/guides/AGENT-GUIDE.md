@@ -6,7 +6,7 @@ Agents are first-class users of Clagentic: Console. A script, a CI job or an AI 
 - `clagentic-console send-input` sends input to an existing session, and resumes it if its runtime was reaped.
 - `clagentic-console end-session` stands one live session down by id, even one blocked on a permission prompt. The history is kept and the session resumes by id.
 - `clagentic-console answer-prompt` answers one pending prompt of a live session by request id, the way a person answers it in the browser, and records who answered.
-- `clagentic-console list-sessions` lists the console's sessions with their state and any prompts they are waiting on.
+- `clagentic-console list-sessions` lists the console's live and idle sessions (`--state any` for every session) with their state and any prompts they are waiting on.
 - `clagentic-console list-outbound` lists what one session sent out with `send-input` and `open-session`: the target, the prompt, the time and the initiator. It only reads.
 - `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
 - `clagentic-console settings` reads and changes server-wide settings by key (`get`, `set`, `list`), starting with the prompt expiry, and prints JSON.
@@ -15,10 +15,13 @@ This guide is the canonical reference for these verbs. [architecture.md](./archi
 
 Every verb talks to the running daemon over its Unix socket (`~/.clagentic/console/daemon.sock`, mode 0700), so the caller must be the daemon's own OS user and the daemon must be running. Each verb prints its result as JSON on stdout. Without a running daemon the result is `{ "ok": false, "result": "error", "reason": "no running daemon" }`.
 
+Every verb, and each `schedule-input` subcommand, answers `-h` and `--help` with its usage on stdout and exit 0. The exact call shape of each verb is on one page, [AGENT-CALL-SHAPES.md](./AGENT-CALL-SHAPES.md): each is one literal command, so an agent never needs a pipe, a filter or a shell variable to use them.
+
 Examples use the generic project `my-project` and the generic agents `reviewer` and `builder`.
 
 ## Contents
 
+- [Call shapes](./AGENT-CALL-SHAPES.md): every agent verb as one literal command
 - [Addressing a session](#addressing-a-session)
 - [open-session](#open-session)
 - [send-input](#send-input)
@@ -343,10 +346,10 @@ The call is recorded in the [outbound ledger](#list-outbound) as verb `answer_pr
 
 ## list-sessions
 
-Read-only. Lists the sessions the console holds, newest activity first. Every session recorded in the console's own store is listed, whether or not it has a runtime; a session started outside the console is not. Background helper sessions are not listed.
+Read-only. Lists the sessions the console holds, newest activity first. Every session recorded in the console's own store can be listed, whether or not it has a runtime; a session started outside the console is not. Background helper sessions are not listed. Without `--state` only live and idle sessions are listed: reaped sessions pile up with every idle reap and daemon restart, and the one you want is almost never among them. Add `--state any` for every session, as releases before this default did. Each row is compact unless `--verbose` is given.
 
 ```
-clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <id>] [--state live|idle|reaped|any]
+clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <id>] [--state <live|idle|reaped|any>[,...]] [--limit <n>] [--verbose]
 ```
 
 | Flag | Meaning |
@@ -354,33 +357,34 @@ clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <i
 | `--project <slug>` | Only this project. An unknown project is `refused`. |
 | `--agent <name>` | Only sessions running this named agent. Compared by slug, so `Reviewer` and `reviewer` are one agent. |
 | `--vendor <id>` | Only sessions on this vendor (case-insensitive). |
-| `--state live\|idle\|reaped\|any` | Only sessions in this state. Default `any`. Another value is `refused`. `live` is a running turn or a session blocked on a pending prompt, so it includes sessions waiting on the operator; read `pendingPrompts` to tell them apart. Every row carries `pendingPrompts` whatever the filter. |
+| `--state <list>` | Only sessions in these states: one of `live`, `idle`, `reaped`, several as a comma list (`live,idle`), or `any` for every state. Default `live,idle`. An unknown name is `refused`, and the reason lists the valid names. `live` is a running turn or a session blocked on a pending prompt, so it includes sessions waiting on the operator; read `pendingPrompts` to tell them apart. Every row carries `pendingPrompts` whatever the filter. |
+| `--limit <n>` | At most `n` rows, the newest. Applied after the filter and the sort, so `--limit 1` is the most recent match. `total` in the result still counts every match. |
+| `--verbose` | The full record per row, and `host` on the result. See below. |
 
-The filters combine. Examples:
+The filters combine. Each of these is one command, with nothing piped or filtered:
 
 ```bash
-clagentic-console list-sessions
-clagentic-console list-sessions --project my-project --state live
-clagentic-console list-sessions --agent reviewer --state any
+clagentic-console list-sessions --project my-project
+clagentic-console list-sessions --project my-project --agent reviewer --limit 1
+clagentic-console list-sessions --project my-project --state live,idle
+clagentic-console list-sessions --agent reviewer --state any --limit 5
 ```
 
-Result:
+Result, compact (the default):
 
 ```json
 {
   "ok": true,
   "result": "listed",
   "count": 1,
+  "total": 1,
   "sessions": [
     {
       "consoleSessionId": "12",
       "sessionId": "6f1c…",
       "project": "my-project",
-      "agent": "reviewer",
-      "vendor": "claude",
       "label": "reviewer@my-project",
       "name": "pass-2",
-      "title": "Review of the open change",
       "state": "live",
       "lastActivity": "2026-10-22T14:03:11.000Z",
       "pendingPrompts": [
@@ -397,19 +401,33 @@ Result:
 }
 ```
 
+`count` is the rows returned, `total` the rows that matched before `--limit`.
+
 | Field | Meaning |
 |---|---|
 | `consoleSessionId` | The console's id for the session, scoped to the project. |
 | `sessionId` | The vendor's id, or `null` if none has been assigned yet. |
 | `project` | The project slug. |
-| `agent` | The named agent, or `null` for a plain session. |
-| `vendor` | The vendor the session runs on. |
 | `label` | `<agent>@<project>`, or `<vendor>@<project>` for a plain session: the same string `--to` accepts. |
 | `name` | The session name set at open, or `null`. |
-| `title` | The session title (empty string if none). |
 | `state` | `live` (a turn is running, or the session is blocked on a pending prompt), `idle` (a runtime is attached, nothing is running, nothing is pending) or `reaped` (no runtime; input resumes it). A non-empty `pendingPrompts` on a `live` row means it is waiting on the operator, not running. |
 | `lastActivity` | ISO 8601 time of the last activity (falling back to creation time), or `null`. |
 | `pendingPrompts` | The operator prompts the session is blocked on, oldest first; an empty array when it waits on nothing. |
+
+With `--verbose` each row also carries `agent`, `vendor`, `title` (empty string if none), and these fields, which are also on the `candidates` of an `ambiguous` refusal:
+
+| Field | Meaning |
+|---|---|
+| `openedAt` | ISO 8601 time the session was created, or `null`. |
+| `opener` | Who started the session: `{ kind, name, project, initiator }` from the sender record of its first message, or `null` when that message is not in the history the console holds in memory. |
+| `lastInjectedSender` | `{ project, vendor, sessionId, name }` of the newest message that came from another session or an automation, or `null`. Read from the history in memory, so an older message than that window is not seen. |
+| `turnCount` | Turns completed in the session. |
+| `midTurn` | `true` while a turn is running. |
+| `memory` | `{ heapEntries }`: how many history entries the console holds in memory for the session. |
+
+The result carries `host`: `{ memAvailableMB, newWorkRefused }`. `memAvailableMB` is the host's free memory (`null` where it cannot be read). `newWorkRefused` is `true` while the console is refusing new sessions and agent work under memory pressure or a drain. It is a read for checking capacity before adding load, not a limit: the console's own refusal stays the backstop.
+
+`pendingPrompts` tells a session that is waiting on an answer from one that is working: a session blocked on a prompt is still `live`. Each element is `{ requestId, kind, tool, summary, ageSeconds }`. `kind` is the prompt kind (`permission`, `plan`, `ask_user`, `elicitation`), `tool` the tool name or `null`, `ageSeconds` the whole seconds since the prompt opened, and `summary` the one-line text the permission banner already shows for a tool call (empty for other kinds). Tool input beyond that line, a question's or form's text and a plan's content are never included. The list is read from the daemon's memory; an answered, expired or cancelled prompt is gone from the next call. An older daemon's entries lack the field: treat a missing `pendingPrompts` as "not reported", not as "nothing pending".
 
 `pendingPrompts` tells a session that is waiting on an answer from one that is working: a session blocked on a prompt is still `live`. Each element is `{ requestId, kind, tool, summary, ageSeconds }`. `kind` is the prompt kind (`permission`, `plan`, `ask_user`, `elicitation`), `tool` the tool name or `null`, `ageSeconds` the whole seconds since the prompt opened, and `summary` the one-line text the permission banner already shows for a tool call (empty for other kinds). Tool input beyond that line, a question's or form's text and a plan's content are never included. The list is read from the daemon's memory; an answered, expired or cancelled prompt is gone from the next call. An older daemon's entries lack the field: treat a missing `pendingPrompts` as "not reported", not as "nothing pending".
 
@@ -418,7 +436,7 @@ Result:
 Read-only. Lists the calls one session made with `send-input` and `open-session`, oldest first: where each went, what was said, when, and why it was sent. It answers "what did that session tell the others", which no other verb does: a delivered prompt is in the target's own history, but nothing there gathers one sender's calls, and a refused call leaves nothing there at all. It returns the outbound calls only, never any other part of a session's transcript.
 
 ```
-clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>] [--kind sent|opens]
+clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>] [--kind sent|opens] [--verbose]
 ```
 
 | Flag | Required | Meaning |
@@ -427,13 +445,16 @@ clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>
 | `--project <slug>` | no | Only the sender in this project. A vendor id that senders in several projects hold is `ambiguous` (exit 3) until this is given. |
 | `--since <dur>` | no | Only calls from this long ago: `90` (minutes), `10m`, `2h`, `1h30m`, `3d`. |
 | `--kind sent\|opens` | no | `sent` for `send-input` calls, `opens` for `open-session` calls. Default: both. |
+| `--verbose` | no | The full record of each call and the calls whose sender only named itself, as below. Without it each call is a compact row. |
 
 ```bash
 clagentic-console list-outbound --session 4f1c9d2e-7a3b-4c55-9e0a-1b2c3d4e5f60
 clagentic-console list-outbound --session 9b2e4c1a-5d3f-4a68-8c70-2e1f3a4b5c6d --project my-project --since 2h --kind sent
 ```
 
-Result:
+Without `--verbose` each message is a compact row: `ts`, `kind`, `result`, `reason` (when it did not go through), `initiator`, `prompt` (and `promptWithheld` when it is withheld) and a `target` of `project`, `sessionId`, `agent`, `name` and `address`. The result carries `session`, `count` and `unattributedCount`; the unattributed calls themselves, `retentionDays` and the explanatory notes are left for `--verbose`.
+
+The full result, with `--verbose`:
 
 ```json
 {
@@ -523,11 +544,13 @@ The browser schedules only for the session on screen. A session can hold 5 armed
 clagentic-console schedule-input create --session <id> [--project <slug>]
     (--in <dur> | --at <time> | --every <dur> (--until <time> | --count <n>))
     (--prompt <text|-> | --prompt-file <path>)
-clagentic-console schedule-input list [--session <id>] [--project <slug>] [--state armed|done|ended|any]
+clagentic-console schedule-input list [--session <id>] [--project <slug>] [--state armed|done|ended|any] [--verbose]
 clagentic-console schedule-input delete --id <id> [--project <slug>]
 ```
 
-All options are flag/value pairs, so each command shape can be allow-listed (see [Suggested allow rules](#suggested-allow-rules)).
+`schedule-input list` prints compact rows (`id`, `project`, `sessionId`, `kind`, `state`, `preview`, `nextAt`, `every`, `firedCount`); `--verbose` prints the full record of each (adding `createdBy`, `at`, `until`, `count`, `lastFiredAt`, `lastOutcome` and `endReason`). A store health report (`store`, `storeErrors`) is always printed.
+
+All options are flag/value pairs (`--verbose` takes no value), so each command shape can be allow-listed (see [Suggested allow rules](#suggested-allow-rules)).
 
 `create`:
 
@@ -785,4 +808,4 @@ clagentic-console send-input --to reviewer@my-project --prompt - < message.txt
 
 ## Keeping this guide current
 
-Every pull request that adds or changes an agent-facing feature updates this guide in the same change: a new verb, flag, address form, result code, sender field or session behaviour that agents can see. The pull request checklist in [CONTRIBUTING.md](../../CONTRIBUTING.md) records the rule.
+Every pull request that adds or changes an agent-facing feature updates this guide, and the [call shapes page](./AGENT-CALL-SHAPES.md), in the same change: a new verb, flag, address form, result code, sender field or session behaviour that agents can see. The pull request checklist in [CONTRIBUTING.md](../../CONTRIBUTING.md) records the rule.
