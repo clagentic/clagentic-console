@@ -202,7 +202,7 @@ var ASK_ROWS = [
   ["AC5 missing command", "Bash", { description: "placeholder" }, "run", GAVE_NO_COMMAND],
   ["AC5 blank command", "Bash", { command: "  \n", description: "placeholder" }, "run", GAVE_NO_COMMAND],
   ["AC3 override character shown, not interpreted", "Bash", { command: "echo " + String.fromCharCode(0x202e) + "txt.exe" }, "run", "echo \\u202Etxt.exe"],
-  ["AC3 newline is one line in the ask", "Bash", { command: "ls\nrm x" }, "run", "ls rm x"],
+  ["AC3 newline is one line in the ask, shown as a mark and not as a space", "Bash", { command: "ls\nrm x" }, "run", "ls ⏎ rm x"],
   ["AC7 Write", "Write", { file_path: "/a/b/c/d/e.txt" }, "write to", ".../c/d/e.txt"],
   ["AC7 Edit", "Edit", { file_path: "/a/b.txt" }, "edit", "/a/b.txt"],
   ["AC7 Read", "Read", { file_path: "/a/b.txt" }, "read", "/a/b.txt"],
