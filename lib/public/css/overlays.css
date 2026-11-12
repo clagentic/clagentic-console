@@ -1343,7 +1343,8 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 
 /* lr-de5fcb Surface 1: shown only in the explicit "session expired" state,
    never during a normal transient-disconnect reconnect. */
-#connect-overlay-signin-btn {
+#connect-overlay-signin-btn,
+#connect-overlay-reload-btn {
   margin-top: 1rem;
   padding: 0.5rem 1.2rem;
   border-radius: 6px;
@@ -1355,7 +1356,18 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   cursor: pointer;
 }
 
-#connect-overlay-signin-btn:hover {
+#connect-overlay-signin-btn:hover,
+#connect-overlay-reload-btn:hover {
   background: #DA7756;
   color: #000;
+}
+
+/* Boot failure (set by the watchdog in index.html): the message is the
+   error, so it is shown at full strength and the logo animation stays off. */
+#connect-overlay[data-state="boot-error"] #connect-overlay-msg {
+  color: var(--error);
+  max-width: 40rem;
+  padding: 0 1.2rem;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
