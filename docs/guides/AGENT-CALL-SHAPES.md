@@ -10,7 +10,7 @@ clagentic-console schedule-input --help
 clagentic-console schedule-input create --help
 ```
 
-Examples use the generic project `my-project`, the generic agents `reviewer` and `builder`, and placeholder ids.
+Examples use the generic project `my-project`, the placeholder `<agent>` for an agent name, and placeholder ids.
 
 ## Find a session
 
@@ -23,7 +23,7 @@ clagentic-console list-sessions --project my-project
 One named agent's current session:
 
 ```bash
-clagentic-console list-sessions --project my-project --agent reviewer --limit 1
+clagentic-console list-sessions --project my-project --agent <agent> --limit 1
 ```
 
 Live and idle are the defaults; name the states to change that. A comma list takes several, `any` takes every state:
@@ -56,9 +56,9 @@ Compact row fields: `consoleSessionId`, `sessionId`, `project`, `label`, `name`,
 ## Open a session
 
 ```bash
-clagentic-console open-session --project my-project --agent reviewer --prompt "Review the open change."
-clagentic-console open-session --to reviewer@my-project --prompt "Review the open change."
-clagentic-console open-session --to reviewer@my-project/pass-2 --prompt "Second pass."
+clagentic-console open-session --project my-project --agent <agent> --prompt "Review the open change."
+clagentic-console open-session --to <agent>@my-project --prompt "Review the open change."
+clagentic-console open-session --to <agent>@my-project/pass-2 --prompt "Second pass."
 clagentic-console open-session --project my-project --vendor codex --name lane-a --prompt "Start the migration."
 ```
 
@@ -67,8 +67,8 @@ clagentic-console open-session --project my-project --vendor codex --name lane-a
 By address, to the one session it names:
 
 ```bash
-clagentic-console send-input --to reviewer@my-project --prompt "The build passed."
-clagentic-console send-input --to reviewer@my-project/pass-2 --prompt "The build passed."
+clagentic-console send-input --to <agent>@my-project --prompt "The build passed."
+clagentic-console send-input --to <agent>@my-project/pass-2 --prompt "The build passed."
 clagentic-console send-input --to @my-project --prompt "Standup in five."
 ```
 
@@ -89,7 +89,7 @@ An address that names several sessions in its top tier is refused with exit 3 an
 ## End a session
 
 ```bash
-clagentic-console end-session --to reviewer@my-project/pass-2
+clagentic-console end-session --to <agent>@my-project/pass-2
 clagentic-console end-session --project my-project --session 12 --reason "finished"
 ```
 
@@ -99,7 +99,7 @@ The request id is in the `pendingPrompts` of the session's `list-sessions` row.
 
 ```bash
 clagentic-console answer-prompt --project my-project --session 12 --request 4f1c --decision allow
-clagentic-console answer-prompt --to reviewer@my-project --request 4f1c --decision deny
+clagentic-console answer-prompt --to <agent>@my-project --request 4f1c --decision deny
 ```
 
 ## See what a session sent
@@ -151,7 +151,7 @@ clagentic-console schedule-input delete --id 7c1e --project my-project
 `open-session` and `send-input` take long or multi-line text from standard input with `--prompt -`, redirected from a file:
 
 ```bash
-clagentic-console send-input --to reviewer@my-project --prompt - < message.txt
+clagentic-console send-input --to <agent>@my-project --prompt - < message.txt
 ```
 
 ## Daemon checks
