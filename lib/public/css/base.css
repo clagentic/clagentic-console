@@ -46,7 +46,46 @@ img.emoji {
   --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --content-width: 820px;
+  /* Conversation width steps (Appearance, Chat width). The chosen step is the
+     data-chat-width attribute on <html>, set before first paint and kept by
+     modules/chat-width.js. Every message type and the composer read
+     --content-width, so a step changes all of them together. */
+  --chat-width-compact: 640px;
+  --chat-width-comfortable: 820px;
+  --chat-width-wide: 1040px;
+  --chat-width-full: 100%;
+  --content-width: var(--chat-width-comfortable);
+
+  /* Message layout. One header line per message: avatar, name, label, time and
+     controls share --msg-header-height; nothing in a header sits on its own row. */
+  --msg-header-height: 24px;
+  --msg-header-gap: 6px;
+  --msg-avatar-size: 24px;
+  --msg-gap: 6px;
+  --msg-gap-run: 2px;
+  --msg-pad-x: 12px;
+  --msg-bubble-pad-y: 8px;
+  --msg-bubble-pad-x: 12px;
+  --msg-bubble-radius: 12px;
+  --msg-text-line: 1.5;
+  --msg-name-size: 15px;
+  --msg-text-size: 15px;
+  --msg-meta-size: 12px;
+  --msg-touch-target: 44px;
+}
+
+:root[data-chat-width="compact"] { --content-width: var(--chat-width-compact); }
+:root[data-chat-width="comfortable"] { --content-width: var(--chat-width-comfortable); }
+:root[data-chat-width="wide"] { --content-width: var(--chat-width-wide); }
+:root[data-chat-width="full"] { --content-width: var(--chat-width-full); }
+
+/* A phone is always full width, whatever the chosen step. */
+@media (max-width: 768px) {
+  :root,
+  :root[data-chat-width] {
+    --content-width: var(--chat-width-full);
+    --msg-pad-x: 8px;
+  }
 }
 
 /* PWA standalone: home indicator safe area still applies on notched devices */

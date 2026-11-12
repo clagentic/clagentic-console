@@ -296,61 +296,64 @@ function request(id, extra) {
   return Object.assign({ type: "prompt_request", requestId: id, kind: "permission", toolName: "Bash", toolInput: TOOL_INPUT, decisionReason: "" }, extra || {});
 }
 
-async function clientFor(t, layout) {
-  var env = await dom.setupToolsEnv(t);
-  global.localStorage.setItem("clagentic-wide-view", layout);
-  return env;
-}
-
 function approveControls(card) {
   return card.querySelectorAll("button").filter(function (b) {
-    return /permission-allow|perm-allow|perm-always/.test(b.className);
+    return /perm-allow|perm-always/.test(b.className);
   });
 }
 
-["bubble", "channel"].forEach(function (layout) {
-  test("the " + layout + " card omits Allow for session for a suppressed ask, in a live request and in a replayed snapshot", async function (t) {
-    var env = await clientFor(t, layout);
-    env.tools.applyPromptMessage(request("c1"));
-    assert.ok(dom.cardFor(env, "c1").querySelector(".permission-allow-session, .perm-always"), "control: an ordinary ask offers it");
+test("the card omits Allow for session for a suppressed ask, in a live request and in a replayed snapshot", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage(request("c1"));
+  assert.ok(dom.cardFor(env, "c1").querySelector(".perm-always"), "control: an ordinary ask offers it");
 
-    env.tools.applyPromptMessage(request("c2", { suppressAlwaysAllowRule: true }));
-    assert.equal(dom.cardFor(env, "c2").querySelector(".permission-allow-session, .perm-always"), null, "live request");
-    assert.ok(dom.cardFor(env, "c2").querySelector(".permission-allow, .perm-allow"), "Allow once stays");
-    assert.ok(dom.cardFor(env, "c2").querySelector(".permission-deny, .perm-deny"), "Deny stays");
+  env.tools.applyPromptMessage(request("c2", { suppressAlwaysAllowRule: true }));
+  assert.equal(dom.cardFor(env, "c2").querySelector(".perm-always"), null, "live request");
+  assert.ok(dom.cardFor(env, "c2").querySelector(".perm-allow"), "Allow once stays");
+  assert.ok(dom.cardFor(env, "c2").querySelector(".perm-deny"), "Deny stays");
 
-    env.tools.applyPromptMessage(Object.assign(request("c3", { suppressAlwaysAllowRule: true }), { type: "prompt_pending" }));
-    assert.equal(dom.cardFor(env, "c3").querySelector(".permission-allow-session, .perm-always"), null, "pending snapshot");
+  env.tools.applyPromptMessage(Object.assign(request("c3", { suppressAlwaysAllowRule: true }), { type: "prompt_pending" }));
+  assert.equal(dom.cardFor(env, "c3").querySelector(".perm-always"), null, "pending snapshot");
 
-    // The older recorded shape.
-    env.tools.applyPromptMessage({ type: "permission_request", requestId: "c4", toolName: "Bash", toolInput: TOOL_INPUT, suppressAlwaysAllowRule: true });
-    assert.equal(dom.cardFor(env, "c4").querySelector(".permission-allow-session, .perm-always"), null, "older permission_request shape");
+  // The older recorded shape.
+  env.tools.applyPromptMessage({ type: "permission_request", requestId: "c4", toolName: "Bash", toolInput: TOOL_INPUT, suppressAlwaysAllowRule: true });
+  assert.equal(dom.cardFor(env, "c4").querySelector(".perm-always"), null, "older permission_request shape");
+});
+
+test("the card for a defaultToNo ask opens on No: Deny first, no approve choice marked or focused", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage(request("d1", { defaultToNo: true }));
+  var card = dom.cardFor(env, "d1");
+  var buttons = card.querySelectorAll(".permission-actions button");
+  assert.match(buttons[0].className, /perm-deny/, "the decline option comes first");
+  assert.equal(buttons[0].dataset.defaultChoice, "true", "and is the default choice");
+  approveControls(card).forEach(function (b) {
+    assert.equal(b.dataset.defaultChoice, undefined, "no approve option is the default");
   });
+  assert.equal(card.dataset.defaultToNo, "true");
 
-  test("the " + layout + " card for a defaultToNo ask opens on No: Deny first, no approve choice marked or focused", async function (t) {
-    var env = await clientFor(t, layout);
-    env.tools.applyPromptMessage(request("d1", { defaultToNo: true }));
-    var card = dom.cardFor(env, "d1");
-    var buttons = card.querySelectorAll(".permission-actions button");
-    assert.match(buttons[0].className, /permission-deny|perm-deny/, "the decline option comes first");
-    assert.equal(buttons[0].dataset.defaultChoice, "true", "and is the default choice");
-    approveControls(card).forEach(function (b) {
-      assert.equal(b.dataset.defaultChoice, undefined, "no approve option is the default");
-    });
-    assert.equal(card.dataset.defaultToNo, "true");
+  env.tools.applyPromptMessage(request("d2"));
+  var plain = dom.cardFor(env, "d2");
+  assert.equal(plain.dataset.defaultToNo, undefined, "an ordinary ask is drawn as before");
+  assert.match(plain.querySelectorAll(".permission-actions button")[0].className, /perm-allow/);
+});
 
-    env.tools.applyPromptMessage(request("d2"));
-    var plain = dom.cardFor(env, "d2");
-    assert.equal(plain.dataset.defaultToNo, undefined, "an ordinary ask is drawn as before");
-    assert.match(plain.querySelectorAll(".permission-actions button")[0].className, /permission-allow|perm-allow/);
-  });
+test("the card shows the rule that forced the ask", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage(request("m1", { matchedAskRule: RULE }));
+  var text = dom.cardFor(env, "m1").textContent;
+  assert.match(text, /make:\*/, "the operator can see which of their rules asked");
+});
 
-  test("the " + layout + " card shows the rule that forced the ask", async function (t) {
-    var env = await clientFor(t, layout);
-    env.tools.applyPromptMessage(request("m1", { matchedAskRule: RULE }));
-    var text = dom.cardFor(env, "m1").textContent;
-    assert.match(text, /make:\*/, "the operator can see which of their rules asked");
-  });
+test("a permission prompt renders one way: the conversational card, with the shared message header", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage(request("o1", { decisionReason: "Path is outside the working directory" }));
+  var card = dom.cardFor(env, "o1");
+  assert.ok(card.classList.contains("perm-conversational"));
+  assert.ok(card.querySelector(".dm-bubble-header.msg-header .msg-header-avatar"), "avatar, name and time share one header line");
+  assert.ok(card.querySelector(".perm-ask"));
+  assert.equal(card.querySelector(".permission-title"), null, "no second, formal layout exists");
+  assert.equal(card.querySelector(".permission-reason").textContent, "Path is outside the working directory", "the reason the ask was raised stays visible");
 });
 
 test("a banner offers Allow for session only for an ask that allows it, and Deny stays first for defaultToNo", async function (t) {

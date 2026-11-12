@@ -23,39 +23,34 @@ function request(id, extra) {
   }, extra || {});
 }
 
-["bubble", "channel"].forEach(function (layout) {
-  test("the " + layout + " card names the project, the session and the agent, and offers Allow for session", async function (t) {
-    var env = await dom.setupToolsEnv(t);
-    global.localStorage.setItem("clagentic-wide-view", layout);
-    env.tools.applyPromptMessage(request("l1"));
-    var card = dom.cardFor(env, "l1");
-    var label = card.querySelector(".prompt-label");
-    assert.ok(label, "the card carries a label");
-    assert.equal(label.textContent, "Project: Project Alpha | Session: DO NOT ANSWER probe | Agent: scan the repository");
-    assert.ok(card.querySelector(".permission-allow-session, .perm-always"), "Bash offers Allow for session");
-  });
+test("the card names the project, the session and the agent, and offers Allow for session", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage(request("l1"));
+  var card = dom.cardFor(env, "l1");
+  var label = card.querySelector(".prompt-label");
+  assert.ok(label, "the card carries a label");
+  assert.equal(label.textContent, "Project: Project Alpha | Session: DO NOT ANSWER probe | Agent: scan the repository");
+  assert.ok(card.querySelector(".perm-always"), "Bash offers Allow for session");
+});
 
-  test("the " + layout + " card offers Allow for session for every file tool as well", async function (t) {
-    var env = await dom.setupToolsEnv(t);
-    global.localStorage.setItem("clagentic-wide-view", layout);
-    FILE_TOOL_INPUTS.forEach(function (call, i) {
-      var id = "l2-" + i;
-      env.tools.applyPromptMessage(request(id, { toolName: call[0], toolInput: call[1] }));
-      var card = dom.cardFor(env, id);
-      assert.ok(card.querySelector(".permission-allow-session, .perm-always"), call[0] + ": Allow for session is offered");
-      assert.ok(card.querySelector(".permission-allow, .perm-allow"), call[0] + ": Allow once stays");
-      assert.ok(card.querySelector(".prompt-label"), call[0] + ": the label stays");
-    });
+test("the card offers Allow for session for every file tool as well", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  FILE_TOOL_INPUTS.forEach(function (call, i) {
+    var id = "l2-" + i;
+    env.tools.applyPromptMessage(request(id, { toolName: call[0], toolInput: call[1] }));
+    var card = dom.cardFor(env, id);
+    assert.ok(card.querySelector(".perm-always"), call[0] + ": Allow for session is offered");
+    assert.ok(card.querySelector(".perm-allow"), call[0] + ": Allow once stays");
+    assert.ok(card.querySelector(".prompt-label"), call[0] + ": the label stays");
   });
+});
 
-  test("the " + layout + " card for an older recorded request with no label is drawn as before", async function (t) {
-    var env = await dom.setupToolsEnv(t);
-    global.localStorage.setItem("clagentic-wide-view", layout);
-    env.tools.applyPromptMessage({ type: "prompt_request", requestId: "l3", kind: "permission", toolName: "Bash", toolInput: { command: "ls" }, decisionReason: "" });
-    var card = dom.cardFor(env, "l3");
-    assert.equal(card.querySelector(".prompt-label"), null);
-    assert.ok(card.querySelector(".permission-allow-session, .perm-always"), "the button is still offered");
-  });
+test("the card for an older recorded request with no label is drawn as before", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  env.tools.applyPromptMessage({ type: "prompt_request", requestId: "l3", kind: "permission", toolName: "Bash", toolInput: { command: "ls" }, decisionReason: "" });
+  var card = dom.cardFor(env, "l3");
+  assert.equal(card.querySelector(".prompt-label"), null);
+  assert.ok(card.querySelector(".perm-always"), "the button is still offered");
 });
 
 test("every kind of card carries the label", async function (t) {

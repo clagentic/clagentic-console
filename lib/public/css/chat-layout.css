@@ -1,0 +1,228 @@
+/* ==========================================================================
+   chat-layout.css
+   The one conversation layout. The viewer's own messages sit on the right;
+   every other speaker (the assistant, a message another agent or session
+   injected, an automation, another person) sits on the left. Each message has
+   one header line, --msg-header-height tall, that carries avatar, name, label,
+   time and controls: nothing in a header sits on a row by itself.
+
+   The column width is --content-width, set by the chat width step
+   (css/base.css). Every size, gap and radius below is a token from base.css.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Rows
+   -------------------------------------------------------------------------- */
+
+.msg-user,
+.msg-assistant {
+  position: relative;
+  display: block;
+  max-width: var(--content-width);
+  margin: 0 auto var(--msg-gap);
+  padding: 0 var(--msg-pad-x);
+}
+
+/* A run of the assistant's blocks from the same minute shares one header. */
+.msg-assistant.grouped {
+  margin-top: calc(var(--msg-gap-run) - var(--msg-gap));
+}
+.msg-assistant.grouped > .dm-bubble-header {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   The message header (modules/message-header.js)
+   -------------------------------------------------------------------------- */
+
+.msg-header {
+  display: flex;
+  align-items: center;
+  gap: var(--msg-header-gap);
+  height: var(--msg-header-height);
+  min-width: 0;
+  font-size: var(--msg-meta-size);
+  color: var(--text-dimmer);
+  white-space: nowrap;
+}
+
+.msg-header-avatar {
+  flex: none;
+  width: var(--msg-avatar-size);
+  height: var(--msg-avatar-size);
+  border-radius: 50%;
+  object-fit: cover;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: smooth;
+}
+
+.dm-bubble-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--msg-name-size);
+  font-weight: 700;
+  line-height: var(--msg-header-height);
+  color: var(--text);
+}
+.dm-bubble-name-tappable {
+  cursor: pointer;
+}
+
+.msg-header-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+.dm-bubble-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The viewer's own side is the same line mirrored: time, label, name, avatar,
+   right-aligned, with the controls at the far left. */
+.msg-header-own {
+  flex-direction: row-reverse;
+}
+
+/* Time only while one person has spoken; avatar and name once two or more have
+   (modules/message-participants.js sets .multi-human on the transcript). */
+#messages:not(.multi-human) .msg-header-own .msg-header-avatar,
+#messages:not(.multi-human) .msg-header-own .dm-bubble-name {
+  display: none;
+}
+
+/* Collapse control. The visible text stays small; the 44 px hit area comes from
+   a pseudo-element, so it adds no layout height. */
+.msg-header .collapsible-toggle {
+  position: relative;
+  flex: none;
+  min-width: var(--msg-touch-target);
+  margin-left: auto;
+  text-align: center;
+}
+.msg-header .collapsible-toggle::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--msg-header-height) - var(--msg-touch-target)) / 2) 0;
+}
+.msg-header-own .collapsible-toggle {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Copy, fork and rewind live in the header too: no row of their own. */
+.msg-header .msg-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+}
+.msg-header-own .msg-actions {
+  margin-left: 0;
+  margin-right: auto;
+}
+.msg-header .collapsible-toggle ~ .msg-actions {
+  margin-left: 0;
+  margin-right: 0;
+}
+.msg-header .msg-action-btn {
+  width: var(--msg-header-height);
+  height: var(--msg-header-height);
+}
+
+/* --------------------------------------------------------------------------
+   Bubbles
+   -------------------------------------------------------------------------- */
+
+.msg-user .bubble {
+  width: fit-content;
+  max-width: 85%;
+  padding: var(--msg-bubble-pad-y) var(--msg-bubble-pad-x);
+  border-radius: var(--msg-bubble-radius);
+  font-size: var(--msg-text-size);
+  line-height: var(--msg-text-line);
+}
+
+/* Own messages: the bubble sits against the right edge. */
+.msg-user:not(.msg-user-other) .bubble {
+  margin-left: auto;
+}
+
+/* Another speaker (a person, or input another process injected). */
+.msg-user-other .bubble {
+  background: var(--bg-elevated, var(--bg-hover));
+}
+
+/* Injected by another process, not typed by anyone in this chat. The dashed
+   frame is its visual distinction from typed input. */
+.msg-user-injected .bubble {
+  border: 1px dashed var(--text-dimmer);
+}
+
+/* --------------------------------------------------------------------------
+   Assistant text
+   -------------------------------------------------------------------------- */
+
+.msg-assistant .md-content {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Working indicator: the one footer (.activity-inline). Its dots.
+   -------------------------------------------------------------------------- */
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 0;
+}
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: dot-bounce 1.4s ease-in-out infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   Permission prompt: one conversational card from the assistant
+   -------------------------------------------------------------------------- */
+
+.permission-container.perm-conversational {
+  display: block;
+  max-width: var(--content-width);
+  margin: 0 auto var(--msg-gap);
+  padding: 0 var(--msg-pad-x);
+}
+.perm-conversational > .dm-bubble-content {
+  padding: var(--msg-bubble-pad-y) var(--msg-bubble-pad-x);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--msg-bubble-radius);
+  background: var(--bg-alt);
+}
+.perm-conversational .permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--msg-header-gap);
+  margin-top: var(--msg-bubble-pad-y);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}

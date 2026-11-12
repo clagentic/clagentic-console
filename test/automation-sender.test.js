@@ -317,17 +317,16 @@ test("a loop iteration is recorded as the loop, with its name and iteration, and
   }
 });
 
-// --- rendering, both layouts ---
+// --- rendering ---
 
 var sharedMessages = new dom.FakeElement("div");
 
-async function render(t, wide) {
+async function render(t) {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   dom.setupGlobals();
   var messages = sharedMessages;
   messages._children = [];
   document.getElementById = function (id) { return id === "messages" ? messages : null; };
-  if (wide) document.body.classList.add("wide-view");
   var realQuery = dom.FakeElement.prototype.querySelector;
   dom.FakeElement.prototype.querySelector = function (sel) {
     return realQuery.call(this, sel) || (/^\.msg-action-/.test(sel) ? new dom.FakeElement("button") : null);
@@ -335,7 +334,7 @@ async function render(t, wide) {
   t.after(function () { dom.FakeElement.prototype.querySelector = realQuery; });
   var storeMod = await import(dom.moduleUrl("store.js"));
   storeMod.createStore({ connected: true, myUserId: "me", cachedAllUsers: [] });
-  var rendering = await import(dom.moduleUrl("app-rendering.js") + "?automation=" + (wide ? "wide" : "bubble"));
+  var rendering = await import(dom.moduleUrl("app-rendering.js") + "?automation=one-layout");
   var label = await clientModule();
   var typed = sender.stampRecord({ type: "user_message", text: "typed by me", initiator: "human" });
   var loop = sender.forClient(sender.consoleTurnEntry(INITIATORS.LOOP, "iteration prompt", "job-hunter daily · iteration 3"));
@@ -345,17 +344,15 @@ async function render(t, wide) {
   return messages.querySelectorAll(".msg-user");
 }
 
-["bubble", "channel"].forEach(function (layout) {
-  test("DOM, " + layout + " layout: a loop turn renders as the Loop automation beside the operator's message", async function (t) {
-    var rows = await render(t, layout === "channel");
-    var own = rows[0];
-    var loop = rows[1];
-    assert.equal(own.classList.contains("msg-user-other"), false);
-    assert.equal(own.classList.contains("msg-user-injected"), false);
-    assert.equal(loop.classList.contains("msg-user-other"), true);
-    assert.equal(loop.classList.contains("msg-user-injected"), true);
-    assert.ok(loop.querySelector(".dm-bubble-avatar-other"));
-    assert.equal(loop.querySelector(".dm-bubble-name").textContent, "Loop");
-    assert.equal(loop.querySelector(".injected-label").textContent, "loop · job-hunter daily · iteration 3");
-  });
+test("DOM: a loop turn renders as the Loop automation beside the operator's message", async function (t) {
+  var rows = await render(t);
+  var own = rows[0];
+  var loop = rows[1];
+  assert.equal(own.classList.contains("msg-user-other"), false);
+  assert.equal(own.classList.contains("msg-user-injected"), false);
+  assert.equal(loop.classList.contains("msg-user-other"), true);
+  assert.equal(loop.classList.contains("msg-user-injected"), true);
+  assert.ok(loop.querySelector(".dm-bubble-avatar-other"));
+  assert.equal(loop.querySelector(".dm-bubble-name").textContent, "Loop");
+  assert.equal(loop.querySelector(".injected-label").textContent, "loop · job-hunter daily · iteration 3");
 });

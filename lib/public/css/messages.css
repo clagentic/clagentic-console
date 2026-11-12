@@ -150,22 +150,9 @@
 }
 
 /* --- User message --- */
-.msg-user {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  max-width: var(--content-width);
-  margin: 0 auto 8px;
-  padding: 0 20px;
-}
-
+/* Row, header and bubble geometry → chat-layout.css */
 .msg-user .bubble {
   background: var(--user-bubble);
-  border-radius: 20px 20px 4px 20px;
-  padding: 12px 18px;
-  max-width: 85%;
-  font-size: 15px;
-  line-height: 1.55;
   word-break: break-word;
   white-space: pre-wrap;
   color: var(--text);
@@ -173,33 +160,7 @@
   text-align: start;
 }
 
-/* dm-bubble-*, wide-view layout → channel-layout.css */
-
-/* --- User message action bar --- */
-.msg-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-height: 28px;
-  padding-top: 2px;
-}
-
-.msg-action-time {
-  font-size: 11px;
-  color: var(--text-dimmer);
-  margin-right: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
-  user-select: none;
-  font-variant-numeric: tabular-nums;
-}
-
-.msg-user:hover .msg-action-time { opacity: 1; }
-
-@media (pointer: coarse) {
-  .msg-action-time { opacity: 1; }
-}
-
+/* --- User message actions (in the message header, see chat-layout.css) --- */
 .msg-action-btn {
   display: inline-flex;
   align-items: center;
@@ -239,11 +200,7 @@
 
 /* --- Assistant message --- */
 .msg-assistant {
-  position: relative;
-  max-width: var(--content-width);
-  margin: 0 auto 12px;
-  padding: 4px 20px;
-  border-radius: 12px;
+  border-radius: var(--msg-bubble-radius);
   transition: background 0.15s;
   /* content-visibility: auto removed — Firefox re-evaluates all cv:auto
      elements on every viewport resize (including textarea growth), causing
@@ -637,16 +594,11 @@ pre.mermaid-error {
 
 .thinking-item.done .thinking-spinner { display: none; }
 
-/* lr-6e20f7: bubble layout (body:not(.wide-view)) has its own
-   bottom-of-transcript presence indicator (.activity-inline, driven by
-   activity-state.js via app-favicon.js's initActivityFooter). The thinking
-   block owns DETAIL (the expandable content), not presence — showing this
-   spinner too duplicated the footer dots (this task's SYMPTOM B: one
-   indicator here, one at the bottom, simultaneously). Channel layout has no
-   such duplicate (its footer, .channel-pre-thinking, is always removed by
-   removePreThinking() before a real thinking block ever renders), so this
-   is scoped to bubble layout only. */
-body:not(.wide-view) .thinking-spinner { display: none; }
+/* The bottom-of-transcript footer (.activity-inline, driven by activity-state.js
+   via app-favicon.js's initActivityFooter) is the one working indicator. The
+   thinking block owns DETAIL (the expandable content), not presence: showing
+   this spinner too would put two indicators on screen at once. */
+.thinking-spinner { display: none; }
 
 .thinking-content {
   display: none;
@@ -1772,17 +1724,6 @@ body:not(.wide-view) .thinking-spinner { display: none; }
    Mobile message adjustments
    ========================================================================== */
 @media (max-width: 768px) {
-  .msg-user {
-    max-width: 100%;
-    padding: 0 12px;
-  }
-  .msg-user .bubble {
-    max-width: 90%;
-  }
-  .msg-assistant {
-    max-width: 100%;
-    padding: 4px 12px;
-  }
   .thinking-item,
   .tool-item,
   .tool-group,
@@ -1798,8 +1739,7 @@ body:not(.wide-view) .thinking-spinner { display: none; }
   }
 }
 
-/* Wide-view, channel-thinking, pre-thinking, channel-scoped
-   permission layout → channel-layout.css */
+/* The conversational permission card layout → chat-layout.css */
 
 .perm-ask {
   font-size: 15px;

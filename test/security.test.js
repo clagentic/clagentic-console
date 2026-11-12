@@ -968,16 +968,16 @@ test("skills proxy: rejects unauthenticated request with 401 in multi-user mode"
 // the real attachSettings handler — it fails if the getMultiUserFromReq/401
 // gate is ever reverted from the corresponding route in server-settings.js.
 
-test("PUT /api/user/chat-layout: rejects unauthenticated request with 401", function () {
+test("PUT /api/user/chat-width: rejects unauthenticated request with 401", function () {
   var { attachSettings } = require("../lib/server-settings");
   var ctx = makeSettingsCtx(false, false);
   var handler = attachSettings(ctx).handleRequest;
 
-  var req = makeReq("PUT", "/api/user/chat-layout");
+  var req = makeReq("PUT", "/api/user/chat-width");
   var res = makeRes();
-  handler(req, res, "/api/user/chat-layout");
+  handler(req, res, "/api/user/chat-width");
 
-  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/chat-layout gets 401");
+  assert.strictEqual(res.status, 401, "unauthenticated PUT /api/user/chat-width gets 401");
   assert.ok(res.body.indexOf("unauthorized") !== -1, "body contains 'unauthorized'");
 });
 

@@ -23,6 +23,7 @@ var ROOT = path.resolve(__dirname, "..");
 var DAEMON_SCRIPT = path.join(ROOT, "lib", "daemon.js");
 var CLI = path.join(ROOT, "bin", "cli.js");
 var KEY = "promptExpiryMinutes";
+var WIDTH_KEY = "chatWidth";
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -35,22 +36,38 @@ test("registry: reads the default when unset and a stored value otherwise", func
   assert.equal(entry.read({ promptExpiryMinutes: 10 }), 10);
 });
 
-[
-  [10, true],
-  [0, true],
-  [35791, true],
-  [-1, false],
-  [99999, false],
-  [1.5, false],
-  ["abc", false],
-  ["10", false],
-  [undefined, false],
-].forEach(function (row) {
-  test("registry: pick " + JSON.stringify(row[0]) + (row[1] ? " is accepted" : " is refused with the shared reason"), function () {
-    var picked = registry.findSetting(KEY).pick(row[0]);
-    assert.equal(picked.ok, row[1]);
-    if (row[1]) assert.equal(picked.value, row[0]);
-    else assert.match(picked.reason, /whole number of minutes from 0/);
+// One table for every registry entry: key, value, accepted, and the reason a
+// refusal must give. The chat width rows use the same list the browser and the
+// profile use, and no bubble/channel entry.
+var PICK_ROWS = [
+  [KEY, 10, true],
+  [KEY, 0, true],
+  [KEY, 35791, true],
+  [KEY, -1, false, /whole number of minutes from 0/],
+  [KEY, 99999, false, /whole number of minutes from 0/],
+  [KEY, 1.5, false, /whole number of minutes from 0/],
+  [KEY, "abc", false, /whole number of minutes from 0/],
+  [KEY, "10", false, /whole number of minutes from 0/],
+  [KEY, undefined, false, /whole number of minutes from 0/],
+  [WIDTH_KEY, "compact", true],
+  [WIDTH_KEY, "comfortable", true],
+  [WIDTH_KEY, "wide", true],
+  [WIDTH_KEY, "full", true],
+  [WIDTH_KEY, "bubble", false, /compact, comfortable, wide, full/],
+  [WIDTH_KEY, "channel", false, /compact, comfortable, wide, full/],
+  [WIDTH_KEY, "Wide", false, /compact, comfortable, wide, full/],
+  [WIDTH_KEY, "", false, /compact, comfortable, wide, full/],
+  [WIDTH_KEY, 820, false, /compact, comfortable, wide, full/],
+  [WIDTH_KEY, undefined, false, /compact, comfortable, wide, full/],
+];
+
+test("registry: pick accepts a valid value and refuses the rest with the entry's shared reason", function () {
+  PICK_ROWS.forEach(function (row) {
+    var label = row[0] + " " + JSON.stringify(row[1]);
+    var picked = registry.findSetting(row[0]).pick(row[1]);
+    assert.equal(picked.ok, row[2], label);
+    if (row[2]) assert.equal(picked.value, row[1], label);
+    else assert.match(picked.reason, row[3], label);
   });
 });
 
@@ -67,7 +84,20 @@ test("registry: an unknown key and inherited names are not settings", function (
   assert.equal(registry.findSetting("nope"), null);
   assert.equal(registry.findSetting("constructor"), null);
   assert.equal(registry.findSetting("__proto__"), null);
-  assert.deepEqual(registry.settingKeys(), [KEY]);
+  assert.deepEqual(registry.settingKeys(), [KEY, WIDTH_KEY]);
+});
+
+test("registry: chatWidth reads the default when unset, stores a step and removes the key at the default", function () {
+  var entry = registry.findSetting(WIDTH_KEY);
+  assert.equal(entry.default, "comfortable");
+  assert.equal(entry.read({}), "comfortable");
+  assert.equal(entry.read({ chatWidth: "bubble" }), "comfortable", "a stale value is not a step");
+  var cfg = {};
+  entry.apply(cfg, "full");
+  assert.equal(entry.read(cfg), "full");
+  entry.apply(cfg, "comfortable");
+  assert.equal("chatWidth" in cfg, false);
+  assert.equal(registry.findSetting("chatLayout"), null, "the bubble/channel setting is not offered");
 });
 
 test("the registry validator is the Settings page's pickSettingChange, with no second range check", function () {
@@ -140,7 +170,10 @@ test("handler: an unknown key is unknown-key for get and set; list names the key
     assert.match(res.reason, /promptExpiryMinutes/);
   });
   var listed = handleSettingsCommand(deps, { cmd: "settings_list" });
-  assert.deepEqual(listed, { ok: true, result: "listed", settings: [{ key: KEY, value: 30, default: 30 }] });
+  assert.deepEqual(listed, { ok: true, result: "listed", settings: [
+    { key: KEY, value: 30, default: 30 },
+    { key: WIDTH_KEY, value: "comfortable", default: "comfortable" },
+  ] });
   assert.equal(deps.calls.set.length, 0);
 });
 
@@ -347,32 +380,38 @@ test("daemon: an invalid value and an unknown key are refused and nothing is sav
   });
 });
 
-test("cli against the daemon: set 10 reads back 10, get returns 10 and the default, list shows it, then 30 clears it", function () {
+// Each row runs in order against the one daemon: CLI args, exit code, the parts
+// of the JSON output that must match, and what the persisted config must then
+// satisfy (null: not checked). Adding a setting is adding rows.
+var CLI_CASES = [
+  [["set", KEY, "10"], 0, { ok: true, result: "saved", key: KEY, value: 10, default: 30 }, function (c) { return c.promptExpiryMinutes === 10; }],
+  [["get", KEY], 0, { ok: true, result: "read", key: KEY, value: 10, default: 30 }, null],
+  [["list"], 0, { settings: [
+    { key: KEY, value: 10, default: 30 },
+    { key: WIDTH_KEY, value: "comfortable", default: "comfortable" },
+  ] }, null],
+  [["set", KEY, "abc"], 1, { result: "refused" }, null],
+  [["get", "nope"], 1, { result: "unknown-key" }, null],
+  [["set", KEY, "30"], 0, {}, function (c) { return !("promptExpiryMinutes" in c); }],
+  [["set", WIDTH_KEY, "wide"], 0, { ok: true, result: "saved", key: WIDTH_KEY, value: "wide", default: "comfortable" }, function (c) { return c.chatWidth === "wide"; }],
+  [["get", WIDTH_KEY], 0, { ok: true, result: "read", key: WIDTH_KEY, value: "wide", default: "comfortable" }, null],
+  [["set", WIDTH_KEY, "bubble"], 1, { result: "refused", value: "wide" }, null],
+  [["set", WIDTH_KEY, "comfortable"], 0, {}, function (c) { return !("chatWidth" in c); }],
+];
+
+test("cli against the daemon: set, get, list, a refused value and an unknown key behave as the table says, and a default clears the key", function () {
   var cliEnv = { CLAGENTIC_HOME: tmpHome, CLAGENTIC_CONFIG: configFile };
-  return runCli(["settings", "set", KEY, "10"], cliEnv).then(function (r) {
-    assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(JSON.parse(r.stdout), { ok: true, result: "saved", key: KEY, value: 10, default: 30 });
-    return waitForPersisted(function (c) { return c.promptExpiryMinutes === 10; }, 3000);
-  }).then(function () {
-    return runCli(["settings", "get", KEY], cliEnv);
-  }).then(function (r) {
-    assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(JSON.parse(r.stdout), { ok: true, result: "read", key: KEY, value: 10, default: 30 });
-    return runCli(["settings", "list"], cliEnv);
-  }).then(function (r) {
-    assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(JSON.parse(r.stdout).settings, [{ key: KEY, value: 10, default: 30 }]);
-    return runCli(["settings", "set", KEY, "abc"], cliEnv);
-  }).then(function (r) {
-    assert.equal(r.code, 1);
-    assert.equal(JSON.parse(r.stdout).result, "refused");
-    return runCli(["settings", "get", "nope"], cliEnv);
-  }).then(function (r) {
-    assert.equal(r.code, 1);
-    assert.equal(JSON.parse(r.stdout).result, "unknown-key");
-    return runCli(["settings", "set", KEY, "30"], cliEnv);
-  }).then(function (r) {
-    assert.equal(r.code, 0, r.stderr);
-    return waitForPersisted(function (c) { return !("promptExpiryMinutes" in c); }, 3000);
-  });
+  return CLI_CASES.reduce(function (chain, row) {
+    return chain.then(function () {
+      return runCli(["settings"].concat(row[0]), cliEnv).then(function (r) {
+        var label = row[0].join(" ");
+        assert.equal(r.code, row[1], label + ": " + r.stderr);
+        var out = JSON.parse(r.stdout);
+        Object.keys(row[2]).forEach(function (field) {
+          assert.deepEqual(out[field], row[2][field], label + ": " + field);
+        });
+        return row[3] ? waitForPersisted(row[3], 3000) : null;
+      });
+    });
+  }, Promise.resolve());
 });
