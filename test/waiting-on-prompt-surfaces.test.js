@@ -116,7 +116,7 @@ test("a running turn with no prompt stays live, an idle one idle, a reaped one r
   var idle = makeSession(2);
   var reaped = makeSession(3, { queryInstance: null });
   var w = world([running, idle, reaped]);
-  var all = w.input.listSessions({});
+  var all = w.input.listSessions({ state: "any" });
   assert.equal(byId(all, 1).state, "live");
   assert.equal(byId(all, 2).state, "idle");
   assert.equal(byId(all, 3).state, "reaped");

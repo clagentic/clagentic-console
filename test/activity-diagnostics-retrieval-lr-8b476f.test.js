@@ -214,8 +214,8 @@ test("lib/cli/ipc-subcommands.js: handleActivityDiagnostics sends {cmd: \"get_ac
   var body = src.slice(start, end === -1 ? src.length : end);
   assert.match(body, /cmd:\s*["']get_activity_diagnostics["']/,
     "handleActivityDiagnostics must send the get_activity_diagnostics IPC command");
-  assert.match(body, /console\.log\(JSON\.stringify/,
-    "handleActivityDiagnostics must print JSON to stdout (the point is machine readability for a Bash-only agent)");
+  assert.match(body, /printDaemonJson\(res\)/,
+    "handleActivityDiagnostics must print the daemon response as JSON to stdout (the point is machine readability for a Bash-only agent)");
   assert.match(src, /handleActivityDiagnostics:\s*handleActivityDiagnostics/, "handleActivityDiagnostics must be exported");
 });
 

@@ -203,18 +203,9 @@ for (var i = 0; i < args.length; i++) {
   console.log("       clagentic-console --activity-diagnostics  Print activity-divergence probe totals as JSON (agent-readable)");
   console.log("       clagentic-console --usage  Print account usage per vendor and rate-limit bucket as JSON, with how fresh each reading is and why (agent-readable)");
   console.log("       clagentic-console --process-build-status  Print the running process's loaded build SHA as JSON (agent-readable)");
-  console.log("       clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|-> [--vendor <id>] [--agent <name>] [--name <session-name>] [--visibility shared|private] [--permission-mode <mode>] [--settings <path>] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Open a session and run a first prompt (prints JSON)");
-  console.log("       clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) --prompt <text|-> [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]  Send input to a session, resuming it if needed (prints JSON; exit 3 ambiguous, 4 not found by address)");
-  console.log("       clagentic-console end-session (--project <slug> --session <id> | --to <address>) [--from <name>] [--from-session <id>] [--reason <text>]  Stand one live session down, even one blocked on a permission prompt; history is kept and the session resumes by id (prints JSON; exit 3 ambiguous, 4 not found by address)");
-  console.log("       clagentic-console answer-prompt (--project <slug> --session <id> | --to <address>) --request <id> --decision <allow|deny|allow_always|text> [--from <name>] [--from-session <id>]  Answer one pending prompt of a live session, as the browser would (prints JSON; exit 3 ambiguous, 4 not found by address)");
-  console.log("       clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <id>] [--state live|idle|reaped|any]  List the console's sessions (prints JSON)");
-  console.log("       clagentic-console list-outbound --session <vendor-session-id> [--project <slug>] [--since <dur>] [--kind sent|opens]  List what a session (by vendor session id, see list-sessions) sent out with send-input and open-session: target, prompt, time, initiator (prints JSON; read-only; kept 30 days by default)");
-  console.log("       clagentic-console schedule-input create --session <id> [--project <slug>] (--in <dur> | --at <time> | --every <dur> (--until <time> | --count <n>)) (--prompt <text|-> | --prompt-file <path>)  Send text into a session later, once or on a repeat with an end (prints JSON)");
-  console.log("       clagentic-console schedule-input list [--session <id>] [--project <slug>] [--state armed|done|ended|any]  List scheduled input, from the browser or the CLI (prints JSON)");
-  console.log("       clagentic-console schedule-input delete --id <id> [--project <slug>]  Cancel a scheduled input");
-  console.log("         <dur> is minutes or parts like 90, 10m, 1h30m; <time> is a local HH:MM (a past one means tomorrow)");
-  console.log("         <address> is <agent>@<project>, <vendor>@<project> (a plain session) or @<project>, each with an optional /<session-name>");
-  console.log("         Several matches resolve live over idle over reaped; /<session-name> names one session exactly");
+  // The agent verbs' lines come from the one usage source their own --help reads.
+  require("../lib/cli/agent-usage").topLevelLines().forEach(function (line) { console.log(line); });
+  console.log("         Each of these takes -h or --help for its own usage");
   console.log("       clagentic-console settings get <key>  Print one server-wide setting's value and default as JSON (agent-readable; known keys: promptExpiryMinutes, chatWidth)");
   console.log("       clagentic-console settings set <key> <value>  Change a server-wide setting; prints the value read back from the daemon (value is JSON when it parses; exit 1 if refused)");
   console.log("       clagentic-console settings list  List the settings with their values and defaults as JSON");
