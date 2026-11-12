@@ -135,6 +135,11 @@ async function createServer(opts) {
     getPushModule: function () { return opts.pushModule || null; },
   });
 
+  // The project has warmed up its default agent, as production does before any
+  // query: a session bound to it does not re-run the agent's init at query
+  // start, which would overwrite the capabilities a test sets.
+  sm.modelsByVendor = Object.assign({}, sm.modelsByVendor, { claude: [] });
+
   var handles = [];
   // The options each query was created with, for tests that check what the
   // bridge asks the adapter to start (permission mode, effort).
@@ -150,13 +155,14 @@ async function createServer(opts) {
     init: function () { return Promise.resolve({ models: [], skills: [] }); },
     supportedModels: function () { return Promise.resolve([]); },
   };
+  var adapters = { claude: adapter };
   var bridge = require(libPath("sdk-bridge")).createSDKBridge({
     cwd: home,
     slug: "harness",
     sessionManager: sm,
     send: transport.send,
     adapter: adapter,
-    adapters: { claude: adapter },
+    adapters: adapters,
     getNotificationsModule: getNotificationsModule,
     onProcessingChanged: function () {},
     pushModule: opts.pushModule || null,
@@ -230,6 +236,11 @@ async function createServer(opts) {
     },
 
     queryOptions: queryOptions,
+
+    // The project's default adapter and its adapter table, as the bridge holds
+    // them, so a test can add an agent or take the default away.
+    adapter: adapter,
+    adapters: adapters,
 
     /**
      * A canUseTool call as the SDK makes it, in process. hints carries the

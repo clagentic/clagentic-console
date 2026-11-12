@@ -54,10 +54,10 @@ function makeSm() {
   };
 }
 
-function makeProcessor(sm) {
+function makeProcessor(sm, send) {
   return attachMessageProcessor({
     sm: sm,
-    send: function () {},
+    send: send || function () {},
     slug: "test-slug",
     cwd: "/tmp",
     pushModule: null,
@@ -573,4 +573,44 @@ test("lr-9bcd7b CHATTINESS INVARIANT: acquiring a second concurrent Task token w
     "acquiring a second token while the session is already active must not trigger a second broadcast (mandatory chattiness mitigation)"
   );
   assert.equal(sessionActivity.getActiveCount(session), 2, "both tokens must still be tracked even though only the first triggered a broadcast");
+});
+
+// A session's own vendor is what a turn's error line names and what its init
+// model_info announces; neither is project-wide or Claude by default.
+[
+  { vendor: "codex", label: "Codex" },
+  { vendor: "claude", label: "Claude Code" },
+].forEach(function (row) {
+  test("the query error line names the session's vendor, " + row.vendor, function () {
+    var sm = makeSm();
+    var processor = makeProcessor(sm);
+    var session = makeSession();
+    session.vendor = row.vendor;
+    processor.processSDKMessage(session, {
+      yokeType: "result",
+      subtype: "error_during_execution",
+      errors: ["boom"],
+      cost: 0,
+      sessionId: "cli-session-v",
+    });
+    var errors = session.history.filter(function (e) { return e.type === "error"; });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].text, row.label + " error: boom");
+  });
+
+  test("the init model_info of a " + row.vendor + " session goes to that session only, with its id", function () {
+    var sm = makeSm();
+    var toSession = [];
+    var toProject = [];
+    sm.sendToSession = function (s, obj) { toSession.push(obj); };
+    var processor = makeProcessor(sm, function (obj) { toProject.push(obj); });
+    var session = makeSession();
+    session.vendor = row.vendor;
+    processor.processSDKMessage(session, { yokeType: "init", model: "m-1", skills: [], sessionId: "cli-session-i" });
+    assert.deepEqual(toProject.filter(function (m) { return m.type === "model_info"; }), [], "not sent project-wide");
+    var info = toSession.filter(function (m) { return m.type === "model_info"; });
+    assert.equal(info.length, 1);
+    assert.equal(info[0].vendor, row.vendor);
+    assert.equal(info[0].sessionId, session.localId);
+  });
 });

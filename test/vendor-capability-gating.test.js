@@ -171,6 +171,117 @@ test("a session bound to an agent that is not registered is stopped with a named
   });
 });
 
+function boundNotices(session) {
+  return historyOf(session, "info").filter(function (m) { return /no recorded agent/.test(m.text); });
+}
+
+// A query with no vendor in memory never runs on an unrecorded vendor: the
+// vendor comes back from the stored meta; else the session is bound once to the
+// project default, recorded in its meta, with one notice; else it is refused.
+[
+  { name: "the meta's vendor is put back, with no notice", stored: "fake", hasDefault: true, bound: null, refused: false },
+  { name: "no meta vendor: bound once to the project default, written to the meta, one notice naming it", stored: null, hasDefault: true, bound: "claude", refused: false },
+  { name: "no meta vendor and no default: refused with a visible error, no adapter called", stored: null, hasDefault: false, bound: null, refused: true },
+  { name: "the meta cannot be read: refused, nothing bound and the recorded vendor is not overwritten", stored: "fake", hasDefault: true, bound: null, refused: true, metaError: true },
+  { name: "restored default emits no second notice", stored: null, hasDefault: true, bound: "claude", refused: false, resumed: true },
+].forEach(function (row) {
+  test("an empty session vendor at query start: " + row.name, async function () {
+    await withHarness(async function (server) {
+      var registry = lib("yoke").registry;
+      registry.register(fakeDescriptor());
+      try {
+        var session = server.sm.createSessionRaw({});
+        session.cliSessionId = "cli-vendor-restore";
+        if (row.stored) session.vendor = row.stored;
+        server.sm.saveSessionFile(session);
+        session.vendor = undefined;
+        if (!row.hasDefault) {
+          server.adapter.vendor = "";
+          server.sm.defaultVendor = null;
+        }
+        var realLookup = server.sm.lookupMetaVendor;
+        if (row.metaError) {
+          server.sm.lookupMetaVendor = function () { return { state: "error", vendor: null }; };
+        }
+        try {
+          await server.bridge.startQuery(session, "hello", null, null);
+        } finally {
+          server.sm.lookupMetaVendor = realLookup;
+        }
+        if (row.resumed) {
+          // The in-memory vendor is lost again (a reload of the stored session)
+          // and the default is gone: the recorded vendor is what is used.
+          session.vendor = undefined;
+          server.adapter.vendor = "";
+          server.sm.defaultVendor = null;
+          await server.bridge.startQuery(session, "second", null, null);
+        }
+        var refusals = historyOf(session, "error").filter(function (m) { return /no recorded agent|could not be read/.test(m.text); });
+        if (row.refused) {
+          assert.equal(refusals.length, 1);
+          assert.match(refusals[0].text, row.metaError ? /could not be read/ : /vendor/);
+          assert.equal(historyOf(session, "done")[0].code, 1);
+          assert.equal(server.queryOptions.length, 0, "no adapter was called");
+          assert.equal(session.vendor, undefined, "nothing was bound");
+          assert.equal(server.sm.readMetaVendor(session), row.metaError ? "fake" : null, "nothing was written to the meta");
+          assert.equal(boundNotices(session).length, 0);
+        } else if (row.bound) {
+          assert.equal(refusals.length, 0);
+          assert.equal(session.vendor, row.bound, "bound to the project default");
+          assert.equal(server.sm.readMetaVendor(session), row.bound, "the bind is written to the meta");
+          var notices = boundNotices(session);
+          assert.equal(notices.length, 1, "one notice");
+          assert.ok(notices[0].text.indexOf(registry.displayNameFor(row.bound)) !== -1, "the notice names the vendor");
+        } else {
+          assert.equal(refusals.length, 0);
+          assert.equal(session.vendor, row.stored, "the vendor was restored from the meta");
+          assert.equal(boundNotices(session).length, 0, "restoring from the meta is not a bind");
+        }
+      } finally {
+        registry.unregister("fake");
+      }
+    });
+  });
+});
+
+// Fork and rewind choose their adapter by the same resolution as the query.
+[
+  { name: "the meta's vendor picks the adapter", stored: "fake", hasDefault: true, expectRollback: true },
+  { name: "no vendor anywhere and no default: refused, no adapter picked", stored: null, hasDefault: false, expectRollback: false },
+].forEach(function (row) {
+  test("rollback of a session with an empty vendor: " + row.name, async function () {
+    await withHarness(async function (server) {
+      var registry = lib("yoke").registry;
+      registry.register(fakeDescriptor());
+      var rolledBack = [];
+      server.adapters.fake = Object.assign(fakeAdapter("fake"), {
+        rollbackThread: function (id, turns) { rolledBack.push([id, turns]); return Promise.resolve(); },
+      });
+      try {
+        var session = server.sm.createSessionRaw({});
+        session.cliSessionId = "cli-vendor-rollback";
+        if (row.stored) session.vendor = row.stored;
+        server.sm.saveSessionFile(session);
+        session.vendor = undefined;
+        if (!row.hasDefault) {
+          server.adapter.vendor = "";
+          server.sm.defaultVendor = null;
+        }
+        if (row.expectRollback) {
+          await server.bridge.rollbackConversation(session, 1);
+          assert.deepEqual(rolledBack, [["cli-vendor-rollback", 1]]);
+        } else {
+          await assert.rejects(server.bridge.rollbackConversation(session, 1), /no recorded agent/);
+          assert.equal(rolledBack.length, 0);
+        }
+      } finally {
+        delete server.adapters.fake;
+        registry.unregister("fake");
+      }
+    });
+  });
+});
+
 test("agent identity follows the RESOLVED agentInjection of the default agent: declared true, live false sends no agent option", async function () {
   await withHarness(async function (server) {
     var registry = lib("yoke").registry;

@@ -219,3 +219,83 @@ test("picker DOM: an agent whose install lookup failed says it could not be chec
   assert.equal(pickerButton(container, "claude").querySelector(".vendor-toggle-note").textContent, "Could not check");
   assert.equal(pickerButton(container, "codex").querySelector(".vendor-toggle-note"), null);
 });
+
+// Which vendor a session's page shows is decided from the server's messages and
+// is never a default: the header names the session's vendor or, knowing none,
+// nobody's.
+function sessionVendorModules() {
+  return Promise.all([
+    import(pathToFileURL(path.join(PUBLIC, "modules", "session-vendor-state.js")).href),
+    import(pathToFileURL(path.join(PUBLIC, "modules", "assistant-identity.js")).href),
+  ]);
+}
+
+[
+  { name: "a Codex session with history binds and locks Codex", msg: { vendor: "codex", hasHistory: true }, current: { currentVendor: "claude", vendorSelectionLocked: false }, want: { currentVendor: "codex", vendorSelectionLocked: true } },
+  { name: "a locked page switching to a Codex session with history takes Codex", msg: { vendor: "codex", hasHistory: true }, current: { currentVendor: "claude", vendorSelectionLocked: true }, want: { currentVendor: "codex", vendorSelectionLocked: true } },
+  { name: "a locked page switching to a new session keeps its vendor", msg: { vendor: "codex", hasHistory: false }, current: { currentVendor: "claude", vendorSelectionLocked: true }, want: { currentVendor: "claude", vendorSelectionLocked: true } },
+  { name: "a session with history and no recorded vendor takes the default, unlocked", msg: { vendor: null, hasHistory: true }, current: { currentVendor: "codex", vendorSelectionLocked: true }, want: { currentVendor: "claude", vendorSelectionLocked: false } },
+  { name: "a new session with no vendor imposes nothing", msg: { vendor: null, hasHistory: false }, current: { currentVendor: "codex", vendorSelectionLocked: false }, want: null },
+].forEach(function (row) {
+  test("session_switched vendor state: " + row.name, async function () {
+    var [state] = await sessionVendorModules();
+    assert.deepEqual(state.vendorStateForSwitch(row.msg, row.current, "claude"), row.want);
+  });
+});
+
+test("session_switched applies the settled vendor again after resetClientState() wipes it", function () {
+  var source = require("fs").readFileSync(path.join(PUBLIC, "modules", "app-messages.js"), "utf8");
+  var switched = source.slice(source.indexOf("session_switched: function"));
+  var reset = switched.indexOf("resetClientState();");
+  var reapply = switched.indexOf("if (_boundVendor) store.set(_boundVendor);", reset);
+  assert.ok(reset > 0 && reapply > reset, "the vendor is re-applied after the reset");
+});
+
+[
+  { name: "a Codex session's turn, also after a tool error, is headed Codex", args: ["codex", null, null], name_: "Codex", avatar: "/codex-avatar.png" },
+  { name: "no vendor on the page: the session list's vendor is used", args: [null, null, "codex"], name_: "Codex", avatar: "/codex-avatar.png" },
+  { name: "the page's own vendor outranks the list's", args: ["claude", null, "codex"], name_: "Claude Code", avatar: "/claude-code-avatar.png" },
+  { name: "no vendor known anywhere: a neutral assistant, no vendor avatar", args: [null, null, null], name_: "Assistant", avatar: null },
+  { name: "a vendor the registry does not know: a neutral assistant", args: ["ghost", null, null], name_: "Assistant", avatar: null },
+  { name: "a named agent keeps its own name", args: [null, "Holden", "codex"], name_: "Holden", avatar: null },
+].forEach(function (row) {
+  test("assistant header: " + row.name, async function () {
+    var [, identity] = await sessionVendorModules();
+    var got = identity.assistantIdentity.apply(null, row.args);
+    assert.equal(got.name, row.name_);
+    assert.equal(got.avatarUrl, row.avatar);
+  });
+});
+
+[
+  { name: "the page's vendor", state: { currentVendor: "codex", activeSessionId: 1, sessionVendors: { 1: "claude" } }, want: "Message Codex..." },
+  { name: "no page vendor: the session list's vendor", state: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "codex" } }, want: "Message Codex..." },
+  { name: "no vendor known anywhere: neutral wording, never Claude", state: { currentVendor: null, activeSessionId: 1, sessionVendors: {} }, want: "Message the assistant..." },
+  { name: "a vendor the registry does not know: neutral wording", state: { currentVendor: "ghost", activeSessionId: 1, sessionVendors: {} }, want: "Message the assistant..." },
+].forEach(function (row) {
+  test("composer placeholder: " + row.name, async function () {
+    var [, identity] = await sessionVendorModules();
+    assert.equal(identity.composerPlaceholder(function (k) { return row.state[k]; }), row.want);
+  });
+});
+
+[
+  { name: "another session's model_info", msg: { vendor: "claude", sessionId: 2 }, state: { currentVendor: null, activeSessionId: 1 }, foreign: true },
+  { name: "another vendor's model_info on a bound page", msg: { vendor: "claude" }, state: { currentVendor: "codex", activeSessionId: 1 }, foreign: true },
+  { name: "this session's own model_info", msg: { vendor: "codex", sessionId: 1 }, state: { currentVendor: "codex", activeSessionId: 1 }, foreign: false },
+  { name: "a model_info that names no session, for a page with no vendor yet", msg: { vendor: "claude" }, state: { currentVendor: null, activeSessionId: 1 }, foreign: false },
+].forEach(function (row) {
+  test("model_info scoping: " + row.name, async function () {
+    var [state] = await sessionVendorModules();
+    assert.equal(state.isForeignModelInfo(row.msg, row.state), row.foreign);
+  });
+});
+
+test("the session list's vendors are mapped by session id", async function () {
+  var [state] = await sessionVendorModules();
+  var map = state.sessionVendorMap([{ id: 3, vendor: "codex" }, { id: 4, vendor: null }, { id: 5, vendor: "claude" }]);
+  assert.equal(state.listedVendor(map, 3), "codex");
+  assert.equal(state.listedVendor(map, 4), null);
+  assert.equal(state.listedVendor(map, 99), null);
+  assert.equal(state.listedVendor(map, null), null);
+});

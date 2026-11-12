@@ -73,7 +73,7 @@ function makeBridge(daemonConfig, vendorAdapter) {
   var saves = [];
   var sm = {
     sessions: new Map(), currentModel: null, currentPermissionMode: null, currentEffort: null, currentBetas: [],
-    modelsByVendor: {}, availableVendors: [], installedVendors: [], defaultVendor: adapter.vendor,
+    modelsByVendor: { [adapter.vendor]: [] }, availableVendors: [], installedVendors: [], defaultVendor: adapter.vendor,
     saveSessionFile: function (s) { saves.push(JSON.stringify(s.identity || null)); },
     broadcastSessionList: function () {}, getActiveSession: function () { return null; },
     setSlashCommandsForVendor: function () {},
@@ -92,7 +92,7 @@ function makeBridge(daemonConfig, vendorAdapter) {
 
 function makeSession(extra) {
   return Object.assign({
-    localId: 9001, queryInstance: null, messageQueue: null, abortController: null, isProcessing: false,
+    localId: 9001, vendor: "claude", queryInstance: null, messageQueue: null, abortController: null, isProcessing: false,
     cliSessionId: null, history: [], blocks: {}, sentToolResults: {}, pendingPermissions: {}, pendingAskUser: {},
     pendingElicitations: {}, activeTaskToolIds: {}, singleTurn: false, lastActivityAt: Date.now(),
     _isCountedLive: false, _adapterWorkerState: null, _workerExitPromise: null,
