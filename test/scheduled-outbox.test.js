@@ -161,6 +161,31 @@ test("the schedules stay after the queued items of the message list", async func
   } finally { done(env); }
 });
 
+test("queued in-flight messages stay at the bottom in queue order, below new turn output, until each leaves", async function () {
+  var env = await boot();
+  try {
+    var rendering = await import(dom.moduleUrl("app-rendering.js"));
+    var first = new dom.FakeElement("div");
+    var second = new dom.FakeElement("div");
+    var output1 = new dom.FakeElement("div");
+    var output2 = new dom.FakeElement("div");
+    rendering.keepAtBottom(first);
+    rendering.addToMessages(first);
+    rendering.addToMessages(output1);
+    rendering.keepAtBottom(second);
+    rendering.addToMessages(second);
+    rendering.addToMessages(output2);
+    assert.deepEqual(env.messages.children, [output1, output2, first, second]);
+
+    rendering.releaseFromBottom(first);
+    first.remove();
+    var output3 = new dom.FakeElement("div");
+    rendering.addToMessages(output3);
+    assert.deepEqual(env.messages.children, [output1, output2, output3, second]);
+    rendering.releaseFromBottom(second);
+  } finally { done(env); }
+});
+
 test("the capability table has one entry per kind, and the scheduled Send now is Fire now", async function () {
   var sn = await import(dom.moduleUrl("send-now.js"));
   assert.deepEqual(Object.keys(sn.SEND_NOW_BY_KIND).sort(), ["chat", "scheduled", "shell"]);

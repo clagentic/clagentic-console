@@ -59,7 +59,13 @@ FakeElement.prototype.getAttribute = function (name) {
   }
   return this._attrs && Object.prototype.hasOwnProperty.call(this._attrs, name) ? this._attrs[name] : null;
 };
-FakeElement.prototype.appendChild = function (c) { c._parent = this; this._children.push(c); return c; };
+// Like the DOM, appending a node that already has a parent moves it.
+FakeElement.prototype.appendChild = function (c) {
+  if (c._parent) c._parent._children = c._parent._children.filter(function (x) { return x !== c; });
+  c._parent = this;
+  this._children.push(c);
+  return c;
+};
 FakeElement.prototype.insertBefore = function (c, ref) {
   if (c._parent) c._parent._children = c._parent._children.filter(function (x) { return x !== c; });
   c._parent = this;
