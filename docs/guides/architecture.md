@@ -845,6 +845,18 @@ Three readers apply it, and none holds a colour of its own:
 
 The client holds no copy of the palettes: `modules/theme-colors.js` takes them from `ClagenticThemeCore.builtin`, which the server appends to `/theme-core.js` from the theme files (`lib/theme-seed.js`, the way it builds `/theme-seed.css`) and which the script reads from the files itself under Node. `test/theme-palette.test.js` fails if a palette value appears in any shipped script, page or manifest. The same test checks that every variable the frontend reads is defined in both themes and in a custom theme, that Dark and Light equal `docs/brand/BRAND.md`, and that text and boundary pairs meet WCAG AA.
 
+## Settings navigation (phone)
+
+On a phone, settings are one place reached one way: **More, Settings, a section**. The More sheet holds the tools and one Settings entry; no setting is edited in the sheet.
+
+- **`modules/settings-hub.js`** is the Settings list (`#settings-hub`). It lists the areas the user may use, each with its sections: Personal (User Settings), Project (the open project) and Server. Choosing a section opens that area's panel on it. The panel's Back bar returns to the list; the list's own Back leaves Settings.
+- **`modules/settings-nav.js`** is the shared component: `readNavGroups` reads an area's sections from its desktop section list in `index.html` (so names, order and grouping equal desktop's by construction), `renderSettingsNav` draws the list, `mountSettingsBack` adds the Back bar each panel shows on a phone. Per-use options (selectors, danger class, area titles) are arguments, not forks. It replaced the section pill and "Jump to setting" overlay copied into Server and Project Settings and the native select in User Settings.
+- **`modules/settings-access.js`** decides which areas are offered (`settingsAreaIds`) and holds the project-settings rule (`canOpenProjectSettings`), shared with the desktop project menu. The checks sit at the openers, so every route passes them: `openProjectSettings` checks the permission, `openServerSettings` asks the administrator check that shows the gear button.
+- Desktop is unchanged: each panel keeps its section list and close button, and Server Settings keeps its Cmd+K palette. `settings-nav.css` styles nothing above 768px.
+- Overlays nest on a phone (the list under a panel), so `overlay-history.js` recognises the popstate caused by its own `history.back()` (`consumeOwnPopstate`) and does not read it as a back swipe.
+
+`test/settings-nav.test.js` and `test/settings-route-permissions.test.js` pin the parity, the Back path, the More sheet contents and the permission checks.
+
 ## Server Connection Log
 
 `handleConnection` and `handleDisconnection` (`lib/project-connection.js`) each log one `[connection]` journal line per browser socket: `[connection] connect: project=<slug> client=<id> user=<id|-> session=<localId|->` and `[connection] disconnect: ...` with the same fields plus `duration_s`. `client` is the per-connection label (`c-` and eight hex digits) made once and stored on the socket (`clientIdOf`, `lib/prompt-source.js`), so a connect and its disconnect share it and it matches the `client=` on a prompt-settle line. `user` is the internal user id; `session` is the session the socket is on at that moment. Every value passes `lib/log-field.js`. Never logged: the ws ticket, cookies, headers, tokens, the remote address, the username or the email. A tab that holds two sockets shows as two connect lines without a disconnect.

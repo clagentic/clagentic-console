@@ -512,6 +512,11 @@
     </div>
   </div>
 
+  <!-- Phone Settings list (More, Settings, a section). Filled by modules/settings-hub.js -->
+  <div id="settings-hub" class="hidden" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="settings-hub-body" id="settings-hub-body"></div>
+  </div>
+
   <!-- Mobile bottom tab bar -->
   <div id="mobile-tab-bar">
     <button class="mobile-tab" data-tab="projects" id="mob-tab-projects"><i data-lucide="layout-grid"></i><span class="mobile-tab-label">Projects</span><span class="mobile-tab-projects-badge hidden"></span></button>
@@ -575,12 +580,6 @@
       <div class="project-settings-nav">
         <div class="project-settings-nav-inner">
           <div class="server-settings-nav-header" id="ps-nav-title">-</div>
-          <button id="ps-nav-pill" class="settings-nav-pill" aria-haspopup="dialog" aria-expanded="false">
-            <span class="settings-nav-pill-group" id="ps-nav-pill-group">General</span>
-            <span class="settings-nav-pill-divider"></span>
-            <span class="settings-nav-pill-label" id="ps-nav-pill-label">Profile</span>
-            <span class="settings-nav-pill-chevron"><i data-lucide="chevron-down"></i></span>
-          </button>
           <div class="server-settings-nav-items">
             <div class="settings-nav-category">General</div>
             <button class="settings-nav-item active" data-section="profile"><span>Profile</span></button>
@@ -777,17 +776,6 @@
       </div>
     </div>
   </div>
-  <div id="ps-palette" class="settings-palette hidden" role="dialog" aria-modal="true" aria-label="Jump to setting">
-    <div class="settings-palette-backdrop"></div>
-    <div class="settings-palette-dialog">
-      <div class="settings-palette-input-row">
-        <i data-lucide="search" class="settings-palette-search-icon"></i>
-        <input id="ps-palette-input" class="settings-palette-input" type="text" placeholder="Jump to setting…" autocomplete="off" spellcheck="false" />
-        <span class="settings-palette-esc-hint">esc</span>
-      </div>
-      <div id="ps-palette-results" class="settings-palette-results"></div>
-    </div>
-  </div>
   <div id="terminal-container" class="hidden">
     <div class="terminal-header">
       <div id="terminal-tabs" class="terminal-tabs"></div>
@@ -878,11 +866,6 @@
     </div>
     <div class="us-modal-body">
       <nav class="us-modal-nav">
-        <select id="user-settings-nav-dropdown" class="settings-nav-dropdown">
-          <option value="us-account" selected>Account</option>
-          <option value="us-appearance">Appearance</option>
-          <option value="us-chat">Chat</option>
-        </select>
         <div class="us-modal-nav-items">
           <button class="us-nav-item active" data-section="us-account"><span>Account</span></button>
           <button class="us-nav-item" data-section="us-appearance"><span>Appearance</span></button>
@@ -1020,12 +1003,6 @@
     <div class="server-settings-nav">
       <div class="server-settings-nav-inner">
         <div class="server-settings-nav-header" id="settings-server-name"></div>
-        <button id="settings-nav-pill" class="settings-nav-pill" aria-haspopup="dialog" aria-expanded="false">
-          <span class="settings-nav-pill-group" id="settings-nav-pill-group">General</span>
-          <span class="settings-nav-pill-divider"></span>
-          <span class="settings-nav-pill-label" id="settings-nav-pill-label">Status</span>
-          <span class="settings-nav-pill-chevron"><i data-lucide="chevron-down"></i></span>
-        </button>
         <div class="server-settings-nav-items">
           <div class="settings-nav-category">General</div>
           <button class="settings-nav-item active" data-section="overview"><span>Status</span></button>

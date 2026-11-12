@@ -1,0 +1,190 @@
+/* ==========================================================================
+   Settings navigation (phone) — modules/settings-nav.js, settings-hub.js
+
+   One Settings list (More, Settings, a section) and one Back bar shared by the
+   user, project and server settings panels. Desktop keeps each panel's own
+   section list and close button, so nothing here shows above 768px.
+   ========================================================================== */
+
+.settings-back-bar,
+#settings-hub {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* --- Back bar: arrow and the open section's name --- */
+  .settings-back-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    padding-right: 16px;
+    background: var(--sidebar-bg);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .settings-back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .settings-back-btn .lucide {
+    width: 22px;
+    height: 22px;
+  }
+
+  .settings-back-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* Panels that carry the Back bar drop the chrome it replaces. */
+  .server-settings-nav-header,
+  .server-settings-close-col,
+  .project-settings-close-col,
+  #user-settings .us-modal-header,
+  .us-modal-nav-items {
+    display: none;
+  }
+
+  /* --- User Settings fills the screen like the other two panels --- */
+  #user-settings {
+    padding: 0;
+  }
+
+  .us-modal {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+  }
+
+  .us-modal-body {
+    flex-direction: column;
+  }
+
+  .us-modal-nav {
+    width: 100%;
+    padding: var(--safe-top) 0 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-y: visible;
+  }
+
+  .us-modal-nav .settings-back-bar {
+    border-bottom: none;
+  }
+
+  /* 44px targets for the controls User Settings reaches on a phone */
+  #user-settings .us-btn,
+  #user-settings .settings-btn-sm,
+  #user-settings .settings-select,
+  #user-settings .us-text-input,
+  #user-settings .layout-option,
+  #user-settings .settings-toggle-row {
+    min-height: 44px;
+  }
+
+  /* --- The Settings list --- */
+  #settings-hub {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    inset: 0;
+    z-index: 260;
+    padding-top: var(--safe-top);
+    background: var(--bg);
+  }
+
+  #settings-hub.hidden {
+    display: none;
+  }
+
+  .settings-hub-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding-bottom: calc(var(--safe-bottom) + 16px);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-nav-area-title {
+    margin: 0;
+    padding: 20px 16px 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .settings-nav-area-subtitle {
+    margin-left: 8px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-dimmer);
+  }
+
+  .settings-nav-group-title {
+    margin: 0;
+    padding: 10px 16px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dimmer);
+  }
+
+  .settings-nav-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 16px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .settings-nav-row:active {
+    background: var(--accent-8);
+  }
+
+  .settings-nav-row-label {
+    flex: 1;
+  }
+
+  .settings-nav-row .lucide {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+
+  .settings-nav-row-danger,
+  .settings-nav-row-danger .lucide {
+    color: var(--error);
+  }
+}
