@@ -206,7 +206,7 @@ for (var i = 0; i < args.length; i++) {
   // The agent verbs' lines come from the one usage source their own --help reads.
   require("../lib/cli/agent-usage").topLevelLines().forEach(function (line) { console.log(line); });
   console.log("         Each of these takes -h or --help for its own usage");
-  console.log("       clagentic-console settings get <key>  Print one server-wide setting's value and default as JSON (agent-readable; known keys: promptExpiryMinutes, chatWidth)");
+  console.log("       clagentic-console settings get <key>  Print one server-wide setting's value and default as JSON (agent-readable; known keys: promptExpiryMinutes, chatWidth, sessionListAvatars)");
   console.log("       clagentic-console settings set <key> <value>  Change a server-wide setting; prints the value read back from the daemon (value is JSON when it parses; exit 1 if refused)");
   console.log("       clagentic-console settings list  List the settings with their values and defaults as JSON");
   console.log("       clagentic-console release list-betas  List promotable beta versions (maintainer/release-engineering)");

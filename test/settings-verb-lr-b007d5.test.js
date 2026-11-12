@@ -24,6 +24,7 @@ var DAEMON_SCRIPT = path.join(ROOT, "lib", "daemon.js");
 var CLI = path.join(ROOT, "bin", "cli.js");
 var KEY = "promptExpiryMinutes";
 var WIDTH_KEY = "chatWidth";
+var AVATARS_KEY = "sessionListAvatars";
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -59,6 +60,11 @@ var PICK_ROWS = [
   [WIDTH_KEY, "", false, /compact, comfortable, wide, full/],
   [WIDTH_KEY, 820, false, /compact, comfortable, wide, full/],
   [WIDTH_KEY, undefined, false, /compact, comfortable, wide, full/],
+  [AVATARS_KEY, true, true],
+  [AVATARS_KEY, false, true],
+  [AVATARS_KEY, "false", false, /true or false/],
+  [AVATARS_KEY, 0, false, /true or false/],
+  [AVATARS_KEY, undefined, false, /true or false/],
 ];
 
 test("registry: pick accepts a valid value and refuses the rest with the entry's shared reason", function () {
@@ -84,7 +90,19 @@ test("registry: an unknown key and inherited names are not settings", function (
   assert.equal(registry.findSetting("nope"), null);
   assert.equal(registry.findSetting("constructor"), null);
   assert.equal(registry.findSetting("__proto__"), null);
-  assert.deepEqual(registry.settingKeys(), [KEY, WIDTH_KEY]);
+  assert.deepEqual(registry.settingKeys(), [KEY, WIDTH_KEY, AVATARS_KEY]);
+});
+
+test("registry: sessionListAvatars defaults on, stores false and removes the key at the default", function () {
+  var entry = registry.findSetting(AVATARS_KEY);
+  assert.equal(entry.default, true);
+  assert.equal(entry.read({}), true);
+  assert.equal(entry.read({ sessionListAvatars: "no" }), true, "a stale value is not a boolean");
+  var cfg = {};
+  entry.apply(cfg, false);
+  assert.equal(entry.read(cfg), false);
+  entry.apply(cfg, true);
+  assert.equal("sessionListAvatars" in cfg, false);
 });
 
 test("registry: chatWidth reads the default when unset, stores a step and removes the key at the default", function () {
@@ -173,6 +191,7 @@ test("handler: an unknown key is unknown-key for get and set; list names the key
   assert.deepEqual(listed, { ok: true, result: "listed", settings: [
     { key: KEY, value: 30, default: 30 },
     { key: WIDTH_KEY, value: "comfortable", default: "comfortable" },
+    { key: AVATARS_KEY, value: true, default: true },
   ] });
   assert.equal(deps.calls.set.length, 0);
 });
@@ -389,6 +408,7 @@ var CLI_CASES = [
   [["list"], 0, { settings: [
     { key: KEY, value: 10, default: 30 },
     { key: WIDTH_KEY, value: "comfortable", default: "comfortable" },
+    { key: AVATARS_KEY, value: true, default: true },
   ] }, null],
   [["set", KEY, "abc"], 1, { result: "refused" }, null],
   [["get", "nope"], 1, { result: "unknown-key" }, null],
@@ -397,6 +417,10 @@ var CLI_CASES = [
   [["get", WIDTH_KEY], 0, { ok: true, result: "read", key: WIDTH_KEY, value: "wide", default: "comfortable" }, null],
   [["set", WIDTH_KEY, "bubble"], 1, { result: "refused", value: "wide" }, null],
   [["set", WIDTH_KEY, "comfortable"], 0, {}, function (c) { return !("chatWidth" in c); }],
+  [["set", AVATARS_KEY, "false"], 0, { ok: true, result: "saved", key: AVATARS_KEY, value: false, default: true }, function (c) { return c.sessionListAvatars === false; }],
+  [["get", AVATARS_KEY], 0, { ok: true, result: "read", key: AVATARS_KEY, value: false, default: true }, null],
+  [["set", AVATARS_KEY, "off"], 1, { result: "refused", value: false }, null],
+  [["set", AVATARS_KEY, "true"], 0, {}, function (c) { return !("sessionListAvatars" in c); }],
 ];
 
 test("cli against the daemon: set, get, list, a refused value and an unknown key behave as the table says, and a default clears the key", function () {
