@@ -155,13 +155,14 @@ async function createServer(opts) {
     init: function () { return Promise.resolve({ models: [], skills: [] }); },
     supportedModels: function () { return Promise.resolve([]); },
   };
+  var adapters = { claude: adapter };
   var bridge = require(libPath("sdk-bridge")).createSDKBridge({
     cwd: home,
     slug: "harness",
     sessionManager: sm,
     send: transport.send,
     adapter: adapter,
-    adapters: { claude: adapter },
+    adapters: adapters,
     getNotificationsModule: getNotificationsModule,
     onProcessingChanged: function () {},
     pushModule: opts.pushModule || null,
@@ -206,8 +207,6 @@ async function createServer(opts) {
   } else {
     session = sm.createSessionRaw({});
     session.cliSessionId = "harness-" + path.basename(home);
-    // A session that has run is bound to its vendor, as the first message binds it.
-    session.vendor = "claude";
     sm.saveSessionFile(session);
   }
 
@@ -237,6 +236,11 @@ async function createServer(opts) {
     },
 
     queryOptions: queryOptions,
+
+    // The project's default adapter and its adapter table, as the bridge holds
+    // them, so a test can add an agent or take the default away.
+    adapter: adapter,
+    adapters: adapters,
 
     /**
      * A canUseTool call as the SDK makes it, in process. hints carries the

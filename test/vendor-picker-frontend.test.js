@@ -268,6 +268,18 @@ test("session_switched applies the settled vendor again after resetClientState()
 });
 
 [
+  { name: "the page's vendor", state: { currentVendor: "codex", activeSessionId: 1, sessionVendors: { 1: "claude" } }, want: "Message Codex..." },
+  { name: "no page vendor: the session list's vendor", state: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "codex" } }, want: "Message Codex..." },
+  { name: "no vendor known anywhere: neutral wording, never Claude", state: { currentVendor: null, activeSessionId: 1, sessionVendors: {} }, want: "Message the assistant..." },
+  { name: "a vendor the registry does not know: neutral wording", state: { currentVendor: "ghost", activeSessionId: 1, sessionVendors: {} }, want: "Message the assistant..." },
+].forEach(function (row) {
+  test("composer placeholder: " + row.name, async function () {
+    var [, identity] = await sessionVendorModules();
+    assert.equal(identity.composerPlaceholder(function (k) { return row.state[k]; }), row.want);
+  });
+});
+
+[
   { name: "another session's model_info", msg: { vendor: "claude", sessionId: 2 }, state: { currentVendor: null, activeSessionId: 1 }, foreign: true },
   { name: "another vendor's model_info on a bound page", msg: { vendor: "claude" }, state: { currentVendor: "codex", activeSessionId: 1 }, foreign: true },
   { name: "this session's own model_info", msg: { vendor: "codex", sessionId: 1 }, state: { currentVendor: "codex", activeSessionId: 1 }, foreign: false },
