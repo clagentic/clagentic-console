@@ -48,6 +48,70 @@ test("null in a new window does not keep the old value", function () {
   assert.equal(snap(s).vendors.claude.buckets.five_hour.utilization, null);
 });
 
+// Reset signals: each row records `first` then `second` on seven_day and checks
+// the current and pre-reset fields of the second reading.
+var T0 = new Date(NOW - 120000).toISOString();
+[
+  { name: "status drop to allowed, same resetsAt, no utilization: null plus labelled pre-reset value",
+    first: { utilization: 0.99, resetsAt: FUTURE, status: "allowed_warning" },
+    second: { resetsAt: FUTURE, status: "allowed" },
+    want: { utilization: null, lastKnownUtilization: 0.99, lastKnownObservedAt: T0, lastKnownPreReset: true } },
+  { name: "rejected to allowed_warning is a drop too",
+    first: { utilization: 1, resetsAt: FUTURE, status: "rejected" },
+    second: { resetsAt: FUTURE, status: "allowed_warning" },
+    want: { utilization: null, lastKnownUtilization: 1, lastKnownObservedAt: T0, lastKnownPreReset: true } },
+  { name: "changed resetsAt, no utilization: null plus labelled pre-reset value",
+    first: { utilization: 0.7, resetsAt: FUTURE, status: "allowed" },
+    second: { resetsAt: FUTURE + 604800, status: "allowed" },
+    want: { utilization: null, lastKnownUtilization: 0.7, lastKnownObservedAt: T0, lastKnownPreReset: true } },
+  { name: "same status and resetsAt carries the value over with its own time",
+    first: { utilization: 0.7, resetsAt: FUTURE, status: "allowed_warning" },
+    second: { resetsAt: FUTURE, status: "allowed_warning" },
+    want: { utilization: 0.7, utilizationObservedAt: T0, lastKnownUtilization: null, lastKnownObservedAt: null, lastKnownPreReset: false } },
+  { name: "status rising carries the value over",
+    first: { utilization: 0.7, resetsAt: FUTURE, status: "allowed" },
+    second: { resetsAt: FUTURE, status: "allowed_warning" },
+    want: { utilization: 0.7, lastKnownPreReset: false } },
+  { name: "an unknown status is never a reset signal",
+    first: { utilization: 0.7, resetsAt: FUTURE, status: "allowed_warning" },
+    second: { resetsAt: FUTURE, status: "mystery" },
+    want: { utilization: 0.7, lastKnownPreReset: false } },
+  { name: "an event carrying a utilization after a drop reports it as current",
+    first: { utilization: 0.99, resetsAt: FUTURE, status: "allowed_warning" },
+    second: { utilization: 0.05, resetsAt: FUTURE, status: "allowed" },
+    want: { utilization: 0.05, lastKnownUtilization: null, lastKnownObservedAt: null, lastKnownPreReset: false } },
+  { name: "an event reporting 0 after a reset is 0, not null",
+    first: { utilization: 0.99, resetsAt: FUTURE, status: "allowed_warning" },
+    second: { utilization: 0, resetsAt: FUTURE, status: "allowed" },
+    want: { utilization: 0, lastKnownPreReset: false } },
+].forEach(function (row) {
+  test("reset signal: " + row.name, function () {
+    var s = createUsageStore();
+    s.record("claude", Object.assign({ rateLimitType: "seven_day" }, row.first), { now: NOW - 120000 });
+    s.record("claude", Object.assign({ rateLimitType: "seven_day" }, row.second), { now: NOW });
+    var b = snap(s).vendors.claude.buckets.seven_day;
+    Object.keys(row.want).forEach(function (k) { assert.equal(b[k], row.want[k], k); });
+  });
+});
+
+test("a further event without utilization keeps the pre-reset value until one arrives", function () {
+  var s = createUsageStore();
+  s.record("claude", { rateLimitType: "seven_day", utilization: 0.99, resetsAt: FUTURE, status: "allowed_warning" }, { now: NOW - 120000 });
+  s.record("claude", { rateLimitType: "seven_day", resetsAt: FUTURE, status: "allowed" }, { now: NOW - 60000 });
+  s.record("claude", { rateLimitType: "seven_day", resetsAt: FUTURE, status: "allowed" }, { now: NOW });
+  var b = snap(s).vendors.claude.buckets.seven_day;
+  assert.equal(b.utilization, null);
+  assert.equal(b.lastKnownUtilization, 0.99);
+  assert.equal(b.lastKnownObservedAt, T0);
+  assert.equal(b.lastKnownPreReset, true);
+});
+
+test("never-seen bucket carries the pre-reset fields as null", function () {
+  var b = snap(createUsageStore()).vendors.claude.buckets.seven_day;
+  assert.equal(b.lastKnownUtilization, null);
+  assert.equal(b.lastKnownPreReset, false);
+});
+
 test("resetsAt in the past is expired and not zeroed", function () {
   var s = createUsageStore();
   s.record("claude", { rateLimitType: "five_hour", utilization: 0.9, resetsAt: PAST }, { now: NOW - 5000 });
