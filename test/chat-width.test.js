@@ -65,21 +65,24 @@ function store(users) {
   return { prefs: prefs, data: data, saves: function () { return saves; } };
 }
 
-[
+var MIGRATION_ROWS = [
   [{ id: "a", chatLayout: "bubble" }, "comfortable"],
   [{ id: "a", chatLayout: "channel" }, "full"],
   [{ id: "a", chatLayout: "bubble", chatWidth: "wide" }, "wide"],
   [{ id: "a", chatLayout: "channel", chatWidth: "compact" }, "compact"],
   [{ id: "a", chatLayout: "something-else" }, undefined],
-].forEach(function (row) {
-  test("migration: " + JSON.stringify(row[0]) + " becomes " + String(row[1]), function () {
+];
+
+test("migration: each stored layout becomes its width once, the old key is dropped and nothing is saved twice", function () {
+  MIGRATION_ROWS.forEach(function (row) {
+    var label = JSON.stringify(row[0]) + " becomes " + String(row[1]);
     var s = store([Object.assign({}, row[0])]);
-    assert.deepEqual(s.prefs.migrateAllChatLayouts(), { changed: 1 });
-    assert.equal(s.data.users[0].chatWidth, row[1]);
-    assert.equal("chatLayout" in s.data.users[0], false, "the old key is dropped");
-    assert.equal(s.saves(), 1);
-    assert.deepEqual(s.prefs.migrateAllChatLayouts(), { changed: 0 }, "it runs once");
-    assert.equal(s.saves(), 1, "and saves nothing the second time");
+    assert.deepEqual(s.prefs.migrateAllChatLayouts(), { changed: 1 }, label);
+    assert.equal(s.data.users[0].chatWidth, row[1], label);
+    assert.equal("chatLayout" in s.data.users[0], false, label + ": the old key is dropped");
+    assert.equal(s.saves(), 1, label);
+    assert.deepEqual(s.prefs.migrateAllChatLayouts(), { changed: 0 }, label + ": it runs once");
+    assert.equal(s.saves(), 1, label + ": and saves nothing the second time");
   });
 });
 
@@ -180,21 +183,30 @@ function mockClock(t) {
   t.clockMocked = true;
 }
 
-async function freshWidthModule(t, profile, seed) {
+// holdPuts: each save stays unanswered until release() answers the oldest one.
+async function freshWidthModule(t, profile, seed, holdPuts) {
   mockClock(t);
   dom.setupGlobals();
   document.documentElement = new dom.FakeElement("html");
   Object.keys(seed || {}).forEach(function (k) { global.localStorage.setItem(k, seed[k]); });
   var puts = [];
+  var held = [];
   global.fetch = function (url, init) {
     if (init && init.method === "PUT") {
       puts.push([url, JSON.parse(init.body)]);
-      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ ok: true }); } });
+      var answer = { ok: true, json: function () { return Promise.resolve({ ok: true }); } };
+      if (!holdPuts) return Promise.resolve(answer);
+      return new Promise(function (resolve) { held.push(function () { resolve(answer); }); });
     }
     return Promise.resolve({ ok: profile !== null, json: function () { return Promise.resolve(profile); } });
   };
   var mod = await import(dom.moduleUrl("chat-width.js") + "?load=" + (++loads));
-  return { mod: mod, puts: puts, attr: function () { return document.documentElement.dataset.chatWidth; } };
+  return {
+    mod: mod,
+    puts: puts,
+    release: function () { held.shift()(); return new Promise(function (resolve) { setImmediate(resolve); }); },
+    attr: function () { return document.documentElement.dataset.chatWidth; },
+  };
 }
 
 test("load: the saved width applies when the page loads, on another device, without opening settings", async function (t) {
@@ -213,18 +225,17 @@ test("load: with no saved choice anywhere the default applies; a failed profile 
   assert.equal(b.attr(), "compact");
 });
 
-[
-  ["bubble", "comfortable"],
-  ["channel", "full"],
-].forEach(function (row) {
-  test("load: a stale local " + row[0] + " becomes " + row[1] + " once, with no prompt, and the old key is removed", async function (t) {
+test("load: a stale local bubble or channel becomes comfortable or full once, with no prompt, and the old key is removed", async function (t) {
+  var rows = [["bubble", "comfortable"], ["channel", "full"]];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
     var env = await freshWidthModule(t, null, { "clagentic-wide-view": row[0] });
     await env.mod.initChatWidth();
-    assert.equal(env.attr(), row[1]);
-    assert.equal(global.localStorage.getItem("clagentic-chat-width"), row[1]);
-    assert.equal(global.localStorage.getItem("clagentic-wide-view"), null);
-    assert.deepEqual(env.puts, [], "nothing is sent to the server by the migration");
-  });
+    assert.equal(env.attr(), row[1], row[0]);
+    assert.equal(global.localStorage.getItem("clagentic-chat-width"), row[1], row[0]);
+    assert.equal(global.localStorage.getItem("clagentic-wide-view"), null, row[0]);
+    assert.deepEqual(env.puts, [], row[0] + ": nothing is sent to the server by the migration");
+  }
 });
 
 test("change: choosing a width applies at once with no reload, is cached and saved, and a late profile reply does not undo it", async function (t) {
@@ -240,6 +251,48 @@ test("change: choosing a width applies at once with no reload, is cached and sav
   assert.equal(global.localStorage.getItem("clagentic-chat-width"), "compact");
   assert.equal(env.mod.setChatWidth("bubble"), false, "a layout is not a width");
   assert.ok(heard.indexOf("compact") !== -1);
+});
+
+// Cases that need a module of their own: saves kept in flight, and listeners
+// that unsubscribe or throw while a change is announced.
+var CHANGE_CASES = [
+  ["quick choices are saved one at a time and only the latest is kept", async function (env) {
+    env.mod.setChatWidth("wide");
+    env.mod.setChatWidth("compact");
+    env.mod.setChatWidth("full");
+    assert.deepEqual(env.puts, [["/api/user/chat-width", { chatWidth: "wide" }]], "one save in flight");
+    await env.release();
+    assert.deepEqual(env.puts.slice(1), [["/api/user/chat-width", { chatWidth: "full" }]], "the last choice follows, the middle one is dropped");
+    await env.release();
+    assert.equal(env.puts.length, 2);
+    env.mod.setChatWidth("wide");
+    assert.equal(env.puts.length, 3, "idle again: the next choice is sent at once");
+    assert.equal(env.attr(), "wide");
+  }],
+  ["a listener that unsubscribes itself does not make the next one miss the change", async function (env) {
+    var heard = [];
+    var off = env.mod.onChatWidthChange(function () { heard.push("first"); off(); });
+    env.mod.onChatWidthChange(function () { heard.push("second"); });
+    env.mod.applyChatWidth("wide");
+    assert.deepEqual(heard, ["first", "second"]);
+  }],
+  ["a listener that throws is reported and the next one still runs", async function (env, t) {
+    var reported = t.mock.method(console, "error", function () {});
+    var heard = [];
+    env.mod.onChatWidthChange(function () { throw new Error("boom"); });
+    env.mod.onChatWidthChange(function (w) { heard.push(w); });
+    env.mod.applyChatWidth("wide");
+    assert.deepEqual(heard, ["wide"]);
+    assert.equal(reported.mock.callCount(), 1);
+    assert.match(String(reported.mock.calls[0].arguments[1]), /boom/);
+  }],
+];
+
+test("change cases: saves are serialized and listeners are isolated", async function (t) {
+  for (var i = 0; i < CHANGE_CASES.length; i++) {
+    var env = await freshWidthModule(t, null, null, true);
+    await CHANGE_CASES[i][1](env, t);
+  }
 });
 
 test("the Appearance choice lists the four steps beside the theme, marks the current one and keeps itself current", async function (t) {

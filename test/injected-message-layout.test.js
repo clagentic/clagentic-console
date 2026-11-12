@@ -124,7 +124,8 @@ function childClasses(el) {
   return el._children.map(function (c) { return c.className; });
 }
 
-// What each child of a header is, in DOM order.
+// The own header is the other header mirrored with the same children, so the
+// tests assert on this kind order and not on class names or pixel positions.
 function headerKinds(head) {
   return head._children.map(function (c) {
     if (c.classList.contains("msg-header-avatar")) return "avatar";
