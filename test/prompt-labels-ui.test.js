@@ -193,7 +193,7 @@ var ASK_ROWS = [
   ["AC1 the command, never the description", "Bash", { command: "find /var/tmp", description: "placeholder" }, "run", "find /var/tmp"],
   ["AC1 a long command is trimmed", "Bash", { command: LONG }, "run", "x".repeat(80) + "..."],
   ["AC4 export prefix shortened to names", "Bash", { command: "export CLAGENTIC_SUBAGENT_ID=af5860c5-1111; find /var/tmp -name x", description: "placeholder" }, "run", "(sets CLAGENTIC_SUBAGENT_ID) find /var/tmp -name x"],
-  ["AC4 inline assignments, quoted value", "Bash", { command: "A=1 B='x y' make test" }, "run", "(sets A, B) make test"],
+  ["AC4 inline assignments, quoted value is not shortened", "Bash", { command: "A=1 B='x y' make test" }, "run", "A=1 B='x y' make test"],
   ["AC4 several export statements", "Bash", { command: "export A=1; export B=2 && ls -l" }, "run", "(sets A, B) ls -l"],
   ["AC4 many names are counted", "Bash", { command: "A=1 B=2 C=3 D=4 E=5 make" }, "run", "(sets A, B, C +2) make"],
   ["AC4 a value that runs a command is not hidden", "Bash", { command: "A=$(rm -rf x) ls" }, "run", "A=$(rm -rf x) ls"],

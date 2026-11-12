@@ -121,6 +121,11 @@ var SUMMARY_ROWS = [
   ["inline assignment", "NAME=value cmd args", "(sets NAME) cmd args"],
   ["no assignments, unchanged", "ls -l", "ls -l"],
   ["a value that runs a command is not hidden", "A=`id` ls", "A=`id` ls"],
+  ["a dollar-brace default with a space is not shortened", "A=${x:-foo bar} rm -rf data", "A=${x:-foo bar} rm -rf data"],
+  ["a dollar-paren substitution is not shortened", "A=$(id) ls", "A=$(id) ls"],
+  ["a backtick substitution is not shortened", "A=`id` rm -rf data", "A=`id` rm -rf data"],
+  ["a quoted value with a space is not shortened", "A=\"x y\" cmd", "A=\"x y\" cmd"],
+  ["a plain literal still shortens", "export CLAGENTIC_SUBAGENT_ID=af5860c5-1234; find .", "(sets CLAGENTIC_SUBAGENT_ID) find ."],
   ["a line break after a comment shows the next command as separate", "echo ok # note\nrm -rf data", "echo ok # note ⏎ rm -rf data"],
   ["a bidirectional control is written out, not passed through", "echo ‮gnp.txt⁦ ok", "echo \\u202Egnp.txt\\u2066 ok"],
 ];
