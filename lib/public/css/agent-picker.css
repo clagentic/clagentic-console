@@ -119,13 +119,35 @@
 }
 
 /* The agent's avatar in a session list (Appearance: "Avatars in session list").
- * 20 px and round, in the slot the badge uses when the setting is off. */
+ * 20 px and round, leading the row, 8 px before what follows. */
 .session-list-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  object-fit: cover;
   flex-shrink: 0;
-  margin-right: 4px;
+  margin-right: 8px;
   vertical-align: middle;
 }
+
+.session-list-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* An agent with no picked image: its initial, 12 px bold, on one of four tints. */
+.agent-avatar-initial {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--on-av);
+}
+
+.agent-avatar-tint-0 { background: var(--av0); }
+.agent-avatar-tint-1 { background: var(--av1); }
+.agent-avatar-tint-2 { background: var(--av2); }
+.agent-avatar-tint-3 { background: var(--av3); }
