@@ -503,8 +503,11 @@ test("the exit codes follow the session verbs: 0 done, 1 anything else", functio
 test("bin/cli.js dispatches schedule-input and lists the verbs in its help; the daemon routes all three commands", function () {
   var bin = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
   assert.match(bin, /args\[0\] === "schedule-input"/);
+  // The help lines come from the shared usage source the verbs' own --help reads.
+  assert.match(bin, /agent-usage"\)\.topLevelLines\(\)/);
+  var usageSource = fs.readFileSync(path.join(__dirname, "..", "lib", "cli", "agent-usage.js"), "utf8");
   ["create", "list", "delete"].forEach(function (sub) {
-    assert.match(bin, new RegExp("schedule-input " + sub + " "));
+    assert.match(usageSource, new RegExp("clagentic-console schedule-input " + sub + " "));
   });
   var daemon = fs.readFileSync(path.join(__dirname, "..", "lib", "daemon.js"), "utf8");
   ["schedule_input_create", "schedule_input_list", "schedule_input_delete"].forEach(function (cmd) {
