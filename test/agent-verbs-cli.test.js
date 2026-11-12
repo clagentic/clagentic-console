@@ -31,7 +31,7 @@ function session(localId, runtime, extra) {
   return Object.assign({
     localId: localId,
     cliSessionId: "cli-" + localId,
-    agentName: "holden",
+    agentName: "agent-a",
     vendor: "claude",
     title: "t" + localId,
     lastActivity: 1700000000000 + localId * 1000,
@@ -109,7 +109,7 @@ function inputFor(sessions, extra) {
 
 var INJECTED = {
   type: "user_message", text: "hi", initiator: "trigger", entryFormat: 1, senderKind: "extracted",
-  fromName: "naomi@ops", senderProject: "ops", senderVendor: "claude", senderCliSessionId: "cli-sender",
+  fromName: "user@example", senderProject: "ops", senderVendor: "claude", senderCliSessionId: "cli-sender",
 };
 
 test("list-sessions: the daemon's rows carry no verbose fields and no host by default", function () {
@@ -126,8 +126,8 @@ test("list-sessions: verbose adds opened-at, opener, last sender, turn count, mi
   var row = out.sessions[0];
   assert.equal(row.consoleSessionId, "4");
   assert.equal(row.openedAt, new Date(1699990004000).toISOString());
-  assert.deepEqual(row.opener, { kind: "extracted", name: "naomi@ops", project: "ops", initiator: "trigger" });
-  assert.deepEqual(row.lastInjectedSender, { project: "ops", vendor: "claude", sessionId: "cli-sender", name: "naomi@ops" });
+  assert.deepEqual(row.opener, { kind: "extracted", name: "user@example", project: "ops", initiator: "trigger" });
+  assert.deepEqual(row.lastInjectedSender, { project: "ops", vendor: "claude", sessionId: "cli-sender", name: "user@example" });
   assert.equal(row.turnCount, 7);
   assert.equal(row.midTurn, true);
   assert.deepEqual(row.memory, { heapEntries: 2 });
@@ -142,7 +142,7 @@ test("list-sessions: a session whose history starts after its first message has 
   var trimmed = session(4, "idle", { history: [INJECTED], _historyBaseIndex: 40 });
   var row = inputFor([trimmed]).listSessions({ verbose: true }).sessions[0];
   assert.equal(row.opener, null);
-  assert.equal(row.lastInjectedSender.name, "naomi@ops");
+  assert.equal(row.lastInjectedSender.name, "user@example");
 });
 
 test("list-sessions: the host load reads null free memory when the daemon gives no reader", function () {
@@ -151,7 +151,7 @@ test("list-sessions: the host load reads null free memory when the daemon gives 
 
 test("send-input: the candidates of an ambiguous address carry the verbose fields", function () {
   var twins = [session(1, "idle", { turnCount: 3 }), session(2, "idle", { turnCount: 9 })];
-  var out = inputFor(twins).sendInput({ to: "holden@lane", prompt: "go" });
+  var out = inputFor(twins).sendInput({ to: "agent-a@lane", prompt: "go" });
   assert.equal(out.result, "ambiguous");
   assert.deepEqual(out.candidates.map(function (c) { return c.turnCount; }).sort(), [3, 9]);
   out.candidates.forEach(function (c) {
@@ -314,32 +314,69 @@ function quietHome(prefix) {
   return home;
 }
 
-// One shared table: every agent verb and subcommand, each with -h and --help,
-// run as a real process (the exit code and the stream are what is checked).
+// One in-process table: every agent verb and subcommand, each with -h and --help.
+// The verb prints through console.log and sets process.exitCode; the capture below
+// feeds that output to exitFlushed's injected io, so the stream and the exit code
+// are read the way the CLI ends.
 var CASES = [];
 agentUsage.VERB_ORDER.forEach(function (key) {
   ["-h", "--help"].forEach(function (flag) {
-    CASES.push({ key: key, argv: key.split(" ").concat([flag]) });
+    CASES.push({ key: key, args: key.split(" ").concat([flag]) });
   });
 });
-CASES.push({ key: "schedule-input", argv: ["schedule-input", "--help"] });
-CASES.push({ key: "schedule-input", argv: ["schedule-input", "-h"] });
+CASES.push({ key: "schedule-input", args: ["schedule-input", "--help"] });
+CASES.push({ key: "schedule-input", args: ["schedule-input", "-h"] });
 
-test("every agent verb and subcommand answers -h and --help with usage on stdout and exit 0", function () {
+function runVerbInProcess(args) {
+  var original = console.log;
+  var savedExitCode = process.exitCode;
+  var text = "";
+  console.log = function (s) { text += s + "\n"; };
+  process.exitCode = undefined;
+  var code;
+  try {
+    if (args[0] === "schedule-input") scheduleCli.runScheduleInput(args.slice(1));
+    else cli.runSessionVerb(args[0], args.slice(1));
+    code = process.exitCode;
+  } finally {
+    console.log = original;
+    process.exitCode = savedExitCode;
+  }
+  return new Promise(function (resolve) {
+    var err = "";
+    var sink = function (collect) {
+      return { write: function (chunk, cb) { collect(chunk); cb(); } };
+    };
+    exitFlushed(code, {
+      out: sink(function () {}),
+      err: sink(function (c) { err += c; }),
+      exit: function (exitCode) { resolve({ stdout: text, stderr: err, status: exitCode }); },
+    });
+  });
+}
+
+CASES.forEach(function (c) {
+  test("help: " + c.args.join(" ") + " prints usage on stdout and exits 0", async function () {
+    var res = await runVerbInProcess(c.args);
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, new RegExp("^Usage: clagentic-console " + c.key));
+    assert.equal(res.stderr, "");
+  });
+});
+
+// The one real process: dispatch from bin/cli.js, the stream and the exit code.
+test("help: a real process answers send-input --help with usage on stdout and exit 0", function () {
   var home = quietHome("agentverbs-");
   try {
-    CASES.forEach(function (c) {
-      var res = childProcess.spawnSync(process.execPath, [CLI].concat(c.argv), {
-        encoding: "utf8",
-        timeout: 15000,
-        cwd: home,
-        env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home }),
-      });
-      var label = c.argv.join(" ");
-      assert.equal(res.status, 0, label + ": " + res.stderr);
-      assert.match(res.stdout, new RegExp("^Usage: clagentic-console " + c.key), label);
-      assert.equal(res.stderr, "", label);
+    var res = childProcess.spawnSync(process.execPath, [CLI, "send-input", "--help"], {
+      encoding: "utf8",
+      timeout: 15000,
+      cwd: home,
+      env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home }),
     });
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /^Usage: clagentic-console send-input/);
+    assert.equal(res.stderr, "");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
