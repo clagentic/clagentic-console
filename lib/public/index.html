@@ -270,8 +270,9 @@
       <div id="app">
     <div id="connect-overlay">
       <svg id="console-logo-svg" viewBox="0 0 112 112" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
-      <p id="connect-overlay-msg">Reconnecting to server…</p>
+      <p id="connect-overlay-msg">Loading Clagentic: Console…</p>
       <button id="connect-overlay-signin-btn" class="hidden">Sign in again</button>
+      <button id="connect-overlay-reload-btn" class="hidden">Reload</button>
     </div>
     <div id="sticky-notes-container" class="hidden"></div>
     <div id="replay-loading" class="hidden">
@@ -2095,7 +2096,102 @@
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0/lib/addon-fit.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0/lib/addon-web-links.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0/lib/addon-webgl.min.js"></script>
-<script type="module" src="app.js"></script>
+<script id="boot-watchdog">
+// Classic script on purpose: a module that fails to evaluate never runs its own
+// handlers, so boot failures can only be observed from outside the module graph.
+// app.js sets window.__clagenticConsoleBooted once boot has run; a failure of
+// the app's own module graph before that swaps the connect overlay to a
+// boot-error state. The reconnect text belongs to app-connection.js and only
+// appears after a successful boot.
+//
+// Only errors attributable to the app count: third-party CDN scripts and browser
+// extensions also raise window errors during boot, and none of those mean the
+// app failed. The decision for a missing or non-running graph is the module
+// script's error event and the window load event. If the signal arrives after an earlier error,
+// the error state is cleared, so a working app is never stranded behind it.
+(function () {
+  var BOOTED = "__clagenticConsoleBooted";
+  var booted = !!window[BOOTED];
+  var reloadBound = false;
+  // Directory of the page: the app's modules are same-origin scripts under it.
+  var appBase = String(location.href).split(/[?#]/)[0];
+  appBase = appBase.slice(0, appBase.lastIndexOf("/") + 1);
+  function ownScript(url) {
+    return typeof url === "string" && url.indexOf(appBase) === 0;
+  }
+  function describe(reason) {
+    if (reason && reason.message) return String(reason.message);
+    if (reason === undefined || reason === null || reason === "") return "Unknown error";
+    return String(reason);
+  }
+  function showBootError(detail) {
+    if (booted) return;
+    var overlay = document.getElementById("connect-overlay");
+    var msg = document.getElementById("connect-overlay-msg");
+    var reload = document.getElementById("connect-overlay-reload-btn");
+    var signin = document.getElementById("connect-overlay-signin-btn");
+    if (!overlay || !msg || overlay.getAttribute("data-state") === "boot-error") return;
+    overlay.setAttribute("data-state", "boot-error");
+    msg.textContent = "Clagentic: Console failed to start. " + detail;
+    if (signin) signin.classList.add("hidden");
+    if (reload) {
+      reload.classList.remove("hidden");
+      if (!reloadBound) {
+        reloadBound = true;
+        reload.addEventListener("click", function () { location.reload(); });
+      }
+    }
+    overlay.classList.remove("hidden");
+  }
+  function clearBootError() {
+    var overlay = document.getElementById("connect-overlay");
+    if (!overlay || overlay.getAttribute("data-state") !== "boot-error") return;
+    var msg = document.getElementById("connect-overlay-msg");
+    var reload = document.getElementById("connect-overlay-reload-btn");
+    overlay.removeAttribute("data-state");
+    if (msg) msg.textContent = "Reconnecting to server…";
+    if (reload) reload.classList.add("hidden");
+    // The overlay stays as it is: app-connection.js hides it on connect.
+  }
+  Object.defineProperty(window, BOOTED, {
+    configurable: true,
+    get: function () { return booted; },
+    set: function (v) {
+      booted = !!v;
+      if (booted) clearBootError();
+    },
+  });
+  window.addEventListener("error", function (e) {
+    if (!e || !ownScript(e.filename)) return;
+    showBootError(describe(e.error || e.message));
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    var reason = e && e.reason;
+    // A rejection has no filename; its stack names the scripts it came through.
+    if (!reason || String(reason.stack || "").indexOf(appBase) === -1) return;
+    showBootError(describe(reason));
+  });
+  // The module script is declared after this script, so it cannot be looked up
+  // here. Its failures are caught from the window instead. A failed fetch or link
+  // of the entry or of any module it imports (missing file, parse error in a
+  // dependency) fires "error" on the entry script element; resource errors do not
+  // bubble, so the listener is capture-phase and matches the target by id. The
+  // window load event fires after the deferred module graph has run or failed;
+  // booted still false by then means the graph ended without the signal.
+  // Trade-off against onerror/onload attributes: no coupling between the tag and
+  // this script's function names, at the cost of one capture listener that sees
+  // every element error and filters it.
+  window.addEventListener("error", function (e) {
+    var t = e && e.target;
+    if (!t || t === window || t.id !== "app-module-script") return;
+    showBootError("A script file could not be loaded (missing or unreachable).");
+  }, true);
+  window.addEventListener("load", function () {
+    if (!window[BOOTED]) showBootError("The app did not finish starting.");
+  });
+})();
+</script>
+<script type="module" src="app.js" id="app-module-script"></script>
 <div id="pwa-install-modal" class="pwa-modal hidden">
   <div class="pwa-modal-backdrop"></div>
   <div class="pwa-modal-card">
