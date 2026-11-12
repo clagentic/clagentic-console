@@ -280,13 +280,15 @@ var PERSIST_FAILURE_ROWS = [
   // [url, request body, the users setter that fails to persist]
   ["/api/user/session-list-avatars", { sessionListAvatars: false }, "setSessionListAvatars"],
   ["/api/user/chat-width", { chatWidth: "wide" }, "setChatWidth"],
+  ["/api/user/auto-continue", { enabled: true }, "setAutoContinue"],
 ];
 
 test("PUT preference routes: bad JSON is a 400, a failure while persisting is logged and a 500", function () {
   var realError = console.error;
   PERSIST_FAILURE_ROWS.forEach(function (row) {
     var ctx = ctxFor({ id: "u1", username: "u" }, {}, []);
-    ctx.users[row[2]] = function () { throw new Error("disk full"); };
+    var setterCalls = 0;
+    ctx.users[row[2]] = function () { setterCalls++; throw new Error("disk full"); };
     var handler = attachSettings(ctx).handleRequest;
     var logged = [];
     console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
@@ -306,6 +308,10 @@ test("PUT preference routes: bad JSON is a 400, a failure while persisting is lo
     listeners.data("{not json");
     listeners.end();
     assert.equal(bad.status, 400, row[0] + ": unparseable body");
+
+    var callsBefore = setterCalls;
+    assert.equal(put(handler, row[0], []).status, 400, row[0] + ": an array body");
+    assert.equal(setterCalls, callsBefore, row[0] + ": an array body stores nothing");
   });
 });
 
