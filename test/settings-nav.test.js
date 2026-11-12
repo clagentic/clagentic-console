@@ -284,7 +284,7 @@ test("More sheet: one Settings entry opens the Settings list", function () {
 
 test("More sheet: no setting is edited in the sheet", function () {
   var body = moreSheetSource();
-  [/Project Settings/, /Server Settings/, /Appearance/, /Chat layout/, /mountThemeChoice/, /setChatLayout/, /setThemeMode/, /fetch\(/].forEach(function (re) {
+  [/Project Settings/, /Server Settings/, /Appearance/, /Chat width/, /mountThemeChoice/, /mountChatWidthChoice/, /setChatWidth/, /setThemeMode/, /fetch\(/].forEach(function (re) {
     assert.doesNotMatch(body, re, String(re));
   });
   var imports = moduleSource("sidebar-mobile.js").split("\n").filter(function (l) { return /^import /.test(l); }).join("\n");
@@ -304,10 +304,13 @@ test("each appearance control exists in exactly one place", function () {
   assert.equal(count, 1);
   var appearance = HTML.slice(HTML.indexOf('<div class="us-section" data-section="us-appearance">'), HTML.indexOf('<div class="us-section" data-section="us-chat">'));
   assert.match(appearance, /us-theme-switcher/);
-  assert.match(appearance, /us-layout-switcher/);
+  assert.match(appearance, /us-width-switcher/);
+  assert.doesNotMatch(appearance, /us-layout-switcher|data-layout=/, "no bubble/channel control remains");
+  assert.equal((HTML.match(/id="us-width-switcher"/g) || []).length, 1);
   assert.match(moduleSource("user-settings.js"), /mountThemeChoice\(themeSwitcher/);
+  assert.match(moduleSource("user-settings.js"), /mountChatWidthChoice\(widthSwitcher/);
   ["sidebar-mobile.js", "settings-hub.js", "settings-nav.js"].forEach(function (name) {
-    assert.doesNotMatch(moduleSource(name), /mountThemeChoice\(/, name);
+    assert.doesNotMatch(moduleSource(name), /mountThemeChoice\(|mountChatWidthChoice\(/, name);
   });
 });
 

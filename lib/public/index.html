@@ -25,24 +25,11 @@
 (function(){try{var s=localStorage,k="clagentic-theme",id=s.getItem(k),cid=s.getItem("clagentic-theme-custom"),r=document.documentElement,m=document.querySelector('meta[name="theme-color"]'),v=cid&&id===cid&&s.getItem("clagentic-theme-migrated")==="3"&&s.getItem(k+"-vars"),mode=s.getItem("clagentic-mode"),light;if(v){var o=JSON.parse(v),p;for(p in o)r.style.setProperty(p,o[p]);light=s.getItem(k+"-variant")==="light"}else{light=mode==="light"||mode!=="dark"&&!!(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)}r.classList.add(light?"light-theme":"dark-theme");r.classList.remove(light?"dark-theme":"light-theme");if(m)m.setAttribute("content",getComputedStyle(r).getPropertyValue("--bg").trim())}catch(e){}})();
 </script>
 <script>if(window.navigator.standalone||window.matchMedia("(display-mode:standalone)").matches){document.documentElement.classList.add("pwa-standalone")}</script>
+<!-- Chat width: the saved step (or the retired bubble/channel choice, mapped once) goes on <html> before first paint; css/base.css turns it into --content-width. modules/chat-width.js reads the same keys; change both together. -->
+<script>
+(function(){try{var s=localStorage,w=s.getItem("clagentic-chat-width")||{bubble:"comfortable",channel:"full"}[s.getItem("clagentic-wide-view")];if(w==="compact"||w==="comfortable"||w==="wide"||w==="full")document.documentElement.setAttribute("data-chat-width",w)}catch(e){}})();
+</script>
 <link rel="stylesheet" href="style.css?v=20260407">
-<style>
-@media(max-width:768px){
-  /* User messages: vertical stack, avatar on top, right-aligned */
-  body.wide-view .msg-user{flex-direction:column!important;align-items:flex-end!important;gap:4px!important;max-width:100%!important;padding:0 16px!important;margin:0 0 8px!important;justify-content:initial!important}
-  body.wide-view .msg-user .dm-bubble-avatar-me{order:-1!important}
-  body.wide-view .msg-user .dm-bubble-content{display:flex!important;flex-direction:column!important;align-items:flex-end!important;width:100%!important;flex:initial!important}
-  body.wide-view .msg-user .bubble{background:var(--user-bubble)!important;border-radius:20px 20px 4px 20px!important;padding:12px 18px!important;max-width:85%!important;width:fit-content!important;font-size:15px!important;line-height:1.55!important;white-space:pre-wrap!important;word-wrap:break-word!important}
-  body.wide-view .msg-user:hover{background:initial!important}
-  /* Assistant messages: row (avatar left), keep channel style */
-  body.wide-view .msg-assistant{max-width:100%!important;padding:4px 16px!important;margin:0 0 12px!important}
-  body.wide-view .msg-assistant .md-content{background:initial!important;border-radius:initial!important;padding:initial!important}
-  body.wide-view .thinking-item,
-  body.wide-view .tool-item,
-  body.wide-view .tool-group{max-width:100%!important}
-  body.wide-view .turn-meta{max-width:100%!important}
-}
-</style>
 </head>
 <body>
 <div id="layout">
@@ -935,19 +922,10 @@
             <div class="layout-switcher" id="us-theme-switcher"></div>
           </div>
           <div class="settings-card">
-            <div class="settings-label" style="margin-bottom:10px;">Chat layout</div>
-            <div class="layout-switcher" id="us-layout-switcher">
-              <button class="layout-option" data-layout="bubble">
-                <span class="layout-option-icon">💬</span>
-                <span class="layout-option-label">Bubble</span>
-                <span class="layout-option-desc">Centered and quiet. Just you and the AI, no distractions.</span>
-              </button>
-              <button class="layout-option" data-layout="channel">
-                <span class="layout-option-icon">💻</span>
-                <span class="layout-option-label">Channel</span>
-                <span class="layout-option-desc">Full-width with faces. Feels like your team is right there.</span>
-              </button>
-            </div>
+            <div class="settings-label" style="margin-bottom:10px;">Chat width</div>
+            <!-- Filled by modules/chat-width-choice.js: Compact, Comfortable, Wide and Full -->
+            <div class="layout-switcher" id="us-width-switcher"></div>
+            <div class="settings-hint">Applies on screens wider than 768 px. On a phone the chat is always full width.</div>
           </div>
         </div>
 
