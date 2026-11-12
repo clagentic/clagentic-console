@@ -178,7 +178,8 @@ var ABORT_TOOLS = { yokeType: "result", subtype: "error_during_execution", error
 var API_FAILURE = { yokeType: "result", subtype: "error_during_execution", errors: ["upstream"], terminalReason: "api_error", cost: 0 };
 var SUCCESS = { yokeType: "result", subtype: "success", cost: 0.01 };
 
-// Each step is "interrupt" (a Send now interrupt, reply pending) or a result.
+// Each step is "interrupt" (a Send now interrupt, reply pending), "reject:N" (the
+// Nth interrupt's reply fails now) or a result.
 var SEND_NOW_ROWS = [
   { name: "AC1 marker set, aborted_streaming: interrupted, done 0, no error", steps: ["interrupt", ABORT_STREAMING], shows: ["interrupted"] },
   { name: "AC2 marker set, aborted_tools: interrupted, done 0, no error", steps: ["interrupt", ABORT_TOOLS], shows: ["interrupted"] },
@@ -186,37 +187,51 @@ var SEND_NOW_ROWS = [
   { name: "AC3 no marker, aborted_tools: error as today", steps: [ABORT_TOOLS], shows: ["error"] },
   { name: "AC4 marker set, api_error result: its error, marker consumed", steps: ["interrupt", API_FAILURE, ABORT_TOOLS], shows: ["error", "error"] },
   { name: "AC5 marker consumed by success, a later abort shows its error", steps: ["interrupt", SUCCESS, ABORT_STREAMING], shows: ["result", "error"] },
+  { name: "AC6 an older interrupt's late rejection keeps the newer marker: interrupted", steps: ["interrupt", "interrupt", "reject:0", ABORT_STREAMING], shows: ["interrupted"] },
 ];
 
-SEND_NOW_ROWS.forEach(function (row) {
-  test("Send now interrupt: " + row.name, async function (t) {
+test("Send now interrupt: the self-caused abort reads as an interruption, any other result keeps its error", async function (t) {
+  captureLog(t);
+  t.mock.method(console, "error", function () {});
+  for (var r = 0; r < SEND_NOW_ROWS.length; r++) {
+    var row = SEND_NOW_ROWS[r];
     var server = await world.createServer();
     try {
       await server.bridge.startQuery(server.session, "go", null, null);
       await world.flush();
-      server.session.queryInstance.interruptKeepingQueued = function () { return new Promise(function () {}); };
-      captureLog(t);
-      t.mock.method(console, "error", function () {});
+      var rejectors = [];
+      server.session.queryInstance.interruptKeepingQueued = function () {
+        return new Promise(function (resolve, reject) { rejectors.push(reject); });
+      };
       var recorded = [];
-      t.mock.method(server.sm, "sendAndRecord", function (session, obj) { recorded.push(obj); });
+      server.sm.sendAndRecord = function (session, obj) { recorded.push(obj); };
       var seen = [];
-      row.steps.forEach(function (step) {
-        if (step === "interrupt") { server.bridge.interruptKeepingQueued(server.session); return; }
+      for (var s = 0; s < row.steps.length; s++) {
+        var step = row.steps[s];
+        if (step === "interrupt") {
+          server.bridge.interruptKeepingQueued(server.session).catch(function () {});
+          continue;
+        }
+        if (typeof step === "string") {
+          rejectors[Number(step.split(":")[1])](new Error("late"));
+          await world.flush();
+          continue;
+        }
         recorded.length = 0;
         server.sdk(step);
         var done = recorded.filter(function (m) { return m.type === "done"; });
         var hasError = recorded.some(function (m) { return m.type === "error"; });
         var hasInfo = recorded.some(function (m) { return m.type === "info"; });
         if (step.subtype === "success") seen.push("result");
-        else if (hasError) { seen.push("error"); assert.equal(done[0].code, 1); assert.match(recorded.filter(function (m) { return m.type === "error"; })[0].text, /error:/); }
-        else { seen.push("interrupted"); assert.ok(hasInfo); assert.equal(done[0].code, 0); }
-      });
-      assert.deepEqual(seen, row.shows);
+        else if (hasError) { seen.push("error"); assert.equal(done[0].code, 1, row.name); assert.match(recorded.filter(function (m) { return m.type === "error"; })[0].text, /error:/, row.name); }
+        else { seen.push("interrupted"); assert.ok(hasInfo, row.name); assert.equal(done[0].code, 0, row.name); }
+      }
+      assert.deepEqual(seen, row.shows, row.name);
     } finally {
       server.shutdown();
       world.removeHome(server.home);
     }
-  });
+  }
 });
 
 test("Send now interrupt: one log line names the session with debug off, and a failed interrupt clears the marker", async function (t) {
