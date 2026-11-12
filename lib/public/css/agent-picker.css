@@ -117,3 +117,15 @@
   width: 12px;
   height: 12px;
 }
+
+/* The agent's avatar in a session list (Appearance: "Avatars in session list").
+ * 20 px and round, in the slot the badge uses when the setting is off. */
+.session-list-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-right: 4px;
+  vertical-align: middle;
+}
