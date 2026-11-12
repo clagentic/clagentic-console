@@ -178,8 +178,10 @@ var ABORT_TOOLS = { yokeType: "result", subtype: "error_during_execution", error
 var API_FAILURE = { yokeType: "result", subtype: "error_during_execution", errors: ["upstream"], terminalReason: "api_error", cost: 0 };
 var SUCCESS = { yokeType: "result", subtype: "success", cost: 0.01 };
 
-// Each step is "interrupt" (a Send now interrupt, reply pending), "reject:N" (the
-// Nth interrupt's reply fails now) or a result.
+// Each step is "interrupt" (a Send now interrupt, reply pending), "stamp" (the
+// stream yields a message, as the bridge loop counts it), "reject:N" (the Nth
+// interrupt's reply fails now) or a result. A result is stamped as the loop
+// would stamp it, unless the row is prestamped (it was yielded earlier).
 var SEND_NOW_ROWS = [
   { name: "AC1 marker set, aborted_streaming: interrupted, done 0, no error", steps: ["interrupt", ABORT_STREAMING], shows: ["interrupted"] },
   { name: "AC2 marker set, aborted_tools: interrupted, done 0, no error", steps: ["interrupt", ABORT_TOOLS], shows: ["interrupted"] },
@@ -188,6 +190,7 @@ var SEND_NOW_ROWS = [
   { name: "AC4 marker set, api_error result: its error, marker consumed", steps: ["interrupt", API_FAILURE, ABORT_TOOLS], shows: ["error", "error"] },
   { name: "AC5 marker consumed by success, a later abort shows its error", steps: ["interrupt", SUCCESS, ABORT_STREAMING], shows: ["result", "error"] },
   { name: "AC6 an older interrupt's late rejection keeps the newer marker: interrupted", steps: ["interrupt", "interrupt", "reject:0", ABORT_STREAMING], shows: ["interrupted"] },
+  { name: "U1 an abort received before Send now was clicked still shows its error", steps: ["stamp", "interrupt", ABORT_STREAMING], prestamped: true, shows: ["error"] },
 ];
 
 test("Send now interrupt: the self-caused abort reads as an interruption, any other result keeps its error", async function (t) {
@@ -212,12 +215,17 @@ test("Send now interrupt: the self-caused abort reads as an interruption, any ot
           server.bridge.interruptKeepingQueued(server.session).catch(function () {});
           continue;
         }
+        if (step === "stamp") {
+          server.session.queryReceiveSeq = (server.session.queryReceiveSeq || 0) + 1;
+          continue;
+        }
         if (typeof step === "string") {
           rejectors[Number(step.split(":")[1])](new Error("late"));
           await world.flush();
           continue;
         }
         recorded.length = 0;
+        if (!row.prestamped) server.session.queryReceiveSeq = (server.session.queryReceiveSeq || 0) + 1;
         server.sdk(step);
         var done = recorded.filter(function (m) { return m.type === "done"; });
         var hasError = recorded.some(function (m) { return m.type === "error"; });
