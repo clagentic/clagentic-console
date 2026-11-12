@@ -88,7 +88,7 @@ test("list: every kind of session, with label, state and activity, newest first"
       session(5, { cliSessionId: null, runtime: "reaped" }),
     ],
   });
-  var r = w.input.listSessions({});
+  var r = w.input.listSessions({ state: "any" });
   assert.equal(r.ok, true);
   assert.equal(r.result, "listed");
   assert.equal(r.count, 3);
@@ -119,7 +119,7 @@ test("list: filters by project, agent, vendor and state combine", function () {
   var ids = function (req) { return w.input.listSessions(req).sessions.map(function (s) { return s.project + "/" + s.consoleSessionId; }).sort(); };
   assert.deepEqual(ids({ projectSlug: "other" }), ["other/1"]);
   assert.deepEqual(ids({ agentName: "holden" }), ["lore/3"]);
-  assert.deepEqual(ids({ vendor: "codex" }), ["lore/2"]);
+  assert.deepEqual(ids({ vendor: "codex", state: "any" }), ["lore/2"]);
   assert.deepEqual(ids({ state: "reaped" }), ["lore/2"]);
   assert.deepEqual(ids({ projectSlug: "lore", vendor: "claude", state: "idle" }), ["lore/1"]);
   assert.equal(ids({ state: "any" }).length, 4);
@@ -757,7 +757,7 @@ test("ipc: to, reply and list_sessions reach session-input", function () {
   assert.equal(seen[0][1].reply, true);
   assert.equal(seen[0][1].senderSessionId, "1");
   assert.equal(seen[1][1].to, "a@b");
-  assert.deepEqual(seen[2][1], { projectSlug: "p", agentName: "a", vendor: "claude", state: "live" });
+  assert.deepEqual(seen[2][1], { projectSlug: "p", agentName: "a", vendor: "claude", state: "live", limit: undefined, verbose: undefined });
 });
 
 // ---- the CLI ----
