@@ -346,7 +346,7 @@ The call is recorded in the [outbound ledger](#list-outbound) as verb `answer_pr
 
 ## list-sessions
 
-Read-only. Lists the sessions the console holds, newest activity first. Every session recorded in the console's own store can be listed, whether or not it has a runtime; a session started outside the console is not. Background helper sessions are not listed. Without `--state` only live and idle sessions are listed: reaped sessions pile up with every idle reap and daemon restart, and the one you want is almost never among them. Add `--state any` for every session, as releases before this default did. Each row is compact unless `--verbose` is given.
+Read-only. Lists the sessions the console holds, newest activity first. Every session recorded in the console's own store can be listed, whether or not it has a runtime; a session started outside the console is not. Background helper sessions are not listed. Without `--state` the live and idle sessions are listed, plus one reaped row per agent lane (a project and a named agent) that has no live or idle session: that lane's newest reaped session, so a lane holding work stays visible after a reap or a daemon restart. Other reaped sessions pile up with every idle reap and daemon restart and are left out, as are reaped plain sessions with no agent. Add `--state any` for every session, as releases before this default did. Each row is compact unless `--verbose` is given.
 
 ```
 clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <id>] [--state <live|idle|reaped|any>[,...]] [--limit <n>] [--verbose]
@@ -357,8 +357,8 @@ clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <i
 | `--project <slug>` | Only this project. An unknown project is `refused`. |
 | `--agent <name>` | Only sessions running this named agent. Compared by slug, so `Reviewer` and `reviewer` are one agent. |
 | `--vendor <id>` | Only sessions on this vendor (case-insensitive). |
-| `--state <list>` | Only sessions in these states: one of `live`, `idle`, `reaped`, several as a comma list (`live,idle`), or `any` for every state. Default `live,idle`. An unknown name is `refused`, and the reason lists the valid names. `live` is a running turn or a session blocked on a pending prompt, so it includes sessions waiting on the operator; read `pendingPrompts` to tell them apart. Every row carries `pendingPrompts` whatever the filter. |
-| `--limit <n>` | At most `n` rows, the newest. Applied after the filter and the sort, so `--limit 1` is the most recent match. `total` in the result still counts every match. |
+| `--state <list>` | Only sessions in these states: one of `live`, `idle`, `reaped`, several as a comma list (`live,idle`), or `any` for every state. Without `--state`, the default above applies; an explicit value is an exact match and adds no lane row. An unknown name is `refused`, and the reason lists the valid names. `live` is a running turn or a session blocked on a pending prompt, so it includes sessions waiting on the operator; read `pendingPrompts` to tell them apart. Every row carries `pendingPrompts` whatever the filter. |
+| `--limit <n>` | At most `n` rows, the newest. Applied after the filter and the sort, so `--limit 1` is the most recent match. `total` in the result still counts every row the filter shows. |
 | `--verbose` | The full record per row, and `host` on the result. See below. |
 
 The filters combine. Each of these is one command, with nothing piped or filtered:
