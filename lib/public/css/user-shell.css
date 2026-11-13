@@ -138,7 +138,7 @@
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--error, #d33);
+  color: var(--error);
 }
 
 .shell-queued.scheduled-queued .scheduled-queued-error:empty { display: none; }

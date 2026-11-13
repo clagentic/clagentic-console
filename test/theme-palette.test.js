@@ -17,6 +17,7 @@ var { pathToFileURL } = require("url");
 var core = require("../lib/public/theme-core.js");
 var themeFiles = require("../lib/theme-files");
 var themeSeed = require("../lib/theme-seed");
+var colourAllowlist = require("./colour-literal-allowlist");
 
 var ROOT = path.join(__dirname, "..");
 var PUBLIC = path.join(ROOT, "lib", "public");
@@ -388,6 +389,11 @@ function contrastRows() {
     ACCENT_SURFACES.forEach(function (bg) { rows.push([fg, bg, 4.5]); });
   });
   rows.push(["--on-accent", "--accent", 4.5]);
+  // The text on a solid fill of each status colour and of accent2.
+  [["--on-accent2", "--accent2"], ["--on-error", "--error"], ["--on-success", "--success"],
+   ["--on-warning", "--warning"], ["--bg", "--text-dimmer"], ["--bg", "--text-muted"]].forEach(function (pair) {
+    rows.push([pair[0], pair[1], 4.5]);
+  });
   ["--av0", "--av1", "--av2", "--av3"].forEach(function (bg) { rows.push(["--on-av", bg, 4.5]); });
   ["--sidebar-bg", "--bg", "--bg-alt", "--input-bg"].forEach(function (bg) { rows.push(["--border-strong", bg, 3]); });
   ["--hl-comment", "--hl-keyword", "--hl-string", "--hl-number", "--hl-function", "--hl-variable", "--hl-type",
@@ -565,26 +571,25 @@ test("single source: no shipped script, page or manifest holds a palette value o
   // palette choice.
   delete palette.FFFFFF;
   delete palette["000000"];
-  // Every shipped script, page and manifest is scanned. These files carry a
-  // colour that only coincides with a palette value (a user's default colour,
-  // the logo mark, component styles in the page body): it is not a theme token,
-  // and replacing it belongs to the colour sweep, so a hit there is not a
-  // second declaration of a token.
-  var notTokens = ["users.js", "server-settings.js", "server-auth.js", "project-user-mention.js", "server-dm.js",
-                   "server.js", "daemon.js", "mention.js", "console-logo.js", "profile.js"];
+  // Every shipped script, page and manifest is scanned, with no file left out
+  // by name. A colour that only coincides with a palette value (a user's
+  // default colour, the logo mark) is exempted at its own entry in
+  // test/colour-literal-allowlist.js, with its reason, never by file.
   var hold = sourceFiles(path.join(ROOT, "lib"), [".js", ".json", ".html"]).filter(function (file) {
-    return file.indexOf(THEMES_DIR + path.sep) !== 0 && path.basename(file) !== "emoji-data.json" &&
-      notTokens.indexOf(path.basename(file)) === -1;
+    return file.indexOf(THEMES_DIR + path.sep) !== 0 && path.basename(file) !== "emoji-data.json";
   }).concat([path.join(PUBLIC, "css", "base.css")]);
   var found = [];
   hold.forEach(function (file) {
     var m;
     var re = /#([0-9A-Fa-f]{6})\b/g;
+    var rel = path.relative(ROOT, file).split(path.sep).join("/");
     var text = read(file);
-    // The page body carries component colours (the sweep's to replace); the
-    // shell is the head.
-    if (path.basename(file) === "index.html") text = text.slice(0, text.indexOf("</head>"));
-    while ((m = re.exec(text))) if (palette[m[1].toUpperCase()]) found.push(path.relative(ROOT, file) + " " + m[0]);
+    while ((m = re.exec(text))) {
+      var lineStart = text.lastIndexOf("\n", m.index) + 1;
+      var lineEnd = text.indexOf("\n", m.index);
+      var line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+      if (palette[m[1].toUpperCase()] && !colourAllowlist.isAllowed(rel, m[0], line)) found.push(rel + " " + m[0]);
+    }
   });
   assert.deepEqual(found, []);
 });

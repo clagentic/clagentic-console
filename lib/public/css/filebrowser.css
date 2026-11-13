@@ -45,7 +45,7 @@
 }
 #sticky-notes-sidebar-count:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* --- Panels --- */
@@ -485,14 +485,14 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
-  background: var(--bg-hover, rgba(255,255,255,0.06));
+  background: var(--bg-hover);
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
 }
 .mcp-ext-setup-btn:hover {
-  background: var(--bg-active, rgba(255,255,255,0.1));
+  background: var(--bg-active);
 }
 .mcp-ext-setup-btn .lucide {
   width: 14px;
@@ -508,7 +508,7 @@
 .mcp-install-cmd {
   flex: 1;
   padding: 8px 10px;
-  background: var(--bg-deep, rgba(0,0,0,0.25));
+  background: var(--bg-deep);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
@@ -521,7 +521,7 @@
 .mcp-install-copy-btn {
   flex-shrink: 0;
   padding: 6px 8px;
-  background: var(--bg-hover, rgba(255,255,255,0.06));
+  background: var(--bg-hover);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-muted);
@@ -529,7 +529,7 @@
   transition: background 0.15s;
 }
 .mcp-install-copy-btn:hover {
-  background: var(--bg-active, rgba(255,255,255,0.1));
+  background: var(--bg-active);
 }
 .mcp-install-copy-btn .lucide {
   width: 14px;
@@ -559,7 +559,7 @@
   color: var(--text-muted);
 }
 .mcp-step-icon.done {
-  color: var(--green, #2ecc71);
+  color: var(--green);
 }
 .mcp-step-icon .lucide {
   width: 20px;
@@ -581,7 +581,7 @@
   line-height: 1.4;
 }
 .mcp-step.done .mcp-step-desc {
-  color: var(--green, #2ecc71);
+  color: var(--green);
 }
 .mcp-divider {
   height: 1px;
@@ -748,7 +748,7 @@
 /* lr-93e3c8: visible error state for save-status spans (e.g. Advanced >
    Memory), matching the same class other save-status spans already use. */
 .ps-save-status-error {
-  color: var(--error, #f38ba8);
+  color: var(--error);
 }
 
 /* Environment notice */
@@ -1304,7 +1304,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.15);
 }
 
 .terminal-tab-ctx-item {
@@ -1328,7 +1328,7 @@
 }
 
 .terminal-tab-ctx-danger:hover {
-  color: #e74c3c;
+  color: var(--error);
 }
 
 .terminal-tab-label { cursor: default; }
@@ -1419,8 +1419,8 @@
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  background: #252525;
-  border-bottom: 1px solid #333;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -1436,9 +1436,9 @@
   min-width: 40px;
   padding: 0 10px;
   border-radius: 6px;
-  border: 1px solid #444;
-  background: #333;
-  color: #d4d4d4;
+  border: 1px solid var(--border);
+  background: var(--user-bubble);
+  color: var(--text-secondary);
   font-family: "Roboto Mono", monospace;
   font-size: 12px;
   font-weight: 500;
@@ -1450,14 +1450,14 @@
 }
 
 .term-key:active {
-  background: #555;
-  border-color: #666;
+  background: var(--sidebar-active);
+  border-color: var(--border-strong);
 }
 
 .term-key-toggle.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .term-key-arrow {
@@ -1562,7 +1562,7 @@
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 600;
   display: flex;
@@ -1757,7 +1757,7 @@
 
 .file-history-compare-slot.filled .compare-slot-num {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .compare-slot-text {
@@ -1807,7 +1807,7 @@
   border-radius: 6px;
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;

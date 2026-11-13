@@ -75,7 +75,7 @@
     top: 4px;
     right: calc(50% - 18px);
     background: var(--success);
-    color: #fff;
+    color: var(--on-success);
     font-size: 9px;
     font-weight: 700;
     font-family: "Roboto Mono", monospace;
@@ -115,7 +115,8 @@
 
   /* Alerts badge (red) */
   #mob-alerts-badge {
-    background: #e74c3c;
+    background: var(--danger);
+    color: var(--on-error);
   }
 
   .mobile-tab-home.active .mobile-home-icon {
@@ -180,7 +181,7 @@
 
   .mobile-project-item.active .mobile-project-abbrev {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
   }
 
   /* mobile-chat-project-icon: icon in the chat header title area */
@@ -216,7 +217,7 @@
   /* Multi-user tone (lr-66c118): ring shape, distinct violet hue. */
   .mobile-project-processing.other {
     background: transparent;
-    border: 1.5px solid var(--activity-other, #B77BF3);
+    border: 1.5px solid var(--activity-other);
     box-sizing: border-box;
   }
   /* Waiting on a prompt: dashed ring, warning hue. */
@@ -227,15 +228,15 @@
   }
   /* Alert tone (lr-66c118): unread wins over processing green. */
   .mobile-project-processing.alert {
-    background: var(--danger, #e74c3c);
+    background: var(--danger);
   }
 
   .mobile-project-unread {
     min-width: 18px;
     height: 18px;
     border-radius: 9px;
-    background: #e74c3c;
-    color: #fff;
+    background: var(--danger);
+    color: var(--on-error);
     font-size: 11px;
     font-weight: 700;
     display: flex;
@@ -252,8 +253,8 @@
     position: absolute;
     top: 4px;
     right: calc(50% - 18px);
-    background: #e74c3c;
-    color: #fff;
+    background: var(--danger);
+    color: var(--on-error);
     font-size: 9px;
     font-weight: 700;
     font-family: "Roboto Mono", monospace;
@@ -498,50 +499,6 @@
   }
   .mobile-more-toggle-left .lucide { width: 20px; height: 20px; color: var(--text-dimmer); }
 
-  /* Dark mode toggle switch */
-  .mobile-settings-theme-toggle {
-    position: relative;
-    width: 44px;
-    height: 26px;
-    flex-shrink: 0;
-    cursor: pointer;
-  }
-  .mobile-settings-theme-toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
-    appearance: none;
-    outline: none;
-  }
-  .mobile-settings-theme-thumb {
-    position: absolute;
-    inset: 0;
-    border-radius: 13px;
-    background: var(--bg-alt);
-    border: 1px solid var(--border);
-    transition: background 0.2s;
-  }
-  .mobile-settings-theme-thumb::before {
-    content: "";
-    position: absolute;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--text-dimmer);
-    top: 2px;
-    left: 2px;
-    transition: transform 0.2s, background 0.2s;
-  }
-  .mobile-settings-theme-toggle input:checked + .mobile-settings-theme-thumb {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-  .mobile-settings-theme-toggle input:checked + .mobile-settings-theme-thumb::before {
-    transform: translateX(18px);
-    background: #fff;
-  }
-
   /* ==========================================================================
      Mobile Sheet — fullscreen overlay for Projects / Sessions
      ========================================================================== */
@@ -754,8 +711,8 @@
   }
 
   .mobile-chat-chip.active .mobile-chat-chip-icon {
-    background: var(--accent, currentColor);
-    color: #fff;
+    background: var(--accent);
+    color: var(--on-accent);
   }
 
   .mobile-chat-chip-avatar {
@@ -769,8 +726,8 @@
     min-width: 16px;
     height: 16px;
     border-radius: 8px;
-    background: #e74c3c;
-    color: #fff;
+    background: var(--danger);
+    color: var(--on-error);
     font-size: 10px;
     font-weight: 700;
     display: flex;
@@ -808,8 +765,8 @@
     min-width: 18px;
     height: 18px;
     border-radius: 9px;
-    background: var(--accent, #ff7b54);
-    color: #fff;
+    background: var(--accent);
+    color: var(--on-accent);
     font-size: 11px;
     font-weight: 700;
     display: flex;
@@ -874,14 +831,14 @@
   }
 
   .mobile-session-processing.io {
-    background: #fff !important;
+    background: var(--text) !important;
     box-shadow: 0 0 4px var(--success);
   }
 
   /* Multi-user tone (lr-66c118): ring shape, distinct violet hue. */
   .mobile-session-processing.other {
     background: transparent;
-    border: 1.5px solid var(--activity-other, #B77BF3);
+    border: 1.5px solid var(--activity-other);
     box-sizing: border-box;
   }
   .mobile-session-processing.waiting {
@@ -891,7 +848,7 @@
   }
   /* Alert tone (lr-66c118): unread wins over processing green. */
   .mobile-session-processing.alert {
-    background: var(--danger, #e74c3c);
+    background: var(--danger);
   }
 
   /* Date group header inside sheet */
@@ -999,7 +956,7 @@
   }
 
   .mobile-loop-count.scheduled {
-    background: rgba(var(--success-rgb, 34, 197, 94), 0.15);
+    background: rgba(var(--success-rgb), 0.15);
     color: var(--success);
   }
 
@@ -1008,8 +965,8 @@
     font-weight: 600;
     padding: 2px 7px;
     border-radius: 10px;
-    background: rgba(var(--warning-rgb, 234, 179, 8), 0.15);
-    color: var(--warning, #eab308);
+    background: rgba(var(--warning-rgb), 0.15);
+    color: var(--warning);
     flex-shrink: 0;
   }
 
@@ -1058,13 +1015,13 @@
   }
 
   .mobile-loop-role-badge.scheduled {
-    background: rgba(var(--success-rgb, 34, 197, 94), 0.12);
+    background: rgba(var(--success-rgb), 0.12);
     color: var(--success);
   }
 
   .mobile-loop-role-badge.crafting {
-    background: rgba(var(--warning-rgb, 234, 179, 8), 0.12);
-    color: var(--warning, #eab308);
+    background: rgba(var(--warning-rgb), 0.12);
+    color: var(--warning);
   }
 
   /* Loop run sub-group (time-based grouping within a loop group) */
@@ -1244,7 +1201,7 @@
   }
 
   .mobile-alert-unread {
-    background: rgba(var(--accent-rgb, 88, 87, 252), 0.06);
+    background: rgba(var(--accent-rgb), 0.06);
   }
 
   /* --- Session items inside chat/search sheet with project/mate tag --- */

@@ -15,7 +15,7 @@
 }
 
 .admin-error {
-  color: #e5534b;
+  color: var(--error);
 }
 
 /* Section header */
@@ -38,7 +38,7 @@
   align-items: center;
   gap: 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   padding: 6px 14px;
   border-radius: 8px;
@@ -135,8 +135,8 @@
 }
 
 .admin-remove-btn:hover {
-  color: #e5534b;
-  background: rgba(229, 83, 75, 0.1);
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
 }
 
 /* Invite list */
@@ -221,8 +221,8 @@
 }
 
 .admin-revoke-btn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
 }
 
 /* Project list */
@@ -317,7 +317,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
   z-index: 1100;
   display: flex;
   align-items: center;
@@ -330,7 +330,7 @@
   border-radius: 14px;
   width: 380px;
   max-width: 90vw;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 30px rgba(var(--shadow-rgb), 0.4);
   animation: admin-in 0.15s ease-out;
 }
 
@@ -407,7 +407,7 @@
 
 .admin-modal-save {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   padding: 8px 18px;
   border-radius: 8px;
@@ -422,7 +422,8 @@
 }
 
 .admin-modal-confirm-danger {
-  background: #ef4444;
+  background: var(--error);
+  color: var(--on-error);
 }
 
 .admin-modal-cancel {
@@ -465,8 +466,8 @@
 }
 
 .admin-action-btn-danger:hover {
-  color: #e5534b;
-  border-color: #e5534b;
+  color: var(--error);
+  border-color: var(--error);
   opacity: 1;
 }
 
@@ -499,8 +500,8 @@
 }
 
 .admin-smtp-status-ok {
-  background: rgba(46, 160, 67, 0.1);
-  color: #2ea043;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
 }
 
 .admin-smtp-status-off {
@@ -584,7 +585,7 @@
 
 .admin-smtp-error {
   font-size: 13px;
-  color: #e5534b;
+  color: var(--error);
   padding: 0 16px;
   min-height: 0;
   overflow: hidden;
@@ -723,7 +724,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--on-accent);
   transition: transform 0.2s;
 }
 
@@ -736,8 +737,8 @@
 }
 
 .migration-callout {
-  background: var(--overlay-soft, rgba(124, 58, 237, 0.08));
-  border: 1px solid var(--accent, #7c3aed);
+  background: var(--overlay-soft);
+  border: 1px solid var(--accent);
   border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 16px;

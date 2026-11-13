@@ -11,8 +11,8 @@
   position: absolute;
   top: -3px;
   right: -3px;
-  background: var(--error, #e53935);
-  color: #fff;
+  background: var(--error);
+  color: var(--on-error);
   font-size: 9px;
   font-weight: 700;
   min-width: 15px;
@@ -181,13 +181,13 @@
   transition: opacity 0.15s, background 0.15s;
 }
 .notif-banner-allow {
-  background: var(--accent, #6c5ce7);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .notif-banner-allow:hover { opacity: 0.85; }
 .notif-banner-always {
   background: none;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--border);
   color: var(--text-secondary);
 }
 .notif-banner-always:hover { color: var(--text); border-color: var(--text-secondary); }
@@ -258,8 +258,8 @@
   font-family: inherit;
   cursor: pointer;
   border: none;
-  background: var(--accent, #6c5ce7);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   transition: opacity 0.15s;
 }
 .notif-banner-auth-login:hover,
@@ -279,8 +279,8 @@
   font-family: inherit;
   cursor: pointer;
   border: none;
-  background: var(--accent, #6c5ce7);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   transition: opacity 0.15s;
 }
 .notif-banner-update-now:hover { opacity: 0.85; }

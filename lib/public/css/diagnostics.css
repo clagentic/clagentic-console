@@ -29,13 +29,13 @@
   padding: 0 3px;
   pointer-events: none;
   font-family: inherit;
-  color: #fff;
+  color: var(--bg);
   background: var(--text-muted);
 }
 .diagnostics-panel-badge.hidden { display: none; }
-.diagnostics-badge-info    { background: var(--text-muted); }
-.diagnostics-badge-warning { background: var(--accent2, #4A7FE8); }
-.diagnostics-badge-error   { background: var(--error, #FF4D6A); }
+.diagnostics-badge-info    { background: var(--text-muted); color: var(--bg); }
+.diagnostics-badge-warning { background: var(--accent2); color: var(--on-accent2); }
+.diagnostics-badge-error   { background: var(--error); color: var(--on-error); }
 
 /* --------------------------------------------------------
    Diagnostics panel (inside #info-panels)
@@ -103,8 +103,8 @@
 
 /* Left-border severity indicator */
 .diagnostics-item-info    { border-left: 2px solid var(--text-muted); }
-.diagnostics-item-warning { border-left: 2px solid var(--accent2, #4A7FE8); }
-.diagnostics-item-error   { border-left: 2px solid var(--error, #FF4D6A); }
+.diagnostics-item-warning { border-left: 2px solid var(--accent2); }
+.diagnostics-item-error   { border-left: 2px solid var(--error); }
 
 .diagnostics-item-meta {
   display: flex;
@@ -129,12 +129,12 @@
   color: var(--text-muted);
 }
 .diagnostics-sev-warning {
-  background: var(--accent2-12, rgba(74, 127, 232, 0.12));
-  color: var(--accent2, #4A7FE8);
+  background: var(--accent2-12);
+  color: var(--accent2);
 }
 .diagnostics-sev-error {
-  background: var(--error-12, rgba(255, 77, 106, 0.12));
-  color: var(--error, #FF4D6A);
+  background: var(--error-12);
+  color: var(--error);
 }
 
 /* Source label */
@@ -186,12 +186,12 @@
   gap: 5px;
   margin-top: 2px;
   padding: 4px 6px;
-  background: var(--accent2-8, rgba(74, 127, 232, 0.08));
+  background: var(--accent2-8);
   border-radius: 4px;
 }
 .diagnostics-actionable-icon {
   flex-shrink: 0;
-  color: var(--accent2, #4A7FE8);
+  color: var(--accent2);
   display: flex;
   align-items: center;
 }
@@ -212,10 +212,10 @@
   align-items: center;
   gap: 5px;
   padding: 4px 10px;
-  background: var(--accent2, #4A7FE8);
+  background: var(--accent2);
   border: none;
   border-radius: 6px;
-  color: #fff;
+  color: var(--on-accent2);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -255,7 +255,7 @@
 .toast-diagnostic-action-btn.build-update-decline {
   background: transparent;
   color: var(--text-secondary);
-  border: 1px solid var(--border, rgba(128, 128, 128, 0.4));
+  border: 1px solid var(--border);
   margin-left: 6px;
 }
 
@@ -288,7 +288,7 @@
 .build-update-send-failed {
   margin-top: 4px;
   font-size: 11px;
-  color: var(--error, #FF4D6A);
+  color: var(--error);
 }
 
 /* Empty state */
@@ -376,8 +376,8 @@
 
 /* Severity border accent */
 .toast-diagnostic-info    { border-left: 3px solid var(--text-muted); }
-.toast-diagnostic-warning { border-left: 3px solid var(--accent2, #4A7FE8); }
-.toast-diagnostic-error   { border-left: 3px solid var(--error, #FF4D6A); }
+.toast-diagnostic-warning { border-left: 3px solid var(--accent2); }
+.toast-diagnostic-error   { border-left: 3px solid var(--error); }
 
 .toast-diagnostic-header {
   display: flex;
@@ -397,8 +397,8 @@
   flex-shrink: 0;
 }
 .toast-diag-sev-info    { background: rgba(var(--overlay-rgb), 0.06); color: var(--text-muted); }
-.toast-diag-sev-warning { background: var(--accent2-12, rgba(74, 127, 232, 0.12)); color: var(--accent2, #4A7FE8); }
-.toast-diag-sev-error   { background: var(--error-12, rgba(255, 77, 106, 0.12)); color: var(--error, #FF4D6A); }
+.toast-diag-sev-warning { background: var(--accent2-12); color: var(--accent2); }
+.toast-diag-sev-error   { background: var(--error-12); color: var(--error); }
 
 .toast-diagnostic-source {
   font-family: var(--font-mono, monospace);
@@ -457,10 +457,10 @@
   align-self: flex-start;
   margin-top: 4px;
   padding: 5px 12px;
-  background: var(--accent2, #4A7FE8);
+  background: var(--accent2);
   border: none;
   border-radius: 6px;
-  color: #fff;
+  color: var(--on-accent2);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;

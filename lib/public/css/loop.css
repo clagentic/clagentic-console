@@ -32,7 +32,7 @@
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
@@ -78,9 +78,9 @@
 }
 .ralph-section-status .lucide { width: 11px; height: 11px; }
 .ralph-section-status.crafting { color: var(--accent); }
-.ralph-section-status.ready { color: var(--success, #27ae60); font-weight: 600; }
+.ralph-section-status.ready { color: var(--success); font-weight: 600; }
 .ralph-section-status.running { color: var(--accent); }
-.ralph-section-status.done { color: var(--success, #27ae60); }
+.ralph-section-status.done { color: var(--success); }
 .ralph-section-tasks-link {
   display: block;
   margin-top: 2px;
@@ -92,9 +92,9 @@
 .ralph-section-tasks-link:hover { text-decoration: underline; }
 
 /* Section accent states */
-.ralph-section-ready { border-left-color: var(--success, #27ae60); }
+.ralph-section-ready { border-left-color: var(--success); }
 .ralph-section-running { border-left-color: var(--accent); }
-.ralph-section-done { border-left-color: var(--success, #27ae60); }
+.ralph-section-done { border-left-color: var(--success); }
 
 /* .loop-start-btn is now inside #ralph-loop-section, inherits sidebar button styles */
 .loop-experimental {
@@ -135,7 +135,7 @@
 .loop-status-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(var(--overlay-rgb, 0,0,0), 0.4);
+  background: rgba(var(--overlay-rgb), 0.4);
 }
 .loop-status-dialog {
   position: relative;
@@ -145,7 +145,7 @@
   padding: 0;
   min-width: 320px;
   max-width: 400px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb, 0,0,0), 0.35);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.35);
   color: var(--text);
 }
 .loop-status-dialog-header {
@@ -241,41 +241,41 @@
 .ralph-wizard-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(var(--shadow-rgb, 0,0,0), 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
 }
 .ralph-wizard-card {
   position: relative;
-  background: var(--bg-alt, #0d0d1a);
-  border: 1px solid var(--border, #333);
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
   border-radius: 14px;
   width: 520px;
   max-width: 90vw;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb, 0,0,0), 0.5);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
 }
 .ralph-wizard-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border, #333);
+  border-bottom: 1px solid var(--border);
   font-weight: 600;
   font-size: 15px;
-  color: var(--text, #fff);
+  color: var(--text);
 }
 .ralph-wizard-header button {
   background: none;
   border: none;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   font-size: 20px;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
 }
 .ralph-wizard-header button:hover {
-  color: var(--text, #fff);
+  color: var(--text);
 }
 .ralph-wizard-progress {
   display: flex;
@@ -287,14 +287,14 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--border, #333);
+  background: var(--border);
   transition: background 0.2s ease;
 }
 .ralph-dot.active {
-  background: var(--accent, #6c5ce7);
+  background: var(--accent);
 }
 .ralph-dot.done {
-  background: var(--text-secondary, #999);
+  background: var(--text-secondary);
 }
 .ralph-wizard-steps {
   padding: 16px 20px 8px;
@@ -352,9 +352,9 @@
 .ralph-dia-done {
   font-size: 11px;
   font-weight: 600;
-  color: var(--success, #27ae60);
+  color: var(--success);
   padding: 4px 10px;
-  border: 1.5px solid var(--success, #27ae60);
+  border: 1.5px solid var(--success);
   border-radius: 12px;
   white-space: nowrap;
 }
@@ -400,10 +400,10 @@
 }
 .ralph-step textarea {
   width: 100%;
-  background: var(--input-bg, #1a1a2e);
-  border: 1px solid var(--border, #333);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: var(--text, #fff);
+  color: var(--text);
   font-family: inherit;
   font-size: 13px;
   padding: 10px 12px;
@@ -413,10 +413,10 @@
   box-sizing: border-box;
 }
 .ralph-step textarea:focus {
-  border-color: var(--accent, #6c5ce7);
+  border-color: var(--accent);
 }
 .ralph-step textarea::placeholder {
-  color: var(--text-secondary, #666);
+  color: var(--text-secondary);
 }
 .ralph-field-label {
   display: block;
@@ -431,7 +431,7 @@
   display: flex;
   gap: 0;
   margin-bottom: 12px;
-  border-bottom: 1px solid var(--border, #333);
+  border-bottom: 1px solid var(--border);
 }
 .ralph-mode-tab {
   flex: 1;
@@ -447,8 +447,8 @@
 }
 .ralph-mode-tab:hover { color: var(--text); }
 .ralph-mode-tab.active {
-  color: var(--accent, #6c5ce7);
-  border-bottom-color: var(--accent, #6c5ce7);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 .ralph-mode-panel { display: none; }
 .ralph-mode-panel.active { display: block; }
@@ -460,18 +460,18 @@
 .ralph-input-text {
   width: 100%;
   padding: 8px 10px;
-  background: var(--input-bg, #1a1a2e);
-  border: 1px solid var(--border, #333);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: var(--text, #fff);
+  color: var(--text);
   font-family: 'Roboto Mono', var(--font-mono, monospace);
   font-size: 13px;
   outline: none;
   transition: border-color 0.15s;
   box-sizing: border-box;
 }
-.ralph-input-text:focus { border-color: var(--accent, #6c5ce7); }
-.ralph-input-text::placeholder { color: var(--text-secondary, #666); }
+.ralph-input-text:focus { border-color: var(--accent); }
+.ralph-input-text::placeholder { color: var(--text-secondary); }
 /* Ralph Settings Row */
 .ralph-settings-row {
   display: flex;
@@ -507,19 +507,19 @@
 }
 
 #ralph-review-summary {
-  background: var(--input-bg, #1a1a2e);
-  border: 1px solid var(--border, #333);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 14px;
   font-size: 13px;
-  color: var(--text, #fff);
+  color: var(--text);
   line-height: 1.5;
   max-height: 280px;
   overflow-y: auto;
 }
 #ralph-review-summary .ralph-review-label {
   font-weight: 600;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -538,7 +538,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  border-top: 1px solid var(--border, #333);
+  border-top: 1px solid var(--border);
 }
 .ralph-wizard-footer > div {
   display: flex;
@@ -557,26 +557,26 @@
   transition: background 0.15s, opacity 0.15s;
 }
 .ralph-btn.primary {
-  background: var(--accent, #6c5ce7);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .ralph-btn.primary:hover {
   opacity: 0.9;
 }
 .ralph-btn.secondary {
-  background: var(--input-bg, #2a2a3e);
-  color: var(--text, #fff);
-  border: 1px solid var(--border, #333);
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 .ralph-btn.secondary:hover {
   opacity: 0.8;
 }
 .ralph-btn.tertiary {
   background: none;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
 }
 .ralph-btn.tertiary:hover {
-  color: var(--text, #fff);
+  color: var(--text);
 }
 .ralph-btn:disabled {
   opacity: 0.4;
@@ -586,11 +586,11 @@
 .ralph-dirty-warning {
   margin-top: 16px;
   padding: 10px 12px;
-  background: rgba(234, 179, 8, 0.08);
-  border: 1px solid rgba(234, 179, 8, 0.25);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent);
   border-radius: 8px;
   font-size: 12px;
-  color: var(--text-secondary, #aaa);
+  color: var(--text-secondary);
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -601,10 +601,10 @@
   height: 16px;
   flex-shrink: 0;
   margin-top: 1px;
-  color: rgb(234, 179, 8);
+  color: var(--warning);
 }
 .ralph-dirty-warning code {
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--overlay-rgb), 0.06);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 11px;
@@ -613,13 +613,13 @@
 .ralph-intro-install-note {
   margin-top: 12px;
   font-size: 12px;
-  color: var(--text-tertiary, #888);
+  color: var(--text-tertiary);
 }
 
 #ralph-install-status {
   margin-top: 12px;
   font-size: 13px;
-  color: var(--text-secondary, #aaa);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -678,7 +678,7 @@
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
@@ -706,19 +706,19 @@
 #ralph-preview-modal .confirm-backdrop {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background: rgba(var(--shadow-rgb, 0,0,0), 0.7);
+  background: rgba(var(--shadow-rgb), 0.7);
 }
 .ralph-preview-dialog {
   position: relative;
-  background: var(--bg-alt, #0d0d1a);
-  border: 1px solid var(--border, #333);
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
   border-radius: 14px;
   width: 640px;
   max-width: 90vw;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb, 0,0,0), 0.5);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
 }
 
 /* Header — matches scheduler-detail-header */
@@ -727,7 +727,7 @@
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(var(--overlay-rgb, 0,0,0), 0.06);
+  border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
 .ralph-preview-name {
@@ -761,7 +761,7 @@
 }
 .ralph-preview-action-btn .lucide { width: 13px; height: 13px; }
 .ralph-preview-action-btn:hover { background: var(--hover, rgba(var(--overlay-rgb), 0.06)); color: var(--text); }
-.ralph-preview-action-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ralph-preview-action-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .ralph-preview-action-btn.primary:hover { opacity: 0.9; }
 .ralph-preview-action-btn:disabled { opacity: 0.4; pointer-events: none; }
 .ralph-preview-action-icon {
@@ -783,7 +783,7 @@
 /* Tabs */
 .ralph-preview-tabs {
   display: flex;
-  border-bottom: 1px solid rgba(var(--overlay-rgb, 0,0,0), 0.06);
+  border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   padding: 0 20px;
   flex-shrink: 0;
 }
@@ -792,7 +792,7 @@
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
@@ -800,11 +800,11 @@
   transition: color 0.12s, border-color 0.12s;
 }
 .ralph-tab:hover {
-  color: var(--text, #fff);
+  color: var(--text);
 }
 .ralph-tab.active {
-  color: var(--text, #fff);
-  border-bottom-color: var(--accent, #6c5ce7);
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 /* Body */
@@ -814,12 +814,12 @@
   padding: 20px 24px;
   font-size: 13px;
   line-height: 1.6;
-  color: var(--text, #fff);
+  color: var(--text);
   min-height: 200px;
   max-height: 60vh;
 }
 .ralph-preview-body pre {
-  background: var(--input-bg, #1a1a2e);
+  background: var(--input-bg);
   border-radius: 4px;
   padding: 10px;
   overflow-x: auto;
@@ -835,15 +835,15 @@
   align-items: center;
   justify-content: flex-end;
   padding: 12px 20px;
-  border-top: 1px solid var(--border, #333);
+  border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
 .ralph-run-combo {
   display: inline-flex;
   align-items: center;
   gap: 0;
-  background: var(--accent, #6c5ce7);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   padding: 0;
@@ -863,16 +863,16 @@
 .ralph-run-combo-sep {
   width: 1px;
   height: 20px;
-  background: rgba(255,255,255,0.3);
+  background: color-mix(in srgb, var(--on-accent) 30%, transparent);
   flex-shrink: 0;
 }
 .ralph-run-combo-input {
   width: 52px;
   padding: 4px 2px 4px 8px;
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.3);
+  background: color-mix(in srgb, var(--on-accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
   border-radius: 4px;
-  color: #fff;
+  color: var(--on-accent);
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -908,7 +908,7 @@
   position: relative;
 }
 #ralph-sticky .ralph-sticky-inner {
-  border-color: color-mix(in srgb, var(--accent, #6c5ce7) 40%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 /* Nav button wraps icon + label + status — clicking it jumps to the loop session */
 #ralph-sticky .ralph-sticky-nav {
@@ -965,7 +965,7 @@
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(var(--shadow-rgb, 0,0,0), 0.35);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.35);
   z-index: 20;
   padding: 8px;
 }
@@ -1018,13 +1018,13 @@
   transition: background 0.15s, color 0.15s;
 }
 .loop-pending-item-remove .lucide { width: 13px; height: 13px; }
-.loop-pending-item-remove:hover { color: var(--error, #ef4444); background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent); }
+.loop-pending-item-remove:hover { color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
 
 /* Ready state — accent color with glow.
    Animate opacity on a pseudo-element instead of box-shadow to avoid
    triggering paint on every frame (box-shadow is a paint property). */
 #ralph-sticky.ralph-ready .ralph-sticky-inner {
-  border-color: var(--accent, #6c5ce7);
+  border-color: var(--accent);
   position: relative;
 }
 #ralph-sticky.ralph-ready .ralph-sticky-inner::after {
@@ -1032,14 +1032,14 @@
   position: absolute;
   inset: -2px;
   border-radius: inherit;
-  box-shadow: 0 0 16px 4px color-mix(in srgb, var(--accent, #6c5ce7) 40%, transparent);
+  box-shadow: 0 0 16px 4px color-mix(in srgb, var(--accent) 40%, transparent);
   opacity: 0.6;
   animation: ralphReadyGlow 2s ease-in-out infinite;
   pointer-events: none;
 }
-#ralph-sticky.ralph-ready .ralph-sticky-icon { color: var(--accent, #6c5ce7); }
+#ralph-sticky.ralph-ready .ralph-sticky-icon { color: var(--accent); }
 #ralph-sticky.ralph-ready .ralph-sticky-status {
-  color: var(--accent, #6c5ce7);
+  color: var(--accent);
   font-weight: 600;
 }
 @keyframes ralphReadyGlow {
@@ -1078,18 +1078,18 @@
 #ralph-sticky .ralph-sticky-action .lucide { width: 14px; height: 14px; }
 #ralph-sticky .ralph-sticky-action:hover { color: var(--accent); background: rgba(var(--overlay-rgb), 0.06); }
 #ralph-sticky .ralph-sticky-action:disabled { opacity: 0.3; cursor: not-allowed; }
-#ralph-sticky .ralph-sticky-start { color: var(--accent, #6c5ce7); }
-#ralph-sticky .ralph-sticky-start:hover { color: var(--accent, #6c5ce7); background: color-mix(in srgb, var(--accent, #6c5ce7) 12%, transparent); }
+#ralph-sticky .ralph-sticky-start { color: var(--accent); }
+#ralph-sticky .ralph-sticky-start:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 #ralph-sticky .ralph-sticky-dismiss { color: var(--text-muted); margin-left: 0; }
 #ralph-sticky .ralph-sticky-dismiss:hover { color: var(--text-secondary); background: rgba(var(--overlay-rgb), 0.06); }
 
 /* Running state — accent border with subtle pulse */
 #ralph-sticky.ralph-running .ralph-sticky-inner {
-  border-color: var(--accent, #6c5ce7);
+  border-color: var(--accent);
 }
-#ralph-sticky.ralph-running .ralph-sticky-icon { color: var(--accent, #6c5ce7); }
+#ralph-sticky.ralph-running .ralph-sticky-icon { color: var(--accent); }
 #ralph-sticky.ralph-running .ralph-sticky-status {
-  color: var(--accent, #6c5ce7);
+  color: var(--accent);
   font-weight: 600;
 }
 #ralph-sticky .ralph-sticky-stop { color: var(--text-muted); }
@@ -1134,7 +1134,7 @@
 .ralph-mode-card.active {
   border-color: var(--accent);
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent, #6c5ce7) 6%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .ralph-mode-card-icon {
   display: flex;
@@ -1230,7 +1230,7 @@
 }
 .ralph-authorship-toggle .config-segment-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* ========================================================
@@ -1249,16 +1249,16 @@
 .ralph-exec-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(var(--shadow-rgb, 0,0,0), 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
 }
 .ralph-exec-dialog {
   position: relative;
   width: 380px;
   max-width: 90vw;
-  background: var(--bg-alt, #0d0d1a);
+  background: var(--bg-alt);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb, 0,0,0), 0.5);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
   overflow: hidden;
 }
 .ralph-exec-header {
@@ -1306,7 +1306,7 @@
   justify-content: center;
 }
 .ralph-exec-check .lucide { width: 14px; height: 14px; }
-.ralph-exec-check.ready { color: var(--success, #22c55e); }
+.ralph-exec-check.ready { color: var(--success); }
 .ralph-exec-check.pending { color: var(--text-muted); }
 .ralph-exec-preview-btn {
   margin-left: auto;

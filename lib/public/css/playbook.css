@@ -5,7 +5,7 @@
 .playbook-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(var(--shadow-rgb), 0.45);
   z-index: 400;
   display: flex;
   align-items: center;
@@ -29,7 +29,7 @@
   max-width: 90vw;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px rgba(var(--shadow-rgb), 0.3);
   outline: none;
   animation: playbookSlideIn 0.25s ease;
   display: flex;
@@ -160,7 +160,7 @@
 }
 .playbook-btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .playbook-btn-primary:hover:not(:disabled) {
   filter: brightness(1.1);
@@ -202,12 +202,12 @@
   border-color: var(--accent);
 }
 .hub-playbook-card.completed {
-  background: rgba(76, 175, 80, 0.08);
-  border-color: rgba(76, 175, 80, 0.25);
+  background: var(--success-8);
+  border-color: var(--success-25);
 }
 .hub-playbook-card.completed:hover {
-  background: rgba(76, 175, 80, 0.14);
-  border-color: rgba(76, 175, 80, 0.4);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
 }
 .hub-playbook-card-icon {
   font-size: 18px;

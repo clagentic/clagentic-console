@@ -84,9 +84,9 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--on-accent);
   transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px rgba(var(--shadow-rgb), 0.2);
 }
 .scheduler-scope-toggle.active .scheduler-scope-thumb {
   transform: translateX(14px);
@@ -131,7 +131,7 @@
 }
 .scheduler-sidebar-count {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 10px;
   font-weight: 700;
   padding: 1px 7px;
@@ -267,18 +267,18 @@
 /* Preview event (temporary element on calendar during drag / create) */
 .scheduler-event.preview {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   opacity: 0.7;
   pointer-events: none;
-  border: 1px dashed rgba(255, 255, 255, 0.5);
+  border: 1px dashed color-mix(in srgb, var(--on-accent) 50%, transparent);
   animation: sched-preview-fade-in 0.15s ease-out;
 }
 .scheduler-week-event.preview {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   opacity: 0.7;
   pointer-events: none;
-  border: 1px dashed rgba(255, 255, 255, 0.5);
+  border: 1px dashed color-mix(in srgb, var(--on-accent) 50%, transparent);
   animation: sched-preview-fade-in 0.15s ease-out;
 }
 @keyframes sched-preview-fade-in {
@@ -324,8 +324,8 @@
   height: 7px;
   border-radius: 50%;
 }
-.scheduler-task-dot.pass { background: var(--success, #27ae60); }
-.scheduler-task-dot.fail { background: var(--error, #e74c3c); }
+.scheduler-task-dot.pass { background: var(--success); }
+.scheduler-task-dot.fail { background: var(--error); }
 
 /* --- Inline add task row (top of sidebar) --- */
 .scheduler-add-row {
@@ -423,7 +423,7 @@
   border-radius: 6px;
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
   font-family: inherit;
@@ -551,7 +551,7 @@
 
 .scheduler-view-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .scheduler-view-btn:not(.active):hover {
@@ -705,7 +705,7 @@
 
 .scheduler-event.enabled {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .scheduler-event.disabled {
@@ -716,7 +716,7 @@
 
 .scheduler-event.running {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   animation: sched-pulse 1.5s ease-in-out infinite;
 }
 
@@ -796,7 +796,7 @@
 }
 
 .scheduler-week-header-cell.today .wdate {
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border-radius: 50%;
   width: 24px;
@@ -869,7 +869,7 @@
 
 .scheduler-week-event.enabled {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .scheduler-week-event.disabled {
@@ -956,7 +956,7 @@
   color: var(--text);
   pointer-events: none;
   z-index: 5;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.2);
   white-space: nowrap;
 }
 
@@ -1030,7 +1030,7 @@
 }
 .scheduler-detail-btn:hover { background: var(--hover, rgba(var(--overlay-rgb), 0.06)); color: var(--text); }
 .scheduler-detail-btn.danger:hover { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); border-color: var(--error); }
-.scheduler-detail-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.scheduler-detail-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .scheduler-detail-btn.primary:hover { opacity: 0.9; }
 .scheduler-detail-btn .lucide { width: 13px; height: 13px; }
 .scheduler-detail-icon-btn {
@@ -1152,7 +1152,7 @@
 
 .scheduler-file-save-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -1269,7 +1269,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.25);
   padding: 12px 14px;
   min-width: 220px;
   max-width: 300px;

@@ -195,7 +195,7 @@
 }
 
 .icon-strip-item:hover {
-  color: #fff;
+  color: var(--text);
 }
 
 .icon-strip-item.active::before {
@@ -203,7 +203,7 @@
 }
 
 .icon-strip-item.active {
-  color: #fff;
+  color: var(--text);
 }
 
 /* --- Socket status indicator on icon (top-left dot) --- */
@@ -245,7 +245,7 @@
   opacity: 1;
   background: transparent;
   border-width: 2px;
-  border-color: var(--activity-other, #B77BF3);
+  border-color: var(--activity-other);
 }
 
 /* Waiting on a prompt: dashed ring, warning hue. */
@@ -260,13 +260,13 @@
 /* Alert tone (lr-66c118): unread activity wins over processing green. */
 .icon-strip-status.alert {
   opacity: 1;
-  background: var(--danger, #e74c3c);
+  background: var(--danger);
 }
 
 /* IO blink = HDD LED flash */
 .icon-strip-status.io {
   opacity: 1;
-  background: #fff !important;
+  background: var(--text) !important;
   box-shadow: 0 0 6px var(--success);
   transition: none;
 }
@@ -321,7 +321,7 @@
 }
 
 .icon-strip-add:hover {
-  color: #fff;
+  color: var(--text);
 }
 
 .icon-strip-add .lucide {
@@ -408,7 +408,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #e57373;
+  color: var(--error);
   animation: trashAppear 0.25s ease-out;
 }
 
@@ -430,11 +430,11 @@
 }
 
 .icon-strip-trash.drag-hover {
-  color: #fff;
+  color: var(--on-error);
 }
 
 .icon-strip-trash.drag-hover::before {
-  background: #e53935;
+  background: var(--error);
   transform: scale(1.1);
 }
 
@@ -487,11 +487,11 @@
   width: 22px;
   height: 22px;
   filter:
-    drop-shadow(1px 0 0 rgba(0,0,0,0.25))
-    drop-shadow(-1px 0 0 rgba(0,0,0,0.25))
-    drop-shadow(0 1px 0 rgba(0,0,0,0.25))
-    drop-shadow(0 -1px 0 rgba(0,0,0,0.25))
-    drop-shadow(0 0 4px rgba(255,255,255,0.35));
+    drop-shadow(1px 0 0 rgba(var(--shadow-rgb), 0.25))
+    drop-shadow(-1px 0 0 rgba(var(--shadow-rgb), 0.25))
+    drop-shadow(0 1px 0 rgba(var(--shadow-rgb), 0.25))
+    drop-shadow(0 -1px 0 rgba(var(--shadow-rgb), 0.25))
+    drop-shadow(0 0 4px rgba(var(--overlay-rgb), 0.35));
 }
 
 /* Custom-image icon rendered as <img> (project-icon.js) */
@@ -548,7 +548,7 @@
 }
 
 .emoji-picker-slug-input:focus {
-  border-color: var(--accent, #7c6cf8);
+  border-color: var(--accent);
 }
 
 .emoji-picker-slug-actions {
@@ -577,7 +577,7 @@
 
 .emoji-picker-slug-actions button.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -599,7 +599,7 @@
 .emoji-picker-upload-tile:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(var(--accent-rgb, 124, 58, 237), 0.06);
+  background: rgba(var(--accent-rgb), 0.06);
   transform: none;
 }
 
@@ -631,8 +631,8 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--error, #ef4444);
-  color: #fff;
+  background: var(--error);
+  color: var(--on-error);
   font-size: 12px;
   line-height: 1;
   border: none;
@@ -812,9 +812,9 @@
 .project-access-vis-btn .lucide { width: 14px; height: 14px; }
 .project-access-vis-btn:hover { background: rgba(var(--overlay-rgb), 0.08); }
 .project-access-vis-btn.active {
-  background: var(--accent-8, rgba(99, 102, 241, 0.08));
-  border-color: var(--accent, #6366f1);
-  color: var(--accent, #6366f1);
+  background: var(--accent-8);
+  border-color: var(--accent);
+  color: var(--accent);
   font-weight: 500;
 }
 .project-access-user-list {
@@ -831,7 +831,7 @@
   cursor: pointer;
 }
 .project-access-user-item input[type="checkbox"] {
-  accent-color: var(--accent, #6366f1);
+  accent-color: var(--accent);
   width: 15px;
   height: 15px;
   cursor: pointer;
@@ -916,7 +916,7 @@
 }
 
 .emoji-picker-search:focus {
-  border-color: var(--accent, #7c6cf8);
+  border-color: var(--accent);
 }
 
 .emoji-picker-search::placeholder {
@@ -1056,7 +1056,7 @@
 }
 
 .icon-strip-team-btn:hover {
-  color: #fff;
+  color: var(--text);
 }
 
 .icon-strip-team-btn.active::before {
@@ -1064,7 +1064,7 @@
 }
 
 .icon-strip-team-btn.active {
-  color: #fff;
+  color: var(--text);
 }
 
 .icon-strip-team-btn .lucide {
@@ -1083,8 +1083,8 @@
   min-width: 18px;
   height: 18px;
   border-radius: 9px;
-  background: #e74c3c;
-  color: #fff;
+  background: var(--danger);
+  color: var(--on-error);
   font-size: 11px;
   font-weight: 700;
   display: none;
@@ -1230,7 +1230,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-dimmer, #6272a4);
+  color: var(--text-dimmer);
 }
 
 .dm-user-picker-name {
@@ -1269,7 +1269,7 @@
 }
 
 .dm-picker-del-btn:hover {
-  color: var(--danger, #e74c3c) !important;
+  color: var(--danger) !important;
 }
 
 .dm-picker-fav-btn svg,
@@ -1381,7 +1381,7 @@
 }
 
 .icon-strip-wt-item.active {
-  color: #fff;
+  color: var(--text);
 }
 
 .icon-strip-wt-item .wt-branch-abbrev {
@@ -1428,14 +1428,14 @@
 .icon-strip-group-add:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(var(--accent-rgb, 124, 58, 237), 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 /* --- Worktree creation modal --- */
 .wt-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
   z-index: 9998;
 }
 
@@ -1451,7 +1451,7 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.3);
 }
 
 .wt-modal-title {
@@ -1496,7 +1496,7 @@ select.wt-modal-input {
 }
 
 .wt-modal-error {
-  color: var(--error, #ef4444);
+  color: var(--error);
   font-size: 12px;
   margin-top: 8px;
   display: none;
@@ -1532,7 +1532,7 @@ select.wt-modal-input {
 
 .wt-modal-btn.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -1596,7 +1596,7 @@ select.wt-modal-input {
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  background: var(--text-muted, #888);
+  background: var(--text-muted);
   margin: 5px auto;
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
@@ -1613,7 +1613,7 @@ select.wt-modal-input {
 
 .icon-strip-item.drag-over-merge {
   transform: scale(1.1);
-  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb, 88, 87, 252), 0.4);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb), 0.4);
   border-radius: 14px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   z-index: 5;
@@ -1720,24 +1720,24 @@ select.wt-modal-input {
 .icon-strip-folder-header:hover .icon-strip-folder-icon-box {
   background: var(--accent2);
   border-radius: 14px;
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--on-accent2) 25%, transparent);
 }
 
 .icon-strip-folder-header:hover .icon-strip-folder-icon-box svg {
-  color: #fff;
+  color: var(--on-accent2);
 }
 
 .icon-strip-folder-header.active .icon-strip-folder-icon-box {
   background: var(--accent2);
   border-radius: 14px;
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--on-accent2) 25%, transparent);
 }
 
 /* Drag-over state: folder header highlights when a project is dragged over it */
 .icon-strip-folder-header.drag-over-folder .icon-strip-folder-icon-box {
   background: var(--accent2);
   border-radius: 14px;
-  box-shadow: 0 0 0 2px var(--accent2), 0 0 12px rgba(74, 127, 232, 0.4);
+  box-shadow: 0 0 0 2px var(--accent2), 0 0 12px color-mix(in srgb, var(--accent2) 40%, transparent);
 }
 
 /* Reorder indicators on folder header when a folder is being dragged */
@@ -1829,7 +1829,7 @@ select.wt-modal-input {
 
 /* Open: chevron has accent tint to reinforce open state */
 .icon-strip-folder:not(.collapsed) .icon-strip-folder-chevron {
-  background: rgba(var(--accent-rgb, 88, 87, 252), 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -1924,7 +1924,7 @@ select.wt-modal-input {
 /* Folder icon box — use a visible tint in light mode (default bg-alt is pale) */
 .light-theme .icon-strip-folder-icon-box {
   background: var(--border);
-  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 0 0 1.5px rgba(var(--shadow-rgb), 0.18);
 }
 
 /* Folder chevron badge — needs a darker border in light mode */
@@ -1935,7 +1935,7 @@ select.wt-modal-input {
 }
 
 .light-theme .icon-strip-folder:not(.collapsed) .icon-strip-folder-chevron {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(var(--shadow-rgb), 0.06);
   border-color: var(--accent);
   color: var(--accent);
 }

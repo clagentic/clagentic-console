@@ -315,7 +315,7 @@
 
 .settings-toggle-row input:checked + .toggle-track .toggle-thumb {
   transform: translateX(14px);
-  background: #fff;
+  background: var(--on-accent);
 }
 
 .settings-hint {
@@ -448,8 +448,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--warning, #e5a83d);
-  background: rgba(var(--warning-rgb, 229, 168, 61), 0.1);
+  color: var(--warning);
+  background: rgba(var(--warning-rgb), 0.1);
   border-radius: 4px;
   padding: 1px 5px;
   margin-left: 6px;
@@ -546,7 +546,7 @@
 
 .settings-btn-option.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .settings-budget-row {
@@ -667,7 +667,7 @@
 
 .settings-btn-update-available:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .settings-btn-ghost {
@@ -692,8 +692,8 @@
 
 /* --- Badge variant: green for enabled --- */
 .settings-badge.settings-badge-green {
-  background: rgba(46, 160, 67, 0.12);
-  color: #3fb950;
+  background: var(--success-12);
+  color: var(--success);
 }
 
 /* --- Badge variant: proxy-terminated HTTPS (lr-20e71c) ---
@@ -811,7 +811,7 @@
 
 .settings-btn-shutdown:hover:not(:disabled) {
   background: var(--error) !important;
-  color: #fff !important;
+  color: var(--on-error) !important;
 }
 
 .settings-btn-shutdown:disabled {
@@ -901,7 +901,7 @@
 .settings-palette-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(var(--shadow-rgb), 0.55);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -913,7 +913,7 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 24px 64px rgba(var(--shadow-rgb), 0.5);
   max-height: calc(100% - 70px);
   display: flex;
   flex-direction: column;

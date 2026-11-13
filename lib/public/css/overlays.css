@@ -166,8 +166,8 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .ext-experimental {
   font-size: 10px;
   font-weight: 600;
-  color: var(--warning, #f59e0b);
-  background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
   padding: 2px 6px;
   border-radius: 6px;
   vertical-align: middle;
@@ -200,7 +200,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   width: 100%;
   padding: 8px 0;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   font-family: inherit;
@@ -253,7 +253,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 10px;
   font-weight: 700;
   flex-shrink: 0;
@@ -272,20 +272,20 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 
 /* Extension connected state */
 .top-bar-ext-btn.ext-connected {
-  background: color-mix(in srgb, var(--success, #22c55e) 12%, transparent);
-  color: var(--success, #22c55e);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
 }
 .top-bar-ext-btn.ext-connected:hover {
-  background: color-mix(in srgb, var(--success, #22c55e) 20%, transparent);
-  color: var(--success, #22c55e);
+  background: color-mix(in srgb, var(--success) 20%, transparent);
+  color: var(--success);
 }
 .ext-popover-connected {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  background: color-mix(in srgb, var(--success, #22c55e) 10%, transparent);
-  color: var(--success, #22c55e);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
   border-radius: 8px;
   font-size: 12.5px;
   font-weight: 600;
@@ -310,7 +310,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .pwa-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: rgba(var(--shadow-rgb), 0.55);
 }
 
 .pwa-modal-card {
@@ -321,7 +321,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   padding: 28px 24px 20px;
   max-width: 340px;
   width: 100%;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+  box-shadow: 0 16px 48px rgba(var(--shadow-rgb), 0.35);
   animation: modal-in 0.2s ease-out;
   text-align: center;
 }
@@ -399,7 +399,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 
 .pwa-modal-btn.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .pwa-modal-btn.secondary {
@@ -553,7 +553,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .session-grants-title { font-weight: 600; font-size: 16px; margin-bottom: 12px; color: var(--text); }
 .session-grants-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 50vh; overflow-y: auto; }
 .session-grants-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(var(--overlay-rgb), 0.05); border: 1px solid var(--border); }
-.session-grants-whole { border-color: var(--warning, #f39c12); }
+.session-grants-whole { border-color: var(--warning); }
 .session-grants-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
 .session-grants-revoke { flex-shrink: 0; background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; padding: 4px 10px; font-size: 12px; }
 .session-grants-revoke:disabled { opacity: 0.5; cursor: default; }
@@ -569,13 +569,13 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .skill-install-item .skill-name { font-weight: 500; font-size: 14px; color: var(--text); }
 .skill-install-item .skill-scope { font-size: 12px; color: var(--text-muted); }
 .skill-badge { font-size: 11px; padding: 1px 7px; border-radius: 6px; font-weight: 500; white-space: nowrap; }
-.skill-badge-new { background: rgba(46,204,113,0.15); color: var(--success, #2ecc71); }
-.skill-badge-update { background: rgba(243,156,18,0.15); color: var(--warning, #f39c12); }
+.skill-badge-new { background: var(--success-15); color: var(--success); }
+.skill-badge-update { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
 .skill-install-item .skill-status { margin-left: auto; flex-shrink: 0; }
-.skill-status-ok { color: var(--success, #2ecc71); font-size: 16px; font-weight: 600; }
+.skill-status-ok { color: var(--success); font-size: 16px; font-weight: 600; }
 #skill-install-status { font-size: 13px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); }
 #skill-install-status.hidden { display: none; }
-.confirm-proceed { background: var(--success, #2ecc71); color: #fff; border: none; }
+.confirm-proceed { background: var(--success); color: var(--on-success); border: none; }
 .confirm-proceed:hover { opacity: 0.9; }
 
 .confirm-backdrop {
@@ -629,14 +629,14 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 
 .confirm-delete {
   background: var(--error);
-  color: #fff;
+  color: var(--on-error);
 }
 
 .confirm-delete:hover { opacity: 0.85; }
 
 .confirm-ok {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .confirm-ok:hover { opacity: 0.85; }
@@ -653,7 +653,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .remove-project-task-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(var(--shadow-rgb), 0.45);
 }
 .remove-project-task-dialog {
   position: relative;
@@ -711,7 +711,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 }
 .remove-project-task-btn.move {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .remove-project-task-btn.move:hover { opacity: 0.85; }
@@ -1312,7 +1312,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #000;
+  background: var(--bg);
   z-index: 999;
   opacity: 1;
   /* Fade-out is fast (0.4s); fade-in has a slight delay so sub-second
@@ -1334,7 +1334,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 }
 
 #connect-overlay-msg {
-  color: #555;
+  color: var(--text-dimmer);
   font-family: var(--font-mono);
   font-size: 0.85rem;
   margin-top: 1.2rem;
@@ -1348,9 +1348,9 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   margin-top: 1rem;
   padding: 0.5rem 1.2rem;
   border-radius: 6px;
-  border: 1px solid #DA7756;
+  border: 1px solid var(--accent);
   background: transparent;
-  color: #DA7756;
+  color: var(--accent);
   font-family: var(--font-mono);
   font-size: 0.85rem;
   cursor: pointer;
@@ -1358,8 +1358,8 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 
 #connect-overlay-signin-btn:hover,
 #connect-overlay-reload-btn:hover {
-  background: #DA7756;
-  color: #000;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 /* Boot failure (set by the watchdog in index.html): the message is the

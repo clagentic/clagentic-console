@@ -422,7 +422,7 @@
 
 .ask-user-submit {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 10px;
   padding: 10px 18px;
@@ -609,7 +609,7 @@
 
 .permission-btn:hover { opacity: 0.85; }
 
-.permission-allow { background: var(--text-dimmer); color: #fff; }
+.permission-allow { background: var(--text-dimmer); color: var(--bg); }
 .permission-allow:hover { background: var(--text-muted); opacity: 1; }
 .permission-allow-session { background: var(--bg-alt); color: var(--text-secondary); border-color: var(--border); }
 .permission-allow-session:hover { background: var(--input-bg); opacity: 1; }
@@ -692,9 +692,9 @@
   width: 160px;
   height: 100px;
   border-radius: 12px;
-  background: var(--bg-alt, #2a2a2e);
-  color: var(--text-dimmer, #666);
+  background: var(--bg-alt);
+  color: var(--text-dimmer);
   font-size: 12px;
-  border: 1px dashed var(--border, #444);
+  border: 1px dashed var(--border);
 }
 

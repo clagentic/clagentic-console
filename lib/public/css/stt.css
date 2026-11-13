@@ -31,12 +31,12 @@
   width: auto;
   padding: 0 14px 0 10px;
   border-radius: 18px;
-  color: #fff;
-  background: #e53935;
+  color: var(--on-error);
+  background: var(--error);
 }
 
 #stt-btn.stt-active:hover {
-  background: #c62828;
+  background: color-mix(in srgb, var(--error) 88%, var(--on-error));
 }
 
 /* --- Waveform bars --- */
@@ -51,7 +51,7 @@
 .stt-wave-bar {
   width: 3px;
   border-radius: 1.5px;
-  background: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--on-error) 85%, transparent);
   animation: stt-wave-bounce 1.2s ease-in-out infinite;
 }
 

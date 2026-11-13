@@ -295,13 +295,13 @@
 }
 .hub-project-dot.processing {
   background: var(--success);
-  box-shadow: 0 0 6px rgba(80, 250, 123, 0.4);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--success) 40%, transparent);
 }
 /* Multi-user tone (lr-66c118): ring shape, see .hub-recent-dot.other */
 .hub-project-dot.other {
   background: transparent;
-  border: 1.5px solid var(--activity-other, #B77BF3);
-  box-shadow: 0 0 4px rgba(183, 123, 243, 0.4);
+  border: 1.5px solid var(--activity-other);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--activity-other) 40%, transparent);
 }
 /* Waiting on a prompt: dashed ring in the warning hue, so it is
    told from running (filled) and another user's activity (solid ring) by
@@ -502,7 +502,7 @@
 .hub-recent-dot.processing {
   background: var(--success);
   opacity: 1;
-  box-shadow: 0 0 6px rgba(80, 250, 123, 0.4);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--success) 40%, transparent);
 }
 /* Alert state — color precedence LOCKED (andy, lr-0aa7b6), promoted into
    activity-state.js's indicatorClass() as the canonical derivation for
@@ -516,9 +516,9 @@
    Formerly a SEPARATE right-side dot (.hub-recent-alert-dot, removed) — now
    just another color state of the single left dot. */
 .hub-recent-dot.alert {
-  background: var(--danger, #e74c3c);
+  background: var(--danger);
   opacity: 1;
-  box-shadow: 0 0 6px rgba(231, 76, 60, 0.5);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 50%, transparent);
 }
 /* Multi-user tone (lr-66c118): another user's activity — distinct violet
    hue AND a ring shape (transparent center, colored border) instead of a
@@ -527,8 +527,8 @@
 .hub-recent-dot.other {
   background: transparent;
   opacity: 1;
-  border: 1.5px solid var(--activity-other, #B77BF3);
-  box-shadow: 0 0 4px rgba(183, 123, 243, 0.4);
+  border: 1.5px solid var(--activity-other);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--activity-other) 40%, transparent);
 }
 .hub-recent-dot.waiting {
   background: transparent;
@@ -712,10 +712,10 @@
   font-weight: 600;
 }
 .home-hub-mate-primary .home-hub-mate-avatar {
-  box-shadow: 0 0 0 2px #00b894;
+  box-shadow: 0 0 0 2px var(--success);
 }
 .home-hub-mate-primary-star {
-  color: #00b894;
+  color: var(--success);
   font-size: 8px;
   margin-left: 2px;
   vertical-align: super;

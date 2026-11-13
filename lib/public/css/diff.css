@@ -68,7 +68,7 @@
 
 /* --- Hunk header row (patch diffs) --- */
 .diff-row-hunk {
-  background: rgba(128, 128, 128, 0.05);
+  background: rgba(var(--overlay-rgb), 0.05);
 }
 
 .diff-row-hunk .diff-hunk-text {
@@ -108,7 +108,7 @@
 /* Empty cells in split view */
 .diff-row-remove .diff-code-new,
 .diff-row-add .diff-code-old {
-  background: rgba(128, 128, 128, 0.03);
+  background: rgba(var(--overlay-rgb), 0.03);
 }
 
 /* --- Word-wrap mode for prose files (markdown, etc.) --- */
