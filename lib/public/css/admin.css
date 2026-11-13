@@ -310,27 +310,16 @@
   background: var(--accent-8);
 }
 
-/* --- Project Users Modal --- */
-.admin-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(var(--shadow-rgb), 0.5);
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
+/* --- Admin dialogs ---
+   Drawn by the shared overlay component (modules/overlay-modal.js): the scrim, the
+   card, the layer and the close control are its. These rules size the dialog and
+   style what is inside it. */
 .admin-modal {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  width: 380px;
-  max-width: 90vw;
-  box-shadow: 0 8px 30px rgba(var(--shadow-rgb), 0.4);
+  /* The admin forms are laid out for this width (named reason: dialog width). */
+  max-width: 380px;
+  /* The sections below carry their own padding. */
+  padding-left: 0;
+  padding-right: 0;
   animation: admin-in 0.15s ease-out;
 }
 
@@ -338,7 +327,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 0;
+  padding: 0 16px;
 }
 
 .admin-modal-header h3 {
@@ -348,27 +337,23 @@
   margin: 0;
 }
 
-.admin-modal-close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  display: flex;
-}
-
-.admin-modal-close svg {
-  width: 16px;
-  height: 16px;
-}
-
-.admin-modal-close:hover {
-  color: var(--text);
-}
-
 .admin-modal-body {
   padding: 16px;
+}
+
+/* A confirmation: one line of text, no header. */
+.admin-modal-body-plain {
+  padding-top: 0;
+}
+.admin-modal-desc.admin-modal-desc-plain {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+.admin-modal-desc.admin-modal-desc-note {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .admin-modal-desc {

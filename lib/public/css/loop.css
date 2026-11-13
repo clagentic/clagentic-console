@@ -122,56 +122,25 @@
 }
 .loop-busy-hint .lucide { width: 13px; height: 13px; }
 
-/* Loop status modal dialog */
-.loop-status-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 9000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: ralphFadeIn 0.15s ease;
-}
-.loop-status-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--overlay-rgb), 0.4);
-}
+/* Loop status dialog. Drawn by the shared overlay component (scrim, card, layer
+   and close control); this sizes it and styles what is inside. */
 .loop-status-dialog {
-  position: relative;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0;
-  min-width: 320px;
+  /* The rows are laid out for this width (named reason: dialog width). */
   max-width: 400px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.35);
-  color: var(--text);
+  /* The sections below carry their own padding. */
+  padding: 0;
 }
 .loop-status-dialog-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 16px;
+  /* The right side clears the shared close control. */
+  padding: 14px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 .loop-status-dialog-icon { display: inline-flex; color: var(--accent); }
 .loop-status-dialog-icon .lucide { width: 16px; height: 16px; }
 .loop-status-dialog-title { font-weight: 600; font-size: 14px; flex: 1; }
-.loop-status-dialog-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background 0.15s, color 0.15s;
-}
-.loop-status-dialog-close .lucide { width: 14px; height: 14px; }
-.loop-status-dialog-close:hover { color: var(--text-secondary); background: rgba(var(--overlay-rgb), 0.06); }
 
 .loop-status-dialog-body { padding: 14px 16px; }
 .loop-status-dialog-row {
