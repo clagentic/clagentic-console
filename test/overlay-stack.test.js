@@ -1439,7 +1439,6 @@ test("C2 css: no moved dialog keeps its own scrim, card chrome, position or laye
   // C3a: the panels' layer is the shared panel option's, no longer a rule on their own node.
   assert.equal(cssRules.valueAt(css("user-settings.css"), "#user-settings", "z-index", DESKTOP), null);
   assert.equal(cssRules.valueAt(css("server-settings.css"), "#server-settings", "z-index", DESKTOP), null);
-  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", DESKTOP), "var(--z-panel)");
 });
 
 // The page's static modals: the shared scrim and dialog, no close control of their own.
@@ -1547,11 +1546,27 @@ var PANEL_WAYS = [
   { name: "a click on the scrim", act: function (m, el) { el.querySelector(".overlay-modal-backdrop").click(); } },
   { name: "the shared close control", act: function (m, el) { el.querySelector(".overlay-close").click(); } },
   { name: "the back swipe", phoneOnly: true, act: function (m) {
-    assert.equal(m.historyMod.consumeOwnPopstate(), false, "a swipe is not the echo of our own back");
-    assert.equal(m.historyMod.consumeOverlayPopstate(), true, "an entry is held");
-    assert.equal(m.registry.closeTopHeldPanel(), true, "the panel closes itself");
+    assert.equal(backGesture(m), "panel", "the panel that owns the newest entry closes itself");
   } },
 ];
+
+// The popstate routing of app.js, over the same exports: the echo of our own back
+// closes nothing; else an open menu or dialog closes first and the entry the
+// browser popped is put back; else the owner of the newest entry closes (a panel
+// by its node, or an overlay that keeps its own anonymous entry, which app.js
+// routes to that overlay's close function).
+function backGesture(m) {
+  var h = m.historyMod;
+  if (h.consumeOwnPopstate()) return "own";
+  if (!h.hasOverlayState()) return "none";
+  if (m.registry.closeTopBlockingOverlay()) { h.restoreOverlayState(); return "blocking"; }
+  var owner = h.topOverlayOwner();
+  h.consumeOverlayPopstate();
+  if (!owner) return "legacy";
+  if (m.registry.closeHeldPanel(owner)) return "panel";
+  h.restoreOverlayState();
+  return "kept";
+}
 
 test("C3a panel: the real user settings module opens as the panel option, closes by each way, and holds its history entry on a phone only", async function (t) {
   global.fetch = function () { return Promise.reject(new Error("offline")); };
@@ -1614,17 +1629,84 @@ test("C3a panel: the history option, a re-opened panel, and the back swipe closi
   var first = n.overlay.showOverlay({ kind: "modal", panel: true, content: "a" });
   var unheld = n.overlay.showOverlay({ kind: "modal", panel: true, content: "b", history: false });
   var second = n.overlay.showOverlay({ kind: "modal", panel: true, content: "c" });
-  var dialog = n.overlay.showOverlay({ kind: "modal", content: "d" });
-  n.historyMod.consumeOverlayPopstate();
-  assert.equal(n.registry.closeTopHeldPanel(), true);
-  assert.deepEqual([first.isOpen(), unheld.isOpen(), second.isOpen(), dialog.isOpen()], [true, true, false, true], "the panel opened last that holds an entry closed; a dialog and a panel with no entry stay");
-  n.historyMod.consumeOverlayPopstate();
-  assert.equal(n.registry.closeTopHeldPanel(), true);
-  assert.deepEqual([first.isOpen(), unheld.isOpen(), dialog.isOpen()], [false, true, true], "then the earlier one");
-  assert.equal(n.registry.closeTopHeldPanel(), false, "none holds an entry now; the router falls through to the others");
+  assert.equal(n.history.push, 2, "two panels hold an entry");
+  assert.equal(backGesture(n), "panel");
+  assert.deepEqual([first.isOpen(), unheld.isOpen(), second.isOpen()], [true, true, false], "the panel that owns the newest entry closed; a panel with no entry stays");
+  assert.equal(backGesture(n), "panel");
+  assert.deepEqual([first.isOpen(), unheld.isOpen()], [false, true], "then the earlier one");
+  assert.equal(backGesture(n), "none", "no entry is held now; the router falls through to the others");
   assert.equal(n.history.back, 0, "a swipe's pops issue no back of their own");
   unheld.close();
-  dialog.close();
+});
+
+// What one back closes over a panel, in open order: a dialog or a menu opened over
+// it closes first and the panel stays, with its entry put back; a legacy overlay's
+// entry pushed after the panel is that overlay's to close; the panel closes only
+// when it owns the newest entry.
+var BACK_ROWS = [
+  { name: "a dialog over a panel", over: function (m) { return m.overlay.showOverlay({ kind: "modal", content: "d" }); } },
+  { name: "a menu over a panel", over: function (m) { return m.overlay.showOverlay({ kind: "menu", content: "m" }); } },
+];
+
+test("C3a panel: one back closes the topmost overlay in open order and keeps the history stack consistent", async function (t) {
+  for (var i = 0; i < BACK_ROWS.length; i++) {
+    var row = BACK_ROWS[i];
+    var m = await panelBrowser(t, false);
+    var panel = m.overlay.showOverlay({ kind: "modal", panel: true, content: "p" });
+    var over = row.over(m);
+    assert.equal(m.history.push, 1, row.name + ": the panel holds one entry");
+    assert.equal(backGesture(m), "blocking", row.name + ": the first back closes what is on top");
+    assert.equal(over.isOpen(), false, row.name + ": it closed");
+    assert.equal(panel.isOpen(), true, row.name + ": the panel stays");
+    assert.equal(m.history.push, 2, row.name + ": the entry the browser popped is put back");
+    assert.equal(m.historyMod.hasOverlayState(), true, row.name + ": the panel still holds it");
+    assert.equal(backGesture(m), "panel", row.name + ": the next back closes the panel");
+    assert.equal(panel.isOpen(), false, row.name + ": closed");
+    assert.equal(m.history.back, 0, row.name + ": no back of our own, so no double pop");
+    assert.equal(m.historyMod.hasOverlayState(), false, row.name + ": no entry is orphaned");
+  }
+
+  var n = await panelBrowser(t, false);
+  var lower = n.overlay.showOverlay({ kind: "modal", panel: true, content: "a" });
+  n.historyMod.pushOverlayState(); // a legacy overlay opened after the panel (the session search)
+  assert.equal(backGesture(n), "legacy", "the entry opened last is the legacy overlay's to close");
+  n.historyMod.popOverlayState(); // its close function
+  assert.equal(lower.isOpen(), true, "the panel under it stays");
+  assert.equal(n.history.back, 0, "and the swipe's pop issues no back of its own");
+  assert.equal(backGesture(n), "panel", "then the panel closes");
+  assert.equal(lower.isOpen(), false);
+});
+
+test("C3a panel: a panel opened later sits over an earlier one, and the legacy panels sit between", async function (t) {
+  var m = await panelBrowser(t, false);
+  var order = function (el) { return Number(el.style["--overlay-order"]); };
+  var a = m.overlay.showOverlay({ kind: "modal", panel: true, content: "a" });
+  var b = m.overlay.showOverlay({ kind: "modal", panel: true, content: "b" });
+  var dialog = m.overlay.showOverlay({ kind: "modal", content: "d" });
+  assert.ok(order(b.el) > order(a.el), "a panel opened from another is numbered above it");
+  assert.ok(order(dialog.el) > order(b.el), "a dialog is numbered over the panels");
+  for (var i = 0; i < 60; i++) m.overlay.showOverlay({ kind: "modal", panel: true, content: "p" + i });
+  assert.ok(order(m.top()) <= 40, "panel numbers are clamped, so the band stays under the modal layer");
+  assert.ok(layer("panel") + 2 + 40 < layer("modal"), "the whole panel band is under the modal layer");
+  assert.ok(layer("panel") > layer("nav"), "and over the nav");
+  // The phone Settings list (+0), then project settings opened from it (+1), then a registry panel (+2 and up): each above the last (the layers are rows of the token table).
+  var hub = cssRules.valueAt(css("settings-nav.css"), "#settings-hub", "z-index", PHONE);
+  var ps = cssRules.valueAt(css("filebrowser.css"), "#project-settings", "z-index", PHONE);
+  assert.equal(hub, "var(--z-panel)");
+  assert.match(ps, /\+ 1\)$/, "project settings is one above the list that opens it");
+});
+
+test("C3a panel: releasing a panel's entry before the page navigates issues no back, and a panel kept open by a navigation keeps its own", async function (t) {
+  var m = await panelBrowser(t, false);
+  var palette = m.overlay.showOverlay({ kind: "modal", panel: true, content: "p" });
+  assert.equal(m.history.push, 1);
+  palette.close({ keepHistory: true });
+  assert.equal(m.history.back, 0, "no queued back to land on the old sentinel after the navigation's push");
+  assert.equal(m.historyMod.hasOverlayState(), false, "the entry is released");
+  assert.equal(palette.isOpen(), false, "and the panel closed");
+  var plain = m.overlay.showOverlay({ kind: "modal", panel: true, content: "q" });
+  plain.close();
+  assert.equal(m.history.back, 1, "a close with no navigation still releases its entry with a back");
 });
 
 test("C3a panel: a dialog opened from a panel sits over it and takes Escape first, whichever opened last", async function (t) {
@@ -1650,7 +1732,6 @@ test("C3a panel: a dialog opened from a panel sits over it and takes Escape firs
 
   WIDTHS.forEach(function (width) {
     var at = " at " + width + "px";
-    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", width), "var(--z-panel)", "a panel is on the panel layer" + at);
     assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", width), "calc(var(--z-modal) + var(--overlay-order, 0))", "a dialog on the modal layer" + at);
     assert.equal(cssRules.valueAt(OVERLAY, ".overlay-panel-dialog", "width", width), "100%", "the panel dialog fills the page" + at);
     assert.equal(cssRules.valueAt(OVERLAY, ".overlay-panel-dialog > .overlay-close", "top", width), "calc(var(--safe-top) + var(--overlay-close-inset))", "its close control clears the notch" + at);
@@ -1671,13 +1752,18 @@ var C3A_SOURCE_ROWS = [
   { name: "command palette", file: "command-palette.js",
     has: [/showOverlay\(\{ kind: "modal", panel: true, el: paletteEl, closeLabel: "Close search", onRemove: resetPalette \}\)/, /overlay-modal-backdrop"><\/div>' \+\s*'<div class="overlay-modal-dialog cmd-palette-dialog">/,
       // the builders the file keeps escape what the server or a user supplies (P6)
-      /escapeHtml\("v" \+ cachedVersion\)/, /'<img src="' \+ escapeHtml\(uAvatarUrl\) \+ '"/, /escapeHtml\(proj\.sessions \+ " sessions"\)/],
+      /escapeHtml\("v" \+ cachedVersion\)/, /'<img src="' \+ escapeHtml\(uAvatarUrl\) \+ '"/, /escapeHtml\(proj\.sessions \+ " sessions"\)/,
+      // a choice that switches project releases the panel's history entry before the navigation pushes its own
+      /closeCommandPalette\(leavesProject\(entry\.data\.slug\)\);\s*ctx\.switchProject/, /closeCommandPalette\(leavesProject\(item\.projectSlug\)\);/],
     gone: [/overlay-history|pushOverlayState|popOverlayState/, /cmd-palette-backdrop|cmd-palette-close|cmd-palette-kbd/, /"v" \+ cachedVersion : ""/, /e\.key === "Escape"/, /paletteEl\.classList/] },
   { name: "agent picker", file: "agent-picker.js",
     has: [/showOverlay\(\{ kind: "modal", panel: true, el: paletteEl, closeLabel: "Close agents", onRemove: resetPicker \}\)/, /overlay-modal-backdrop"><\/div>' \+\s*'<div class="overlay-modal-dialog cmd-palette-dialog">/],
     gone: [/cmd-palette-backdrop|agent-picker-close|cmd-palette-kbd/, /e\.key === "Escape"/, /paletteEl\.classList\.(add|remove)\("hidden"\)/] },
   { name: "server settings", file: "server-settings.js",
-    has: [/showOverlay\(\{ kind: "modal", panel: true, el: settingsEl, onEscape: onSettingsEscape, onRemove: onSettingsClosed \}\)/, /if \(!paletteOpen\) return false;\s*closeSettingsPalette\(\);\s*return true;/],
+    has: [/showOverlay\(\{ kind: "modal", panel: true, el: settingsEl, onEscape: onSettingsEscape, onRemove: onSettingsClosed \}\)/, /if \(!paletteOpen\) return false;\s*closeSettingsPalette\(\);\s*return true;/,
+      // the PIN input spends its Escape, so one key does not also close the panel; a second open clears the first stats timer
+      /pinInput\.addEventListener\("keydown", function \(e\) \{[^}]*?e\.stopPropagation\(\);\s*if \(e\.key === "Enter"\)/,
+      /stopStatsTimer\(\);\s*requestStats\(\);\s*statsTimer = setInterval\(requestStats, 5000\);/, /function onSettingsClosed\(\) \{[^}]*stopStatsTimer\(\);/],
     gone: [/overlay-history|pushOverlayState|popOverlayState/, /server-settings-close|closeBtn/, /e\.key === "Escape" && !settingsEl/, /settingsEl\.classList\.(add|remove)\("hidden"\)/] },
   { name: "user settings", file: "user-settings.js",
     has: [/kind: 'modal', panel: true, el: settingsEl, history: isPhoneSettingsLayout,/],
@@ -1709,7 +1795,7 @@ test("C3a source: the palette, the picker, server settings and the ralph and sch
     row.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + " (" + row.file + "): " + String(re) + " is gone"); });
   });
   var app = publicFile("app.js");
-  assert.match(app, /if \(closeTopHeldPanel\(\)\) return;\s*\/\/ The overlays that still keep their own entry/, "the popstate routing asks the panel option first");
+  assert.match(app, /if \(closeTopBlockingOverlay\(\)\) \{ restoreOverlayState\(\); return; \}\s*var owner = topOverlayOwner\(\);\s*consumeOverlayPopstate\(\);(?:\s*\/\/[^\n]*)*\s*if \(owner\) \{\s*if \(!closeHeldPanel\(owner\)\) restoreOverlayState\(\);\s*return;\s*\}\s*\/\/ The overlays that still keep their own entry/, "the popstate routing closes a menu or dialog first, then the owner of the newest entry (backGesture mirrors it)");
   assert.doesNotMatch(app, /isCommandPaletteOpen|isUserSettingsOpen|closeUserSettings|isSettingsOpen\(\)|closeSettings\(\)/, "and no longer names the panels it moved");
 });
 
@@ -1757,10 +1843,13 @@ test("C3a css: .confirm-backdrop and .confirm-dialog exist in no stylesheet, mar
 var C3A_TOKENS = [
   { file: "command-palette.css", selector: ".project-switcher", was: 400, want: "var(--z-modal)" },
   { file: "playbook.css", selector: ".playbook-overlay", was: 400, want: "var(--z-modal)" },
-  { file: "scheduler-modal.css", selector: ".sched-create-interval-dropdown", was: 1200, want: "var(--z-menu)" },
   { file: "loop.css", selector: "#ralph-exec-modal", was: 310, want: "var(--z-modal)" },
   { file: "server-settings.css", selector: ".settings-palette", was: 650, want: "var(--z-menu)" },
   { file: "settings-nav.css", selector: "#settings-hub", was: 260, want: "var(--z-panel)", width: PHONE },
+  // Project settings is opened from the list and stays under nothing it opens: one above it.
+  { file: "filebrowser.css", selector: "#project-settings", was: 300, want: "calc(var(--z-panel) + 1)", width: PHONE },
+  // The panel option's layer, the one assertion of it: numbered like the modals, over both legacy panels.
+  { file: "overlay.css", selector: ".overlay-modal.overlay-panel", was: 399, want: "calc(var(--z-panel) + 2 + var(--overlay-order, 0))" },
 ];
 
 test("C3a tokens: each literal the C3a surfaces owned is a layer token, and its scale value is where the literal sat or the surface moved onto the shared layer", function () {
@@ -1771,5 +1860,8 @@ test("C3a tokens: each literal the C3a surfaces owned is a layer token, and its 
   assert.equal(layer("modal"), 400);
   // The moved ralph and scheduler dialogs, and the panels, are on the shared layers (overlay.css).
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", DESKTOP), "calc(var(--z-modal) + var(--overlay-order, 0))");
-  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", DESKTOP), "var(--z-panel)");
+  // The scheduler's create-interval dropdown (was 1200) was unreferenced and is removed, not mapped.
+  fs.readdirSync(CSS_DIR).filter(function (f) { return /\.css$/.test(f); }).forEach(function (f) {
+    assert.doesNotMatch(css(f), /sched-create-interval-dropdown/, f);
+  });
 });
