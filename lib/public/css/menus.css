@@ -97,14 +97,8 @@
 
 /* Session info popover */
 .session-info-popover {
-  position: fixed;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
   padding: 12px 16px;
   min-width: 260px;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
-  z-index: 9999;
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.6;
