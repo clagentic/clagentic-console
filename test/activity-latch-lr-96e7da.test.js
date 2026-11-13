@@ -136,14 +136,16 @@ test("CI invariant: server-side sessions.js/project.js stamp localId on status/d
 
 test("CI invariant: session_switched carries isProcessing from BOTH server send sites (the hydration path previously omitted it, per MILLER's smoking-gun citation)", function () {
   var connSrc = stripLineComments(readMod("lib/project-connection.js"));
-  var switchedIdx = connSrc.indexOf('type: "session_switched"');
-  assert.ok(switchedIdx !== -1, "expected a session_switched send in project-connection.js");
-  var sendCallEnd = connSrc.indexOf(");", switchedIdx);
-  var sendCall = connSrc.slice(switchedIdx, sendCallEnd);
+  // The hydration send no longer spells the payload out: it goes through the
+  // shared builder, which the sessions.js assertions below pin for isProcessing.
   assert.match(
-    sendCall,
-    /isProcessing:\s*!!active\.isProcessing/,
-    "project-connection.js's session_switched hydration send must carry isProcessing so a fresh connect/reconnect reconciles the footer instead of leaving 'processing' at a stale value"
+    connSrc,
+    /sendTo\(ws,\s*sm\.buildSessionSwitchedMessage\(active,/,
+    "project-connection.js's session_switched hydration send must use the shared builder so a fresh connect/reconnect carries isProcessing like a switch does"
+  );
+  assert.ok(
+    connSrc.indexOf('type: "session_switched"') === -1,
+    "project-connection.js must not build its own session_switched payload"
   );
 
   var sessionsSrc = stripLineComments(readMod("lib/sessions.js"));
