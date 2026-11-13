@@ -151,6 +151,56 @@ test("an injected sender's avatar follows the roster: declared and extracted sen
   assert.equal(automation.avatarUrl, automation.defaultAvatarUrl);
 });
 
+// One row per sender: a system kind draws its fixed built-in icon, an agent or
+// human-side sender is unchanged.
+var SYSTEM_ROWS = [
+  { name: "scheduled input", sender: { senderKind: "automation", initiator: "scheduled", fromName: "Scheduled message" }, kind: "scheduled" },
+  { name: "run-now scheduled input", sender: { senderKind: "automation", initiator: "scheduled-now", fromName: "Scheduled message" }, kind: "scheduled" },
+  { name: "loop turn", sender: { senderKind: "automation", initiator: "loop", fromName: "Loop" }, kind: "loop" },
+  { name: "automation of no known kind", sender: { senderKind: "automation", initiator: "other", fromName: "x" }, kind: null },
+  { name: "declared agent", sender: { senderKind: "declared", fromName: "sender-z" }, kind: null },
+  { name: "extracted agent", sender: { senderKind: "extracted", fromName: "worker-a@side", senderAgent: "worker-a" }, kind: null },
+  { name: "undeclared sender", sender: { senderKind: "undeclared" }, kind: null },
+];
+
+test("a system-injected sender draws a fixed built-in icon, never a seeded robot; agents are unchanged", async function () {
+  var a = await loadAvatar();
+  var identity = await mod("injected-identity.js");
+  SYSTEM_ROWS.forEach(function (row) {
+    assert.equal(a.systemKindOf(row.sender), row.kind, row.name);
+    var id = identity.resolveInjectedIdentity(row.sender, undefined, [], 36);
+    assert.equal(id.systemKind, row.kind, row.name);
+    if (row.kind) {
+      assert.equal(id.agentKey, null, row.name + ": no agent key, so no roster choice or seed");
+      var el = a.createAgentAvatar(null, 36, "x", null, { systemKind: id.systemKind });
+      assert.equal(el.tagName.toLowerCase(), "span", row.name);
+      assert.equal(el.dataset.agentSystemKind, row.kind, row.name);
+      assert.equal(el.dataset.agentKey, undefined, row.name + ": not bound to a seed");
+      assert.match(el.innerHTML, /^<svg /, row.name);
+    } else if (row.sender.senderKind === "declared" || row.sender.senderKind === "extracted") {
+      assert.match(id.defaultAvatarUrl, /\/bottts\/svg\?seed=/, row.name + ": the agent's seeded robot as at main");
+    }
+  });
+  assert.notEqual(a.resolveSystemAvatar("scheduled").svg, a.resolveSystemAvatar("loop").svg, "each kind has its own icon");
+  assert.equal(a.resolveSystemAvatar("no-such-kind"), null);
+  var plain = a.createAgentAvatar("agent-a", 24, "x", null, { systemKind: "no-such-kind" });
+  assert.equal(plain.tagName.toLowerCase(), "img", "an unknown kind falls through to the agent avatar");
+});
+
+test("a system icon carries no literal colour; the container takes theme tokens", function () {
+  ["lib/public/modules/agent-avatar.js"].forEach(function (rel) {
+    var src = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    var svgs = src.match(/<svg[^`]*?<\/svg>/g) || [];
+    assert.ok(svgs.length >= 2, "both icons found");
+    svgs.forEach(function (svg) { assert.doesNotMatch(svg, /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/, "literal colour in an icon"); });
+  });
+  var css = fs.readFileSync(path.join(ROOT, "lib/public/css/agent-picker.css"), "utf8");
+  var block = css.match(/\.agent-avatar-system \{[^}]*\}/)[0];
+  assert.match(block, /background: var\(--/);
+  assert.match(block, /color: var\(--/);
+  assert.doesNotMatch(block, /#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+});
+
 test("an injected sender's avatar already on the page changes when the roster does", async function () {
   var a = await loadAvatar();
   var identity = await mod("injected-identity.js");

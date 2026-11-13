@@ -147,6 +147,24 @@
   color: var(--on-av);
 }
 
+/* A console automation (scheduled input, a loop turn): one fixed glyph on the
+   accent tint. The size comes from the surface that hosts it; the glyph fills
+   three fifths of it. */
+.agent-avatar-system {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.agent-avatar-system svg {
+  width: 60%;
+  height: 60%;
+}
+
 .agent-avatar-tint-0 { background: var(--av0); }
 .agent-avatar-tint-1 { background: var(--av1); }
 .agent-avatar-tint-2 { background: var(--av2); }
