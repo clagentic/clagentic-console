@@ -275,6 +275,132 @@ test("a server that reports a version when the binary did not is trusted; neithe
   await neither.adapter.shutdown();
 });
 
+// --- A Codex upgraded under a running app-server ---
+
+// A stand-in for the binary lookup: what is on disk now, and a count of the
+// times Codex was asked for its version.
+function fakeBinary(initial) {
+  var disk = Object.assign({ path: "/opt/codex/bin/codex", fileId: "1:100:7", version: "0.150.0" }, initial);
+  return {
+    disk: disk,
+    probes: 0,
+    locate: function () { return disk.path; },
+    fileId: function () { return disk.fileId; },
+    resolve: function () { this.probes++; return { path: disk.path, version: disk.version }; },
+  };
+}
+
+async function adapterOver(binary) {
+  setScenario(binary.disk.version);
+  var dir = projectDir();
+  var adapter = codexModule.createCodexAdapter({ cwd: dir, slug: "p", binaryProbe: {
+    locate: function () { return binary.locate(); },
+    fileId: function (p) { return binary.fileId(p); },
+    resolve: function () { return binary.resolve(); },
+  } });
+  return { adapter: adapter, dir: dir };
+}
+
+function captureLog() {
+  var lines = [];
+  var original = console.log;
+  console.log = function () { lines.push(Array.prototype.join.call(arguments, " ")); };
+  return { lines: lines, stop: function () { console.log = original; } };
+}
+
+[
+  { name: "a version change", change: { fileId: "2:200:7", version: "0.162.1" } },
+  { name: "a path change", change: { path: "/usr/local/bin/codex", fileId: "3:100:9" } },
+].forEach(function (row) {
+  test(row.name + " of the resolved codex gives the next turn a fresh app-server and retires the old one unforced", async function () {
+    var binary = fakeBinary();
+    var run = await adapterOver(binary);
+    var first = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+    var old = lastServer();
+    first.close();
+    await until(function () { return old.calls.length > 0; }, "the old server to be used");
+
+    Object.assign(binary.disk, row.change);
+    setScenario(binary.disk.version);
+    var second = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+    var fresh = lastServer();
+    assert.notEqual(fresh, old, "the new turn runs on a new app-server");
+    await until(function () { return old.stopped; }, "the old server to be retired");
+    assert.equal(fresh.stopped, false);
+    second.close();
+    await run.adapter.shutdown();
+  });
+});
+
+test("a turn in flight when the binary changes completes on the old app-server, which is retired only after it", async function () {
+  var binary = fakeBinary();
+  var run = await adapterOver(binary);
+  setScenario(binary.disk.version, { holdTurn: true });
+  var inFlight = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  var old = lastServer();
+  inFlight.pushMessage("long turn");
+  await until(function () { return callsOf(old, "turn/start").length > 0; }, "the turn");
+
+  Object.assign(binary.disk, { fileId: "2:200:7", version: "0.162.1" });
+  setScenario("0.162.1");
+  var next = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  assert.notEqual(lastServer(), old);
+  await new Promise(function (resolve) { setTimeout(resolve, 50); });
+  assert.equal(old.stopped, false, "the server with a turn on it is not stopped");
+  assert.equal(callsOf(old, "turn/interrupt").length, 0, "the turn is not interrupted");
+
+  inFlight.close();
+  await until(function () { return old.stopped; }, "the old server to be retired once its turn ended");
+  next.close();
+  await run.adapter.shutdown();
+});
+
+test("an unchanged binary is reused for every turn and Codex is never asked for its version", async function () {
+  var binary = fakeBinary();
+  var run = await adapterOver(binary);
+  var handles = [];
+  for (var i = 0; i < 4; i++) handles.push(await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null }));
+  assert.equal(servers.filter(function (s) { return s.opts.cwd === run.dir; }).length, 1);
+  assert.equal(binary.probes, 0);
+  handles.forEach(function (h) { h.close(); });
+  await run.adapter.shutdown();
+});
+
+test("a touched file reporting the same version at the same path keeps its app-server, after one version check", async function () {
+  var binary = fakeBinary();
+  var run = await adapterOver(binary);
+  var first = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  var server = lastServer();
+  binary.disk.fileId = "9:100:7";
+  var second = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  var third = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  assert.equal(lastServer(), server);
+  assert.equal(binary.probes, 1, "the changed file is checked once, then remembered");
+  [first, second, third].forEach(function (h) { h.close(); });
+  await run.adapter.shutdown();
+});
+
+test("the retirement is logged with the old and the new binary identity", async function () {
+  var binary = fakeBinary();
+  var run = await adapterOver(binary);
+  var first = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  first.close();
+  Object.assign(binary.disk, { fileId: "2:200:7", version: "0.162.1" });
+  setScenario("0.162.1");
+  var log = captureLog();
+  var second;
+  try {
+    second = await run.adapter.createQuery({ cwd: run.dir, model: "gpt-test", runtimeEnv: null });
+  } finally {
+    log.stop();
+  }
+  var line = log.lines.filter(function (l) { return /codex binary changed/.test(l); })[0];
+  assert.ok(line, "a line names the retirement");
+  assert.match(line, /changed from \/opt\/codex\/bin\/codex \(version 0\.150\.0, file 1:100:7\) to \/opt\/codex\/bin\/codex \(version 0\.162\.1, file 2:200:7\)/);
+  second.close();
+  await run.adapter.shutdown();
+});
+
 // --- Model switch, capabilities, plan display, abort ---
 
 test("each running version lists its own models, and a switch is sent on the next turn", async function () {
