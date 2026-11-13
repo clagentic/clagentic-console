@@ -415,7 +415,7 @@ var MENU_SURFACES = [
   { name: "notification menu", b2: true, kind: "menu", node: "page", opener: true, place: { placement: "below-right-aligned", gap: 6 }, at: { left: "90px", top: "126px" } },
   { name: "update popover", b2: true, kind: "popover", node: "page", opener: true, place: { placement: "below-right-aligned", gap: 6 }, at: { left: "90px", top: "126px" } },
   { name: "extension popover", b2: true, kind: "popover", node: "page", opener: true, place: { placement: "below", gap: 8 }, at: { left: "100px", top: "128px" } },
-  { name: "rate-limit popover", b2: true, kind: "popover", node: "new", place: { placement: "below-center", gap: 8 }, at: { left: "95px", top: "128px" } },
+  { name: "rate-limit popover", b2: true, passive: true, kind: "popover", node: "new", place: { placement: "below-center", gap: 8 }, at: { left: "95px", top: "128px" } },
   { name: "tool-palette menu", b2: true, kind: "menu", node: "new", point: { x: 300, y: 200 }, at: { left: "300px", top: "200px" } },
   { name: "profile popover", b2: true, kind: "popover", node: "built", opener: true, closeButton: true, place: { placement: "above", gap: 8 }, at: { left: "100px", top: "62px" } },
   { name: "speech-to-text language popover", b2: true, kind: "popover", node: "new", opener: true, place: { placement: "above", gap: 8 }, at: { left: "100px", top: "62px" } },
@@ -433,6 +433,7 @@ function openSurface(m, row) {
   var opts = Object.assign({ kind: row.kind, doc: m.doc, id: row.id, closeButton: row.closeButton }, row.place);
   if (row.inline) opts.inline = true;
   else opts.anchor = anchor;
+  if (row.passive) opts.passive = true;
   if (row.opener) opts.opener = control;
   if (row.node === "new") opts.content = "<span>x</span>";
   else {
@@ -587,7 +588,9 @@ var B1_SHEETS = [
   { file: "scheduler-modal.css", selectors: [".sched-custom-end-list"] },
   { file: "loop.css", selectors: [".loop-pending-popover"] },
   // B2.
-  { file: "menus.css", selectors: ["#notif-menu", "#usage-panel", "#status-panel", "#diagnostics-panel"] },
+  // The three adopted info panels set their layer on their own node (the column
+  // sits below modals); the stylesheet row above asserts it is the menu token.
+  { file: "menus.css", selectors: ["#notif-menu", "#usage-panel", "#status-panel", "#diagnostics-panel"], ownLayer: ["#usage-panel", "#status-panel", "#diagnostics-panel"] },
   { file: "overlays.css", selectors: [".ext-popover", ".top-bar-popover"] },
   { file: "title-bar.css", selectors: [".rate-limit-popover"] },
   { file: "sidebar.css", selectors: [".tool-palette-ctx-menu"] },
@@ -605,7 +608,8 @@ test("stylesheet: no B1 or B2 menu keeps its own position, layer or card chrome"
       assert.ok(hits.length > 0, sheet.file + ": " + selector + " still styles its content");
       hits.forEach(function (r) {
         var props = r.body.split(";").map(function (d) { return d.split(":")[0].trim(); }).filter(Boolean);
-        assert.deepEqual(props.filter(function (p) { return CHROME_PROPS.test(p); }), [],
+        var allowed = (sheet.ownLayer || []).indexOf(selector) !== -1 ? "z-index" : null;
+        assert.deepEqual(props.filter(function (p) { return CHROME_PROPS.test(p) && p !== allowed; }), [],
           sheet.file + ": " + selector + " must leave position, layer and chrome to overlay.css");
       });
     });
@@ -654,9 +658,14 @@ test("modules: no B1 or B2 module sets a menu's z-index or places a menu by hand
   assert.ok(!/document\.addEventListener\(\s*["'](click|keydown)["']/.test(sched), "scheduler-config.js: outside click and Escape are the registry's");
 });
 
-test("stylesheet: the info-panels column carries the menu layer from the token; an inline panel adds no layer or float", function () {
+test("stylesheet: the info-panels column sits below modals, each adopted panel takes the menu layer; an inline panel adds no layer or float", function () {
   var MENUS = css("menus.css");
-  assert.equal(cssRules.valueAt(MENUS, "#info-panels", "z-index", DESKTOP), "var(--z-menu)");
+  // --z-base is below --z-modal (the layer-scale test above asserts the order).
+  assert.equal(cssRules.valueAt(MENUS, "#info-panels", "z-index", DESKTOP), "var(--z-base)", "the column is below --z-modal");
+  ["#usage-panel", "#status-panel", "#diagnostics-panel"].forEach(function (id) {
+    assert.equal(cssRules.valueAt(MENUS, id, "z-index", DESKTOP), "var(--z-menu)", id + " takes the menu layer on its own node");
+  });
+  assert.notEqual(cssRules.valueAt(MENUS, "#context-panel", "z-index", DESKTOP), "var(--z-menu)", "the context panel is not a menu");
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu-inline", "position", DESKTOP), "relative");
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu-inline", "z-index", DESKTOP), "auto");
 });
@@ -688,6 +697,27 @@ test("menu: B2 one open: a B2 pair and a B1 and B2 pair close each other, in bot
       assert.equal(m.handlerCount("click"), 1, pair.name + ": one outside-click handler");
       assert.equal(m.handlerCount("keydown"), 1, pair.name + ": one Escape handler");
     }
+  }
+});
+
+test("menu: a passive notice opens beside a menu the user has open and closes nothing; Escape takes the menu first", async function (t) {
+  var ROWS = [
+    { name: "B1 menu", open: "session context menu" },
+    { name: "B2 menu", open: "notification menu" },
+  ];
+  for (var i = 0; i < ROWS.length; i++) {
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    var menu = openSurface(m, rowNamed(ROWS[i].open)).handle;
+    var notice = openSurface(m, rowNamed("rate-limit popover")).handle;
+    assert.equal(menu.isOpen(), true, ROWS[i].name + ": the notice leaves the open menu open");
+    assert.equal(notice.isOpen(), true, ROWS[i].name + ": the notice is shown");
+    assert.equal(m.registry.getOpenMenu(), menu.el, ROWS[i].name + ": the registry still holds the menu");
+    m.escape();
+    assert.equal(gone(menu), true, ROWS[i].name + ": Escape closes the menu first");
+    assert.equal(notice.isOpen(), true, ROWS[i].name + ": and leaves the notice");
+    m.escape();
+    assert.equal(gone(notice), true, ROWS[i].name + ": a second Escape closes the notice");
   }
 });
 
