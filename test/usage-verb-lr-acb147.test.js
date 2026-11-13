@@ -106,6 +106,55 @@ test("a further event without utilization keeps the pre-reset value until one ar
   assert.equal(b.lastKnownPreReset, true);
 });
 
+// Stale-utilization rows: record `first` at NOW - firstAgo, then optionally
+// `second` at NOW - secondAgo, then read at NOW with the given horizon.
+var U0 = function (ago) { return new Date(NOW - ago * 1000).toISOString(); };
+[
+  { name: "carried value older than the horizon and unconfirmed is last known, not current",
+    first: { utilization: 0.99, resetsAt: FUTURE, status: "allowed_warning" }, firstAgo: 7200,
+    second: { resetsAt: FUTURE, status: "allowed_warning" }, secondAgo: 10,
+    want: { utilization: null, lastKnownUtilization: 0.99, lastKnownObservedAt: U0(7200), lastKnownStale: true, lastKnownAgeSeconds: 7200, lastKnownPreReset: false, state: "fresh" } },
+  { name: "carried value within the horizon stays current",
+    first: { utilization: 0.5, resetsAt: FUTURE, status: "allowed" }, firstAgo: 600,
+    second: { resetsAt: FUTURE, status: "allowed" }, secondAgo: 10,
+    want: { utilization: 0.5, lastKnownUtilization: null, lastKnownStale: false, lastKnownAgeSeconds: null } },
+  { name: "old value with a confirmation on its own event stays current",
+    first: { utilization: 0.5, resetsAt: FUTURE, status: "allowed" }, firstAgo: 7200, confirm: true,
+    want: { utilization: 0.5, utilizationConfirmed: true, lastKnownStale: false } },
+  { name: "a new utilization clears the stale view",
+    first: { utilization: 0.99, resetsAt: FUTURE, status: "allowed" }, firstAgo: 7200,
+    second: { utilization: 0.2, resetsAt: FUTURE, status: "allowed" }, secondAgo: 5,
+    want: { utilization: 0.2, lastKnownUtilization: null, lastKnownObservedAt: null, lastKnownStale: false, lastKnownAgeSeconds: null } },
+  { name: "a pre-reset last known is unchanged and not flagged stale",
+    first: { utilization: 0.99, resetsAt: FUTURE, status: "allowed_warning" }, firstAgo: 7200,
+    second: { resetsAt: FUTURE, status: "allowed" }, secondAgo: 10,
+    want: { utilization: null, lastKnownUtilization: 0.99, lastKnownPreReset: true, lastKnownStale: false, lastKnownAgeSeconds: null } },
+  { name: "the horizon setting moves the cutoff",
+    first: { utilization: 0.4, resetsAt: FUTURE, status: "allowed" }, firstAgo: 600, staleSeconds: 300,
+    want: { utilization: null, lastKnownUtilization: 0.4, lastKnownStale: true, lastKnownAgeSeconds: 600 } },
+].forEach(function (row) {
+  test("stale utilization: " + row.name, function () {
+    var s = createUsageStore();
+    var rec = Object.assign({ rateLimitType: "seven_day" }, row.first);
+    s.record("claude", rec, { now: NOW - row.firstAgo * 1000, processKey: "p", sessionLocalId: "1" });
+    if (row.confirm) s.confirm("claude", { sessionLocalId: "1", processKey: "p" }, { now: NOW - 5000 });
+    if (row.second) s.record("claude", Object.assign({ rateLimitType: "seven_day" }, row.second), { now: NOW - row.secondAgo * 1000 });
+    var b = snap(s, { staleSeconds: row.staleSeconds || 1800 }).vendors.claude.buckets.seven_day;
+    Object.keys(row.want).forEach(function (k) { assert.equal(b[k], row.want[k], k); });
+  });
+});
+
+test("the horizon is the one the bucket state uses, from the environment", function () {
+  var s = createUsageStore();
+  s.record("claude", { rateLimitType: "seven_day", utilization: 0.4, resetsAt: FUTURE, status: "allowed" }, { now: NOW - 600000 });
+  var out = s.snapshot({ now: NOW, env: { CLAGENTIC_CONSOLE_USAGE_STALE_SECONDS: "300" } });
+  var b = out.vendors.claude.buckets.seven_day;
+  assert.equal(out.staleAfterSeconds, 300);
+  assert.equal(b.state, "stale");
+  assert.equal(b.utilization, null);
+  assert.equal(b.lastKnownStale, true);
+});
+
 test("never-seen bucket carries the pre-reset fields as null", function () {
   var b = snap(createUsageStore()).vendors.claude.buckets.seven_day;
   assert.equal(b.lastKnownUtilization, null);
