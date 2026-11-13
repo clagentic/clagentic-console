@@ -497,18 +497,9 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .popover-copy:hover { color: var(--text); border-color: var(--text-dimmer); }
 .popover-copy.copied { color: var(--success); border-color: var(--success); }
 
-/* --- Confirm modal --- */
-#confirm-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#confirm-modal.hidden { display: none; }
-
+/* The confirm modal is drawn by the shared overlay component (overlay.css); the
+   rules below keep the button and text styling it shares with the modals that
+   still use the .confirm-* classes. */
 #skill-install-modal {
   position: fixed;
   inset: 0;
