@@ -60,43 +60,28 @@ test("menus.css: #diagnostics-panel.hidden is included in the shared display:non
   );
 });
 
-test("diagnostics.js: initDiagnostics wires a click-outside-to-dismiss handler", () => {
-  var idx = DIAGNOSTICS_JS.indexOf("export function initDiagnostics");
-  assert.ok(idx !== -1, "expected initDiagnostics to be exported");
-  var block = DIAGNOSTICS_JS.slice(idx, idx + 2000);
-
+// The panel is dismissed by a click outside it (lr-b580) through the open-menu
+// registry: the panel is adopted as a menu with the topbar toggle as its opener,
+// so a click inside it or on the toggle is not an outside click, and the module
+// carries no document listener of its own.
+test("diagnostics.js: the panel is adopted as a menu, with the toggle button as its opener", () => {
   assert.match(
-    block,
-    /document\.addEventListener\(\s*["']click["']/,
-    "initDiagnostics must register a document-level click listener so the panel is dismissable by clicking outside it (lr-b580: the panel has no backdrop element to bind to)"
+    DIAGNOSTICS_JS,
+    /openInfoPanel\(\s*panelEl,\s*\{[^}]*opener:\s*panelToggleBtn/,
+    "the panel must open through the shared component with panelToggleBtn as opener (a click on the toggle is the toggle's own)"
+  );
+  assert.ok(
+    !/document\.addEventListener\(/.test(DIAGNOSTICS_JS),
+    "outside click and Escape belong to the registry: diagnostics.js adds no document listener"
   );
 });
 
-test("diagnostics.js: the click-outside handler reuses closePanelAndRefocus (not a bare closePanel call)", () => {
-  var docClickIdx = DIAGNOSTICS_JS.indexOf('document.addEventListener("click"');
-  assert.ok(docClickIdx !== -1, 'expected document.addEventListener("click", ...) to exist');
-  var block = DIAGNOSTICS_JS.slice(docClickIdx, docClickIdx + 400);
-
+test("diagnostics.js: focus returns to the topbar toggle however the panel closes", () => {
+  var idx = DIAGNOSTICS_JS.indexOf("function _onPanelClosed");
+  assert.ok(idx !== -1, "expected the close hook to exist");
   assert.match(
-    block,
-    /closePanelAndRefocus\s*\(\s*\)/,
-    "click-outside dismissal must go through closePanelAndRefocus() so focus is restored to the topbar toggle button, consistent with the Escape-key and close-button dismiss paths"
-  );
-});
-
-test("diagnostics.js: click-outside handler ignores clicks on the panel itself and its toggle button", () => {
-  var docClickIdx = DIAGNOSTICS_JS.indexOf('document.addEventListener("click"');
-  assert.ok(docClickIdx !== -1, 'expected document.addEventListener("click", ...) to exist');
-  var block = DIAGNOSTICS_JS.slice(docClickIdx, docClickIdx + 400);
-
-  assert.match(
-    block,
-    /panelEl\.contains\(e\.target\)/,
-    "handler must not dismiss when the click originated inside the panel itself (e.g. on the X button)"
-  );
-  assert.match(
-    block,
-    /panelToggleBtn.*contains\(e\.target\)/,
-    "handler must not dismiss when the click originated on the topbar toggle button (that click already handles open/close via its own listener)"
+    DIAGNOSTICS_JS.slice(idx, idx + 500),
+    /panelToggleBtn\.focus\(\)/,
+    "the close hook restores focus to the topbar toggle (WCAG 2.1 2.4.3), for the close control, Escape and an outside click alike"
   );
 });
