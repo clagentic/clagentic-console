@@ -490,6 +490,19 @@ test("per-project visibility holds for every group", function () {
   assert.deepEqual(m.roster.listFor(CALLER)[0].places.map(function (p) { return p.project; }), ["open"]);
 });
 
+test("a sub-agent sighting in an unreadable project does not group the agent as a helper for a caller who cannot read it", function () {
+  var m = makeRoster(tmpFile(), { catalog: fakeVendorCatalog(), mayReadProject: function (slug) { return slug !== "closed"; } });
+  m.roster.observe({ key: "helper-a", source: "subagent", project: "closed" });
+  m.roster.observe({ key: "helper-a", source: "session", project: "open" });
+  var seen = m.roster.listFor(CALLER);
+  assert.equal(seen[0].group, "agent");
+  assert.equal(seen[0].vendor, null);
+  var all = makeRoster(tmpFile(), { catalog: fakeVendorCatalog() });
+  all.roster.observe({ key: "helper-a", source: "subagent", project: "closed" });
+  all.roster.observe({ key: "helper-a", source: "session", project: "open" });
+  assert.equal(all.roster.listFor(CALLER)[0].group, "helper", "a caller who can read both sees the helper");
+});
+
 test("Claude families come from the vendor's alias entries; the literal serves only until a list arrives", function () {
   try {
     modelFamilies.resetClaudeModelFamilies();
