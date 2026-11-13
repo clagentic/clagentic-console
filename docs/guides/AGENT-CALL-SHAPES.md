@@ -164,6 +164,36 @@ clagentic-console --usage
 clagentic-console --process-build-status
 ```
 
+## Restart the daemon
+
+```bash
+clagentic-console --restart --json
+```
+
+Restarts the daemon through its existing restart path (under a supervisor the daemon exits and the supervisor starts the replacement; otherwise it starts one itself), then waits for the new process and reads its build status. It reports the sessions in flight and never refuses on them: stopping sessions cleanly first is the caller's job. It has no notion of who is calling and applies the same to every caller; who may run it is decided outside Clagentic: Console.
+
+The wait accepts only a process whose pid differs from the old one answering over the daemon socket, never the old process's state, and gives up after 60 seconds. Without `--json` the same steps run and the result is printed as text; the exit codes are the same.
+
+One JSON report is printed to standard output:
+
+| Field | Meaning |
+|---|---|
+| `outcome` | `restarted`, `build-mismatch`, `timeout`, `restart-not-acknowledged`, `old-pid-unknown` or `no-daemon` |
+| `oldPid` | pid of the daemon before the restart |
+| `sessions` | sessions in flight before the restart, each `{project, session, processing, activity}`; `null` when the daemon could not list them |
+| `newPid` | pid of the new process; `null` if none answered |
+| `loadedBuildSha` | build the new process loaded at startup |
+| `installedBuildSha` | build installed on disk |
+| `state` | the new process's build state: `adopted`, `stale` or `inconclusive` |
+| `lastSeen` | what the wait last saw: `{pid, state, error}`; read it when `outcome` is `timeout` |
+
+| Exit code | Outcome |
+|---|---|
+| 0 | `restarted`: the new process is up and loaded equals installed |
+| 1 | `no-daemon`, `restart-not-acknowledged` or `old-pid-unknown` |
+| 2 | `timeout`: no new process answered in time |
+| 3 | `build-mismatch`: the new process is up but did not load the installed build |
+
 ## After an upgrade
 
 The verbs run in the CLI, but `--verbose`, `--limit`, the state list and the richer fields are answered by the daemon. Restart the daemon after installing a build that has them; until then an older daemon answers `list-sessions` with every state and without the extra fields.

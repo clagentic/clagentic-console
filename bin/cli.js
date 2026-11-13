@@ -116,6 +116,7 @@ var autoYes = false;
 var cliPin = null;
 var shutdownMode = false;
 var restartMode = false;
+var jsonMode = false;
 var noRestart = false;
 var addPath = null;
 var removePath = null;
@@ -169,6 +170,8 @@ for (var i = 0; i < args.length; i++) {
     shutdownMode = true;
   } else if (args[i] === "--restart") {
     restartMode = true;
+  } else if (args[i] === "--json") {
+    jsonMode = true;
   } else if (args[i] === "--no-restart") {
     noRestart = true;
   } else if (args[i] === "--add") {
@@ -196,7 +199,7 @@ for (var i = 0; i < args.length; i++) {
   } else if (args[i] === "--os-users") {
     osUsersMode = true;
   } else if (args[i] === "-h" || args[i] === "--help") {
-  console.log("Usage: clagentic-console [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart] [--no-restart]");
+  console.log("Usage: clagentic-console [-p|--port <port>] [--host <address>] [--no-https] [--no-update] [--debug] [-y|--yes] [--pin <pin>] [--shutdown] [--restart [--json]] [--no-restart]");
   console.log("       clagentic-console --add <path>     Add a project to the running daemon");
   console.log("       clagentic-console --remove <path>  Remove a project from the running daemon");
   console.log("       clagentic-console --list            List registered projects");
@@ -222,7 +225,8 @@ for (var i = 0; i < args.length; i++) {
     console.log("  -y, --yes          Skip interactive prompts (accept defaults)");
     console.log("  --pin <pin>        Set 6-digit PIN (use with --yes)");
     console.log("  --shutdown         Shut down the running relay daemon");
-    console.log("  --restart          Restart the running relay daemon");
+    console.log("  --restart          Restart the running relay daemon and wait for the new process (reports sessions in flight)");
+    console.log("  --json             With --restart: print one JSON report; exit 0 only if the new process loaded the installed build");
     console.log("  --no-restart       Do not auto-restart on crash (useful for debugging crash state)");
     console.log("  --add <path>       Add a project directory (use '.' for current)");
     console.log("  --remove <path>    Remove a project directory");
@@ -251,7 +255,7 @@ if (shutdownMode) {
 
 // --- Handle --restart before anything else ---
 if (restartMode) {
-  handleRestart();
+  handleRestart(jsonMode);
   return;
 }
 

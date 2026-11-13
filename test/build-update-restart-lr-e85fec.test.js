@@ -7,7 +7,7 @@ var test = require("node:test");
 var assert = require("node:assert/strict");
 
 var { createBuildUpdateRestart } = require("../lib/build-update-restart");
-var { collectInterruptions, describeInterruptions, liveAgentTasks } = require("../lib/build-update-offer");
+var { collectInterruptions, inFlightSessions, describeInterruptions, liveAgentTasks } = require("../lib/build-update-offer");
 
 function session(localId, title, o) {
   var s = { localId: localId, title: title, queryInstance: {}, isProcessing: false, activeTaskToolIds: {} };
@@ -332,4 +332,14 @@ test("collectInterruptions bounds and cleans what the model or user supplied", f
   assert.match(i.sessions[0].title, /^first part second line /);
   assert.equal(liveAgentTasks({ activeTaskToolIds: { a: true }, taskLabels: { a: "named\nagent" } })[0].label, "named agent");
   assert.equal(liveAgentTasks({ activeTaskToolIds: { a: true } })[0].label, "background agent");
+});
+
+test("inFlightSessions lists each live session by project and session, running or idle, and skips a reaped one", function () {
+  var w = world();
+  w.add("lore", session("s1", "busy", { isProcessing: true }));
+  w.add("workspace", session("s2", "idle one"));
+  w.add("workspace", session("s3", "reaped", { queryInstance: null, worker: null }));
+  var flight = inFlightSessions(w.projects);
+  assert.deepEqual(flight.map(function (s) { return [s.project, s.session, s.processing]; }), [["lore", "s1", true], ["workspace", "s2", false]]);
+  assert.deepEqual(inFlightSessions([]), []);
 });
