@@ -202,3 +202,48 @@ test("lr-041af8: reconnect falls back to the project default only when the resto
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
+
+// A reconnect hydrates through the same session_switched builder as a switch,
+// so its vendor source tells an unreadable meta (shown neutral by the client)
+// from a recorded vendor.
+[
+  { name: "a session whose meta cannot be read is sent as error with no vendor", meta: "{not json", vendor: null, vendorSource: "error" },
+  { name: "a session whose meta records a vendor is sent as present", meta: null, vendor: "codex", vendorSource: "present" },
+].forEach(function (row) {
+  test("session_switched on reconnect: " + row.name, function () {
+    var tmpHome = makeTempHome();
+    try {
+      bustRequireCache();
+      var mods = makeModules(tmpHome);
+      var sm = mods.sessionsModule.createSessionManager({ cwd: tmpHome, send: function () {}, sendTo: function () {}, sendEach: null });
+      var session = sm.createSessionRaw({});
+      session.cliSessionId = "sess-vendor-source";
+      if (row.vendor) session.vendor = row.vendor;
+      sm.sendAndRecord(session, { type: "user_message", text: "hello" });
+      sm.saveSessionFile(session);
+      if (row.meta) {
+        var file = fs.readdirSync(tmpHome, { recursive: true }).filter(function (f) { return f.endsWith("sess-vendor-source.jsonl"); })[0];
+        fs.writeFileSync(path.join(tmpHome, file), row.meta + "\n");
+        session.vendor = null;
+      }
+
+      var sendToCalls = [];
+      var ctx = makeConnectionCtx({
+        cwd: tmpHome,
+        sm: sm,
+        tm: { list: function () { return []; } },
+        nm: { list: function () { return []; } },
+        sendTo: function (ws, msg) { sendToCalls.push(msg); },
+      });
+      var attachment = mods.connModule.attachConnection(ctx);
+      attachment.handleConnection({ on: function () {}, readyState: 1, send: function () {} }, null, function () {}, function () {});
+
+      var switched = sendToCalls.find(function (m) { return m.type === "session_switched"; });
+      assert.ok(switched, "expected a session_switched message on connect");
+      assert.strictEqual(switched.vendor, row.vendor);
+      assert.strictEqual(switched.vendorSource, row.vendorSource);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+});

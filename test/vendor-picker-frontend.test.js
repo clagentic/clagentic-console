@@ -236,11 +236,47 @@ function sessionVendorModules() {
   { name: "a locked page switching to a new session keeps its vendor", msg: { vendor: "codex", hasHistory: false }, current: { currentVendor: "claude", vendorSelectionLocked: true }, want: { currentVendor: "claude", vendorSelectionLocked: true } },
   { name: "a session with history and no recorded vendor takes the default, unlocked", msg: { vendor: null, hasHistory: true }, current: { currentVendor: "codex", vendorSelectionLocked: true }, want: { currentVendor: "claude", vendorSelectionLocked: false } },
   { name: "a new session with no vendor imposes nothing", msg: { vendor: null, hasHistory: false }, current: { currentVendor: "codex", vendorSelectionLocked: false }, want: null },
+  { name: "an explicitly absent vendor with history takes the default", msg: { vendor: null, vendorSource: "absent", hasHistory: true }, current: { currentVendor: null, vendorSelectionLocked: false }, want: { currentVendor: "claude", vendorSelectionLocked: false } },
+  { name: "an unreadable vendor shows none, locked, not the default", msg: { vendor: null, vendorSource: "error", hasHistory: true }, current: { currentVendor: "claude", vendorSelectionLocked: false }, want: { currentVendor: null, vendorSelectionLocked: true } },
+  { name: "a default-bound vendor is applied as sent", msg: { vendor: "claude", vendorSource: "default-bound", hasHistory: true }, current: { currentVendor: null, vendorSelectionLocked: false }, want: { currentVendor: "claude", vendorSelectionLocked: true } },
+  { name: "a new session keeps the vendor picked before its first message", msg: { vendor: null, vendorSource: "absent", hasHistory: false }, current: { currentVendor: "codex", vendorSelectionLocked: true, sameSession: true }, want: { currentVendor: "codex", vendorSelectionLocked: true } },
+  { name: "a different new session takes the vendor the server resolved, not the held pick", msg: { vendor: "codex", vendorSource: "default-bound", hasHistory: false }, current: { currentVendor: "claude", vendorSelectionLocked: true, sameSession: false }, want: { currentVendor: "codex", vendorSelectionLocked: true } },
+  { name: "an unreadable vendor without history is neutral and locked", msg: { vendor: null, vendorSource: "error", hasHistory: false }, current: { currentVendor: "claude", vendorSelectionLocked: false }, want: { currentVendor: null, vendorSelectionLocked: true } },
+  { name: "a pick made on another session is not carried to a new one", msg: { vendor: null, vendorSource: "absent", hasHistory: false }, current: { currentVendor: "codex", vendorSelectionLocked: true, sameSession: false }, want: null },
 ].forEach(function (row) {
   test("session_switched vendor state: " + row.name, async function () {
     var [state] = await sessionVendorModules();
     assert.deepEqual(state.vendorStateForSwitch(row.msg, row.current, "claude"), row.want);
   });
+});
+
+[
+  { name: "a vendor the session or its meta records", source: "meta", want: "present" },
+  { name: "the project default standing in", source: "default", want: "default-bound" },
+  { name: "a meta that could not be read", source: "error", want: "error" },
+  { name: "no vendor at all", source: null, want: "absent" },
+].forEach(function (row) {
+  test("session_switched vendorSource: " + row.name, function () {
+    assert.equal(require("../lib/session-vendor").vendorSourceLabel(row.source), row.want);
+  });
+});
+
+[
+  { name: "the active session's vendor changed", state: { currentVendor: "codex", activeSessionId: 1, sessionVendors: {} }, prev: { currentVendor: "claude", activeSessionId: 1, sessionVendors: {} }, want: true },
+  { name: "the active session changed to one the list records another vendor for", state: { currentVendor: null, activeSessionId: 2, sessionVendors: { 1: "claude", 2: "codex" } }, prev: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "claude", 2: "codex" } }, want: true },
+  { name: "a new session_list map with the same active vendor", state: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "codex" } }, prev: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "codex" } }, want: false },
+  { name: "loop-queue mode keeps the queue placeholder", state: { loopQueueMode: true, currentVendor: "codex", activeSessionId: 1, sessionVendors: {} }, prev: { currentVendor: "claude", activeSessionId: 1, sessionVendors: {} }, want: false },
+].forEach(function (row) {
+  test("placeholder recompute: " + row.name, async function () {
+    var [state] = await sessionVendorModules();
+    assert.equal(state.placeholderNeedsRecompute(row.state, row.prev), row.want);
+  });
+});
+
+test("the placeholder subscription asks the shared recompute rule", function () {
+  var source = require("fs").readFileSync(path.join(PUBLIC, "modules", "app-rendering.js"), "utf8");
+  var sub = source.slice(source.indexOf("store.subscribe(['currentVendor', 'activeSessionId', 'sessionVendors']"));
+  assert.match(sub.slice(0, 700), /placeholderNeedsRecompute\(state, prev\)/);
 });
 
 test("session_switched applies the settled vendor again after resetClientState() wipes it", function () {
@@ -272,6 +308,7 @@ test("session_switched applies the settled vendor again after resetClientState()
   { name: "no page vendor: the session list's vendor", state: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "codex" } }, want: "Message Codex..." },
   { name: "no vendor known anywhere: neutral wording, never Claude", state: { currentVendor: null, activeSessionId: 1, sessionVendors: {} }, want: "Message the assistant..." },
   { name: "a vendor the registry does not know: neutral wording", state: { currentVendor: "ghost", activeSessionId: 1, sessionVendors: {} }, want: "Message the assistant..." },
+  { name: "loop-queue mode keeps the queue wording over any vendor", state: { loopQueueMode: true, currentVendor: "codex", activeSessionId: 1, sessionVendors: { 1: "codex" } }, want: "Message queues for the next loop iteration…" },
 ].forEach(function (row) {
   test("composer placeholder: " + row.name, async function () {
     var [, identity] = await sessionVendorModules();

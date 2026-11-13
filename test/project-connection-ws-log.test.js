@@ -61,6 +61,9 @@ function makeCtx(overrides) {
       saveSessionFile: function () {},
       loadSessionHistory: function () {},
       replayHistory: function () {},
+      buildSessionSwitchedMessage: function (s, hasHistory) {
+        return { type: "session_switched", id: s.localId, hasHistory: !!hasHistory, isProcessing: !!s.isProcessing };
+      },
       mapSessionForClient: function (s) { return s; },
       // lr-041af8: connect-path hydration now calls sm.effectiveSessionModel()
       // instead of reading sm.currentModel directly — mirror the real
