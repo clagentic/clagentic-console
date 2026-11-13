@@ -1216,23 +1216,25 @@ test("nav sheet: sidebar-mobile.js routes every nav button, its close and its ac
 
 // A z-index from 100 up is an overlay layer and comes from the scale in base.css;
 // -1 to 99 is local stacking inside a component and stays a literal. What is left
-// below belongs to surfaces C1 did not move: the remaining modals (C2) and the
-// panels, menus and other layers (C3). Each of those tasks removes its rows; the
-// guard fails on a new literal and on a row whose literal is gone.
-// TODO(lr-528910): the modal rows go with the remaining modals.
+// below belongs to surfaces C1 and C2 did not move: the panels, menus and other
+// layers (C3). That task removes its rows; the guard fails on a new literal and on
+// a row whose literal is gone. The files the C2 modals lived in are listed with no
+// rows left.
 // TODO(lr-5ebc02): the other rows go with the repo-wide sweep.
 var OVERLAY_BAND_MIN = 100;
 var UNMOVED_LITERALS = {
-  "overlays.css": [
-    ".pwa-modal|700", "#skill-install-modal|300", "#session-grants-modal|300", ".remove-project-task-modal|310",
-    "#rewind-modal|300", "#resume-modal|300", "#notif-help-modal|300", "#add-project-modal|300", "#connect-overlay|999",
-  ],
-  "messages.css": [".remote-cursor|9999", "#todo-sticky .todo-sticky-items|200", "#mermaid-modal|300"],
-  "input.css": ["#context-sources-picker|200", "#sidebar|1000", "#sidebar-overlay|999", "#input-more-sheet|10000"],
+  "overlays.css": ["#connect-overlay|999"],
+  "messages.css": [".remote-cursor|9999", "#todo-sticky .todo-sticky-items|200"],
+  "input.css": ["#context-sources-picker|200", "#sidebar|1000", "#sidebar-overlay|999"],
   "mobile-nav.css": [], "overlay.css": [], "base.css": [],
+  "admin.css": [], "profile.css": [], "skills.css": [],
 };
-var UNMOVED_JS_LITERALS = { "app-misc.js": 1 };
+var UNMOVED_JS_LITERALS = {};
 var C1_MODULES = ["overlay.js", "overlay-modal.js", "overlay-registry.js", "app-modals.js", "mobile-nav-sheet.js", "mobile-action-sheet.js", "sidebar-mobile.js", "app-misc.js"];
+var C2_MODULES = [
+  "admin.js", "sidebar-projects.js", "app-projects.js", "app-loop-ui.js", "qrcode.js", "profile.js", "notifications.js", "rewind.js",
+  "sidebar-sessions.js", "app-skills-install.js", "session-grants.js", "skills.js", "mcp-ui.js", "markdown.js", "input.js", "context-sources.js",
+];
 
 test("guard: the files C1 touches hold no overlay-band literal z-index but the named unmoved ones", function () {
   Object.keys(UNMOVED_LITERALS).forEach(function (file) {
@@ -1243,7 +1245,7 @@ test("guard: the files C1 touches hold no overlay-band literal z-index but the n
     });
     assert.deepEqual(found.sort(), UNMOVED_LITERALS[file].slice().sort(), file + ": overlay-band literal z-index values");
   });
-  C1_MODULES.forEach(function (file) {
+  C1_MODULES.concat(C2_MODULES).forEach(function (file) {
     var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", file), "utf8");
     var hits = src.match(/z-index\s*:\s*\d{3,}|zIndex\s*=\s*["']?\d{3,}/g) || [];
     assert.equal(hits.length, UNMOVED_JS_LITERALS[file] || 0, file + ": overlay-band literal z-index in script");
@@ -1256,4 +1258,231 @@ test("guard: the files C1 touches hold no overlay-band literal z-index but the n
   var sheets = ["overlays.css", "input.css", "messages.css", "mobile-nav.css"].map(css).join("\n");
   [/#confirm-modal/, /#paste-modal\b/, /#image-modal\b/, /\.image-modal-close/, /\.paste-modal-close/, /\.mobile-action-sheet-overlay/, /\.mobile-sheet-backdrop/, /\.mobile-sheet-close/]
     .forEach(function (re) { assert.doesNotMatch(sheets, re, String(re) + " is gone from the stylesheets"); });
+});
+
+// ---------------------------------------------------------------------------
+// C2: the remaining modals and the input more-sheet
+// ---------------------------------------------------------------------------
+
+var PUBLIC_DIR = path.join(__dirname, "..", "lib", "public");
+function publicFile(rel) { return fs.readFileSync(path.join(PUBLIC_DIR, rel), "utf8"); }
+var INDEX_HTML = publicFile("index.html");
+
+// A static modal as index.html draws it: the page's own node, hidden, with the
+// shared scrim and dialog in it.
+function staticModal(id, dialogClass) {
+  var root = new dom.FakeElement("div");
+  root.id = id;
+  root.className = "hidden";
+  var scrim = new dom.FakeElement("div");
+  scrim.className = "overlay-modal-backdrop";
+  var dialog = new dom.FakeElement("div");
+  dialog.className = "overlay-modal-dialog " + dialogClass;
+  root.appendChild(scrim);
+  root.appendChild(dialog);
+  global.document.body.appendChild(root);
+  return { root: root, dialog: dialog };
+}
+
+// Real modules that can be imported under node:test, each opened as the page does.
+// A JS-built one draws its own node; a static one adopts the page's.
+var C2_RUNTIME = [
+  { name: "session grants (JS-built)", adopted: false, dialogClass: "session-grants-dialog",
+    open: async function (m) {
+      var mod = await import(dom.moduleUrl("session-grants.js"));
+      mod.openSessionGrants(7);
+    } },
+  { name: "skills (static)", adopted: true, dialogClass: "skills-dialog",
+    open: async function (m) {
+      var skills = await import(dom.moduleUrl("skills.js"));
+      var page = staticModal("skills-modal", "skills-dialog");
+      var content = new dom.FakeElement("div");
+      content.id = "skills-content";
+      page.dialog.appendChild(content);
+      var btn = new dom.FakeElement("button");
+      btn.id = "skills-btn";
+      global.document.body.appendChild(btn);
+      global.fetch = function () { return Promise.reject(new Error("offline")); };
+      skills.initSkills();
+      btn.click();
+    } },
+];
+
+test("C2 modal: a real JS-built module and a real static modal open as the shared modal with the shared top-right close, and Escape, the scrim and the close control close each", async function (t) {
+  for (var i = 0; i < C2_RUNTIME.length; i++) {
+    var row = C2_RUNTIME[i];
+    for (var w = 0; w < DISMISS_WAYS.length; w++) {
+      var m = await modalBrowser(t);
+      await row.open(m);
+      var el = m.top();
+      assert.ok(el, row.name + ": open in the registry");
+      assert.ok(el.classList.contains("overlay-modal"), row.name + ": the shared modal");
+      assert.equal(el.getAttribute("data-overlay-kind"), "modal", row.name + ": a modal, not a sheet");
+      assert.equal(el.classList.contains("hidden"), false, row.name + ": shown");
+      var dialog = el.querySelector(".overlay-modal-dialog");
+      assert.ok(dialog && el.querySelector(".overlay-modal-backdrop"), row.name + ": the shared scrim and dialog");
+      assert.ok(dialog.classList.contains(row.dialogClass), row.name + ": the surface's own class only sizes and fills the dialog");
+      var closes = el.querySelectorAll(".overlay-close");
+      assert.equal(closes.length, 1, row.name + ": one close control");
+      assert.equal(closes[0]._parent, dialog, row.name + ": the dialog's own child, at its corner");
+      assert.equal(el.querySelectorAll(".confirm-backdrop, .confirm-dialog, .skills-close").length, 0, row.name + ": no surface-owned scrim, card or close control");
+      DISMISS_WAYS[w].act(m, el);
+      m.tick(300);
+      assert.equal(modalGone(m, el, row.adopted), true, row.name + ": closed by " + DISMISS_WAYS[w].name);
+      if (row.adopted) assert.equal(el.parentNode, global.document.body, row.name + ": the page's node stays where it was");
+    }
+  }
+});
+
+test("C2 modal: the session grants list is replaced by a second open and redrawn for its own session only", async function (t) {
+  var m = await modalBrowser(t);
+  var mod = await import(dom.moduleUrl("session-grants.js"));
+  mod.openSessionGrants(7);
+  var first = m.top();
+  assert.equal(first.getAttribute("data-session-id"), "7");
+  mod.openSessionGrants(8);
+  var second = m.top();
+  assert.equal(m.registry.isModalOpen(first), false, "a second open replaces the first");
+  assert.equal(global.document.body.querySelectorAll(".session-grants-dialog").length, 1, "one list in the page");
+  mod.handleSessionGrants({ sessionId: 7, grants: [{ key: "a", text: "A", wholeTool: false }] });
+  assert.equal(second.querySelectorAll(".session-grants-row").length, 0, "a list for another session does not redraw it");
+  mod.handleSessionGrants({ sessionId: 8, grants: [{ key: "a", text: "A", wholeTool: false }] });
+  assert.equal(second.querySelectorAll(".session-grants-row").length, 1);
+  second.querySelector(".confirm-cancel").click();
+  assert.equal(m.registry.isModalOpen(second), false, "its Close button closes it");
+});
+
+test("C2 modal: a modal that spends Escape on something inside stays open; the next Escape closes it", async function (t) {
+  var m = await modalBrowser(t);
+  var spent = 0;
+  var handle = m.overlay.showOverlay({ kind: "modal", content: "x", onEscape: function () { spent++; return spent === 1; } });
+  m.escape();
+  assert.equal(handle.isOpen(), true, "the detail view stepped back and the modal stayed");
+  m.escape();
+  assert.equal(handle.isOpen(), false);
+  assert.equal(spent, 2);
+});
+
+test("C2 stacking: two C2 modals sit in token order, Escape closes the top one first, and a toast and a menu stay readable over them", async function (t) {
+  var m = await modalBrowser(t);
+  var order = function (el) { return Number(el.style["--overlay-order"]); };
+  var mod = await import(dom.moduleUrl("session-grants.js"));
+  mod.openSessionGrants(7);
+  var grants = m.top();
+  var skills = staticModal("skills-modal", "skills-dialog");
+  m.overlay.showOverlay({ kind: "modal", el: skills.root });
+  assert.ok(order(skills.root) > order(grants), "a second C2 modal sits over the first");
+  m.b.utils.showToast("Saved", "error", "detail");
+  var toast = m.b.stack().querySelector(".overlay-toast");
+  m.escape();
+  assert.equal(m.registry.isModalOpen(skills.root), false, "Escape closed the top modal");
+  assert.equal(m.registry.isModalOpen(grants), true, "and left the one beneath");
+  assert.equal(toast.classList.contains("hide"), false, "and the toast");
+  WIDTHS.forEach(function (width) {
+    var at = " at " + width + "px";
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", width), "calc(var(--z-modal) + var(--overlay-order, 0))", "both modals share the one modal layer" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "z-index", width), "var(--z-toast)", "a toast is above them" + at);
+  });
+  assert.ok(layer("panel") < layer("modal"), "a dialog a settings panel opens shows over the panel");
+});
+
+// Each moved surface's own dialog rule sizes and fills it; it keeps no scrim, card
+// chrome, position or layer, at either width.
+var C2_DIALOG_RULES = [
+  [".admin-modal", "admin.css"], [".wt-modal", "icon-strip.css"], [".remove-project-task-dialog", "overlays.css"],
+  [".loop-status-dialog", "loop.css"], [".mermaid-modal-dialog", "messages.css"], [".skills-dialog", "skills.css"],
+  [".mcp-dialog", "filebrowser.css"], [".session-grants-dialog", "overlays.css"], [".skill-install-dialog", "overlays.css"],
+  [".rewind-dialog", "overlays.css"], [".resume-picker-dialog", "overlays.css"], [".notif-help-dialog", "overlays.css"],
+  [".add-project-dialog", "overlays.css"], [".pwa-modal-card", "overlays.css"], ["#qr-overlay-inner", "menus.css"],
+  [".avatar-positioner-container", "profile.css"], [".input-more-content", "input.css"], [".fcp-card", "overlays.css"],
+];
+// Rules the moved surfaces used to carry for their own scrim, card or close control.
+var C2_GONE_SELECTORS = [
+  "#skills-modal", "#mcp-modal", "#mermaid-modal", "#resume-modal", "#rewind-modal", "#notif-help-modal", "#add-project-modal",
+  "#skill-install-modal", "#session-grants-modal", "#qr-overlay", ".pwa-modal", ".pwa-modal-backdrop", ".wt-modal-overlay",
+  ".admin-modal-overlay", ".admin-modal-close", ".loop-status-modal", ".loop-status-backdrop", ".loop-status-dialog-close",
+  ".remove-project-task-modal", ".remove-project-task-backdrop", ".avatar-positioner-overlay", ".avatar-positioner-close",
+  "#input-more-sheet", ".input-more-backdrop", ".confirm-dialog", ".skills-close", "#mermaid-modal .confirm-backdrop",
+];
+
+test("C2 css: no moved dialog keeps its own scrim, card chrome, position or layer, and no rule for a removed scrim or close control is left", function () {
+  WIDTHS.forEach(function (width) {
+    C2_DIALOG_RULES.forEach(function (row) {
+      ["position", "z-index", "background", "box-shadow", "inset"].forEach(function (prop) {
+        var own = cssRules.valueAt(css(row[1]), row[0], prop, width);
+        assert.equal(own, null, row[0] + " keeps no own " + prop + " at " + width + "px");
+      });
+    });
+  });
+  var all = fs.readdirSync(CSS_DIR).filter(function (f) { return /\.css$/.test(f); });
+  all.forEach(function (file) {
+    cssRules.rules(css(file)).forEach(function (r) {
+      r.selector.split(",").map(function (s) { return s.trim(); }).forEach(function (sel) {
+        assert.equal(C2_GONE_SELECTORS.indexOf(sel), -1, file + ": " + sel + " is gone");
+      });
+    });
+  });
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-scrim-solid .overlay-modal-backdrop", "background", DESKTOP), "var(--bg)", "the solid scrim is an option of the shared modal");
+  assert.equal(cssRules.valueAt(css("user-settings.css"), "#user-settings", "z-index", DESKTOP), "var(--z-panel)");
+  assert.equal(cssRules.valueAt(css("server-settings.css"), "#server-settings", "z-index", DESKTOP), "var(--z-panel)");
+});
+
+// The page's static modals: the shared scrim and dialog, no close control of their own.
+var C2_STATIC_IDS = ["mermaid-modal", "notif-help-modal", "resume-modal", "rewind-modal", "skill-install-modal", "add-project-modal", "skills-modal", "mcp-modal", "pwa-install-modal", "qr-overlay", "input-more-sheet"];
+
+test("C2 html: every static modal is the shared scrim and dialog, with no scrim, card or close control of its own", function () {
+  C2_STATIC_IDS.forEach(function (id) {
+    var re = new RegExp('id="' + id + '"[^>]*>\\s*<div class="overlay-modal-backdrop"></div>\\s*<div [^>]*class="[^"]*overlay-modal-dialog');
+    assert.match(INDEX_HTML, re, id + " is the shared scrim and dialog");
+  });
+  assert.doesNotMatch(INDEX_HTML, /confirm-dialog|skills-close|pwa-modal-backdrop|input-more-backdrop|mermaid-modal-btn" title="Close"/, "no own card or close control is left in the page");
+  assert.doesNotMatch(INDEX_HTML, /id="notif-help-modal"[\s\S]{0,200}style="/, "the notification help dialog keeps no inline style");
+});
+
+// Surfaces whose module cannot be imported under node:test (module-private builders,
+// or a page node the module reads at start): pinned by source. Each opens through
+// showOverlay as a modal or sheet, and no longer builds a scrim, a card or its own
+// close and Escape handling.
+var C2_SOURCE_ROWS = [
+  { name: "admin dialogs", file: "admin.js", has: [/showOverlay\(\{ kind: "modal", content: html, dialogClass: "admin-modal" \}\)/], gone: [/admin-modal-overlay|admin-modal-close|e\.target === modal/] },
+  { name: "worktree modal", file: "sidebar-projects.js", has: [/kind: "modal",\s*id: "wt-modal-container",\s*dialogClass: "wt-modal"/], gone: [/wt-modal-overlay|e\.key === "Escape"\) closeModal/] },
+  { name: "remove-project-task dialog", file: "app-projects.js", has: [/kind: "modal", dialogClass: "remove-project-task-dialog"/], gone: [/remove-project-task-backdrop|remove-project-task-modal/] },
+  { name: "add-project modal", file: "app-projects.js", has: [/kind: "modal", el: addProjectModal, onRemove: resetAddProjectModal/], gone: [/\.confirm-backdrop|e\.key === "Escape"\) \{ e\.preventDefault\(\); closeAddProjectModal/] },
+  { name: "loop status dialog", file: "app-loop-ui.js", has: [/kind: "modal", id: "loop-status-modal", dialogClass: "loop-status-dialog"/], gone: [/loop-status-backdrop|loop-status-dialog-close/] },
+  { name: "force change PIN", file: "app-misc.js", has: [/id: "force-change-pin-overlay"[^}]*dismissible: false[^}]*card: false[^}]*scrim: "solid"/], gone: [/style\.cssText|style="|z-index|fcp-style|style\.opacity/] },
+  { name: "PWA install", file: "app-misc.js", has: [/showOverlay\(\{ kind: "modal", el: modal \}\)/], gone: [/pwa-modal-backdrop/] },
+  { name: "QR", file: "qrcode.js", has: [/showOverlay\(\{ kind: "modal", el: qrOverlay \}\)/], gone: [/e\.key === "Escape"|qr-overlay-inner"\)\.addEventListener/] },
+  { name: "avatar positioner", file: "profile.js", has: [/dialogClass: 'avatar-positioner-container'/, /onDismiss: function\(\) \{ URL\.revokeObjectURL\(objectUrl\); \}/], gone: [/avatar-positioner-overlay|avatar-positioner-close/] },
+  { name: "mermaid viewer", file: "markdown.js", has: [/showOverlay\(\{ kind: "modal", el: modal \}\)/], gone: [/closeMermaidModal/] },
+  { name: "notification help", file: "notifications.js", has: [/showOverlay\(\{ kind: "modal", el: notifHelpModal \}\)/], gone: [/notifHelpModal\.classList/] },
+  { name: "resume picker", file: "sidebar-sessions.js", has: [/showOverlay\(\{ kind: "modal", el: resumeModal \}\)/], gone: [/resume-modal"\);\s*if \(modal\) modal\.classList/] },
+  { name: "rewind", file: "rewind.js", has: [/kind: "modal", el: rewindModal, onRemove: resetRewindState/], gone: [/rewindModal\.classList/] },
+  { name: "skill install", file: "app-skills-install.js", has: [/kind: "modal", el: skillInstallModal, onDismiss: onSkillInstallDismiss/], gone: [/skillInstallModal\.classList/] },
+  { name: "skills", file: "skills.js", has: [/kind: "modal", el: modal, onEscape: onSkillsEscape/], gone: [/skills-modal-close|e\.key === "Escape"/] },
+  { name: "MCP servers", file: "mcp-ui.js", has: [/kind: "modal", el: modal \}/], gone: [/mcp-modal-close|e\.key === "Escape"/] },
+  { name: "input more-sheet", file: "input.js", has: [/kind: "sheet", el: moreSheet, exit: \{ className: "closing", ms: INPUT_MORE_EXIT_MS \}/], gone: [/input-more-backdrop|classList\.add\("open"\)/] },
+  { name: "context sources reads the sheet from the registry", file: "context-sources.js", has: [/isModalOpen\(moreSheet\)/], gone: [/classList\.contains\("open"\)/] },
+];
+
+test("C2 source: the surfaces that cannot be imported under node:test open through the shared modal or sheet and keep no scrim, card or handler of their own", function () {
+  C2_SOURCE_ROWS.forEach(function (row) {
+    var src = publicFile(path.join("modules", row.file));
+    row.has.forEach(function (re) { assert.match(src, re, row.name + " (" + row.file + "): opens through the shared overlay"); });
+    row.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + " (" + row.file + "): " + String(re) + " is gone"); });
+  });
+});
+
+test("C2 force change PIN: a modal that cannot be dismissed on a solid scrim has no close control, and neither Escape nor the scrim gets past it", async function (t) {
+  var m = await modalBrowser(t);
+  // The options the module passes (pinned by the source row above).
+  var handle = m.overlay.showOverlay({ kind: "modal", id: "force-change-pin-overlay", content: "x", dismissible: false, card: false, scrim: "solid" });
+  var el = handle.el;
+  assert.ok(el.classList.contains("overlay-scrim-solid"), "the solid scrim is an option");
+  assert.ok(el.querySelector(".overlay-modal-dialog").classList.contains("overlay-modal-bare"), "no card");
+  assert.equal(el.querySelectorAll(".overlay-close").length, 0, "no close control");
+  m.escape();
+  el.querySelector(".overlay-modal-backdrop").click();
+  assert.equal(handle.isOpen(), true, "Escape and the scrim leave it");
+  handle.close();
+  assert.equal(handle.isOpen(), false, "the surface itself closes it once the PIN is saved");
 });
