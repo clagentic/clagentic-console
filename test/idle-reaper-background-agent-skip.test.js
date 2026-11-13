@@ -233,6 +233,132 @@ test("AC4: a session with no background agent is reaped as before, silently", wi
   assert.equal(r.sent.length, 0);
 }));
 
+// --- Any live background task (Bash, monitor, workflow...) holds the session ---
+
+var BASH = "toolu_bg_bash";
+var BASH_TASK = "bgbash01";
+
+// A run_in_background Bash launch: its tool_result carries backgroundTaskId and
+// no agent token holds the session once the turn ends.
+function launchBackgroundBash(r) {
+  toolResult(r, BASH, "Command running in background with ID: " + BASH_TASK, { backgroundTaskId: BASH_TASK });
+  endTurn(r);
+  r.session.isProcessing = false;
+}
+
+function changed(r, tasks) {
+  feed(r, flatten({
+    type: "system", subtype: "background_tasks_changed", uuid: "bt", session_id: "cli-1",
+    tasks: tasks.map(function (x) { return { task_id: x[0], task_type: x[1], description: "d " + x[0] }; }),
+  }));
+}
+
+function captureLog(fn) {
+  var lines = [];
+  var orig = console.log;
+  console.log = function (s) { lines.push(String(s)); };
+  try { fn(); } finally { console.log = orig; }
+  return lines;
+}
+
+test("background Bash: not reaped while its notification is outstanding, skip logged, reaped after any terminal status", function (t) {
+  withTimers(function (tt) {
+    var r = rig();
+    launchBackgroundBash(r);
+    silentFor(r, LONG_SILENCE_MS);
+    var lines = captureLog(function () { reap(tt, r, 90); });
+    assert.equal(r.session._closed.value, false, "the waiting lane must stay loaded");
+    assert.ok(lines.some(function (l) { return /skipped 1 session\(s\) with live background tasks/.test(l); }), "skip is logged");
+  })(t);
+
+  ["completed", "failed", "stopped"].forEach(function (status) {
+    withTimers(function (tt) {
+      var r = rig();
+      launchBackgroundBash(r);
+      feed(r, { yokeType: "task_notification", taskId: BASH_TASK, status: status, summary: "" });
+      silentFor(r, LONG_SILENCE_MS);
+      reap(tt, r, 2);
+      assert.equal(r.session._closed.value, true, status);
+    })(t);
+  });
+
+  withTimers(function (tt) {
+    var r = rig();
+    launchBackgroundBash(r);
+    feed(r, { yokeType: "task_notification", taskId: "some-other-task", status: "completed", summary: "" });
+    silentFor(r, LONG_SILENCE_MS);
+    reap(tt, r, 2);
+    assert.equal(r.session._closed.value, false, "a notification for another task id does not release it");
+  })(t);
+});
+
+test("background_tasks_changed: a live task of any type holds the session; an empty list releases it", function (t) {
+  [["local_bash"], ["local_workflow"], ["monitor_mcp"]].forEach(function (row) {
+    withTimers(function (tt) {
+      var r = rig();
+      r.session.isProcessing = false;
+      changed(r, [["t1", row[0]]]);
+      silentFor(r, LONG_SILENCE_MS);
+      reap(tt, r, 2);
+      assert.equal(r.session._closed.value, false, row[0]);
+
+      changed(r, []);
+      silentFor(r, LONG_SILENCE_MS);
+      reap(tt, r, 2);
+      assert.equal(r.session._closed.value, true, row[0] + ": empty list is reapable");
+    })(t);
+  });
+});
+
+test("the query ending clears the live background task set", async function () {
+  var resolveNext;
+  var handle = {
+    _adapterState: null,
+    [Symbol.asyncIterator]: function () {
+      return { next: function () { return new Promise(function (res) { resolveNext = function () { res({ value: undefined, done: true }); }; }); } };
+    },
+    pushMessage: function () {}, close: function () { if (resolveNext) resolveNext(); },
+    endInput: function () {}, abort: function () { if (resolveNext) resolveNext(); },
+  };
+  var sm = makeSm();
+  var adapter = {
+    vendor: "claude", createQuery: function () { return Promise.resolve(handle); },
+    init: function () { return Promise.resolve({ models: [], skills: [] }); },
+    supportedModels: function () { return Promise.resolve([]); },
+    generateTitle: null, renameSession: null, forkSession: null,
+  };
+  var bridge = freshSdkBridge().createSDKBridge({
+    cwd: "/tmp", slug: "proj", sessionManager: sm, send: function () {},
+    adapter: adapter, adapters: { claude: adapter }, onProcessingChanged: function () {}, getConfig: null,
+  });
+  var session = makeSession();
+  session.queryInstance = null;
+  session.history = [];
+  sm.sessions.set(session.localId, session);
+
+  await bridge.startQuery(session, "hello", null, null);
+  session.liveBackgroundTasks = { stale: { type: "local_bash", label: "x" } };
+  handle.close();
+  if (session.streamPromise) { await session.streamPromise; }
+  await new Promise(function (r) { setImmediate(r); });
+
+  assert.deepEqual(Object.keys(session.liveBackgroundTasks || {}), [], "no stale entry pins the session");
+});
+
+test("memory pressure still ends the session and the notice names a live background task", function () {
+  var r = rig();
+  r.session.isProcessing = false;
+  changed(r, [["t1", "local_bash"]]);
+  var recorded = [];
+  require("../lib/session-reclaim").announceLiveAgentReclaim({
+    session: r.session,
+    sm: { saveSessionFile: function () {}, sendAndRecord: function (s, o) { recorded.push(o); } },
+    send: null, slug: "proj", reason: "memory_shed", source: "memory-shed", cause: "Memory is low.",
+  });
+  assert.equal(recorded.length, 1);
+  assert.match(recorded[0].text, /background task "d t1"/);
+});
+
 test("AC4: the open-prompt and keep-alive skips still hold for an idle session", withTimers(function (t) {
   var kept = rig();
   kept.session.isProcessing = false;
