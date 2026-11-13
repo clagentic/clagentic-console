@@ -485,13 +485,14 @@
   </div>
 
   <!-- Mobile fullscreen sheet overlay (Projects / Sessions) -->
+  <!-- A nav sheet: modules/mobile-nav-sheet.js opens it through the shared overlay
+       component, which draws the close control. -->
   <div id="mobile-sheet" class="hidden">
-    <div class="mobile-sheet-backdrop"></div>
-    <div class="mobile-sheet-content">
+    <div class="overlay-modal-backdrop"></div>
+    <div class="mobile-sheet-content overlay-modal-dialog">
       <div class="mobile-sheet-handle"></div>
       <div class="mobile-sheet-header">
         <span class="mobile-sheet-title"></span>
-        <button class="mobile-sheet-close"><i data-lucide="x"></i></button>
       </div>
       <div class="mobile-sheet-list"></div>
     </div>
@@ -1520,28 +1521,6 @@
   </div>
 </div>
 
-<div id="paste-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog paste-modal-dialog">
-    <div class="paste-modal-header">
-      <span class="paste-modal-title">Pasted content</span>
-      <div class="paste-modal-actions">
-        <button class="paste-modal-copy" title="Copy to clipboard"><i data-lucide="copy" style="width:15px;height:15px"></i></button>
-        <button class="paste-modal-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
-      </div>
-    </div>
-    <pre class="paste-modal-body" id="paste-modal-body"></pre>
-  </div>
-</div>
-
-<div id="image-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="image-modal-dialog">
-    <img id="image-modal-img" src="" alt="">
-    <button class="image-modal-close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
-  </div>
-</div>
-
 <div id="mermaid-modal" class="hidden">
   <div class="confirm-backdrop"></div>
   <div class="mermaid-modal-dialog">
@@ -1614,17 +1593,6 @@
     <div class="confirm-actions">
       <button class="confirm-btn confirm-cancel" id="rewind-cancel">Cancel</button>
       <button class="confirm-btn confirm-ok" id="rewind-confirm">Rewind</button>
-    </div>
-  </div>
-</div>
-
-<div id="confirm-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog">
-    <div class="confirm-text" id="confirm-text"></div>
-    <div class="confirm-actions">
-      <button class="confirm-btn confirm-cancel" id="confirm-cancel">Cancel</button>
-      <button class="confirm-btn confirm-delete" id="confirm-ok">Delete</button>
     </div>
   </div>
 </div>

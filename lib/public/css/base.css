@@ -87,6 +87,10 @@ img.emoji {
      sits above those; the toast layer sits above menus so a toast raised while
      one is open is still read. */
   --z-base: 10;
+  /* The phone bottom nav: above page content, below every overlay layer. A
+     sheet a nav button opens is laid out above the nav (--mobile-nav-height), so
+     the nav stays in view and tappable beneath it. */
+  --z-nav: 200;
   --z-modal: 400;
   --z-menu: 5000;
   --z-toast: 9000;
@@ -112,6 +116,21 @@ img.emoji {
   --overlay-text-size: 13px;        /* a plain toast's message */
   --overlay-icon-size: 12px;        /* the close control's glyph */
   --overlay-rise: 8px;              /* how far a card slides in from above */
+
+  /* Modals and sheets (css/overlay.css). One scrim, one dialog card, one sheet. */
+  --overlay-scrim: 0.5;             /* backdrop alpha */
+  --overlay-scrim-dark: 0.8;        /* backdrop alpha where the content is the picture (a lightbox) */
+  --overlay-modal-radius: 14px;     /* a centred dialog's corners */
+  --overlay-modal-pad-y: 20px;
+  --overlay-modal-pad-x: 24px;
+  --overlay-modal-width: 320px;     /* a dialog's widest; 90% of the viewport below that */
+  --overlay-sheet-radius: 20px;     /* a bottom sheet's top corners */
+  --overlay-sheet-pad-top: 8px;     /* above a sheet's first row */
+  --overlay-sheet-pad-bottom: 16px; /* below its last row, on top of the safe area */
+  --overlay-close-touch: 32px;      /* the close control's hit area on a phone */
+  --overlay-modal-edge: 16px;       /* a lightbox's close control from the viewport corner */
+  /* The phone bottom nav's height. A nav sheet stops above it. */
+  --mobile-nav-height: calc(56px + var(--safe-bottom));
 }
 
 :root[data-chat-width="compact"] { --content-width: var(--chat-width-compact); }

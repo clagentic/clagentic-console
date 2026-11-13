@@ -4,8 +4,10 @@
    #overlay-stack, drawn by modules/overlay.js and placed by
    modules/overlay-stack.js. Every menu and popover is drawn by the same
    component, placed by modules/popover-position.js and tracked by
-   modules/overlay-registry.js. Other stylesheets style what is inside a card and
-   never its position, layer, chrome or close control.
+   modules/overlay-registry.js. Every modal and sheet is drawn by the same
+   component (modules/overlay-modal.js) on the modal layer. Other stylesheets
+   style what is inside a card and never its position, layer, chrome or close
+   control.
 
    Sizes and layers are the tokens in base.css (--overlay-*, --z-*). */
 
@@ -35,11 +37,12 @@
   }
 }
 
-/* The card chrome: one look for a toast, a banner, a menu and any other card
-   (a surface that draws its own box, such as an inline picker, adds
-   .overlay-card). */
+/* The card chrome: one look for a toast, a banner, a menu, a modal's dialog and
+   any other card (a surface that draws its own box, such as an inline picker,
+   adds .overlay-card). */
 .overlay,
 .overlay-menu,
+.overlay-modal-dialog,
 .overlay-card {
   box-sizing: border-box;
   background: var(--bg-alt);
@@ -55,6 +58,80 @@
 .overlay-menu {
   position: fixed;
   z-index: var(--z-menu);
+}
+
+/* A modal or sheet (modules/overlay-modal.js): a scrim over the page and one
+   dialog card on it, on the modal layer. A later modal sits over an earlier one:
+   the registry numbers the open ones in --overlay-order and the layer adds it, so
+   the order holds wherever each node lives in the page. The page's toasts and
+   menus are on higher layers and stay readable over it. */
+.overlay-modal {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + var(--overlay-order, 0));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.overlay-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--shadow-rgb), var(--overlay-scrim));
+}
+.overlay-scrim-dark .overlay-modal-backdrop {
+  background: rgba(var(--shadow-rgb), var(--overlay-scrim-dark));
+}
+/* The dialog's look is the shared card chrome above; this is its size and place. */
+.overlay-modal-dialog {
+  position: relative;
+  width: 90%;
+  max-width: var(--overlay-modal-width);
+  /* The top strip holds the close control. */
+  padding: calc(var(--overlay-modal-pad-y) + var(--overlay-close-size)) var(--overlay-modal-pad-x) var(--overlay-modal-pad-y);
+  border-radius: var(--overlay-modal-radius);
+}
+/* A dialog that is its content (a lightbox): no card. Its close control hangs
+   from the viewport corner, over whatever the content is. */
+.overlay-modal-bare {
+  width: auto;
+  max-width: none;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.overlay-modal-bare .overlay-close {
+  position: fixed;
+  top: var(--overlay-modal-edge);
+  right: var(--overlay-modal-edge);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--text);
+}
+
+/* A sheet rises from the bottom edge at full width. */
+.overlay-sheet {
+  align-items: flex-end;
+}
+.overlay-sheet-dialog {
+  width: 100%;
+  max-width: none;
+  /* The top strip holds the close control. */
+  padding: calc(var(--overlay-sheet-pad-top) + var(--overlay-close-touch)) 0 calc(var(--overlay-sheet-pad-bottom) + var(--safe-bottom));
+  background: var(--bg);
+  border: none;
+  border-radius: var(--overlay-sheet-radius) var(--overlay-sheet-radius) 0 0;
+  box-shadow: 0 -8px 24px rgba(var(--shadow-rgb), 0.22);
+}
+/* A sheet a bottom-nav button opens stops above the nav, so the nav stays in view
+   and every nav button still works while it is open. */
+.overlay-nav-sheet {
+  bottom: var(--mobile-nav-height);
+}
+@media (max-width: 768px) {
+  .overlay-modal .overlay-close {
+    width: var(--overlay-close-touch);
+    height: var(--overlay-close-touch);
+  }
 }
 
 /* A panel that keeps its place in the column its container lays out (the info

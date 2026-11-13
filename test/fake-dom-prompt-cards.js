@@ -31,6 +31,9 @@ function FakeElement(tag) {
   this.className = "";
   this.dataset = {};
   this.style = {};
+  // Like CSSStyleDeclaration, a custom property is set through setProperty; the
+  // method is not an own enumerable key, so a style that was never set is still empty.
+  Object.defineProperty(this.style, "setProperty", { value: function (name, value) { this[name] = String(value); } });
   this.disabled = false;
   this.value = "";
   this._children = [];
