@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { createTreeHasher } = require('../lib/build-identity');
+const { BUILD_SOURCE_ENV } = require('../lib/build-changes');
 
 // Extracts the packed tarball filename from `npm pack --json`'s raw stdout.
 // Exported (not just used internally) so tests can exercise the parsing
@@ -64,8 +65,29 @@ function extractTarballFilename(raw) {
   throw new Error(`could not locate a valid \`npm pack --json\` array in output:\n${raw}`);
 }
 
-function packAndGetFilename() {
-  const raw = execFileSync('npm', ['pack', '--json'], { encoding: 'utf8' });
+// The lasting checkout holding this tree's history. In a linked worktree (a
+// temporary tree removed after the install) `--git-common-dir` points into the
+// main checkout's .git, so the checkout is that directory's parent. Anything
+// else (a bare repo, a failure) yields null: nothing is recorded rather than a
+// path that may vanish. `run` is injectable for tests.
+function resolveLastingCheckout(repoRoot, run) {
+  const exec = run || execFileSync;
+  let common;
+  try {
+    common = String(exec('git', ['rev-parse', '--git-common-dir'], { cwd: repoRoot, encoding: 'utf8' })).trim();
+  } catch (_) {
+    return null;
+  }
+  if (!common) return null;
+  const gitDir = path.resolve(repoRoot, common);
+  return path.basename(gitDir) === '.git' ? path.dirname(gitDir) : null;
+}
+
+function packAndGetFilename(sourceRepo) {
+  const env = Object.assign({}, process.env);
+  delete env[BUILD_SOURCE_ENV];
+  if (sourceRepo) env[BUILD_SOURCE_ENV] = sourceRepo;
+  const raw = execFileSync('npm', ['pack', '--json'], { encoding: 'utf8', env });
   return extractTarballFilename(raw);
 }
 
@@ -111,9 +133,14 @@ function main() {
     return;
   }
 
+  const sourceRepo = resolveLastingCheckout(path.join(__dirname, '..'));
+  console.log(sourceRepo
+    ? `[install-local-test] recording build source ${sourceRepo}`
+    : '[install-local-test] no lasting checkout found; recording no build source');
+
   let tarball;
   try {
-    tarball = packAndGetFilename();
+    tarball = packAndGetFilename(sourceRepo);
   } catch (err) {
     console.error(`[install-local-test] ERROR: ${err.message}`);
     process.exit(1);
@@ -134,7 +161,7 @@ function main() {
   console.log('[install-local-test] ok: installed');
 }
 
-module.exports = { extractTarballFilename, installedMatchesTree, shouldSkipInstall };
+module.exports = { extractTarballFilename, installedMatchesTree, shouldSkipInstall, resolveLastingCheckout };
 
 if (require.main === module) {
   main();

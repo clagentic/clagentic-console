@@ -68,6 +68,43 @@ test("a commit subject is bounded to one line", async function () {
   assert.ok(out.commits[0].subject.length <= 200);
 });
 
+// The recorded source lives in the installed build-sha.json; `readFile` is injected.
+function recordedFile(sourceRepo) {
+  return function () { return JSON.stringify({ sha: "a".repeat(40), sourceRepo: sourceRepo }); };
+}
+
+test("resolveHistoryRepo order: operator value, then the recorded source, then the package .git", function () {
+  var checkout = fs.mkdtempSync(path.join(os.tmpdir(), "build-changes-co-"));
+  fs.mkdirSync(path.join(checkout, ".git"));
+  var install = fs.mkdtempSync(path.join(os.tmpdir(), "build-changes-in-"));
+  assert.equal(resolveHistoryRepo("/srv/operator", install, recordedFile("/srv/recorded")), "/srv/operator");
+  assert.equal(resolveHistoryRepo(undefined, install, recordedFile("/srv/recorded")), "/srv/recorded");
+  assert.equal(resolveHistoryRepo(undefined, checkout, recordedFile("/srv/recorded")), "/srv/recorded");
+  assert.equal(resolveHistoryRepo(undefined, checkout, recordedFile(undefined)), checkout);
+  assert.equal(resolveHistoryRepo(undefined, install, recordedFile("relative")), null, "a relative record is ignored");
+  assert.equal(resolveHistoryRepo(undefined, install, function () { throw new Error("ENOENT"); }), null);
+});
+
+test("the recorded source survives a daemon config save: it is not part of daemon.json", function () {
+  // saveConfig serialises the in-memory config; the record is in the build, so
+  // a config with or without it resolves the same.
+  var inMemory = JSON.parse(JSON.stringify({ port: 1 }));
+  assert.equal(resolveHistoryRepo(inMemory.buildSourceRepo, "/pkg", recordedFile("/srv/recorded")), "/srv/recorded");
+});
+
+test("after a local install the change list is available with commits, from the recorded source", async function () {
+  var repo = resolveHistoryRepo(undefined, "/pkg", recordedFile("/srv/recorded"));
+  var seen;
+  var out = await listBuildChanges({
+    repo: repo, fromSha: "a".repeat(40), toSha: "b".repeat(40),
+    execFileFn: function (_cmd, args, _opts, cb) { seen = args; cb(null, "abc1234\tfix a thing\ndef5678\tadd a thing\n"); },
+  });
+  assert.equal(seen[1], "/srv/recorded");
+  assert.equal(out.available, true);
+  assert.equal(out.reason, null);
+  assert.deepEqual(out.commits.map(function (c) { return c.subject; }), ["fix a thing", "add a thing"]);
+});
+
 test("resolveHistoryRepo: a configured absolute path wins, a checkout is used, an install has none", function () {
   var checkout = fs.mkdtempSync(path.join(os.tmpdir(), "build-changes-co-"));
   fs.mkdirSync(path.join(checkout, ".git"));

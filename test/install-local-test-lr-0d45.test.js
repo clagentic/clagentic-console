@@ -24,7 +24,66 @@
 var test = require("node:test");
 var assert = require("node:assert/strict");
 
-var { extractTarballFilename } = require("../scripts/install-local-test");
+var { extractTarballFilename, resolveLastingCheckout } = require("../scripts/install-local-test");
+var { buildPayload } = require("../scripts/write-build-sha");
+var { BUILD_SOURCE_ENV } = require("../lib/build-changes");
+
+// One table for the recorded build source: what a local install records and
+// what a plain pack must not.
+var SHA = "a".repeat(40);
+var NOW = new Date("2026-01-01T00:00:00Z");
+[
+  {
+    name: "a linked worktree resolves to the lasting checkout, never the temporary tree",
+    actual: function () {
+      return resolveLastingCheckout("/tmp/worktree-x", function () { return "/srv/checkout/.git\n"; });
+    },
+    expected: "/srv/checkout",
+  },
+  {
+    name: "a plain checkout reports a relative .git, resolved against the tree",
+    actual: function () {
+      return resolveLastingCheckout("/srv/checkout", function () { return ".git\n"; });
+    },
+    expected: "/srv/checkout",
+  },
+  {
+    name: "a bare or unreadable repository records nothing",
+    actual: function () {
+      return resolveLastingCheckout("/srv/bare", function () { return "/srv/bare.git\n"; });
+    },
+    expected: null,
+  },
+  {
+    name: "git failing records nothing",
+    actual: function () {
+      return resolveLastingCheckout("/srv/x", function () { throw new Error("not a repo"); });
+    },
+    expected: null,
+  },
+  {
+    name: "a plain pack or publish (no env) carries no path",
+    actual: function () { return "sourceRepo" in buildPayload(SHA, {}, NOW); },
+    expected: false,
+  },
+  {
+    name: "a relative env value is not embedded",
+    actual: function () { return "sourceRepo" in buildPayload(SHA, (function () { var e = {}; e[BUILD_SOURCE_ENV] = "rel/path"; return e; })(), NOW); },
+    expected: false,
+  },
+  {
+    name: "install:local-test's env value is embedded",
+    actual: function () {
+      var e = {}; e[BUILD_SOURCE_ENV] = "/srv/checkout";
+      return buildPayload(SHA, e, NOW).sourceRepo;
+    },
+    expected: "/srv/checkout",
+  },
+].forEach(function (row) {
+  test("recorded build source: " + row.name, function () {
+    assert.deepEqual(row.actual(), row.expected);
+  });
+});
 
 test("lr-0d45: extracts filename from clean npm pack --json output", function () {
   var raw = JSON.stringify([{ filename: "@clagentic/console-1.7.0-beta.1.tgz" }]);
