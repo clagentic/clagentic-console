@@ -96,6 +96,58 @@ test("directory list: 200 sessions with one live lane give one row by default", 
   assert.deepEqual(ids(found), ["200"]);
 });
 
+// The lane rule: with no state, an agent lane with no live or idle session shows
+// its newest reaped session. Each row is [project slug, session] pairs.
+function lanesOf(pairs) {
+  var byProject = {};
+  pairs.forEach(function (p) {
+    if (!byProject[p[0]]) byProject[p[0]] = { sessions: new Map(), defaultVendor: "claude" };
+    byProject[p[0]].sessions.set(p[1].localId, p[1]);
+  });
+  return Object.keys(byProject).map(function (slug) { return { slug: slug, project: { sm: byProject[slug] } }; });
+}
+
+function plain(localId, runtime) { return session(localId, runtime, { agentName: null }); }
+
+[
+  { name: "a lane with one reaped session shows it as reaped with its lastActivity",
+    pairs: [["p1", session(1, "reaped")]], filter: {}, ids: ["1"], total: 1 },
+  { name: "a lane with only reaped sessions shows the newest by lastActivity",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "reaped", { lastActivity: 1700000900000 })], ["p1", session(3, "reaped")]], filter: {}, ids: ["2"], total: 1 },
+  { name: "a lane with a live session shows no reaped row",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "running")]], filter: {}, ids: ["2"], total: 1 },
+  { name: "a lane with an idle session shows no reaped row",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "idle")]], filter: {}, ids: ["2"], total: 1 },
+  { name: "lanes are per project and per agent",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "reaped", { agentName: "agent-b" })], ["p2", session(3, "reaped")], ["p2", session(4, "running", { agentName: "agent-b" })]],
+    filter: {}, ids: ["4", "3", "2", "1"], total: 4 },
+  { name: "a plain session with no agent keeps the live and idle default",
+    pairs: [["p1", plain(1, "reaped")], ["p1", plain(2, "idle")], ["p2", plain(3, "reaped")]], filter: {}, ids: ["2"], total: 1 },
+  { name: "the agent filter scopes the lane rule",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "reaped", { agentName: "agent-b" })]], filter: { agent: "agent-b" }, ids: ["2"], total: 1 },
+  { name: "limit applies after the lane rule and total counts the shown rows",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "reaped")], ["p2", session(3, "reaped", { lastActivity: 1700000900000 })], ["p3", session(4, "idle")]],
+    filter: { limit: 2 }, ids: ["3", "4"], total: 3 },
+  { name: "state reaped is the exact match",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "reaped")], ["p1", session(3, "running")]], filter: { state: "reaped" }, ids: ["2", "1"], total: 2 },
+  { name: "state live,idle is the exact match",
+    pairs: [["p1", session(1, "reaped")], ["p2", session(2, "reaped")], ["p2", session(3, "idle")]], filter: { state: "live,idle" }, ids: ["3"], total: 1 },
+  { name: "state any is every session",
+    pairs: [["p1", session(1, "reaped")], ["p1", session(2, "reaped")], ["p1", session(3, "running")]], filter: { state: "any" }, ids: ["3", "2", "1"], total: 3 },
+].forEach(function (row) {
+  test("directory list lanes: " + row.name, function () {
+    var found = directory.list(lanesOf(row.pairs), Object.assign({ now: NOW }, row.filter));
+    assert.deepEqual(ids(found), row.ids);
+    assert.equal(found.total, row.total);
+  });
+});
+
+test("directory list lanes: a reaped lane row reports state reaped and its lastActivity", function () {
+  var found = directory.list(lanesOf([["p1", session(1, "reaped")]]), { now: NOW });
+  assert.equal(found.entries[0].state, "reaped");
+  assert.equal(found.entries[0].lastActivity, new Date(1700000001000).toISOString());
+});
+
 // --- list-sessions through session-input: verbose fields and host load ---
 
 function inputFor(sessions, extra) {

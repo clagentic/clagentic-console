@@ -14,7 +14,7 @@ Examples use the generic project `my-project`, the placeholder `<agent>` for an 
 
 ## Find a session
 
-Without `--state`, `list-sessions` lists live and idle sessions only, newest first, one compact row each. A project with hundreds of reaped sessions and one running lane returns one row.
+Without `--state`, `list-sessions` lists live and idle sessions, newest first, one compact row each, plus one reaped row for each agent lane that has no live or idle session: the lane's newest reaped session, with `state` `reaped` and its `lastActivity`. A lane is a project and a named agent; a plain session with no agent has no lane. A project with hundreds of reaped sessions and one running lane returns one row.
 
 ```bash
 clagentic-console list-sessions --project my-project
@@ -26,7 +26,7 @@ One named agent's current session:
 clagentic-console list-sessions --project my-project --agent <agent> --limit 1
 ```
 
-Live and idle are the defaults; name the states to change that. A comma list takes several, `any` takes every state:
+Name the states to change the default. An explicit `--state` is an exact match and adds no lane row. A comma list takes several, `any` takes every state:
 
 ```bash
 clagentic-console list-sessions --project my-project --state live
@@ -34,7 +34,7 @@ clagentic-console list-sessions --project my-project --state idle,reaped
 clagentic-console list-sessions --project my-project --state any --limit 20
 ```
 
-Reaped sessions are left out unless asked for. A caller that relied on the old default, every session, passes `--state any`.
+Other reaped sessions are left out unless asked for. A caller that relied on the old default, every session, passes `--state any`.
 
 The full record per row, with the opener, the last sender, the turn count, whether a turn is running, the memory held and the host load:
 
@@ -47,7 +47,7 @@ clagentic-console list-sessions --project my-project --verbose
 | `--project` | a project slug | |
 | `--agent` | an agent name | compared by slug |
 | `--vendor` | a vendor id | |
-| `--state` | `live`, `idle`, `reaped`, `any`, or a comma list | default `live,idle` |
+| `--state` | `live`, `idle`, `reaped`, `any`, or a comma list | default: live and idle, plus each agent lane's newest reaped session when the lane has none live or idle |
 | `--limit` | a whole number, 1 or more | the newest rows, after the filters |
 | `--verbose` | nothing | the full record and `host` |
 
