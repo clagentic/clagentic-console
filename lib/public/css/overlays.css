@@ -1279,7 +1279,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   align-items: center;
   justify-content: center;
   background: var(--bg);
-  z-index: 999;
+  z-index: var(--z-connect);
   opacity: 1;
   /* Fade-out is fast (0.4s); fade-in has a slight delay so sub-second
      disconnects don't cause a jarring black flash before JS grace timer fires. */

@@ -18,7 +18,7 @@
 /* --- Remote cursors (Figma-style) --- */
 .remote-cursor {
   pointer-events: none;
-  z-index: 9999;
+  z-index: var(--z-cursor);
 }
 
 /* --- Sticky todo (inline in title bar) --- */
@@ -83,7 +83,7 @@
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
   padding: 4px 4px 6px;
   margin-top: 4px;
-  z-index: 200;
+  z-index: var(--z-float);
 }
 #todo-sticky.collapsed .todo-sticky-items { display: none; }
 #todo-sticky.collapsed .todo-sticky-progress { height: 3px; border-radius: 0 0 10px 10px; overflow: hidden; }

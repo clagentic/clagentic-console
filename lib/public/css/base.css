@@ -80,26 +80,50 @@ img.emoji {
   --compact-card-height-touch: 54px;
   --compact-control-size: 28px;
 
-  /* Layer scale: every overlay takes its z-index from here, never a literal.
-     Order, low to high: raised in-flow content, modals and panels, anchored
-     menus, the toast/banner stack, tooltips. A menu is opened from the surface
-     under it (the full-screen mobile sheet, the terminal panel, a modal), so it
-     sits above those; the toast layer sits above menus so a toast raised while
-     one is open is still read. */
+  /* Layer scale: every layer from 100 up takes its z-index from here, never a
+     literal; -1 to 99 is local stacking inside one component and may stay a
+     literal (the guard in test/overlay-stack.test.js names those bands).
+     Order, low to high: raised in-flow content, sticky notes, the phone nav,
+     in-page floats, full-screen phone views, the phone sidebar, modals and panels,
+     the connection cover, anchored menus, the toast/banner stack, tooltips. A menu
+     is opened from the surface under it (the full-screen mobile sheet, the
+     terminal panel, a modal), so it sits above those; the toast layer sits above
+     menus so a toast raised while one is open is still read. */
   --z-base: 10;
+  /* Sticky notes: a band from here up to 199, under the nav. Each note adds its
+     own order, clamped to 0-99 (sticky-notes.js), so the band never reaches the nav. */
+  --z-note: 100;
   /* The phone bottom nav: above page content, below every overlay layer. A
      sheet a nav button opens is laid out above the nav (--mobile-nav-height), so
      the nav stays in view and tappable beneath it. */
   --z-nav: 200;
+  /* In-page floats anchored to a control: the composer's config and context
+     pickers, the title bar's todo list, the note format toolbar. Above the nav. */
+  --z-float: 250;
+  /* A full-screen view on a phone (the file viewer, the terminal): over the page
+     and the floats, under the sidebar that slides over it. */
+  --z-screen: 300;
+  /* The phone sidebar drawer and its scrim (the scrim is one below): over the
+     full-screen views and the nav, under every panel and dialog, so a panel, dialog
+     or menu opened from the sidebar shows over it. */
+  --z-sidebar: 320;
   /* A full-screen settings panel: under the modal layer, so a dialog a panel opens
      (an admin form, the avatar positioner) shows over it. The panel layer is a band
      from here up to 392 (the registry numbers open panels, at most 40 apart, and two
-     legacy panels sit at +0 and +1), clear of the literal 300 layers below. */
+     legacy panels sit at +0 and +1), clear of the sidebar below. A panel is never
+     opened while a dialog is open (overlay-registry.js), so it is never under one. */
   --z-panel: 350;
   --z-modal: 400;
+  /* The "connecting" cover shown while the socket is down: over every dialog and
+     panel, under the menus and toasts. */
+  --z-connect: 999;
   --z-menu: 5000;
   --z-toast: 9000;
   --z-tooltip: 10000;
+  /* Remote cursors, their selections and the off-screen cursor chips live inside
+     #messages, which isolates its stacking (contain: layout), so this number only
+     competes with message content (at most 10). It is outside the global order. */
+  --z-cursor: 90;
 
   /* Toast and banner stack (css/overlay.css). One column, top-right on a wide
      viewport and full width on a phone; the card chrome shared by every toast

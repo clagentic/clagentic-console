@@ -384,7 +384,7 @@
   font-size: 12px;
   color: var(--text-secondary);
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
-  z-index: 200;
+  z-index: var(--z-menu);
   animation: ctx-popover-in 0.12s ease-out;
   line-height: 1.5;
 }

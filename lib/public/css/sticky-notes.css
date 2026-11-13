@@ -66,6 +66,8 @@
   min-height: 80px;
   transition: box-shadow 0.15s;
   overflow: hidden;
+  /* --note-order is the note's own order from sticky-notes.js, clamped to 0-99. */
+  z-index: calc(var(--z-note) + var(--note-order, 0));
 }
 
 .sticky-note:hover {
@@ -392,7 +394,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.35);
-  z-index: 300;
+  z-index: var(--z-float);
   animation: snToolbarAppear 0.12s ease-out;
 }
 

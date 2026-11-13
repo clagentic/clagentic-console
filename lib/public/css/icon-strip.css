@@ -344,7 +344,7 @@
   opacity: 0;
   transform: translateX(-4px);
   transition: opacity 0.1s, transform 0.1s;
-  z-index: 1000;
+  z-index: var(--z-tooltip);
   box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.5);
 }
 
@@ -458,7 +458,7 @@
   position: fixed;
   border-radius: 50%;
   pointer-events: none;
-  z-index: 10000;
+  z-index: var(--z-tooltip);
   animation: dustFly var(--dust-duration, 800ms) ease-out forwards;
 }
 
@@ -1108,7 +1108,7 @@
   max-height: 70vh;
   overflow-y: auto;
   box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.5);
-  z-index: 10001;
+  z-index: var(--z-menu);
   animation: ctxMenuAppear 0.15s ease-out;
   display: flex;
   flex-direction: column;
