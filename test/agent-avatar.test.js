@@ -222,7 +222,7 @@ test("the roster is a Team view section that asks for the roster when drawn", as
   assert.ok(body.querySelector(".ar-empty"), "loading state until the roster arrives");
 });
 
-test("each roster entry shows its avatar, first seen, last seen and where it was seen; the list updates live", async function () {
+test("each roster entry shows its avatar, last seen and where it was seen, and no first seen; the list updates live", async function () {
   var m = await loadTeam();
   m.view.openTeamView();
   var body = m.els["team-view-body"];
@@ -238,7 +238,7 @@ test("each roster entry shows its avatar, first seen, last seen and where it was
   var rows = body.querySelectorAll(".ar-row");
   assert.equal(rows.length, 2);
   assert.match(rows[0].textContent, /agent-a/);
-  assert.match(rows[0].textContent, /First seen 1h ago/);
+  assert.doesNotMatch(rows[0].textContent, /First seen/);
   assert.match(rows[0].textContent, /Last seen 1m ago/);
   assert.match(rows[0].textContent, /session agent in proj-1/);
   assert.doesNotMatch(rows[0].textContent, /session \d/);

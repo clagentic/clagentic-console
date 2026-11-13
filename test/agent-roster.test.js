@@ -398,3 +398,195 @@ test("without an observer the processor handles a dispatch as before", function 
   runTool(processor, session, "Agent", { description: "d", subagent_type: "helper-x", prompt: "p" }, 0);
   assert.ok(session.history.some(function (e) { return e.type === "tool_executing" && e.name === "Agent"; }));
 });
+
+// --- Team view groups from the vendor catalog ---
+
+var { createVendorCatalog } = require("../lib/vendor-catalog");
+var modelFamilies = require("../lib/model-families");
+var fakeDom = require("./fake-dom-prompt-cards");
+
+var PUBLIC_MODULES = path.join(__dirname, "..", "lib", "public", "modules");
+async function loadGroups() {
+  fakeDom.setupGlobals();
+  return import(pathToFileURL(path.join(PUBLIC_MODULES, "agent-roster-groups.js")).href);
+}
+
+// A fake vendor that reports one model and one helper. Neutral names only.
+function fakeVendorCatalog() {
+  var catalog = createVendorCatalog();
+  catalog.report("vendor-one", { models: [{ value: "model-a" }, { value: "alias-b", resolvedModel: "alias-b-1" }], helpers: [{ name: "helper-a" }] });
+  return catalog;
+}
+
+function groupsOf(catalog, sightings) {
+  var m = makeRoster(tmpFile(), { catalog: catalog });
+  sightings.forEach(function (s) { m.roster.observe(s); });
+  var out = {};
+  m.roster.listFor(CALLER).forEach(function (a) { out[a.key] = a.group + ":" + a.vendor; });
+  return out;
+}
+
+// key, how it was seen, expected group and the vendor whose list held it
+[
+  ["agent-a", "session", "agent:null"],
+  ["helper-a", "subagent", "helper:vendor-one"],
+  ["helper-a", "session", "agent:null"],
+  ["model-a", "session", "model:vendor-one"],
+  ["model-a", "subagent", "model:vendor-one"],
+  ["alias-b-1", "sender", "model:vendor-one"],
+  ["unlisted-helper", "subagent", "agent:null"],
+].forEach(function (row) {
+  test("classified by the vendor catalog: " + row[0] + " seen as " + row[1] + " is " + row[2], function () {
+    var got = groupsOf(fakeVendorCatalog(), [{ key: row[0], source: row[1], project: "proj-1" }]);
+    assert.equal(got[row[0]], row[2]);
+  });
+});
+
+test("a vendor that newly reports a model and a helper changes the grouping with no code change", function () {
+  var catalog = createVendorCatalog();
+  var m = makeRoster(tmpFile(), { catalog: catalog });
+  m.roster.observe({ key: "new-model", source: "session", project: "proj-1" });
+  m.roster.observe({ key: "new-helper", source: "subagent", project: "proj-1" });
+  var before = m.roster.listFor(CALLER).map(function (a) { return a.group; });
+  assert.deepEqual(before, ["agent", "agent"], "a vendor that reported nothing groups nothing");
+
+  var nudges = 0;
+  catalog.subscribe(function () { nudges++; });
+  assert.equal(catalog.report("fake-vendor", { models: [{ value: "new-model" }], helpers: [{ name: "new-helper" }] }), true);
+  assert.equal(nudges, 1);
+  assert.equal(catalog.report("fake-vendor", { models: [{ value: "new-model" }] }), false, "an unchanged report is not a change");
+  var byKey = {};
+  m.roster.listFor(CALLER).forEach(function (a) { byKey[a.key] = a.group + ":" + a.vendor; });
+  assert.deepEqual(byKey, { "new-model": "model:fake-vendor", "new-helper": "helper:fake-vendor" });
+  assert.equal(m.roster.catalogSnapshot()[0].vendor, "fake-vendor");
+});
+
+test("a vendor call that failed reports nothing and keeps what it last reported; no table is merged in", function () {
+  var catalog = fakeVendorCatalog();
+  assert.equal(catalog.report("vendor-one", { models: "not a list" }), false);
+  assert.equal(catalog.report("", { models: [{ value: "x" }] }), false);
+  assert.deepEqual(catalog.modelsOf("vendor-one").map(function (e) { return e.value; }), ["model-a", "alias-b"]);
+  assert.deepEqual(catalog.modelsOf("never-reported"), []);
+  var bare = groupsOf(createVendorCatalog(), [{ key: "model-a", source: "session" }]);
+  assert.equal(bare["model-a"], "agent:null");
+});
+
+test("the group is read at answer time and never written to the roster file", function () {
+  var m = makeRoster(tmpFile(), { catalog: fakeVendorCatalog() });
+  m.roster.observe({ key: "model-a", source: "session", project: "proj-1" });
+  assert.equal("group" in m.roster.list()[0], false);
+  assert.equal(m.roster.listFor(CALLER)[0].group, "model");
+  var msg = rosterWs.rosterMessage(m.roster, CALLER);
+  assert.equal(msg.catalog[0].vendor, "vendor-one");
+});
+
+test("per-project visibility holds for every group", function () {
+  var m = makeRoster(tmpFile(), { catalog: fakeVendorCatalog(), mayReadProject: function (slug) { return slug === "open"; } });
+  m.roster.observe({ key: "model-a", source: "session", project: "closed" });
+  m.roster.observe({ key: "helper-a", source: "subagent", project: "closed" });
+  m.roster.observe({ key: "agent-a", source: "session", project: "closed" });
+  m.roster.observe({ key: "model-a", source: "session", project: "open" });
+  assert.deepEqual(m.roster.listFor(CALLER).map(function (a) { return a.key; }), ["model-a"]);
+  assert.deepEqual(m.roster.listFor(CALLER)[0].places.map(function (p) { return p.project; }), ["open"]);
+});
+
+test("a sub-agent sighting in an unreadable project does not group the agent as a helper for a caller who cannot read it", function () {
+  var m = makeRoster(tmpFile(), { catalog: fakeVendorCatalog(), mayReadProject: function (slug) { return slug !== "closed"; } });
+  m.roster.observe({ key: "helper-a", source: "subagent", project: "closed" });
+  m.roster.observe({ key: "helper-a", source: "session", project: "open" });
+  var seen = m.roster.listFor(CALLER);
+  assert.equal(seen[0].group, "agent");
+  assert.equal(seen[0].vendor, null);
+  var all = makeRoster(tmpFile(), { catalog: fakeVendorCatalog() });
+  all.roster.observe({ key: "helper-a", source: "subagent", project: "closed" });
+  all.roster.observe({ key: "helper-a", source: "session", project: "open" });
+  assert.equal(all.roster.listFor(CALLER)[0].group, "helper", "a caller who can read both sees the helper");
+});
+
+test("lastSeen is the latest readable place and the response carries no firstSeen", function () {
+  function build(mayRead) {
+    var m = makeRoster(tmpFile(), { mayReadProject: mayRead });
+    m.setNow(1000);
+    m.roster.observe({ key: "agent-a", source: "session", project: "closed" });
+    m.setNow(2000);
+    m.roster.observe({ key: "agent-a", source: "session", project: "open" });
+    m.setNow(9000);
+    m.roster.observe({ key: "agent-a", source: "sender", project: "closed" });
+    return m.roster.listFor(CALLER)[0];
+  }
+  var partial = build(function (slug) { return slug === "open"; });
+  assert.equal(partial.lastSeen, 2000, "the newer sighting in the unreadable project is not shown");
+  assert.equal("firstSeen" in partial, false, "a partial view carries no first seen");
+  var full = build(function () { return true; });
+  assert.equal("firstSeen" in full, false, "no caller gets first seen");
+  assert.equal(full.lastSeen, 9000);
+});
+
+test("a redraw signature changes when only an agent's vendor changes", async function () {
+  var G = await loadGroups();
+  var before = [{ key: "model-a", group: "model", vendor: "vendor-one", lastSeen: 1 }];
+  assert.notEqual(G.choicesSignature(before), G.choicesSignature([{ key: "model-a", group: "model", vendor: "vendor-two", lastSeen: 1 }]));
+  assert.equal(G.choicesSignature(before), G.choicesSignature([{ key: "model-a", group: "model", vendor: "vendor-one", lastSeen: 2 }]), "times alone do not redraw");
+});
+
+test("Claude families come from the vendor's alias entries; the literal serves only until a list arrives", function () {
+  try {
+    modelFamilies.resetClaudeModelFamilies();
+    assert.deepEqual(modelFamilies.CLAUDE_MODEL_FAMILIES, ["opus", "sonnet", "haiku", "fable"], "the fallback");
+    assert.equal(modelFamilies.setClaudeModelFamilies([]), false, "a failed or empty listing keeps the fallback");
+    assert.equal(modelFamilies.setClaudeModelFamilies([{ value: "default" }, { value: "claude-opus-4-5" }]), false, "no alias entry, no change");
+    assert.deepEqual(modelFamilies.CLAUDE_MODEL_FAMILIES, ["opus", "sonnet", "haiku", "fable"]);
+
+    assert.equal(modelFamilies.setClaudeModelFamilies([{ value: "default" }, { value: "newfam" }, { value: "sonnet" }, { value: "claude-opus-4-5" }]), true);
+    assert.deepEqual(modelFamilies.CLAUDE_MODEL_FAMILIES, ["newfam", "sonnet"], "derived, not merged with the fallback");
+    assert.equal(modelFamilies.parseClaudeModelVersion("claude-newfam-2-1").family, "newfam");
+  } finally {
+    modelFamilies.resetClaudeModelFamilies();
+  }
+});
+
+test("the Team view draws three groups: named agents open, helpers and models collapsed", async function () {
+  var G = await loadGroups();
+  var agents = [
+    { key: "agent-a", group: "agent" }, { key: "helper-a", group: "helper", vendor: "vendor-one" },
+    { key: "model-a", group: "model", vendor: "vendor-one" }, { key: "legacy" }, { key: "odd", group: "unknown" },
+  ];
+  var parts = G.partitionRoster(agents);
+  assert.deepEqual(parts.agent.map(function (a) { return a.key; }), ["agent-a", "legacy", "odd"], "nothing is dropped");
+  assert.equal(parts.helper.length, 1);
+  assert.equal(parts.model.length, 1);
+
+  var sections = G.GROUPS.map(function (g) {
+    var rows = parts[g.id].map(function (a) { var r = new fakeDom.FakeElement("div"); r.dataset.agentKey = a.key; return r; });
+    return G.buildGroupSection(g, g.collapsible ? [] : rows, { count: parts[g.id].length, expanded: false, onToggle: function () {} });
+  });
+  assert.deepEqual(sections.map(function (s) { return s.dataset.arGroup; }), ["agent", "helper", "model"]);
+  assert.equal(sections[0].querySelectorAll("[data-agent-key]").length, 3, "named agents are listed");
+  assert.equal(sections[1].querySelector("button").getAttribute("aria-expanded"), "false");
+  assert.equal(sections[1].querySelector(".ar-list"), null, "helpers start collapsed");
+  assert.match(sections[2].querySelector("button").textContent, /^Models \(1\)$/);
+  var open = G.buildGroupSection(G.GROUPS[2], [new fakeDom.FakeElement("div")], { count: 1, expanded: true, onToggle: function () {} });
+  assert.ok(open.querySelector(".ar-list"));
+});
+
+// row: agent, whether the operator chose an avatar, what mark shows
+[
+  [{ key: "model-a", group: "model", vendor: "vendor-one" }, false, "logo"],
+  [{ key: "model-a", group: "model", vendor: "no-logo" }, false, "neutral"],
+  [{ key: "model-a", group: "model" }, false, "neutral"],
+  [{ key: "helper-a", group: "helper", vendor: "vendor-one" }, false, "tool"],
+  [{ key: "model-a", group: "model", vendor: "vendor-one" }, true, "chosen"],
+  [{ key: "helper-a", group: "helper", vendor: "vendor-one" }, true, "chosen"],
+  [{ key: "agent-a", group: "agent" }, false, "chosen"],
+].forEach(function (row) {
+  test("the mark of " + row[0].key + " (" + row[0].group + ", " + (row[0].vendor || "no vendor") + ", chosen " + row[1] + ") is " + row[2], async function () {
+    var G = await loadGroups();
+    var node = G.buildRowAvatar(row[0], 40, {
+      chosen: function () { return row[1]; },
+      plain: function () { var n = new fakeDom.FakeElement("img"); n.dataset.arMark = "chosen"; return n; },
+      logoFor: function (v) { return v === "vendor-one" ? "/logo.png" : null; },
+    });
+    assert.equal(node.dataset.arMark, row[2]);
+    if (row[2] === "logo") assert.equal(node.src, "/logo.png");
+  });
+});

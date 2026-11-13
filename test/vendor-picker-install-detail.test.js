@@ -20,18 +20,23 @@ async function load() {
 
 var HINT = "Install the Codex CLI (npm install -g @openai/codex), then sign in.";
 
-test("a usable Codex shows its version beside the name and its path and version in the title", async function () {
+test("a usable Codex shows no version beside the name, the same shape as Claude; its path and version stay in the title", async function () {
   var { VR, picker } = await load();
   var rows = VR.pickerRows([
-    { id: "codex", displayName: "Codex", installed: true, installHint: HINT, installDetail: { path: "/usr/local/bin/codex", version: "0.162.1", source: "path", reason: null } },
+    { id: "claude", displayName: "Claude Code", icon: "/claude.png", installed: true, installHint: HINT, installDetail: { path: "/usr/local/bin/claude", version: "2.1.0", source: "path", reason: null } },
+    { id: "codex", displayName: "Codex", icon: "/codex.png", installed: true, installHint: HINT, installDetail: { path: "/usr/local/bin/codex", version: "0.162.1", source: "path", reason: null } },
   ], "codex");
-  assert.equal(rows[0].version, "0.162.1");
-  assert.equal(rows[0].title, "Codex 0.162.1 (/usr/local/bin/codex)");
+  assert.equal(rows[1].version, undefined);
+  assert.equal(rows[1].title, "Codex 0.162.1 (/usr/local/bin/codex)");
 
   var container = new fakeDom.FakeElement("div");
   picker.renderVendorPicker(container, rows, { onSelect: function () {}, onRecheck: function () {} });
-  var button = container.querySelector('[data-vendor="codex"]');
-  assert.equal(button.querySelector(".vendor-toggle-note").textContent, "0.162.1");
+  var shapes = ["claude", "codex"].map(function (id) {
+    var button = container.querySelector('[data-vendor="' + id + '"]');
+    assert.equal(button.querySelector(".vendor-toggle-note"), null, id + " shows no version note");
+    return button.children.map(function (c) { return c.className; }).join(",");
+  });
+  assert.equal(shapes[0], shapes[1], "Claude and Codex indicators have the same shape");
 });
 
 test("a Codex that is too old is disabled with the stated reason, not the install hint", async function () {
@@ -41,7 +46,7 @@ test("a Codex that is too old is disabled with the stated reason, not the instal
       installDetail: { path: "/usr/bin/codex", version: "0.147.9", source: "path", reason: "Codex 0.147.9 is too old; Clagentic: Console needs 0.148.0 or newer" } },
   ], "claude");
   assert.equal(rows[0].installed, false);
-  assert.equal(rows[0].version, "");
+  assert.equal(rows[0].version, undefined);
   assert.equal(rows[0].title, "Codex. Codex 0.147.9 is too old; Clagentic: Console needs 0.148.0 or newer");
 });
 
@@ -86,6 +91,6 @@ test("an agent with no install detail is shown exactly as before", async functio
     { id: "other", displayName: "Other", installed: false, installHint: "Install other." },
   ], "claude");
   assert.equal(rows[0].title, "Claude Code");
-  assert.equal(rows[0].version, "");
+  assert.equal(rows[0].version, undefined);
   assert.equal(rows[1].title, "Other is not installed. Install other.");
 });
