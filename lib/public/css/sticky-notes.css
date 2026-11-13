@@ -361,15 +361,9 @@
 
 /* --- Color picker popup --- */
 .sticky-note-color-picker {
-  position: fixed;
   display: flex;
   gap: 4px;
   padding: 6px 8px;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
-  z-index: 250;
 }
 
 .sticky-note-color-dot {

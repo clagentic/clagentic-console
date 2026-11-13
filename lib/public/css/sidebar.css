@@ -1216,14 +1216,8 @@
 
 /* --- Session context menu --- */
 .session-ctx-menu {
-  position: fixed;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
   padding: 4px 0;
   min-width: 140px;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
-  z-index: 9999;
 }
 
 .session-ctx-item {

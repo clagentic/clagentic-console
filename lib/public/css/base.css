@@ -81,12 +81,14 @@ img.emoji {
   --compact-control-size: 28px;
 
   /* Layer scale: every overlay takes its z-index from here, never a literal.
-     Order, low to high: raised in-flow content, anchored menus, modals and
-     panels, the toast/banner stack, tooltips. The toast layer sits above modals
-     so a toast raised while one is open is still read. */
+     Order, low to high: raised in-flow content, modals and panels, anchored
+     menus, the toast/banner stack, tooltips. A menu is opened from the surface
+     under it (the full-screen mobile sheet, the terminal panel, a modal), so it
+     sits above those; the toast layer sits above menus so a toast raised while
+     one is open is still read. */
   --z-base: 10;
-  --z-menu: 200;
   --z-modal: 400;
+  --z-menu: 5000;
   --z-toast: 9000;
   --z-tooltip: 10000;
 

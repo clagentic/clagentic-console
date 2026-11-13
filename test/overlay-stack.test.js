@@ -234,14 +234,21 @@ var CARD_SELECTORS = [
   });
 });
 
-test("stylesheet: the layer scale is ordered and the stack takes its layer from it", function () {
+test("stylesheet: the layer scale is ordered and the stack and the menus take their layer from it", function () {
   var root = cssRules.rules(BASE).filter(function (r) { return r.selector === ":root" && /--z-base/.test(r.body); })[0];
   assert.ok(root, "the scale is declared on :root");
-  var order = ["base", "menu", "modal", "toast", "tooltip"].map(function (name) {
+  // A menu opens from the surface under it (the full-screen mobile sheet, the
+  // terminal panel, a modal), so it sits above modals and panels.
+  var names = ["base", "modal", "menu", "toast", "tooltip"];
+  var order = names.map(function (name) {
     return Number(new RegExp("--z-" + name + ":\\s*(\\d+)").exec(root.body)[1]);
   });
-  assert.deepEqual(order.slice().sort(function (a, b) { return a - b; }), order, "base < menu < modal < toast < tooltip");
+  for (var i = 1; i < names.length; i++) {
+    assert.ok(order[i] > order[i - 1], "--z-" + names[i - 1] + " (" + order[i - 1] + ") < --z-" + names[i] + " (" + order[i] + ")");
+  }
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "z-index", DESKTOP), "var(--z-toast)");
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "z-index", DESKTOP), "var(--z-menu)");
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "position", DESKTOP), "fixed");
 });
 
 test("stylesheet: overlay.css reads sizes from tokens; the only literals are the named ones", function () {
@@ -342,4 +349,260 @@ test("the notification banners redraw and clear in their own group, leaving toas
   assert.equal(b.stack().querySelectorAll(".notif-banner").length, 0, "the banners are gone");
   assert.equal(b.stack().querySelectorAll(".notif-banner-clear-all").length, 0, "and so is the Clear all pill");
   assert.equal(b.stack().querySelectorAll(".overlay-toast").length, 2, "the toasts stay");
+});
+
+// ---------------------------------------------------------------------------
+// Menus and popovers: the anchored kinds and the one open-menu registry
+// ---------------------------------------------------------------------------
+
+// A document of its own, so its click and Escape handlers can be fired by hand:
+// the registry wires one capture click handler and one keydown handler per
+// document, never one per menu.
+async function menuBrowser(t) {
+  var b = await browser(t);
+  var overlay = await import(dom.moduleUrl("overlay.js"));
+  var registry = await import(dom.moduleUrl("overlay-registry.js"));
+  registry.closeOpenMenu();
+  var listeners = {};
+  var doc = {
+    body: new dom.FakeElement("body"),
+    createElement: function (tag) { return sized(new dom.FakeElement(tag), { width: 50, height: 30 }); },
+    addEventListener: function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
+  };
+  return {
+    b: b, overlay: overlay, registry: registry, doc: doc,
+    handlerCount: function (type) { return (listeners[type] || []).length; },
+    click: function (target) { (listeners.click || []).forEach(function (fn) { fn({ target: target }); }); },
+    escape: function () { (listeners.keydown || []).forEach(function (fn) { fn({ key: "Escape" }); }); },
+  };
+}
+
+function sized(el, box) {
+  var rect = { top: 100, left: 100, width: box.width, height: box.height, right: 100 + box.width, bottom: 100 + box.height };
+  el.getBoundingClientRect = function () { return rect; };
+  return el;
+}
+
+// An anchor control in the page, 40 x 20 at (100, 100).
+function anchorEl(m) {
+  var el = sized(m.doc.createElement("button"), { width: 40, height: 20 });
+  m.doc.body.appendChild(el);
+  return el;
+}
+
+// Each B1 surface with the options its module passes. `node` says how it gets
+// its card: built by the module and adopted ("built"), a node index.html already
+// has ("page", retained hidden), or created by the component ("new"). `at` is
+// where popover-position.js must put it for an anchor at (100,100) 40x20 and a
+// 50x30 card on a 1280 x 800 viewport.
+var MENU_SURFACES = [
+  { name: "session-info", kind: "popover", node: "new", opener: true, place: { placement: "below" }, at: { left: "100px", top: "126px" } },
+  { name: "project context menu", kind: "menu", node: "built", place: { placement: "right" }, at: { left: "146px", top: "100px" } },
+  { name: "project context menu, below", kind: "menu", node: "built", opener: true, place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
+  { name: "project access popover", kind: "popover", node: "new", closeButton: true, place: { placement: "right", gap: 8 }, at: { left: "148px", top: "100px" } },
+  { name: "emoji picker", kind: "popover", node: "built", place: { placement: "right" }, at: { left: "146px", top: "100px" } },
+  { name: "session context menu", kind: "menu", node: "built", place: { placement: "below-right-aligned", gap: 2 }, at: { left: "90px", top: "122px" } },
+  { name: "terminal context menu", kind: "menu", node: "built", point: { x: 300, y: 200 }, at: { left: "300px", top: "200px" } },
+  { name: "sticky-note colour picker", kind: "popover", node: "built", place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
+  { name: "schedule popover", kind: "popover", node: "page", place: { placement: "below" }, at: { left: "100px", top: "126px" } },
+  { name: "schedule end-type list", kind: "menu", node: "page", opener: true, place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
+  { name: "loop pending popover", kind: "popover", node: "new", opener: true, id: "loop-pending-popover", place: { placement: "below-right-aligned" }, at: { left: "90px", top: "126px" } },
+];
+
+function openSurface(m, row) {
+  var anchor = row.point || anchorEl(m);
+  var opts = Object.assign({ kind: row.kind, anchor: anchor, doc: m.doc, id: row.id, closeButton: row.closeButton }, row.place);
+  if (row.opener) opts.opener = anchor;
+  if (row.node === "new") opts.content = "<span>x</span>";
+  else {
+    opts.el = sized(m.doc.createElement("div"), { width: 50, height: 30 });
+    if (row.node === "page") {
+      opts.retain = true;
+      opts.el.className = "hidden";
+      m.doc.body.appendChild(opts.el);
+    }
+  }
+  var handle = m.overlay.showOverlay(opts);
+  return { handle: handle, anchor: anchor, inside: handle.el.appendChild(m.doc.createElement("span")) };
+}
+
+function gone(handle) {
+  return !handle.isOpen() && (!handle.el.parentNode || handle.el.classList.contains("hidden"));
+}
+
+test("menu: each B1 surface opens as the shared menu, placed by popover-position.js, on the menu layer's class", async function (t) {
+  for (var i = 0; i < MENU_SURFACES.length; i++) {
+    var row = MENU_SURFACES[i];
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    var open = openSurface(m, row);
+    var el = open.handle.el;
+    assert.ok(el.classList.contains("overlay-menu"), row.name + ": the shared card");
+    assert.equal(el.classList.contains("overlay-popover"), row.kind === "popover", row.name + ": the kind is a class");
+    assert.equal(el.getAttribute("data-overlay-kind"), row.kind, row.name + ": the kind is an attribute");
+    assert.equal(el.classList.contains("hidden"), false, row.name + ": an adopted page node is shown");
+    assert.ok(el.parentNode, row.name + ": in the page");
+    assert.deepEqual({ left: el.style.left, top: el.style.top, position: el.style.position },
+      { left: row.at.left, top: row.at.top, position: "fixed" }, row.name + ": placed by popover-position.js");
+    assert.equal(open.handle.isOpen(), true, row.name + ": tracked by the registry");
+    assert.equal(el.querySelectorAll(".overlay-close").length, row.closeButton ? 1 : 0, row.name + ": the close control only where asked");
+  }
+});
+
+test("menu: one open: a second menu closes the first, for element-then-element and element-then-point", async function (t) {
+  var PAIRS = [
+    { name: "element anchored, then element anchored", first: "session context menu", second: "project context menu" },
+    { name: "element anchored, then point anchored", first: "sticky-note colour picker", second: "terminal context menu" },
+    { name: "point anchored, then element anchored", first: "terminal context menu", second: "emoji picker" },
+    { name: "a retained page node, then a built one", first: "schedule popover", second: "project access popover" },
+  ];
+  for (var i = 0; i < PAIRS.length; i++) {
+    var pair = PAIRS[i];
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    var row = function (name) { return MENU_SURFACES.filter(function (s) { return s.name === name; })[0]; };
+    var first = openSurface(m, row(pair.first)).handle;
+    var second = openSurface(m, row(pair.second)).handle;
+    assert.equal(gone(first), true, pair.name + ": the first is closed");
+    assert.equal(second.isOpen(), true, pair.name + ": the second is open");
+    assert.equal(m.registry.getOpenMenu(), second.el, pair.name + ": the registry holds the second");
+    assert.equal(m.handlerCount("click"), 1, pair.name + ": one outside-click handler");
+    assert.equal(m.handlerCount("keydown"), 1, pair.name + ": one Escape handler");
+  }
+});
+
+test("menu: Escape and an outside click close each B1 surface; its opener and its own content do not", async function (t) {
+  for (var i = 0; i < MENU_SURFACES.length; i++) {
+    var row = MENU_SURFACES[i];
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    var open = openSurface(m, row);
+    var handle = open.handle;
+
+    m.click(open.inside);
+    assert.equal(handle.isOpen(), true, row.name + ": a click on its own content leaves it");
+    if (row.opener) {
+      m.click(open.anchor);
+      assert.equal(handle.isOpen(), true, row.name + ": a click on its opener is the opener's to handle");
+    }
+    m.escape();
+    assert.equal(gone(handle), true, row.name + ": Escape closes it");
+
+    var again = openSurface(m, row).handle;
+    m.click(m.doc.body);
+    assert.equal(gone(again), true, row.name + ": a click outside closes it");
+    if (row.node === "page") {
+      assert.equal(again.el.classList.contains("hidden"), true, row.name + ": a page node is hidden, not removed (data-tip-suppress-when-open reads it)");
+    } else {
+      assert.equal(again.el.parentNode, null, row.name + ": a built card is removed");
+    }
+  }
+});
+
+test("menu: closing reports once, however it closes, and a stale handle cannot close a newer menu", async function (t) {
+  var m = await menuBrowser(t);
+  var calls = [];
+  var a = m.overlay.showOverlay({ kind: "menu", content: "a", doc: m.doc, onRemove: function () { calls.push("a"); } });
+  a.close();
+  a.close();
+  var b = m.overlay.showOverlay({ kind: "menu", content: "b", doc: m.doc, onRemove: function () { calls.push("b"); } });
+  a.close();
+  assert.equal(b.isOpen(), true, "the first handle does not close the second menu");
+  m.escape();
+  m.escape();
+  assert.deepEqual(calls, ["a", "b"], "each close hook runs once");
+});
+
+test("menu: Escape closes the open menu and never a toast; a toast alone is left", async function (t) {
+  var m = await menuBrowser(t);
+  m.b.utils.showToast("Saved", "error", "detail");
+  var toast = m.b.stack().querySelector(".overlay-toast");
+  var card = m.overlay.showOverlay({ kind: "toast", content: "x", dismissible: true });
+
+  var menu = m.overlay.showOverlay({ kind: "menu", content: "m", doc: m.doc });
+  m.escape();
+  assert.equal(menu.isOpen(), false, "the menu closed");
+  assert.equal(toast.classList.contains("hide"), false, "the plain toast stayed");
+  assert.equal(card.el.classList.contains("hide"), false, "the dismissible toast stayed");
+
+  m.escape();
+  assert.equal(card.el.classList.contains("hide"), false, "with no menu open Escape on the document leaves the toast");
+});
+
+test("menu: the shared close control is the card's own top-right button and closes it", async function (t) {
+  var m = await menuBrowser(t);
+  var dismissed = 0;
+  var handle = m.overlay.showOverlay({
+    kind: "popover", content: "x", doc: m.doc, closeButton: true, closeLabel: "Close project access",
+    onDismiss: function () { dismissed++; },
+  });
+  var closes = handle.el.querySelectorAll(".overlay-close");
+  assert.equal(closes.length, 1, "one close control");
+  assert.equal(closes[0].tagName, "BUTTON");
+  assert.equal(closes[0].getAttribute("aria-label"), "Close project access");
+  assert.equal(closes[0]._parent, handle.el, "the card's own child, at the card's corner");
+  closes[0].click();
+  assert.equal(handle.isOpen(), false, "using it closes the card");
+  assert.equal(dismissed, 1);
+
+  // Reopening a node that already carries the control does not add a second.
+  var node = m.doc.createElement("div");
+  m.overlay.showOverlay({ kind: "popover", el: node, doc: m.doc, closeButton: true });
+  m.overlay.showOverlay({ kind: "popover", el: node, doc: m.doc, closeButton: true });
+  assert.equal(node.querySelectorAll(".overlay-close").length, 1);
+});
+
+// The stylesheets of the B1 surfaces keep content styling only. Position, layer
+// and card chrome come from overlay.css.
+var B1_SHEETS = [
+  { file: "menus.css", selectors: [".session-info-popover"] },
+  { file: "icon-strip.css", selectors: [".project-ctx-menu", ".project-access-popover", ".emoji-picker"] },
+  { file: "sidebar.css", selectors: [".session-ctx-menu"] },
+  { file: "filebrowser.css", selectors: [".term-ctx-menu", ".terminal-tab-ctx"] },
+  { file: "sticky-notes.css", selectors: [".sticky-note-color-picker"] },
+  { file: "scheduler.css", selectors: [".schedule-popover"] },
+  { file: "scheduler-modal.css", selectors: [".sched-custom-end-list"] },
+  { file: "loop.css", selectors: [".loop-pending-popover"] },
+];
+var CHROME_PROPS = /^(position|z-index|top|left|right|bottom|background|background-color|border|border-radius|box-shadow)$/;
+
+test("stylesheet: no B1 menu keeps its own position, layer or card chrome", function () {
+  B1_SHEETS.forEach(function (sheet) {
+    var rules = cssRules.rules(css(sheet.file));
+    sheet.selectors.forEach(function (selector) {
+      var hits = rules.filter(function (r) { return r.selector.split(",").map(function (s) { return s.trim(); }).indexOf(selector) !== -1; });
+      assert.ok(hits.length > 0, sheet.file + ": " + selector + " still styles its content");
+      hits.forEach(function (r) {
+        var props = r.body.split(";").map(function (d) { return d.split(":")[0].trim(); }).filter(Boolean);
+        assert.deepEqual(props.filter(function (p) { return CHROME_PROPS.test(p); }), [],
+          sheet.file + ": " + selector + " must leave position, layer and chrome to overlay.css");
+      });
+    });
+  });
+});
+
+test("stylesheet: the menu chrome is one rule shared with the cards, from tokens", function () {
+  ["background", "border", "border-radius", "box-shadow"].forEach(function (prop) {
+    assert.ok(cssRules.valueAt(OVERLAY, ".overlay-menu", prop, DESKTOP), ".overlay-menu has " + prop);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", prop, DESKTOP), cssRules.valueAt(OVERLAY, ".overlay", prop, DESKTOP),
+      "a menu and a toast share " + prop);
+  });
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "border-radius", DESKTOP), "var(--overlay-radius)");
+});
+
+// sticky-notes.js layers the notes themselves by an inline z-index; only its
+// colour picker is a menu, so that module is checked for hand placement alone.
+var B1_MODULES = [
+  { file: "app-header.js", layer: true }, { file: "sidebar-projects.js", layer: true },
+  { file: "sidebar-sessions.js", layer: true }, { file: "terminal.js", layer: true },
+  { file: "sticky-notes.js", layer: false }, { file: "scheduler.js", layer: true },
+  { file: "scheduler-config.js", layer: true }, { file: "app-loop-ui.js", layer: true },
+];
+
+test("modules: no B1 module sets a menu's z-index or places a menu by hand", function () {
+  B1_MODULES.forEach(function (row) {
+    var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", row.file), "utf8");
+    if (row.layer) assert.ok(!/zIndex/.test(src), row.file + " must take its layer from the token");
+    assert.ok(!/\bpositionPopover\b|\bpositionAtPoint\b/.test(src), row.file + " places menus through showOverlay, not directly");
+  });
 });

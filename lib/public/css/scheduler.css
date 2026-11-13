@@ -1264,12 +1264,6 @@
    Popover
    ============================ */
 .schedule-popover {
-  position: fixed;
-  z-index: 400;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.25);
   padding: 12px 14px;
   min-width: 220px;
   max-width: 300px;

@@ -1299,13 +1299,7 @@
 }
 
 .sched-custom-end-list {
-  position: fixed;
   min-width: 80px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.25);
-  z-index: 350;
   padding: 3px;
   display: flex;
   flex-direction: column;

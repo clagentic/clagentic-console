@@ -1297,14 +1297,8 @@
 .terminal-tab-more:hover { background: rgba(var(--overlay-rgb),0.1); color: var(--text); }
 
 .terminal-tab-ctx {
-  position: fixed;
-  z-index: 9999;
   min-width: 120px;
-  background: var(--bg-elevated, var(--bg));
-  border: 1px solid var(--border);
-  border-radius: 6px;
   padding: 4px;
-  box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.15);
 }
 
 .terminal-tab-ctx-item {
@@ -1480,14 +1474,8 @@
 
 /* --- Terminal context menu --- */
 .term-ctx-menu {
-  position: fixed;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 10px;
   padding: 4px 0;
   min-width: 160px;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
-  z-index: 500;
 }
 
 .term-ctx-item {

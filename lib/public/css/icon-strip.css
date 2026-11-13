@@ -697,14 +697,8 @@
 
 /* --- Project context menu --- */
 .project-ctx-menu {
-  position: fixed;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
   padding: 4px 0;
   min-width: 180px;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
-  z-index: 9999;
   animation: ctxMenuAppear 0.12s ease-out;
 }
 
@@ -744,14 +738,8 @@
 
 /* --- Project Access Popover --- */
 .project-access-popover {
-  position: fixed;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
   padding: 0;
   width: 260px;
-  box-shadow: 0 8px 30px rgba(var(--shadow-rgb), 0.35);
-  z-index: 9999;
   animation: ctxMenuAppear 0.12s ease-out;
   overflow: hidden;
 }
@@ -759,7 +747,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 8px;
+  /* Right side leaves room for the shared close control (css/overlay.css). */
+  padding: 12px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 8px 14px;
   border-bottom: 1px solid var(--border);
 }
 .project-access-title {
@@ -767,16 +756,6 @@
   font-weight: 600;
   color: var(--text);
 }
-.project-access-close {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-}
-.project-access-close:hover { color: var(--text); }
 .project-access-section {
   padding: 10px 14px;
 }
@@ -851,14 +830,8 @@
 
 /* --- Emoji picker popover --- */
 .emoji-picker {
-  position: fixed;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
   padding: 10px 10px 6px;
   width: 292px;
-  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.5);
-  z-index: 10001;
   animation: ctxMenuAppear 0.15s ease-out;
   display: flex;
   flex-direction: column;
