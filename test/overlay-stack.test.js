@@ -94,35 +94,38 @@ function escapeKey(card) {
 // Stacking: one column, so no two cards share a spot
 // ---------------------------------------------------------------------------
 
-WIDTHS.forEach(function (width) {
-  test("a diagnostic toast, a banner, a plain toast and the reload banner share one in-flow column at " + width + "px", async function (t) {
+test("a diagnostic toast, a banner, a plain toast and the reload banner share one in-flow column at each width", async function (t) {
+  for (var w = 0; w < WIDTHS.length; w++) {
+    var width = WIDTHS[w];
+    var at = "at " + width + "px";
+    t.mock.timers.reset(); // each row is a fresh browser
     var b = await browser(t);
     ["diagnostic toast", "notification banner", "plain toast", "reload banner, build guard"].forEach(function (name) {
       SURFACES.filter(function (s) { return s.name === name; })[0].raise(b);
     });
 
     var cards = b.stack().children;
-    assert.equal(cards.length, 4, "all four are children of the one stack");
+    assert.equal(cards.length, 4, "all four are children of the one stack " + at);
     cards.forEach(function (card) {
-      assert.ok(card.classList.contains("overlay"), "each is the shared card");
-      assert.deepEqual(Object.keys(card.style), [], "no card places itself with an inline style");
+      assert.ok(card.classList.contains("overlay"), "each is the shared card " + at);
+      assert.deepEqual(Object.keys(card.style), [], "no card places itself with an inline style " + at);
     });
-    assert.equal(global.document.body.querySelectorAll(".overlay-stack").length, 1, "one stack, not one per surface");
+    assert.equal(global.document.body.querySelectorAll(".overlay-stack").length, 1, "one stack, not one per surface " + at);
 
     // The stack is a fixed flex column; its children are in flow, so heights add
     // up and no two boxes intersect.
     var all = BASE + OVERLAY + DIAGNOSTICS + NOTIFICATIONS;
-    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "position", width), "fixed");
-    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "display", width), "flex");
-    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "flex-direction", width), "column");
-    assert.ok(cssRules.valueAt(OVERLAY, ".overlay-stack", "gap", width), "cards are separated by a gap");
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "position", width), "fixed", "stack position " + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "display", width), "flex", "stack display " + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "flex-direction", width), "column", "stack direction " + at);
+    assert.ok(cssRules.valueAt(OVERLAY, ".overlay-stack", "gap", width), "cards are separated by a gap " + at);
     cards.forEach(function (card) {
       card.className.split(/\s+/).forEach(function (cls) {
         var position = cssRules.valueAt(all, "." + cls, "position", width);
-        assert.ok(position === null || position === "relative", "." + cls + " is in flow at " + width + "px, got " + position);
+        assert.ok(position === null || position === "relative", "." + cls + " is in flow " + at + ", got " + position);
       });
     });
-  });
+  }
 });
 
 test("the stack spans the phone and is a fixed-width corner column on a desktop", function () {
@@ -155,40 +158,51 @@ test("the manager replaces by source, clears a group, and a card leaves once how
 // Close control: same element, same corner, always visible, Escape dismisses
 // ---------------------------------------------------------------------------
 
-SURFACES.forEach(function (row) {
-  test("close control: " + row.name + (row.dismissible ? " has the shared control and Escape dismisses it" : " has none and ignores Escape"), async function (t) {
+test("close control: each surface has the shared control and Escape dismisses it, or has none and ignores Escape", async function (t) {
+  for (var i = 0; i < SURFACES.length; i++) {
+    var row = SURFACES[i];
+    t.mock.timers.reset(); // each row is a fresh browser
     var b = await browser(t);
     row.raise(b);
     var card = b.stack().querySelector(row.find);
-    assert.ok(card, row.name + " is drawn in the stack");
+    assert.ok(card, row.name + ": drawn in the stack");
     var closes = card.querySelectorAll(".overlay-close");
     if (!row.dismissible) {
-      assert.equal(closes.length, 0, "no close control");
+      assert.equal(closes.length, 0, row.name + ": no close control");
       escapeKey(card);
-      assert.equal(card.classList.contains("hide"), false, "Escape leaves it");
-      return;
+      assert.equal(card.classList.contains("hide"), false, row.name + ": Escape leaves it");
+      continue;
     }
-    assert.equal(closes.length, 1, "one close control");
-    assert.equal(closes[0].tagName, "BUTTON");
-    assert.ok(closes[0].getAttribute("aria-label"), "it is named for assistive tech");
-    assert.equal(closes[0]._parent, card, "it is the card's own child, at the card's corner");
+    assert.equal(closes.length, 1, row.name + ": one close control");
+    assert.equal(closes[0].tagName, "BUTTON", row.name + ": the control is a button");
+    assert.ok(closes[0].getAttribute("aria-label"), row.name + ": it is named for assistive tech");
+    assert.equal(closes[0]._parent, card, row.name + ": it is the card's own child, at the card's corner");
     escapeKey(card);
-    assert.equal(card.classList.contains("hide"), true, "Escape dismisses");
-  });
+    assert.equal(card.classList.contains("hide"), true, row.name + ": Escape dismisses");
+  }
 });
 
-WIDTHS.forEach(function (width) {
-  test("close control css: top-right, always visible, one rule at " + width + "px", function () {
-    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-close", "position", width), "absolute");
-    assert.ok(cssRules.valueAt(OVERLAY, ".overlay-close", "top", width));
-    assert.ok(cssRules.valueAt(OVERLAY, ".overlay-close", "right", width));
-    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-close", "left", width), null, "never the top-left corner");
+test("close control css: top-right, always visible, one rule at each width", function () {
+  WIDTHS.forEach(function (width) {
+    var at = "at " + width + "px";
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-close", "position", width), "absolute", "position " + at);
+    assert.ok(cssRules.valueAt(OVERLAY, ".overlay-close", "top", width), "top " + at);
+    assert.ok(cssRules.valueAt(OVERLAY, ".overlay-close", "right", width), "right " + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-close", "left", width), null, "never the top-left corner " + at);
     [OVERLAY, BASE, DIAGNOSTICS, NOTIFICATIONS].forEach(function (sheet) {
       cssRules.rules(sheet).filter(function (r) { return /(close|dismiss)/.test(r.selector) && /overlay|toast|banner/.test(r.selector); })
         .forEach(function (r) {
-          assert.ok(!/opacity\s*:\s*0\s*(;|$)/.test(r.body), r.selector + " must not hide the control until hover");
+          assert.ok(!/opacity\s*:\s*0\s*(;|$)/.test(r.body), r.selector + " must not hide the control until hover " + at);
         });
     });
+  });
+});
+
+test("a leaving card passes clicks through while it fades", function () {
+  [
+    { name: "hide state", selector: ".overlay.hide", prop: "pointer-events", want: "none" },
+  ].forEach(function (row) {
+    assert.equal(cssRules.valueAt(OVERLAY, row.selector, row.prop, DESKTOP), row.want, row.name + ": " + row.selector + " sets " + row.prop);
   });
 });
 
@@ -244,26 +258,30 @@ test("stylesheet: overlay.css reads sizes from tokens; the only literals are the
 // Behaviour kept by the move
 // ---------------------------------------------------------------------------
 
-[
+var TOAST_WINDOWS = [
   { name: "a plain toast keeps its 1500 ms window", level: undefined, ms: 1500 },
   { name: "a warn toast keeps its 5000 ms window", level: "warn", ms: 5000 },
   { name: "an error toast keeps its 5000 ms window", level: "error", ms: 5000 },
-].forEach(function (row) {
-  test("showToast: " + row.name, async function (t) {
+];
+
+test("showToast keeps its signature and its timeout per level", async function (t) {
+  for (var i = 0; i < TOAST_WINDOWS.length; i++) {
+    var row = TOAST_WINDOWS[i];
+    t.mock.timers.reset(); // each row is a fresh browser
     var b = await browser(t);
-    assert.equal(b.utils.showToast.length, 3, "the signature is (message, level, detail)");
+    assert.equal(b.utils.showToast.length, 3, row.name + ": the signature is (message, level, detail)");
     b.utils.showToast("Saved", row.level, "first line\nsecond line");
     var card = b.stack().querySelector(".overlay-toast");
-    assert.equal(card.getAttribute("data-severity"), row.level || null);
-    assert.equal(card.querySelector(".overlay-detail").textContent, "first line");
-    assert.deepEqual(Object.keys(card.querySelector(".overlay-detail").style), [], "the detail line has no inline style");
+    assert.equal(card.getAttribute("data-severity"), row.level || null, row.name + ": severity");
+    assert.equal(card.querySelector(".overlay-detail").textContent, "first line", row.name + ": detail is the first line");
+    assert.deepEqual(Object.keys(card.querySelector(".overlay-detail").style), [], row.name + ": the detail line has no inline style");
     t.mock.timers.tick(row.ms - 1);
-    assert.equal(card.classList.contains("hide"), false);
+    assert.equal(card.classList.contains("hide"), false, row.name + ": still shown just before the window");
     t.mock.timers.tick(1);
-    assert.equal(card.classList.contains("hide"), true);
+    assert.equal(card.classList.contains("hide"), true, row.name + ": hidden at the window");
     t.mock.timers.tick(300);
-    assert.equal(b.stack().querySelectorAll(".overlay-toast").length, 0);
-  });
+    assert.equal(b.stack().querySelectorAll(".overlay-toast").length, 0, row.name + ": removed after the exit");
+  }
 });
 
 test("a diagnostic toast keeps its 6 s window, and one with an action or a persistent state stays", async function (t) {
@@ -282,6 +300,34 @@ test("a diagnostic toast keeps its 6 s window, and one with an action or a persi
   t.mock.timers.tick(60000);
   assert.equal(cardOf("persistent").classList.contains("hide"), false);
   assert.equal(cardOf("build-update").classList.contains("hide"), false);
+});
+
+test("the diagnostics clear-all removes diagnostic cards only, not another surface's card with a source key", async function (t) {
+  var b = await browser(t);
+  var overlay = await import(dom.moduleUrl("overlay.js"));
+  var panel = new dom.FakeElement("div");
+  panel.id = "diagnostics-panel";
+  var list = new dom.FakeElement("div");
+  list.id = "diagnostics-panel-list";
+  var clearAll = new dom.FakeElement("button");
+  clearAll.className = "diagnostics-panel-clear-all";
+  panel.appendChild(clearAll);
+  global.document.body.appendChild(panel);
+  global.document.body.appendChild(list);
+  ["diagnostics-panel-btn", "diagnostics-panel-badge"].forEach(function (id) {
+    var el = new dom.FakeElement("span");
+    el.id = id;
+    global.document.body.appendChild(el);
+  });
+  b.diagnostics.initDiagnostics();
+  b.diagnostics.addDiagnostic({ type: "diagnostic", severity: "error", source: "d", message: "m" });
+  overlay.showOverlay({ kind: "toast", source: "other-surface", content: "x" });
+  assert.equal(b.stack().querySelectorAll("[data-overlay-source]").length, 2, "both cards carry a source key");
+
+  clearAll.click();
+  t.mock.timers.tick(300);
+  assert.equal(b.stack().querySelectorAll('[data-overlay-source="d"]').length, 0, "the diagnostic card goes");
+  assert.equal(b.stack().querySelectorAll('[data-overlay-source="other-surface"]').length, 1, "the other surface's card stays");
 });
 
 test("the notification banners redraw and clear in their own group, leaving toasts alone", async function (t) {

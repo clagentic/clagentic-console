@@ -54,6 +54,8 @@
   transform: translateY(0);
 }
 .overlay.hide {
+  /* A leaving card fades for a moment; it must not swallow clicks meanwhile. */
+  pointer-events: none;
   opacity: 0;
   transform: translateY(calc(-1 * var(--overlay-rise)));
 }
