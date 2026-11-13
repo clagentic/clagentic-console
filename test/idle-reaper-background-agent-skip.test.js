@@ -350,12 +350,13 @@ test("memory pressure still ends the session and the notice names a live backgro
   r.session.isProcessing = false;
   changed(r, [["t1", "local_bash"]]);
   var recorded = [];
-  require("../lib/session-reclaim").announceLiveAgentReclaim({
+  var out = require("../lib/session-reclaim").announceLiveAgentReclaim({
     session: r.session,
     sm: { saveSessionFile: function () {}, sendAndRecord: function (s, o) { recorded.push(o); } },
     send: null, slug: "proj", reason: "memory_shed", source: "memory-shed", cause: "Memory is low.",
   });
   assert.equal(recorded.length, 1);
+  assert.deepEqual(out, { labels: [], persisted: true, tasks: ["d t1"] });
   assert.match(recorded[0].text, /background task "d t1"/);
 });
 
