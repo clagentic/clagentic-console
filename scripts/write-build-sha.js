@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+const { BUILD_SOURCE_ENV } = require('../lib/build-changes');
+
 const OUT_PATH = path.join(__dirname, '..', 'lib', 'build-sha.json');
 
 function resolveSha() {
@@ -45,9 +47,23 @@ function main() {
     console.error(`[write-build-sha] ERROR: resolved SHA does not look like a git commit hash: ${JSON.stringify(sha)}`);
     process.exit(1);
   }
-  const payload = { sha, writtenAt: new Date().toISOString() };
+  const payload = buildPayload(sha, process.env, new Date());
   fs.writeFileSync(OUT_PATH, JSON.stringify(payload, null, 2) + '\n');
   console.log(`[write-build-sha] wrote ${OUT_PATH} (sha=${sha})`);
 }
 
-main();
+// A source checkout path is embedded only when install:local-test asked for it
+// through the env; npm pack and npm publish run without it, so a released
+// package carries no host path.
+function buildPayload(sha, env, now) {
+  const payload = { sha, writtenAt: now.toISOString() };
+  const source = env[BUILD_SOURCE_ENV];
+  if (typeof source === 'string' && path.isAbsolute(source)) payload.sourceRepo = source;
+  return payload;
+}
+
+module.exports = { buildPayload };
+
+if (require.main === module) {
+  main();
+}
