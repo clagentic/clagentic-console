@@ -5,7 +5,8 @@
    modules/overlay-stack.js. Every menu and popover is drawn by the same
    component, placed by modules/popover-position.js and tracked by
    modules/overlay-registry.js. Every modal and sheet is drawn by the same
-   component (modules/overlay-modal.js) on the modal layer. Other stylesheets
+   component (modules/overlay-modal.js) on the modal layer, and every panel by the
+   same component on the panel layer under it. Other stylesheets
    style what is inside a card and never its position, layer, chrome or close
    control.
 
@@ -109,6 +110,30 @@
   right: var(--overlay-modal-edge);
   background: color-mix(in srgb, var(--bg) 70%, transparent);
   color: var(--text);
+}
+
+/* A panel (the panel option of modules/overlay-modal.js): a modal on the panel
+   layer, under the dialogs a panel opens, so a confirmation or a picker the
+   panel raises shows over it. Panels do not take the order number: they stay on
+   the one layer and the page's order settles two of them. */
+.overlay-modal.overlay-panel {
+  z-index: var(--z-panel);
+}
+/* Its dialog fills the page, with no card chrome. A surface that is a card or a
+   drop-down sizes and paints its own dialog class, which loads after this rule. */
+.overlay-panel-dialog {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  padding: 0;
+  background: var(--bg);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* The shared close control clears the notch, as the panel's own content does. */
+.overlay-panel-dialog > .overlay-close {
+  top: calc(var(--safe-top) + var(--overlay-close-inset));
 }
 
 /* A sheet rises from the bottom edge at full width. */

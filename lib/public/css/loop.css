@@ -196,54 +196,25 @@
   color: var(--text);
 }
 
-/* Ralph Wizard */
-#ralph-wizard {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-#ralph-wizard.hidden { display: none; }
-
-.ralph-wizard-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--shadow-rgb), 0.5);
-}
+/* Ralph Wizard: a shared modal (overlay.css draws its scrim, card, layer and
+   close control); this sizes and fills the dialog */
 .ralph-wizard-card {
-  position: relative;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 14px;
   width: 520px;
   max-width: 90vw;
   max-height: 85vh;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
 }
 .ralph-wizard-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  /* The right end is the shared close control's corner. */
+  padding: 16px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 16px 20px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
   font-size: 15px;
-  color: var(--text);
-}
-.ralph-wizard-header button {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 20px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-}
-.ralph-wizard-header button:hover {
   color: var(--text);
 }
 .ralph-wizard-progress {
@@ -661,33 +632,15 @@
   cursor: not-allowed;
 }
 
-/* Ralph Preview Modal */
-#ralph-preview-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 310;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-#ralph-preview-modal.hidden { display: none; }
-
-#ralph-preview-modal .confirm-backdrop {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background: rgba(var(--shadow-rgb), 0.7);
-}
+/* Ralph Preview Modal: a shared modal (overlay.css draws its scrim, card, layer
+   and close control); this sizes and fills the dialog */
 .ralph-preview-dialog {
-  position: relative;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 14px;
   width: 640px;
   max-width: 90vw;
   max-height: 80vh;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
 }
 
 /* Header — matches scheduler-detail-header */
@@ -695,7 +648,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
+  /* The right end is the shared close control's corner. */
+  padding: 16px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 16px 20px;
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
@@ -1194,7 +1148,7 @@
 #ralph-exec-modal {
   position: fixed;
   inset: 0;
-  z-index: 310;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;

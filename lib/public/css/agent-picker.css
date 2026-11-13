@@ -1,9 +1,9 @@
 /* agent-picker.css — overlays for the SDK-agent picker (lr-7db0).
- * Inherits .cmd-palette / .cmd-palette-* styles from command-palette.css.
+ * Inherits the .cmd-palette-* styles from command-palette.css.
  * Only the tab strip, source/model chips, star toggle, and empty state
  * are agent-specific. */
 
-.cmd-palette.agent-picker .cmd-palette-dialog {
+.agent-picker .cmd-palette-dialog {
   /* Slightly taller default so a 14-agent catalog fits without scroll. */
   max-height: 70vh;
 }

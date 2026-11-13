@@ -3,7 +3,7 @@
 
    One Settings list (More, Settings, a section) and one Back bar shared by the
    user, project and server settings panels. Desktop keeps each panel's own
-   section list and close button, so nothing here shows above 768px.
+   section list, so nothing here shows above 768px.
    ========================================================================== */
 
 .settings-back-bar,
@@ -21,6 +21,12 @@
     padding-right: 16px;
     background: var(--sidebar-bg);
     border-bottom: 1px solid var(--border-subtle);
+  }
+
+  /* A panel's shared close control sits at the bar's right end; the title stops short of it. */
+  #user-settings .settings-back-bar,
+  #server-settings .settings-back-bar {
+    padding-right: calc(var(--overlay-close-touch) + 2 * var(--overlay-close-inset));
   }
 
   .settings-back-btn {
@@ -56,7 +62,6 @@
 
   /* Panels that carry the Back bar drop the chrome it replaces. */
   .server-settings-nav-header,
-  .server-settings-close-col,
   .project-settings-close-col,
   #user-settings .us-modal-header,
   .us-modal-nav-items {
@@ -107,7 +112,9 @@
     flex-direction: column;
     position: fixed;
     inset: 0;
-    z-index: 260;
+    /* The list is a panel's layer, ahead of the panels it opens in the page, so
+       the settings panel it opens shows over it. */
+    z-index: var(--z-panel);
     padding-top: var(--safe-top);
     background: var(--bg);
   }
