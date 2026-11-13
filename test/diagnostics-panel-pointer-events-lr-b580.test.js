@@ -18,9 +18,8 @@
 // app-panels.js), reusing the shared closePanelAndRefocus() helper so
 // Escape-close+refocus stays consistent with all dismiss paths.
 //
-// These are source-text regression checks (no DOM harness required), matching
-// the project's existing xss-escape.test.js / server-settings-mobile-parity
-// convention for modules that only do DOM work inside functions.
+// The two stylesheet checks read menus.css as text; the panel check runs the
+// real module over the fake DOM and reads the stylesheet through css-rules.
 
 "use strict";
 
@@ -29,12 +28,11 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 
+var dom = require("./fake-dom-prompt-cards");
+var cssRules = require("./fixtures/css-rules");
+
 var MENUS_CSS = fs.readFileSync(
   path.join(__dirname, "../lib/public/css/menus.css"),
-  "utf8"
-);
-var DIAGNOSTICS_JS = fs.readFileSync(
-  path.join(__dirname, "../lib/public/modules/diagnostics.js"),
   "utf8"
 );
 
@@ -60,28 +58,38 @@ test("menus.css: #diagnostics-panel.hidden is included in the shared display:non
   );
 });
 
-// The panel is dismissed by a click outside it (lr-b580) through the open-menu
-// registry: the panel is adopted as a menu with the topbar toggle as its opener,
-// so a click inside it or on the toggle is not an outside click, and the module
-// carries no document listener of its own.
-test("diagnostics.js: the panel is adopted as a menu, with the toggle button as its opener", () => {
-  assert.match(
-    DIAGNOSTICS_JS,
-    /openInfoPanel\(\s*panelEl,\s*\{[^}]*opener:\s*panelToggleBtn/,
-    "the panel must open through the shared component with panelToggleBtn as opener (a click on the toggle is the toggle's own)"
-  );
-  assert.ok(
-    !/document\.addEventListener\(/.test(DIAGNOSTICS_JS),
-    "outside click and Escape belong to the registry: diagnostics.js adds no document listener"
-  );
-});
+// The panel is dismissed through the open-menu registry (the shared component and
+// its close control), not a document listener of its own. What lr-b580 guards is
+// asserted here on the element and its stylesheet, not on the module's source:
+// an open panel takes pointer events on its own bounds, and a closed one is
+// hidden, so it blocks none. The focus-return behaviour is a runtime row in
+// overlay-stack.test.js.
+test("the diagnostics panel element takes pointer events when open and is hidden, so blocks none, when closed", async (t) => {
+  await dom.setupToolsEnv(t);
+  global.requestAnimationFrame = function (fn) { fn(); return 0; };
+  var find = function (node, id) {
+    return node.id === id ? node : node._children.reduce(function (hit, c) { return hit || find(c, id); }, null);
+  };
+  global.document.getElementById = function (id) { return find(global.document.body, id); };
+  var panel = new dom.FakeElement("div");
+  panel.id = "diagnostics-panel";
+  panel.className = "hidden";
+  var list = new dom.FakeElement("div");
+  list.id = "diagnostics-panel-list";
+  var toggle = new dom.FakeElement("button");
+  toggle.id = "diagnostics-panel-btn";
+  [panel, list, toggle].forEach(function (el) { global.document.body.appendChild(el); });
+  var diagnostics = await import(dom.moduleUrl("diagnostics.js") + "?b580");
+  diagnostics.initDiagnostics();
 
-test("diagnostics.js: focus returns to the topbar toggle however the panel closes", () => {
-  var idx = DIAGNOSTICS_JS.indexOf("function _onPanelClosed");
-  assert.ok(idx !== -1, "expected the close hook to exist");
-  assert.match(
-    DIAGNOSTICS_JS.slice(idx, idx + 500),
-    /panelToggleBtn\.focus\(\)/,
-    "the close hook restores focus to the topbar toggle (WCAG 2.1 2.4.3), for the close control, Escape and an outside click alike"
-  );
+  toggle.click();
+  assert.equal(panel.classList.contains("hidden"), false, "the toggle opens the panel");
+  assert.equal(cssRules.valueAt(MENUS_CSS, "#diagnostics-panel", "pointer-events", 1280), "auto",
+    "an open panel takes pointer events on its own bounds under the click-through #info-panels");
+  assert.equal(cssRules.valueAt(MENUS_CSS, "#info-panels", "pointer-events", 1280), "none");
+
+  toggle.click();
+  assert.equal(panel.classList.contains("hidden"), true, "closing the panel hides it");
+  assert.equal(cssRules.valueAt(MENUS_CSS, "#diagnostics-panel.hidden", "display", 1280), "none",
+    "a hidden panel is display:none, so it blocks no pointer events");
 });

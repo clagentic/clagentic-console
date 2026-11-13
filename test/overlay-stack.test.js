@@ -742,10 +742,11 @@ test("menu: Escape closes each B2 surface and leaves a toast; with no menu open 
 test("menu: a dropdown a popover owns leaves the popover open; a click inside the popover closes the dropdown alone; Escape peels one at a time", async function (t) {
   var m = await menuBrowser(t);
   var pop = openSurface(m, rowNamed("scheduler create popover"));
-  var dropdown = function () {
+  // The dropdown belongs to `owner` (the current popover unless one is given).
+  var dropdown = function (owner) {
     return m.overlay.showOverlay({
       kind: "menu", el: sized(m.doc.createElement("div"), { width: 50, height: 30 }), retain: true,
-      parent: pop.handle.el, anchor: anchorEl(m), doc: m.doc,
+      parent: (owner || pop.handle).el, anchor: anchorEl(m), doc: m.doc,
     });
   };
 
@@ -777,9 +778,78 @@ test("menu: a dropdown a popover owns leaves the popover open; a click inside th
   assert.equal(dd.isOpen(), false, "closing the popover closes the dropdown it owns");
 
   var other = openSurface(m, rowNamed("scheduler create popover"));
-  dd = dropdown();
-  openSurface(m, rowNamed("notification menu"));
+  dd = dropdown(other.handle);
+  assert.equal(dd.isOpen() && other.handle.isOpen(), true, "the dropdown is open inside the popover it belongs to");
+  var menu = openSurface(m, rowNamed("notification menu")).handle;
   assert.equal(dd.isOpen() || other.handle.isOpen(), false, "another menu opening closes the popover and its dropdown");
+  assert.equal(menu.isOpen(), true, "and is the open one");
+
+  // A named parent that is not open counts as no parent: the dropdown is
+  // top-level and closes the other open menu (one-open).
+  var closedParent = openSurface(m, rowNamed("scheduler create popover")).handle;
+  closedParent.close();
+  menu = openSurface(m, rowNamed("notification menu")).handle;
+  dd = dropdown(closedParent);
+  assert.equal(menu.isOpen(), false, "a dropdown whose parent is not open closes the open menu");
+  assert.equal(dd.isOpen(), true, "and is open itself");
+});
+
+test("registry: a menu opened from a close hook stays open, whether the close came from closeMenu or Escape", async function (t) {
+  var ROWS = [
+    { name: "closeMenu", close: function (m, first) { first.close(); } },
+    { name: "Escape", close: function (m) { m.escape(); } },
+  ];
+  for (var i = 0; i < ROWS.length; i++) {
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    var opened = null;
+    var first = m.overlay.showOverlay({
+      kind: "popover", content: "x", doc: m.doc,
+      onRemove: function () { opened = m.overlay.showOverlay({ kind: "popover", content: "y", doc: m.doc }); },
+    });
+    ROWS[i].close(m, first);
+    assert.equal(first.isOpen(), false, ROWS[i].name + ": the first menu closed");
+    assert.ok(opened && opened.isOpen(), ROWS[i].name + ": the menu its close hook opened is still open");
+    assert.equal(m.registry.getOpenMenu(), opened.el, ROWS[i].name + ": the registry holds it");
+  }
+});
+
+test("diagnostics panel: focus returns to its toggle on Escape or its close control, not when another menu opens or a click lands elsewhere", async function (t) {
+  var b = await browser(t);
+  var overlay = await import(dom.moduleUrl("overlay.js"));
+  var registry = await import(dom.moduleUrl("overlay-registry.js"));
+  // The page's document does not fire events by itself; collect the registry's.
+  var listeners = {};
+  global.document.addEventListener = function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); };
+  var panel = new dom.FakeElement("div");
+  panel.id = "diagnostics-panel";
+  panel.className = "hidden";
+  var list = new dom.FakeElement("div");
+  list.id = "diagnostics-panel-list";
+  var toggle = new dom.FakeElement("button");
+  toggle.id = "diagnostics-panel-btn";
+  var focused = 0;
+  toggle.focus = function () { focused++; };
+  [panel, list, toggle].forEach(function (el) { global.document.body.appendChild(el); });
+  b.diagnostics.initDiagnostics();
+
+  var ROWS = [
+    { name: "Escape", restores: true, act: function () { listeners.keydown.forEach(function (fn) { fn({ key: "Escape" }); }); } },
+    { name: "its close control", restores: true, act: function () { panel.querySelector(".overlay-close").click(); } },
+    { name: "another menu opening", restores: false, act: function () { overlay.showOverlay({ kind: "popover", content: "x" }); } },
+    { name: "a click on another control", restores: false, act: function () {
+      listeners.click.forEach(function (fn) { fn({ target: global.document.body }); });
+    } },
+  ];
+  ROWS.forEach(function (row) {
+    registry.closeOpenMenu();
+    toggle.click();
+    assert.equal(registry.isMenuOpen(panel), true, row.name + ": the panel is open");
+    focused = 0;
+    row.act();
+    assert.equal(registry.isMenuOpen(panel), false, row.name + ": the panel closed");
+    assert.equal(focused, row.restores ? 1 : 0, row.name + (row.restores ? ": focus returns to the toggle" : ": focus is not moved to the toggle"));
+  });
 });
 
 test("menu: Escape is offered to the innermost menu first, and true keeps it open", async function (t) {
