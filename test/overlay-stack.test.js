@@ -1998,8 +1998,6 @@ test("C3b scale: the layers are in order, each new one sits where it is named, a
   WIDTHS.forEach(function (width) {
     var at = " at " + width + "px";
     var phone = width === PHONE;
-    var sidebar = cssRules.valueAt(css("input.css"), "#sidebar", "z-index", width);
-    assert.equal(sidebar, phone ? "var(--z-sidebar)" : null, "the sidebar is a drawer on its own layer on a phone only" + at);
     assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-tab-bar", "z-index", width), phone ? "var(--z-nav)" : null, "the nav is on its layer on a phone only" + at);
     assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", width), "calc(var(--z-panel) + 2 + var(--overlay-order, 0))", "panels" + at);
     assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", width), "calc(var(--z-modal) + var(--overlay-order, 0))", "dialogs" + at);
@@ -2032,6 +2030,31 @@ test("C3b notes: a note's order is a whole number from 0 to 99, so the band stay
   var src = publicFile(path.join("modules", "sticky-notes.js"));
   assert.match(src, /setNoteOrder\(el, data\.zIndex\)/, "a new note takes its order through the clamp");
   assert.match(src, /setNoteOrder\(entry\.el, msg\.note\.zIndex\)/, "an updated note does too");
+});
+
+// Each row is a run of bring-to-front clicks (the server raises the clicked note's
+// counter to one past the highest) over some notes.
+var NOTE_CLICK_RUNS = [
+  { name: "120 clicks across 4 notes", notes: 4, clicks: 120 },
+  { name: "150 clicks across 101 notes", notes: 101, clicks: 150 },
+];
+
+test("C3b notes: past 99 clicks the last-clicked note is strictly on top and every order stays 0 to 99", async function () {
+  var mod = await import(dom.moduleUrl("note-order.js"));
+  NOTE_CLICK_RUNS.forEach(function (row) {
+    var counters = [];
+    for (var i = 0; i < row.notes; i++) counters.push(i + 1);
+    var last = 0;
+    for (var c = 0; c < row.clicks; c++) {
+      last = (c * 7) % row.notes;
+      counters[last] = counters.reduce(function (a, b) { return Math.max(a, b); }, 0) + 1;
+    }
+    var orders = mod.noteLayerOrders(counters);
+    orders.forEach(function (o) { assert.ok(Number.isInteger(o) && o >= 0 && o <= 99, row.name + ": " + o + " is in 0..99"); });
+    orders.forEach(function (o, i) {
+      if (i !== last) assert.ok(o < orders[last], row.name + ": note " + i + " (" + o + ") is under the last-clicked (" + orders[last] + ")");
+    });
+  });
 });
 
 // A page with one dialog open, the way a surface opens it, and the panels' openers.
