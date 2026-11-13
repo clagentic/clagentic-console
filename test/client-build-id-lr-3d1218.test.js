@@ -9,6 +9,7 @@ import { createBuildGuard, showReloadBanner } from "../lib/public/modules/build-
 import { injectedSenderName, injectedLabel, injectedFromMessage } from "../lib/public/modules/injected-label.js";
 
 const require = createRequire(import.meta.url);
+const fakeDom = require("./fake-dom-prompt-cards");
 const clientBuildId = require("../lib/client-build-id");
 const injectedSender = require("../lib/injected-sender");
 
@@ -71,22 +72,17 @@ test("a message without an id is ignored, so an older daemon cannot trigger a re
 });
 
 test("the banner is not dismissable and is added once", () => {
-  const made = [];
-  const doc = {
-    body: { appendChild: (el) => made.push(el) },
-    getElementById: (id) => made.find((el) => el.id === id) || null,
-    createElement: () => ({
-      id: "", className: "", textContent: "", children: [],
-      classList: { add() {} },
-      appendChild(c) { this.children.push(c); },
-      addEventListener() {},
-    }),
-  };
+  fakeDom.setupGlobals();
+  const doc = global.document;
+  const find = (node, id) => (node.id === id ? node : node._children.reduce((hit, c) => hit || find(c, id), null));
+  doc.getElementById = (id) => find(doc.body, id);
   showReloadBanner(doc, () => {});
   showReloadBanner(doc, () => {});
-  assert.equal(made.length, 1);
-  assert.equal(made[0].children.length, 2, "text and reload button only");
-  assert.match(made[0].children[0].textContent, /^Clagentic: Console /);
+  const banners = doc.body.querySelectorAll(".overlay-banner");
+  assert.equal(banners.length, 1);
+  assert.equal(banners[0].querySelectorAll(".overlay-close").length, 0, "no close control");
+  assert.equal(banners[0]._children.length, 2, "text and reload button only");
+  assert.match(banners[0]._children[0].textContent, /^Clagentic: Console /);
 });
 
 // A real server (test/access-harness.js) started under a given build id. The

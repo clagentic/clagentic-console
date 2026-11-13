@@ -1,0 +1,131 @@
+/* Toast and banner overlays: the one stack, the one card, the one close control.
+   Every toast and banner (plain toasts, diagnostic and preflight toasts, the
+   build-update offer, the reload banner, notification banners) is a child of
+   #overlay-stack, drawn by modules/overlay.js and placed by
+   modules/overlay-stack.js. Other stylesheets style what is inside a card and
+   never its position, layer, chrome or close control.
+
+   Sizes and layers are the tokens in base.css (--overlay-*, --z-*). */
+
+.overlay-stack {
+  position: fixed;
+  top: var(--overlay-stack-top);
+  right: var(--overlay-stack-inset);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--overlay-gap);
+  width: min(var(--overlay-width), calc(100vw - 2 * var(--overlay-stack-inset)));
+  /* The stack is a layout box only: the gaps and the empty strip around the
+     cards pass clicks through to the page. */
+  pointer-events: none;
+}
+.overlay-stack > * {
+  pointer-events: auto;
+}
+
+/* A phone: the stack spans the width, below the notch, and the cards fill it. */
+@media (max-width: 768px) {
+  .overlay-stack {
+    top: calc(var(--safe-top) + var(--overlay-stack-inset));
+    left: var(--overlay-stack-inset);
+    width: auto;
+  }
+}
+
+.overlay {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  min-width: 0;
+  padding: var(--overlay-pad-y) var(--overlay-pad-x);
+  background: var(--bg-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--overlay-radius);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.22);
+  overflow-wrap: anywhere;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--overlay-rise)));
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.overlay.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.overlay.hide {
+  /* A leaving card fades for a moment; it must not swallow clicks meanwhile. */
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--overlay-rise)));
+}
+
+/* A toast reads top to bottom (header, message, actions); a banner reads left
+   to right (icon, text). */
+.overlay-toast {
+  flex-direction: column;
+  gap: var(--overlay-toast-gap);
+}
+.overlay-banner {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--overlay-banner-gap);
+}
+
+/* Severity is the card's left edge. */
+.overlay[data-severity] {
+  border-left-width: var(--overlay-accent-width);
+}
+.overlay[data-severity="info"]    { border-left-color: var(--text-muted); }
+.overlay[data-severity="success"] { border-left-color: var(--success); }
+.overlay[data-severity="warn"]    { border-left-color: var(--warning); }
+.overlay[data-severity="error"]   { border-left-color: var(--error); }
+
+/* The close control: one element, one corner, always visible (a phone has no
+   hover). The card reserves its width so text never runs under it. */
+.overlay-dismissible {
+  padding-right: calc(var(--overlay-close-size) + var(--overlay-close-inset));
+}
+.overlay-close {
+  position: absolute;
+  top: var(--overlay-close-inset);
+  right: var(--overlay-close-inset);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--overlay-close-size);
+  height: var(--overlay-close-size);
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.overlay-close:hover {
+  color: var(--text);
+  background: rgba(var(--overlay-rgb), 0.06);
+}
+.overlay-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.overlay-close .lucide {
+  width: var(--overlay-icon-size);
+  height: var(--overlay-icon-size);
+}
+
+/* A plain toast: the message and an optional one-line detail. */
+.overlay-text {
+  font-size: var(--overlay-text-size);
+  font-weight: 500;
+}
+.overlay-detail {
+  margin-top: var(--overlay-toast-gap);
+  font-size: var(--overlay-detail-size);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -83,7 +83,7 @@ test("a permission banner drawn by the notification module carries the label, an
   storeMod.createStore({ connected: true });
   var notifications = await import(dom.moduleUrl("app-notifications.js"));
   notifications.initAppNotifications();
-  var container = global.document.body.querySelector(".notif-banner-container");
+  var container = global.document.body.querySelector(".overlay-stack");
   assert.ok(container, "the banner container exists");
 
   function created(id, meta) {
@@ -294,7 +294,7 @@ test("the banner title is the same ask: the command, not the description; its su
   storeMod.createStore({ connected: true });
   var notifications = await import(dom.moduleUrl("app-notifications.js"));
   notifications.initAppNotifications();
-  var container = global.document.body.querySelector(".notif-banner-container");
+  var container = global.document.body.querySelector(".overlay-stack");
   notifications.handleNotificationCreated({
     unreadCount: 1,
     notification: {

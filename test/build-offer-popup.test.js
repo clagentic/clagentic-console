@@ -113,7 +113,7 @@ async function adminPage(t) {
   var bell = new dom.FakeElement("button");
   var badge = new dom.FakeElement("span");
   badge.classList.add("hidden");
-  var byId = { "diagnostic-toast-container": toasts, "notif-center-btn": bell, "notif-center-badge": badge };
+  var byId = { "overlay-stack": toasts, "notif-center-btn": bell, "notif-center-badge": badge };
   global.document.getElementById = function (id) { return byId[id] || null; };
   var storeMod = await import(dom.moduleUrl("store.js"));
   storeMod.store.set({ currentSlug: "proj-a", activeSessionId: 1 });
@@ -142,7 +142,7 @@ async function adminPage(t) {
     badgeCount: function () { return badge.classList.contains("hidden") ? null : badge.textContent; },
     clickBell: function () { bell._listeners.click.forEach(function (fn) { fn({ stopPropagation: function () {} }); }); },
     popups: function () {
-      return toasts.querySelectorAll('[data-diag-source="build-update"]').filter(function (el) {
+      return toasts.querySelectorAll('[data-overlay-source="build-update"]').filter(function (el) {
         return el.classList.contains("visible") && el.querySelectorAll("button").some(function (b) { return b.textContent === RESTART_LABEL; });
       });
     },
@@ -265,7 +265,7 @@ test("AC1: a pop-up the operator closed is not brought back by the refresh; clos
   var page = await adminPage(t);
   w.poll(); w.poll();
   page.deliver(w);
-  page.popups()[0].querySelectorAll(".toast-diagnostic-dismiss")[0]._listeners.click[0]({});
+  page.popups()[0].querySelectorAll(".overlay-close")[0]._listeners.click[0]({});
   t.mock.timers.tick(300);
   assert.equal(page.popups().length, 0, "closed");
   var from = w.frames.length;
@@ -301,7 +301,7 @@ test("AC1: with the banner surface muted for the system category the entry is he
   w.poll(); w.poll();
   page.deliver(w);
   assert.equal(page.popups().length, 0, "muted: no pop-up");
-  assert.equal(page.toasts.querySelectorAll('[data-diag-source="build-update"]').length, 0);
+  assert.equal(page.toasts.querySelectorAll('[data-overlay-source="build-update"]').length, 0);
 });
 
 test("AC2: a page that connects while the offer stands shows the pop-up once", async function (t) {
@@ -514,7 +514,7 @@ test("R-573-3: the diagnostics clear-all keeps the offer entry and its pop-up, d
   var clearAll = new dom.FakeElement("button");
   clearAll.className = "diagnostics-panel-clear-all";
   panel.appendChild(clearAll);
-  var byId = { "diagnostic-toast-container": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-list": list, "diagnostics-panel-btn": toggle, "diagnostics-panel-badge": badge };
+  var byId = { "overlay-stack": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-list": list, "diagnostics-panel-btn": toggle, "diagnostics-panel-badge": badge };
   global.document.getElementById = function (id) { return byId[id] || null; };
   page.diagnostics.initDiagnostics();
   w.poll(); w.poll();
@@ -527,7 +527,7 @@ test("R-573-3: the diagnostics clear-all keeps the offer entry and its pop-up, d
   t.mock.timers.tick(300);
   assert.equal(list.querySelectorAll(".diagnostics-item").length, 1, "only the offer's entry is left");
   assert.equal(page.popups().length, 1, "its pop-up is still there");
-  assert.equal(page.toasts.querySelectorAll('[data-diag-source="other-source"]').length, 0, "other toasts went");
+  assert.equal(page.toasts.querySelectorAll('[data-overlay-source="other-source"]').length, 0, "other toasts went");
   assert.deepEqual(page.sent, [], "nothing was declined");
   // Its own entry's dismiss is a decline.
   list.querySelectorAll(".diagnostics-item-dismiss")[0].click();

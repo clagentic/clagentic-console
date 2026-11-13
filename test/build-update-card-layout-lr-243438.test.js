@@ -64,7 +64,7 @@ async function client(t) {
   dom.setupGlobals();
   var container = new dom.FakeElement("div");
   global.document.body.appendChild(container);
-  global.document.getElementById = function (id) { return id === "diagnostic-toast-container" ? container : null; };
+  global.document.getElementById = function (id) { return id === "overlay-stack" ? container : null; };
   var wsRef = await import(pathToFileURL(path.join(MODULES, "ws-ref.js")).href);
   wsRef.setWs({ readyState: 1, send: function () {} });
   var diagnostics = await import(dom.moduleUrl("diagnostics.js") + "?layout=" + (++instance));
@@ -142,7 +142,7 @@ test("the diagnostics panel entry collapses the list the same way", async functi
   var byId = {
     "diagnostics-panel": panel, "diagnostics-panel-list": list,
     "diagnostics-panel-btn": new dom.FakeElement("button"),
-    "diagnostic-toast-container": c.container,
+    "overlay-stack": c.container,
     "diagnostics-panel-badge": new dom.FakeElement("span"),
   };
   global.document.getElementById = function (id) { return byId[id] || null; };

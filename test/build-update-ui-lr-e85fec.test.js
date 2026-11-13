@@ -45,7 +45,7 @@ async function client(t) {
   dom.setupGlobals();
   var container = new dom.FakeElement("div");
   global.document.body.appendChild(container);
-  global.document.getElementById = function (id) { return id === "diagnostic-toast-container" ? container : null; };
+  global.document.getElementById = function (id) { return id === "overlay-stack" ? container : null; };
   var sent = [];
   var wsRef = await import(pathToFileURL(path.join(MODULES, "ws-ref.js")).href);
   wsRef.setWs({ readyState: 1, send: function (body) { sent.push(JSON.parse(body)); } });
@@ -57,7 +57,7 @@ async function client(t) {
     button: function (label) {
       return container.querySelectorAll("button").filter(function (b) { return b.textContent === label; })[0] || null;
     },
-    toastsOf: function (source) { return container.querySelectorAll('[data-diag-source="' + source + '"]'); },
+    toastsOf: function (source) { return container.querySelectorAll('[data-overlay-source="' + source + '"]'); },
     settle: function () { t.mock.timers.tick(300); },
   };
 }
