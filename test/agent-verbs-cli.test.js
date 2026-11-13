@@ -231,6 +231,12 @@ test("send-input: the candidates of an ambiguous address carry the verbose field
   { verb: "list-sessions", args: ["--limit"], match: /Missing value/ },
   { verb: "list-outbound", args: ["--session", "x", "--limit", "2"], match: /Unknown option/ },
   { verb: "send-input", args: ["--to", "a@b", "--prompt", "x", "--verbose"], match: /Unknown option/ },
+  { verb: "open-session", args: ["--project", "p", "--prompt", "x", "--settings", "a.json", "--settings", "b.json"], match: /Option given twice: --settings/ },
+  { verb: "send-input", args: ["--project", "p", "--session", "s", "--prompt", "x", "--prompt", "y"], match: /Option given twice: --prompt/ },
+  { verb: "end-session", args: ["--project", "p", "--session", "s", "--reason", "a", "--reason", "b"], match: /Option given twice: --reason/ },
+  { verb: "answer-prompt", args: ["--project", "p", "--session", "s", "--request", "r", "--decision", "allow", "--decision", "deny"], match: /Option given twice: --decision/ },
+  { verb: "list-sessions", args: ["--state", "live", "--state", "idle"], match: /Option given twice: --state/ },
+  { verb: "list-outbound", args: ["--session", "a", "--since", "1h", "--since", "2h"], match: /Option given twice: --since/ },
 ].forEach(function (row) {
   test("cli " + row.verb + " refuses " + JSON.stringify(row.args), function () {
     assert.match(cli.parseSessionArgs(row.verb, row.args).error, row.match);
