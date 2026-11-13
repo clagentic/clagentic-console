@@ -281,9 +281,14 @@ var PERSIST_FAILURE_ROWS = [
   ["/api/user/session-list-avatars", { sessionListAvatars: false }, "setSessionListAvatars"],
   ["/api/user/chat-width", { chatWidth: "wide" }, "setChatWidth"],
   ["/api/user/auto-continue", { enabled: true }, "setAutoContinue"],
+  ["/api/user/theme-mode", { themeMode: "dark" }, "setThemeMode"],
+  ["/api/user/theme-id", { themeId: null }, "setThemeId"],
+  ["/api/user/tool-palettes", { palette: "example" }, "setToolPalette"],
+  ["/api/profile", { name: "example" }, "updateUserProfile"],
+  ["/api/user/pin", { newPin: "123456" }, "updateUserPin"],
 ];
 
-test("PUT preference routes: bad JSON is a 400, a failure while persisting is logged and a 500", function () {
+test("PUT per-user routes: bad JSON is a 400, a failure while persisting is a logged 500, an oversized body is a 413 and read no further", function () {
   var realError = console.error;
   PERSIST_FAILURE_ROWS.forEach(function (row) {
     var ctx = ctxFor({ id: "u1", username: "u" }, {}, []);
@@ -312,6 +317,34 @@ test("PUT preference routes: bad JSON is a 400, a failure while persisting is lo
     var callsBefore = setterCalls;
     assert.equal(put(handler, row[0], []).status, 400, row[0] + ": an array body");
     assert.equal(setterCalls, callsBefore, row[0] + ": an array body stores nothing");
+
+    // Two 40 KiB pieces cross the cap: answered 413 once, the request is paused
+    // and closed after the answer, and a later piece or the end stores nothing.
+    var bigListeners = {};
+    var bigHeads = [];
+    var paused = 0;
+    var destroyed = 0;
+    var big = res();
+    big.writeHead = function (s) { bigHeads.push(s); big.status = s; };
+    big.end = function (b, done) { big.body = b || ""; if (done) done(); };
+    handler({
+      method: "PUT",
+      url: row[0],
+      on: function (evt, fn) { bigListeners[evt] = fn; },
+      pause: function () { paused++; },
+      destroy: function () { destroyed++; },
+    }, big, row[0]);
+    var piece = Buffer.alloc(40 * 1024, 97);
+    bigListeners.data(piece);
+    assert.deepEqual(bigHeads, [], row[0] + ": under the cap nothing is answered yet");
+    bigListeners.data(piece);
+    assert.deepEqual(bigHeads, [413], row[0] + ": over the cap");
+    assert.equal(paused, 1, row[0] + ": reading stops");
+    assert.equal(destroyed, 1, row[0] + ": connection closed after the answer");
+    bigListeners.data(piece);
+    bigListeners.end();
+    assert.deepEqual(bigHeads, [413], row[0] + ": answered once");
+    assert.equal(setterCalls, callsBefore, row[0] + ": an oversized body stores nothing");
   });
 });
 
