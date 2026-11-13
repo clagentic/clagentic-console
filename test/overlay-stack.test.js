@@ -1669,8 +1669,10 @@ var C3A_STATIC_IDS = ["user-settings", "ralph-wizard", "ralph-preview-modal", "s
 // close control, Escape or history handling of its own.
 var C3A_SOURCE_ROWS = [
   { name: "command palette", file: "command-palette.js",
-    has: [/showOverlay\(\{ kind: "modal", panel: true, el: paletteEl, closeLabel: "Close search", onRemove: resetPalette \}\)/, /overlay-modal-backdrop"><\/div>' \+\s*'<div class="overlay-modal-dialog cmd-palette-dialog">/],
-    gone: [/overlay-history|pushOverlayState|popOverlayState/, /cmd-palette-backdrop|cmd-palette-close|cmd-palette-kbd/, /e\.key === "Escape"/, /paletteEl\.classList/] },
+    has: [/showOverlay\(\{ kind: "modal", panel: true, el: paletteEl, closeLabel: "Close search", onRemove: resetPalette \}\)/, /overlay-modal-backdrop"><\/div>' \+\s*'<div class="overlay-modal-dialog cmd-palette-dialog">/,
+      // the builders the file keeps escape what the server or a user supplies (P6)
+      /escapeHtml\("v" \+ cachedVersion\)/, /'<img src="' \+ escapeHtml\(uAvatarUrl\) \+ '"/, /escapeHtml\(proj\.sessions \+ " sessions"\)/],
+    gone: [/overlay-history|pushOverlayState|popOverlayState/, /cmd-palette-backdrop|cmd-palette-close|cmd-palette-kbd/, /"v" \+ cachedVersion : ""/, /e\.key === "Escape"/, /paletteEl\.classList/] },
   { name: "agent picker", file: "agent-picker.js",
     has: [/showOverlay\(\{ kind: "modal", panel: true, el: paletteEl, closeLabel: "Close agents", onRemove: resetPicker \}\)/, /overlay-modal-backdrop"><\/div>' \+\s*'<div class="overlay-modal-dialog cmd-palette-dialog">/],
     gone: [/cmd-palette-backdrop|agent-picker-close|cmd-palette-kbd/, /e\.key === "Escape"/, /paletteEl\.classList\.(add|remove)\("hidden"\)/] },
