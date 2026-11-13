@@ -51,6 +51,8 @@ clagentic-console list-sessions --project my-project --verbose
 | `--limit` | a whole number, 1 or more | the newest rows, after the filters |
 | `--verbose` | nothing | the full record and `host` |
 
+A value flag is given once on any session command; a repeat is refused with `Option given twice: <flag>`.
+
 Compact row fields: `consoleSessionId`, `sessionId`, `project`, `label`, `name`, `state`, `lastActivity`, `pendingPrompts`. `--verbose` adds `agent`, `vendor`, `title`, `openedAt`, `opener`, `lastInjectedSender`, `turnCount`, `midTurn` and `memory`, and the result gains `host`.
 
 ## Open a session
