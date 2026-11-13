@@ -447,6 +447,154 @@ function runPiped(home, args) {
   });
 }
 
+// --- --restart: the sessions in flight, a wait that only a new pid ends, the build read ---
+
+var { runRestart, humanLines, EXIT } = require("../lib/cli/restart-verb");
+
+var OLD = 100;
+var NEW = 200;
+var BUILD = { loadedBuildSha: "aaa", installedBuildSha: "aaa", state: "adopted" };
+var STATUS_OLD = Object.assign({ ok: true, pid: OLD }, BUILD);
+var STATUS_NEW = Object.assign({ ok: true, pid: NEW }, BUILD);
+var FLIGHT = { ok: true, sessions: [{ project: "lane", session: 4, processing: true, activity: "running" }] };
+
+// The daemon's answers in order per command; the last one repeats. Records the
+// commands sent and moves the clock on each sleep.
+function scripted(answers) {
+  var sent = [];
+  var seen = {};
+  var clock = 0;
+  return {
+    sent: sent,
+    deps: {
+      send: function (msg) {
+        sent.push(msg.cmd);
+        var list = answers[msg.cmd];
+        var i = seen[msg.cmd] || 0;
+        seen[msg.cmd] = i + 1;
+        return Promise.resolve(list[Math.min(i, list.length - 1)]);
+      },
+      sleep: function (ms) { clock += ms; return Promise.resolve(); },
+      now: function () { return clock; },
+    },
+  };
+}
+
+[
+  { name: "sessions in flight are reported and the restart still proceeds",
+    answers: { get_build_status: [STATUS_OLD, STATUS_NEW], get_interruptions: [FLIGHT], restart: [{ ok: true }] },
+    code: EXIT.OK, outcome: "restarted", sessions: FLIGHT.sessions, newPid: NEW, sent: ["get_build_status", "get_interruptions", "restart", "get_build_status"] },
+  { name: "the old process answering after the restart is never accepted",
+    answers: { get_build_status: [STATUS_OLD, STATUS_OLD, STATUS_OLD, { ok: false, error: "daemon not responding" }, STATUS_NEW], get_interruptions: [FLIGHT], restart: [{ ok: true }] },
+    code: EXIT.OK, outcome: "restarted", sessions: FLIGHT.sessions, newPid: NEW, sent: ["get_build_status", "get_interruptions", "restart", "get_build_status", "get_build_status", "get_build_status", "get_build_status"] },
+  { name: "no new process in time: timeout, with what was last seen",
+    answers: { get_build_status: [STATUS_OLD], get_interruptions: [FLIGHT], restart: [{ ok: true }] },
+    opts: { timeoutMs: 2000, pollMs: 500 },
+    code: EXIT.TIMEOUT, outcome: "timeout", sessions: FLIGHT.sessions, newPid: null, lastSeen: { pid: OLD, state: "adopted", error: null } },
+  { name: "a new process that loaded another build than the installed one is a mismatch",
+    answers: { get_build_status: [STATUS_OLD, { ok: true, pid: NEW, loadedBuildSha: "aaa", installedBuildSha: "bbb", state: "stale" }], get_interruptions: [{ ok: true, sessions: [] }], restart: [{ ok: true }] },
+    code: EXIT.BUILD_MISMATCH, outcome: "build-mismatch", sessions: [], newPid: NEW, state: "stale", loadedBuildSha: "aaa", installedBuildSha: "bbb" },
+  { name: "a daemon that cannot list sessions still restarts, sessions null",
+    answers: { get_build_status: [STATUS_OLD, STATUS_NEW], get_interruptions: [{ ok: false, error: "unknown command" }], restart: [{ ok: true }] },
+    code: EXIT.OK, outcome: "restarted", sessions: null, newPid: NEW },
+  { name: "a restart the daemon does not acknowledge fails",
+    answers: { get_build_status: [STATUS_OLD], get_interruptions: [FLIGHT], restart: [{ ok: false, error: "timeout" }] },
+    code: EXIT.FAILED, outcome: "restart-not-acknowledged", newPid: null, sent: ["get_build_status", "get_interruptions", "restart"] },
+  { name: "an unknown old pid sends no restart, as the new process could not be told apart",
+    answers: { get_build_status: [{ ok: false, error: "timeout" }], get_interruptions: [FLIGHT], restart: [{ ok: true }] },
+    code: EXIT.FAILED, outcome: "old-pid-unknown", newPid: null, sent: ["get_build_status"] },
+].forEach(function (row) {
+  test("restart verb: " + row.name, async function () {
+    var run = scripted(row.answers);
+    var result = await runRestart(run.deps, row.opts);
+    assert.equal(result.code, row.code);
+    assert.equal(result.report.outcome, row.outcome);
+    assert.equal(result.report.newPid, row.newPid);
+    ["sessions", "lastSeen", "state", "loadedBuildSha", "installedBuildSha"].forEach(function (field) {
+      if (row[field] !== undefined) assert.deepEqual(result.report[field], row[field]);
+    });
+    if (row.sent) assert.deepEqual(run.sent, row.sent);
+    if (row.outcome !== "old-pid-unknown") assert.equal(result.report.oldPid, OLD);
+  });
+});
+
+test("restart verb: human text names the new process only after it is up, and the mismatch with both shas", function () {
+  var ok = humanLines({ code: 0, report: { outcome: "restarted", oldPid: OLD, newPid: NEW, loadedBuildSha: "aaa", sessions: FLIGHT.sessions } });
+  assert.match(ok.join("\n"), /Server restarted \(pid 100 -> 200/);
+  var bad = humanLines({ code: 3, report: { outcome: "build-mismatch", oldPid: OLD, newPid: NEW, loadedBuildSha: "aaa", installedBuildSha: "bbb", state: "stale" } });
+  assert.match(bad.join("\n"), /loaded aaa, installed bbb, state stale/);
+});
+
+// Runs the CLI and reads its output as it comes; resolves { status, stdout }.
+function runCli(home, args) {
+  return new Promise(function (resolve) {
+    var child = childProcess.spawn(process.execPath, [CLI].concat(args), {
+      cwd: home,
+      env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: home }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    var chunks = [];
+    child.stdout.on("data", function (c) { chunks.push(c); });
+    child.on("close", function (status) { resolve({ status: status, stdout: Buffer.concat(chunks).toString("utf8") }); });
+  });
+}
+
+// The real CLI against a daemon that answers as the old process until it is asked
+// to restart, then as a new pid.
+function restartingDaemon(home, build) {
+  var dir = path.join(home, "console");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "daemon.json"), JSON.stringify({ pid: process.pid }));
+  var restarted = false;
+  var server = net.createServer(function (conn) {
+    var buffer = "";
+    conn.on("data", function (chunk) {
+      buffer += chunk;
+      if (buffer.indexOf("\n") === -1) return;
+      var cmd = JSON.parse(buffer.split("\n")[0]).cmd;
+      var answer = { ok: false, error: "unknown command" };
+      if (cmd === "get_interruptions") answer = FLIGHT;
+      if (cmd === "restart") { restarted = true; answer = { ok: true }; }
+      if (cmd === "get_build_status") answer = Object.assign({ ok: true, pid: restarted ? process.pid + 1 : process.pid }, build);
+      conn.end(JSON.stringify(answer) + "\n");
+    });
+    conn.on("error", function () {});
+  });
+  return new Promise(function (resolve) {
+    server.listen(path.join(dir, "daemon.sock"), function () { resolve(server); });
+  });
+}
+
+[
+  { name: "--restart --json prints one report and exits 0", args: ["--restart", "--json"], build: BUILD, status: 0,
+    check: function (out) {
+      var r = JSON.parse(out);
+      assert.equal(r.outcome, "restarted");
+      assert.equal(r.newPid, r.oldPid + 1);
+      assert.deepEqual(r.sessions, FLIGHT.sessions);
+      assert.equal(r.loadedBuildSha, "aaa");
+      assert.equal(r.state, "adopted");
+    } },
+  { name: "--restart --json exits 3 when the new process did not load the installed build", args: ["--restart", "--json"],
+    build: { loadedBuildSha: "aaa", installedBuildSha: "bbb", state: "stale" }, status: 3,
+    check: function (out) { assert.equal(JSON.parse(out).installedBuildSha, "bbb"); } },
+  { name: "--restart without --json keeps human text", args: ["--restart"], build: BUILD, status: 0,
+    check: function (out) { assert.match(out, /Server restarted \(pid \d+ -> \d+/); } },
+].forEach(function (row) {
+  test("clagentic-console " + row.name, async function () {
+    var home = quietHome("restartverb-");
+    var server = await restartingDaemon(home, row.build);
+    try {
+      var run = await runCli(home, row.args);
+      assert.equal(run.status, row.status);
+      row.check(run.stdout);
+    } finally {
+      server.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
 var BIG = [];
 for (var n = 0; n < 40000; n++) BIG.push({ rawIsProcessing: true, derivedIsActive: false, note: "x".repeat(40) });
 
