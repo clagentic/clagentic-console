@@ -110,7 +110,11 @@ async function adminPage(t) {
   global.requestAnimationFrame = function (fn) { fn(); return 0; };
   var toasts = new dom.FakeElement("div");
   global.document.body.appendChild(toasts);
-  global.document.getElementById = function (id) { return id === "diagnostic-toast-container" ? toasts : null; };
+  var bell = new dom.FakeElement("button");
+  var badge = new dom.FakeElement("span");
+  badge.classList.add("hidden");
+  var byId = { "diagnostic-toast-container": toasts, "notif-center-btn": bell, "notif-center-badge": badge };
+  global.document.getElementById = function (id) { return byId[id] || null; };
   var storeMod = await import(dom.moduleUrl("store.js"));
   storeMod.store.set({ currentSlug: "proj-a", activeSessionId: 1 });
   var sent = [];
@@ -133,6 +137,10 @@ async function adminPage(t) {
       else if (m.type === "notification_dismissed") mod.handleNotificationDismissed(m);
       else if (m.type === "notification_dismissed_all") mod.handleNotificationDismissedAll(m);
     },
+    badge: badge,
+    // The unread count the bell shows; null while the badge is hidden.
+    badgeCount: function () { return badge.classList.contains("hidden") ? null : badge.textContent; },
+    clickBell: function () { bell._listeners.click.forEach(function (fn) { fn({ stopPropagation: function () {} }); }); },
     popups: function () {
       return toasts.querySelectorAll('[data-diag-source="build-update"]').filter(function (el) {
         return el.classList.contains("visible") && el.querySelectorAll("button").some(function (b) { return b.textContent === RESTART_LABEL; });
@@ -189,14 +197,40 @@ test("repro: the admin's socket is sent the offer (delivery)", async function ()
   assert.equal(w.created()[0].notification.category, "system");
 });
 
-test("repro: the page draws the offer's banner and its diagnostics entry (render, banner)", async function (t) {
+test("one alert: the page draws the offer's pop-up and no stack banner, on arrival, on connect and from the bell", async function (t) {
   var w = daemonWorld();
   var page = await adminPage(t);
   w.poll(); w.poll();
   await w.settle();
   page.deliver(w);
   var offer = w.created()[0].notification;
-  assert.ok(page.bannerOf(offer.id), "the stack banner is drawn");
+  assert.equal(page.bannerOf(offer.id), null, "no stack banner for the offer");
+  assert.equal(page.banners.querySelectorAll(".notif-banner").length, 0, "nothing in the banner stack");
+  assert.equal(page.popups().length, 1, "the pop-up is the one alert");
+  page.receive(w.connect());
+  assert.equal(page.bannerOf(offer.id), null, "none after a reconnect's state either");
+  assert.equal(page.popups().length, 1);
+  page.clickBell();
+  assert.equal(page.bannerOf(offer.id), null, "none from the bell either");
+  assert.equal(page.banners.querySelectorAll('[data-notif-type="build_update_offer"]').length, 0, "no build banner drawn by the bell");
+  assert.equal(page.popups().length, 1);
+});
+
+test("the bell leaves the offer out of its count: alone it shows no unread, beside another it counts only the other", async function (t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  w.poll(); w.poll();
+  await w.settle();
+  page.deliver(w);
+  assert.equal(page.badgeCount(), null, "the offer alone is no unread count");
+  page.receive(w.connect());
+  assert.equal(page.badgeCount(), null, "nor after a connect's state");
+  var from = w.frames.length;
+  w.store.notify("loop_complete", { slug: "proj-a", name: "L", reason: "complete", iterations: 1 }, {});
+  page.deliver(w, from);
+  assert.equal(page.badgeCount(), "1", "only the other notification is counted");
+  page.receive(w.connect());
+  assert.equal(page.badgeCount(), "1", "and the same after a connect's state");
 });
 
 test("AC1: while a tab is open the offer is a visible pop-up carrying the restart action", async function (t) {
@@ -241,6 +275,20 @@ test("AC1: a pop-up the operator closed is not brought back by the refresh; clos
   assert.ok(w.created().length >= 2, "the core sent the refreshed offer");
   assert.equal(page.popups().length, 0, "it does not pop up again");
   assert.deepEqual(page.sent, [], "closing a pop-up declined nothing");
+});
+
+test("AC3: a clear-all with the pop-up up draws no banner and leaves the offer undeclined", async function (t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  w.poll(); w.poll();
+  await w.settle();
+  page.deliver(w);
+  var from = w.frames.length;
+  w.store.handleNotificationMessage({ _clagenticUser: { id: ADMIN } }, { type: "notification_dismiss_all" });
+  page.deliver(w, from);
+  assert.equal(page.banners.querySelectorAll(".notif-banner").length, 0);
+  assert.deepEqual(w.resolvedByOperator, []);
+  assert.equal(page.popups().length, 1);
 });
 
 test("AC1: with the banner surface muted for the system category the entry is held but no pop-up shows", async function (t) {
@@ -334,6 +382,7 @@ test("AC4: after a decline no pop-up shows until the cooldown has elapsed", asyn
   w.poll(); w.poll();
   await w.settle();
   page.deliver(w);
+  assert.equal(page.banners.querySelectorAll(".notif-banner").length, 0, "no banner exists: the pop-up's decline alone carries the cooldown");
   declineViaPage(w, page);
   t.mock.timers.tick(300);
   assert.equal(page.popups().length, 0, "declined");
