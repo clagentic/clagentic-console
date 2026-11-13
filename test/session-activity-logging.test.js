@@ -170,6 +170,97 @@ test("the bridge's push and the message processor's task events each report thei
   assert.deepEqual(sources, ["push-message", "task_started", "task_progress", "tool_progress", "task_updated"]);
 });
 
+// Send now interrupts the running turn with the query kept, so the CLI ends the
+// turn with an abort result. The abort the console caused reads as an
+// interruption; any other result keeps its error line.
+var ABORT_STREAMING = { yokeType: "result", subtype: "error_during_execution", errors: [], terminalReason: "aborted_streaming", cost: 0 };
+var ABORT_TOOLS = { yokeType: "result", subtype: "error_during_execution", errors: [], terminalReason: "aborted_tools", cost: 0 };
+var API_FAILURE = { yokeType: "result", subtype: "error_during_execution", errors: ["upstream"], terminalReason: "api_error", cost: 0 };
+var SUCCESS = { yokeType: "result", subtype: "success", cost: 0.01 };
+
+// Each step is "interrupt" (a Send now interrupt, reply pending), "stamp" (the
+// stream yields a message, as the bridge loop counts it), "reject:N" (the Nth
+// interrupt's reply fails now) or a result. A result is stamped as the loop
+// would stamp it, unless the row is prestamped (it was yielded earlier).
+var SEND_NOW_ROWS = [
+  { name: "AC1 marker set, aborted_streaming: interrupted, done 0, no error", steps: ["interrupt", ABORT_STREAMING], shows: ["interrupted"] },
+  { name: "AC2 marker set, aborted_tools: interrupted, done 0, no error", steps: ["interrupt", ABORT_TOOLS], shows: ["interrupted"] },
+  { name: "AC3 no marker, aborted_streaming: error as today", steps: [ABORT_STREAMING], shows: ["error"] },
+  { name: "AC3 no marker, aborted_tools: error as today", steps: [ABORT_TOOLS], shows: ["error"] },
+  { name: "AC4 marker set, api_error result: its error, marker consumed", steps: ["interrupt", API_FAILURE, ABORT_TOOLS], shows: ["error", "error"] },
+  { name: "AC5 marker consumed by success, a later abort shows its error", steps: ["interrupt", SUCCESS, ABORT_STREAMING], shows: ["result", "error"] },
+  { name: "AC6 an older interrupt's late rejection keeps the newer marker: interrupted", steps: ["interrupt", "interrupt", "reject:0", ABORT_STREAMING], shows: ["interrupted"] },
+  { name: "U1 an abort received before Send now was clicked still shows its error", steps: ["stamp", "interrupt", ABORT_STREAMING], prestamped: true, shows: ["error"] },
+];
+
+test("Send now interrupt: the self-caused abort reads as an interruption, any other result keeps its error", async function (t) {
+  captureLog(t);
+  t.mock.method(console, "error", function () {});
+  for (var r = 0; r < SEND_NOW_ROWS.length; r++) {
+    var row = SEND_NOW_ROWS[r];
+    var server = await world.createServer();
+    try {
+      await server.bridge.startQuery(server.session, "go", null, null);
+      await world.flush();
+      var rejectors = [];
+      server.session.queryInstance.interruptKeepingQueued = function () {
+        return new Promise(function (resolve, reject) { rejectors.push(reject); });
+      };
+      var recorded = [];
+      server.sm.sendAndRecord = function (session, obj) { recorded.push(obj); };
+      var seen = [];
+      for (var s = 0; s < row.steps.length; s++) {
+        var step = row.steps[s];
+        if (step === "interrupt") {
+          server.bridge.interruptKeepingQueued(server.session).catch(function () {});
+          continue;
+        }
+        if (step === "stamp") {
+          server.session.queryReceiveSeq = (server.session.queryReceiveSeq || 0) + 1;
+          continue;
+        }
+        if (typeof step === "string") {
+          rejectors[Number(step.split(":")[1])](new Error("late"));
+          await world.flush();
+          continue;
+        }
+        recorded.length = 0;
+        if (!row.prestamped) server.session.queryReceiveSeq = (server.session.queryReceiveSeq || 0) + 1;
+        server.sdk(step);
+        var done = recorded.filter(function (m) { return m.type === "done"; });
+        var hasError = recorded.some(function (m) { return m.type === "error"; });
+        var hasInfo = recorded.some(function (m) { return m.type === "info"; });
+        if (step.subtype === "success") seen.push("result");
+        else if (hasError) { seen.push("error"); assert.equal(done[0].code, 1, row.name); assert.match(recorded.filter(function (m) { return m.type === "error"; })[0].text, /error:/, row.name); }
+        else { seen.push("interrupted"); assert.ok(hasInfo, row.name); assert.equal(done[0].code, 0, row.name); }
+      }
+      assert.deepEqual(seen, row.shows, row.name);
+    } finally {
+      server.shutdown();
+      world.removeHome(server.home);
+    }
+  }
+});
+
+test("Send now interrupt: one log line names the session with debug off, and a failed interrupt clears the marker", async function (t) {
+  var server = await world.createServer();
+  try {
+    await server.bridge.startQuery(server.session, "go", null, null);
+    await world.flush();
+    server.session.queryInstance.interruptKeepingQueued = function () { return Promise.reject(new Error("no")); };
+    var lines = captureLog(t);
+    await withDebug(null, async function () {
+      await assert.rejects(server.bridge.interruptKeepingQueued(server.session), /no/);
+    });
+    var requested = lines.filter(function (l) { return l.indexOf("Send now interrupt requested") !== -1; });
+    assert.deepEqual(requested, ["[sdk-bridge] Send now interrupt requested: project=harness session=" + server.session.localId]);
+    assert.equal(server.session.selfCausedInterrupt, false, "a refused interrupt leaves no marker");
+  } finally {
+    server.shutdown();
+    world.removeHome(server.home);
+  }
+});
+
 test("the startQuery and result lines carry the project and not the prompt", async function (t) {
   var server = await world.createServer();
   try {
