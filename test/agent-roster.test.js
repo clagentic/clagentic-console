@@ -503,8 +503,7 @@ test("a sub-agent sighting in an unreadable project does not group the agent as 
   assert.equal(all.roster.listFor(CALLER)[0].group, "helper", "a caller who can read both sees the helper");
 });
 
-// row: what a caller who can read only "open" sees, and what one who can read both sees
-test("timestamps reflect readable places only: lastSeen from a readable place, firstSeen null when a place is filtered, present when all are readable", function () {
+test("lastSeen is the latest readable place and the response carries no firstSeen", function () {
   function build(mayRead) {
     var m = makeRoster(tmpFile(), { mayReadProject: mayRead });
     m.setNow(1000);
@@ -517,10 +516,17 @@ test("timestamps reflect readable places only: lastSeen from a readable place, f
   }
   var partial = build(function (slug) { return slug === "open"; });
   assert.equal(partial.lastSeen, 2000, "the newer sighting in the unreadable project is not shown");
-  assert.equal(partial.firstSeen, null, "a filtered place means no first seen");
+  assert.equal("firstSeen" in partial, false, "a partial view carries no first seen");
   var full = build(function () { return true; });
-  assert.equal(full.firstSeen, 1000);
+  assert.equal("firstSeen" in full, false, "no caller gets first seen");
   assert.equal(full.lastSeen, 9000);
+});
+
+test("a redraw signature changes when only an agent's vendor changes", async function () {
+  var G = await loadGroups();
+  var before = [{ key: "model-a", group: "model", vendor: "vendor-one", lastSeen: 1 }];
+  assert.notEqual(G.choicesSignature(before), G.choicesSignature([{ key: "model-a", group: "model", vendor: "vendor-two", lastSeen: 1 }]));
+  assert.equal(G.choicesSignature(before), G.choicesSignature([{ key: "model-a", group: "model", vendor: "vendor-one", lastSeen: 2 }]), "times alone do not redraw");
 });
 
 test("Claude families come from the vendor's alias entries; the literal serves only until a list arrives", function () {
