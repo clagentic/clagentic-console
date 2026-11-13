@@ -118,7 +118,7 @@ test("a long reply from the session's agent never collapses", async function (t)
   assert.equal(reply.querySelector(".collapsible-toggle"), null);
 });
 
-test("the outbox row of a long armed schedule uses the three-line rule and Expand", async function (t) {
+test("the outbox row of an armed schedule is one line with an always-present Expand", async function (t) {
   dom.setupGlobals();
   document.removeEventListener = function () {};
   // dom-refs caches the first #messages it is given for the life of the process.
@@ -132,11 +132,61 @@ test("the outbox row of a long armed schedule uses the three-line rule and Expan
       { id: "si_3", kind: "once", text: THREE, nextAt: Date.now() + 60000 },
     ]);
     var rows = messages.querySelectorAll(".scheduled-queued");
-    assert.equal(rows[0].querySelector(".collapsible-preview").textContent, "line 1 of the pushed text\nline 2 of the pushed text\nline 3 of the pushed text");
+    assert.equal(rows[0].querySelector(".collapsible-preview").textContent, "line 1 of the pushed text", "one line");
     assert.equal(rows[0].querySelector(".collapsible-full").textContent, LONG);
-    assert.equal(rows[0].querySelector(".collapsible-toggle").textContent, "Expand");
-    assert.equal(rows[1].querySelector(".collapsible-toggle"), null, "three lines renders in full");
+    assert.equal(rows[0].querySelector(".collapsible-toggle").getAttribute("aria-label"), "Expand");
+    assert.ok(rows[1].querySelector(".collapsible-toggle"), "Expand is there even for a short prompt");
+    assert.equal(rows[1].querySelector(".collapsible-preview").textContent, "one");
   } finally { ob.removeScheduledOutbox(); }
+});
+
+// One row per option set: what buildCollapsibleText builds. The first row is the
+// no-options call every other caller makes (app-rendering.js), whose output must
+// not change; the rest are the new options.
+var OPTION_ROWS = [
+  { name: "no options", opts: undefined, cls: "collapsible-text", clamp: undefined, preview: "l1\nl2\nl3", label: null, text: "Expand" },
+  { name: "empty options", opts: {}, cls: "collapsible-text", clamp: undefined, preview: "l1\nl2\nl3", label: null, text: "Expand" },
+  { name: "lines 3 is the default", opts: { lines: 3, size: "normal", controls: "row" }, cls: "collapsible-text", clamp: undefined, preview: "l1\nl2\nl3", label: null, text: "Expand" },
+  { name: "header leaves the word toggle", opts: { controls: "header" }, cls: "collapsible-text", clamp: undefined, preview: "l1\nl2\nl3", label: null, text: "Expand" },
+  { name: "lines 1", opts: { lines: 1 }, cls: "collapsible-text", clamp: "1", preview: "l1", label: null, text: "Expand" },
+  { name: "compact", opts: { size: "compact" }, cls: "collapsible-text collapsible-compact", clamp: undefined, preview: "l1\nl2\nl3", label: null, text: "Expand" },
+  { name: "inline", opts: { controls: "inline" }, cls: "collapsible-text collapsible-inline", clamp: undefined, preview: "l1\nl2\nl3", label: "Expand", text: '<i data-lucide="chevron-down"></i>' },
+];
+
+OPTION_ROWS.forEach(function (row) {
+  test("collapsible-text options: " + row.name, async function () {
+    dom.setupGlobals();
+    var m = await import(dom.moduleUrl("collapsible-text.js"));
+    var c = m.buildCollapsibleText("l1\nl2\nl3\nl4\nl5", row.opts);
+    assert.equal(c.el.className.split(" ").filter(function (x) { return x !== "is-collapsed"; }).join(" "), row.cls);
+    var preview = c.el.querySelector(".collapsible-preview");
+    assert.equal(preview.textContent, row.preview);
+    assert.equal(preview.style.webkitLineClamp, row.clamp, "a clamp is set only for a non-default line count");
+    assert.equal(c.el.querySelector(".collapsible-full").textContent, "l1\nl2\nl3\nl4\nl5", "the full text is never cut");
+    assert.equal(c.button.className, "collapsible-toggle");
+    assert.equal(c.button.getAttribute("aria-label"), row.label);
+    assert.equal(c.button.textContent, row.text);
+    assert.equal(c.button.getAttribute("aria-expanded"), "false");
+    press(c.button);
+    assert.equal(c.button.getAttribute("aria-expanded"), "true");
+    assert.equal(c.button.getAttribute("aria-label"), row.label && "Collapse");
+    assert.equal(c.button.textContent, row.label ? '<i data-lucide="chevron-up"></i>' : "Collapse");
+  });
+});
+
+test("queuedButton: with no options it is the word button; an icon is an icon button with an accessible name", async function () {
+  dom.setupGlobals();
+  var q = await import(dom.moduleUrl("queued-button.js"));
+  var word = q.queuedButton("Send now", "shell-queued-send-now");
+  assert.equal(word.className, "shell-queued-btn shell-queued-send-now");
+  assert.equal(word.textContent, "Send now");
+  assert.equal(word.getAttribute("aria-label"), "Send now");
+  assert.equal(word.title, undefined);
+  var icon = q.queuedButton("Cancel", "shell-queued-cancel", { icon: "x" });
+  assert.equal(icon.className, "shell-queued-btn shell-queued-cancel shell-queued-icon-btn");
+  assert.equal(icon.textContent, '<i data-lucide="x"></i>');
+  assert.equal(icon.getAttribute("aria-label"), "Cancel");
+  assert.equal(icon.title, "Cancel");
 });
 
 test("one predicate: pushed-in descriptors collapse, a typed one and none do not", async function () {

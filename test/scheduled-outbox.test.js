@@ -70,11 +70,58 @@ test("an armed schedule is an outbox item with its fire time, Fire now and Cance
     assert.equal(items[0].querySelector(".shell-queued-text").textContent, "wake up");
     var fire = items[0].querySelector(".scheduled-queued-fire");
     var cancel = items[0].querySelector(".scheduled-queued-cancel");
-    assert.equal(fire.textContent, "Fire now");
-    assert.equal(cancel.textContent, "Cancel");
+    // The pending card's controls are icon buttons: the name is the aria-label.
+    assert.equal(fire.getAttribute("aria-label"), "Fire now");
+    assert.equal(cancel.getAttribute("aria-label"), "Cancel");
     assert.ok(fire.classList.contains("shell-queued-btn") && cancel.classList.contains("shell-queued-btn"), "the queued controls' size class");
     assert.equal(items[0].querySelectorAll(".shell-queued-edit").length, 0, "a schedule has no Edit here");
   } finally { done(env); }
+});
+
+test("the pending card is one line: three icon buttons on it, Expand always there, the meta only in the expanded view", async function () {
+  var env = await boot();
+  try {
+    env.rl.applyScheduledInputList(list("A", [once("si_1", "wake up", 90000)]));
+    var row = rows(env)[0];
+    var actions = row.querySelector(".shell-queued-actions");
+    var fire = row.querySelector(".scheduled-queued-fire");
+    var cancel = row.querySelector(".scheduled-queued-cancel");
+    var toggle = row.querySelector(".collapsible-toggle");
+    [[fire, "play", "Fire now"], [cancel, "x", "Cancel"], [toggle, "chevron-down", "Expand"]].forEach(function (b) {
+      assert.ok(actions.contains(b[0]), b[2] + " is on the card's one line");
+      assert.ok(b[0].classList.contains("shell-queued-icon-btn"), b[2] + " is an icon button");
+      assert.equal(b[0].getAttribute("aria-label"), b[2]);
+      assert.equal(b[0].innerHTML, '<i data-lucide="' + b[1] + '"></i>');
+    });
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
+    assert.ok(row.querySelector(".collapsible-text").classList.contains("collapsible-compact"));
+    assert.ok(row.querySelector(".collapsible-text").classList.contains("collapsible-inline"));
+    assert.equal(row.classList.contains("is-expanded"), false, "the meta is hidden while collapsed");
+    toggle._listeners.click.forEach(function (fn) { fn({ stopPropagation: function () {} }); });
+    assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(toggle.getAttribute("aria-label"), "Collapse");
+    assert.equal(row.classList.contains("is-expanded"), true);
+    assert.match(row.querySelector(".scheduled-queued-time").textContent, /^Sends at /, "the meta is in the card");
+  } finally { done(env); }
+});
+
+test("the pending card's sizes: 38 px row and 28 px buttons on a fine pointer, 54 px row and 44 px hit areas on a coarse one", function () {
+  var fs = require("fs");
+  var path = require("path");
+  var css = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "css", "user-shell.css"), "utf8");
+  var base = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "css", "base.css"), "utf8");
+  assert.match(base, /--compact-card-height: 38px;/);
+  assert.match(base, /--compact-card-height-touch: 54px;/);
+  assert.match(base, /--compact-control-size: 28px;/);
+  assert.match(base, /--msg-touch-target: 44px;/);
+  var fine = css.slice(0, css.indexOf("@media (pointer: coarse)"));
+  var coarse = css.slice(css.indexOf("@media (pointer: coarse)"));
+  assert.match(fine, /\.shell-queued\.scheduled-queued \{[^}]*min-height: var\(--compact-card-height\)/);
+  assert.match(fine, /\.shell-queued-icon-btn \{[^}]*width: var\(--compact-control-size\);[^}]*height: var\(--compact-control-size\)/);
+  assert.match(fine, /\.shell-queued-actions \{[^}]*gap: 0;/, "side by side with no gap");
+  assert.match(coarse, /\.shell-queued\.scheduled-queued \{ min-height: var\(--compact-card-height-touch\)/);
+  assert.match(coarse, /min-width: var\(--msg-touch-target\);[^}]*min-height: var\(--msg-touch-target\)/);
+  assert.match(coarse, /width: var\(--msg-touch-target\);\s*height: var\(--msg-touch-target\)/);
 });
 
 test("one rendering per schedule: the pending card is replaced by the outbox item", async function () {
