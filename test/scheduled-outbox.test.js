@@ -105,6 +105,69 @@ test("the pending card is one line: three icon buttons on it, Expand always ther
   } finally { done(env); }
 });
 
+// The collapsed line's fire time, with an injected clock: rows of [name, input, now,
+// text, title, label]. No real-time wait; the outbox's own tick is driven with `now`.
+var T0 = new Date(2030, 0, 15, 20, 0, 0, 0).getTime();
+var FIRE_TIME_ROWS = [
+  ["a one-shot shows time remaining, absolute time in title and aria", { id: "si_1", kind: "once", createdBy: "browser", text: "wake up", nextAt: T0 + 252000, firedCount: 0 }, T0,
+    "in 4m 12s", "Sends today at 20:04", "Sends today at 20:04, in 4m 12s"],
+  ["a recurring schedule shows its next firing", { id: "si_2", kind: "recurring", every: 60000, createdBy: "browser", text: "tick", nextAt: T0 + 3900000, firedCount: 0 }, T0,
+    "next in 1h 5m", "Next today at 21:05", "Next today at 21:05, in 1h 5m"],
+  ["a due schedule says it is sending", { id: "si_3", kind: "once", createdBy: "browser", text: "due", nextAt: T0 - 1000, firedCount: 0 }, T0,
+    "Sending...", "Sends today at 19:59", "Sends today at 19:59, sending now"],
+];
+
+FIRE_TIME_ROWS.forEach(function (r) {
+  test("collapsed line fire time: " + r[0], async function () {
+    var env = await boot();
+    try {
+      var ob = await import(dom.moduleUrl("scheduled-outbox.js"));
+      env.rl.applyScheduledInputList(list("A", [r[1]]));
+      ob.tickScheduledOutbox(r[2]);
+      var el = rows(env)[0].querySelector(".scheduled-queued-fire-at");
+      assert.equal(el.textContent, r[3]);
+      assert.equal(el.title, r[4]);
+      assert.equal(el.getAttribute("aria-label"), r[5]);
+    } finally { done(env); }
+  });
+});
+
+test("collapsed line fire time: the injected clock advancing updates the text, one timer for every row", async function () {
+  var env = await boot();
+  try {
+    var ob = await import(dom.moduleUrl("scheduled-outbox.js"));
+    env.rl.applyScheduledInputList(list("A", [
+      { id: "si_a", kind: "once", createdBy: "browser", text: "a", nextAt: T0 + 90000, firedCount: 0 },
+      { id: "si_b", kind: "once", createdBy: "browser", text: "b", nextAt: T0 + 600000, firedCount: 0 },
+    ]));
+    var els = rows(env).map(function (r) { return r.querySelector(".scheduled-queued-fire-at"); });
+    ob.tickScheduledOutbox(T0);
+    assert.deepEqual(els.map(function (e) { return e.textContent; }), ["in 1m 30s", "in 10m 0s"]);
+    ob.tickScheduledOutbox(T0 + 60000);
+    assert.deepEqual(els.map(function (e) { return e.textContent; }), ["in 30s", "in 9m 0s"]);
+    assert.match(els[0].getAttribute("aria-label"), /, in 30s$/);
+  } finally { done(env); }
+});
+
+test("the fire time is an option of the card: off leaves it out, Fire now, Cancel and Expand are as before", async function () {
+  var env = await boot();
+  try {
+    var ob = await import(dom.moduleUrl("scheduled-outbox.js"));
+    ob.renderScheduledOutbox([once("si_1", "wake up", 90000)], { fireTime: false });
+    var off = rows(env)[0];
+    assert.equal(off.querySelector(".scheduled-queued-fire-at"), null);
+    ob.renderScheduledOutbox([once("si_1", "wake up", 90000)]);
+    var on = rows(env)[0];
+    var actions = on.querySelector(".shell-queued-actions");
+    ["scheduled-queued-fire", "scheduled-queued-cancel", "collapsible-toggle"].forEach(function (c) {
+      assert.ok(actions.contains(on.querySelector("." + c)), c + " stays in the actions");
+    });
+    assert.equal(on.querySelector(".scheduled-queued-fire").getAttribute("aria-label"), "Fire now");
+    on.querySelector(".scheduled-queued-fire").click();
+    assert.deepEqual(env.frames.map(noRequestId), [{ type: "send_scheduled_now", id: "si_1" }]);
+  } finally { done(env); }
+});
+
 test("the pending card's sizes: 38 px row and 28 px buttons on a fine pointer, 54 px row and 44 px hit areas on a coarse one", function () {
   var fs = require("fs");
   var path = require("path");

@@ -145,8 +145,8 @@
 
 /* The pending scheduled card is one compact line: the prompt clamped to one line
    (collapsible-text.js lines 1, compact, inline) and Fire now, Cancel and Expand
-   as icon buttons side by side with no gap. The fire time, cadence and remaining
-   count are in the expanded view only. */
+   as icon buttons side by side with no gap. The time remaining is on the line;
+   the absolute time, cadence and remaining count are in the expanded view. */
 .shell-queued.scheduled-queued {
   display: flex;
   flex-wrap: wrap;
@@ -204,6 +204,24 @@
   display: none;
   flex: 1 0 100%;
   margin: 0 0 6px;
+}
+
+/* The collapsed line's fire time: never shrinks or wraps, so the prompt text
+   gives way first (it is the flexing, ellipsized item) and, below the tablet
+   width, the "Scheduled" tag goes too. Hidden when expanded, where the meta
+   line carries it. */
+.shell-queued.scheduled-queued .scheduled-queued-fire-at {
+  flex: none;
+  margin: 0 8px;
+  font-size: var(--msg-meta-size);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.shell-queued.scheduled-queued.is-expanded .scheduled-queued-fire-at { display: none; }
+
+@media (max-width: 768px) {
+  .shell-queued.scheduled-queued .shell-queued-tag { display: none; }
 }
 
 .shell-queued.scheduled-queued.is-expanded { align-items: flex-start; padding-top: 4px; }
