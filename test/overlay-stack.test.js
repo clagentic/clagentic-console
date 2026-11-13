@@ -239,10 +239,13 @@ test("stylesheet: the layer scale is ordered and the stack and the menus take th
   assert.ok(root, "the scale is declared on :root");
   // A menu opens from the surface under it (the full-screen mobile sheet, the
   // terminal panel, a modal), so it sits above modals and panels.
-  var order = ["base", "modal", "menu", "toast", "tooltip"].map(function (name) {
+  var names = ["base", "modal", "menu", "toast", "tooltip"];
+  var order = names.map(function (name) {
     return Number(new RegExp("--z-" + name + ":\\s*(\\d+)").exec(root.body)[1]);
   });
-  assert.deepEqual(order.slice().sort(function (a, b) { return a - b; }), order, "base < modal < menu < toast < tooltip");
+  for (var i = 1; i < names.length; i++) {
+    assert.ok(order[i] > order[i - 1], "--z-" + names[i - 1] + " (" + order[i - 1] + ") < --z-" + names[i] + " (" + order[i] + ")");
+  }
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "z-index", DESKTOP), "var(--z-toast)");
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "z-index", DESKTOP), "var(--z-menu)");
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "position", DESKTOP), "fixed");
