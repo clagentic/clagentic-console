@@ -1374,6 +1374,10 @@ test("C2 stacking: two C2 modals sit in token order, Escape closes the top one f
   assert.ok(order(skills.root) > order(grants), "a second C2 modal sits over the first");
   m.b.utils.showToast("Saved", "error", "detail");
   var toast = m.b.stack().querySelector(".overlay-toast");
+  var menu = m.overlay.showOverlay({ kind: "menu", content: "m" });
+  assert.equal(menu.isOpen(), true, "a menu opens over the C2 modals");
+  assert.equal(m.registry.isModalOpen(skills.root), true, "and does not close the modal beneath it");
+  menu.close();
   m.escape();
   assert.equal(m.registry.isModalOpen(skills.root), false, "Escape closed the top modal");
   assert.equal(m.registry.isModalOpen(grants), true, "and left the one beneath");
@@ -1381,8 +1385,10 @@ test("C2 stacking: two C2 modals sit in token order, Escape closes the top one f
   WIDTHS.forEach(function (width) {
     var at = " at " + width + "px";
     assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", width), "calc(var(--z-modal) + var(--overlay-order, 0))", "both modals share the one modal layer" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "z-index", width), "var(--z-menu)", "a menu is above the modals and under a toast" + at);
     assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "z-index", width), "var(--z-toast)", "a toast is above them" + at);
   });
+  assert.ok(layer("modal") + 99 < layer("menu") && layer("menu") < layer("toast"), "modal < menu < toast");
   assert.ok(layer("panel") < layer("modal"), "a dialog a settings panel opens shows over the panel");
 });
 
@@ -1446,12 +1452,12 @@ test("C2 html: every static modal is the shared scrim and dialog, with no scrim,
 var C2_SOURCE_ROWS = [
   { name: "admin dialogs", file: "admin.js", has: [/showOverlay\(\{ kind: "modal", content: html, dialogClass: "admin-modal" \}\)/], gone: [/admin-modal-overlay|admin-modal-close|e\.target === modal/] },
   { name: "worktree modal", file: "sidebar-projects.js", has: [/kind: "modal",\s*id: "wt-modal-container",\s*dialogClass: "wt-modal"/], gone: [/wt-modal-overlay|e\.key === "Escape"\) closeModal/] },
-  { name: "remove-project-task dialog", file: "app-projects.js", has: [/kind: "modal", dialogClass: "remove-project-task-dialog"/], gone: [/remove-project-task-backdrop|remove-project-task-modal/] },
+  { name: "remove-project-task dialog", file: "app-projects.js", has: [/kind: "modal", dialogClass: "remove-project-task-dialog"/, /Remove project "' \+ escapeHtml\(name \|\| slug\) \+ '"/, /<option value="' \+ escapeHtml\(p\.slug\) \+ '">' \+ escapeHtml\(p\.title \|\| p\.project \|\| p\.slug\) \+ '<\/option>/], gone: [/remove-project-task-backdrop|remove-project-task-modal/, /\+ \(name \|\| slug\) \+|\+ p\.slug \+ '"|\+ \(p\.title \|\| p\.project \|\| p\.slug\) \+/] },
   { name: "add-project modal", file: "app-projects.js", has: [/kind: "modal", el: addProjectModal, onRemove: resetAddProjectModal/], gone: [/\.confirm-backdrop|e\.key === "Escape"\) \{ e\.preventDefault\(\); closeAddProjectModal/] },
   { name: "loop status dialog", file: "app-loop-ui.js", has: [/kind: "modal", id: "loop-status-modal", dialogClass: "loop-status-dialog"/], gone: [/loop-status-backdrop|loop-status-dialog-close/] },
   { name: "force change PIN", file: "app-misc.js", has: [/id: "force-change-pin-overlay"[^}]*dismissible: false[^}]*card: false[^}]*scrim: "solid"/], gone: [/style\.cssText|style="|z-index|fcp-style|style\.opacity/] },
   { name: "PWA install", file: "app-misc.js", has: [/showOverlay\(\{ kind: "modal", el: modal \}\)/], gone: [/pwa-modal-backdrop/] },
-  { name: "QR", file: "qrcode.js", has: [/showOverlay\(\{ kind: "modal", el: qrOverlay \}\)/], gone: [/e\.key === "Escape"|qr-overlay-inner"\)\.addEventListener/] },
+  { name: "QR", file: "qrcode.js", has: [/showOverlay\(\{ kind: "modal", el: qrOverlay \}\)/, /escapeHtml\(url\) \+ '<span class="qr-hint">/], gone: [/innerHTML = url \+/, /e\.key === "Escape"|qr-overlay-inner"\)\.addEventListener/] },
   { name: "avatar positioner", file: "profile.js", has: [/dialogClass: 'avatar-positioner-container'/, /onDismiss: function\(\) \{ URL\.revokeObjectURL\(objectUrl\); \}/], gone: [/avatar-positioner-overlay|avatar-positioner-close/] },
   { name: "mermaid viewer", file: "markdown.js", has: [/showOverlay\(\{ kind: "modal", el: modal \}\)/], gone: [/closeMermaidModal/] },
   { name: "notification help", file: "notifications.js", has: [/showOverlay\(\{ kind: "modal", el: notifHelpModal \}\)/], gone: [/notifHelpModal\.classList/] },
