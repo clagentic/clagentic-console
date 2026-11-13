@@ -30,6 +30,8 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 
+var cssRules = require("./fixtures/css-rules");
+
 var BASE_CSS = fs.readFileSync(
   path.join(__dirname, "../lib/public/css/base.css"),
   "utf8"
@@ -39,45 +41,24 @@ var DIAGNOSTICS_CSS = fs.readFileSync(
   "utf8"
 );
 
-test("base.css: .toast still sets left:50% (sanity — confirms the leak source is real, not already removed)", () => {
-  var idx = BASE_CSS.indexOf(".toast {");
-  assert.ok(idx !== -1, "expected a base .toast rule to exist");
-  var block = BASE_CSS.slice(idx, idx + 400);
-
-  assert.match(block, /left:\s*50%/,
-    "base .toast is expected to keep left:50% for its own center-bottom single-toast use -- " +
-    "this test's companion assertion below is what must explicitly cancel it for .toast-diagnostic");
+// The leak this guarded (the base .toast rule's left:50% / bottom:80px bleeding
+// into the corner-anchored diagnostic toast) is closed at the source: there is
+// no base .toast positioning rule left to leak, and no toast rule positions
+// itself. The rows below assert that end state.
+test("base.css: no .toast rule remains to leak a center-bottom offset into a toast", () => {
+  assert.ok(!/(^|[\s,}])\.toast\s*[{,.:]/.test(BASE_CSS),
+    "base.css must not carry a .toast rule: the single-toast center-bottom pattern is gone");
+  assert.ok(!/left:\s*50%/.test(BASE_CSS.slice(BASE_CSS.indexOf("Reload banner content"))),
+    "no toast or banner rule in base.css centers itself with left:50%");
 });
 
-test("diagnostics.css: .toast-diagnostic explicitly resets left so the base .toast center-bottom offset cannot leak through", () => {
-  var idx = DIAGNOSTICS_CSS.indexOf(".toast-diagnostic {");
-  assert.ok(idx !== -1, "expected .toast-diagnostic rule to exist");
-  var end = DIAGNOSTICS_CSS.indexOf("}", idx);
-  var block = DIAGNOSTICS_CSS.slice(idx, end);
-
-  assert.match(
-    block,
-    /left:\s*auto/,
-    "lr-56fb36: .toast-diagnostic must set left:auto -- otherwise base.css's .toast left:50% " +
-    "(designed for the old center-bottom single-toast pattern) keeps applying and offsets the " +
-    "box away from the normal-flow position #diagnostic-toast-container computes for it, pushing " +
-    "it past the right viewport edge on both desktop and mobile"
-  );
-});
-
-test("diagnostics.css: .toast-diagnostic explicitly resets bottom so the base .toast vertical offset cannot leak through", () => {
-  var idx = DIAGNOSTICS_CSS.indexOf(".toast-diagnostic {");
-  assert.ok(idx !== -1, "expected .toast-diagnostic rule to exist");
-  var end = DIAGNOSTICS_CSS.indexOf("}", idx);
-  var block = DIAGNOSTICS_CSS.slice(idx, end);
-
-  assert.match(
-    block,
-    /bottom:\s*auto/,
-    "lr-56fb36: .toast-diagnostic must set bottom:auto -- base.css's .toast bottom:80px is a " +
-    "leftover from the center-bottom single-toast pattern and should not affect the corner-" +
-    "anchored, container-positioned diagnostic toast"
-  );
+test("diagnostics.css: no toast rule sets left or bottom, so the stack alone places the card", () => {
+  var toastRules = cssRules.rules(DIAGNOSTICS_CSS).filter(function (r) { return /toast/.test(r.selector); });
+  assert.ok(toastRules.length > 0, "the toast content rules are still present");
+  toastRules.forEach(function (r) {
+    assert.ok(!/(^|[;\s])(left|bottom|right|top|position)\s*:/.test(r.body),
+      "lr-56fb36: " + r.selector + " must not position itself (left/bottom/right/top/position)");
+  });
 });
 
 test("diagnostics.css: mobile media query does not need to re-reset left/bottom (already auto from the base rule above)", () => {

@@ -38,6 +38,10 @@ var DIAGNOSTICS_CSS = fs.readFileSync(
   path.join(__dirname, "../lib/public/css/diagnostics.css"),
   "utf8"
 );
+var OVERLAY_CSS = fs.readFileSync(
+  path.join(__dirname, "../lib/public/css/overlay.css"),
+  "utf8"
+);
 
 // ---------------------------------------------------------------------------
 // Defect 2 — doubling / dedup
@@ -87,10 +91,12 @@ test("diagnostics.js: dedup uses a bounded time window, not a permanent block", 
 // Defect 3 — placement / stacking
 // ---------------------------------------------------------------------------
 
-test("diagnostics.css: #diagnostic-toast-container is a fixed, corner-anchored, gap-stacked container", () => {
-  var idx = DIAGNOSTICS_CSS.indexOf("#diagnostic-toast-container {");
-  assert.ok(idx !== -1, "expected #diagnostic-toast-container rule to exist");
-  var block = DIAGNOSTICS_CSS.slice(idx, idx + 400);
+// The container is now the one shared overlay stack (overlay.css), not a
+// diagnostics-only #diagnostic-toast-container.
+test("overlay.css: .overlay-stack is a fixed, corner-anchored, gap-stacked container", () => {
+  var idx = OVERLAY_CSS.indexOf(".overlay-stack {");
+  assert.ok(idx !== -1, "expected .overlay-stack rule to exist");
+  var block = OVERLAY_CSS.slice(idx, idx + 600);
 
   assert.match(block, /position:\s*fixed/, "container must be position:fixed");
   assert.match(block, /display:\s*flex/, "container must use flex layout for stacking");
@@ -102,35 +108,31 @@ test("diagnostics.css: #diagnostic-toast-container is a fixed, corner-anchored, 
     "container must not be center-anchored (left:50%) -- that was the lr-e901 placement defect, directly over the composer/input box");
 });
 
-test("diagnostics.css: .toast-diagnostic no longer self-positions with position:fixed", () => {
-  var idx = DIAGNOSTICS_CSS.indexOf(".toast-diagnostic {");
-  assert.ok(idx !== -1, "expected .toast-diagnostic rule to exist");
-  var block = DIAGNOSTICS_CSS.slice(idx, idx + 400);
-
-  assert.ok(block.indexOf("position: fixed") === -1,
-    "individual toasts must not be position:fixed anymore -- positioning now comes from the parent #diagnostic-toast-container so multiple concurrent toasts stack instead of overlapping at the same fixed spot");
+test("diagnostics.css: the toast content rules carry no position of their own", () => {
+  assert.ok(!/\.toast-diagnostic\s*\{/.test(DIAGNOSTICS_CSS),
+    "individual toasts must not be positioned by diagnostics.css anymore -- positioning comes from the shared stack so multiple concurrent toasts stack instead of overlapping at the same fixed spot");
 });
 
-test("diagnostics.js: toasts are appended into the shared toast container, not document.body directly", () => {
+test("diagnostics.js: toasts are drawn through the shared overlay, not appended to document.body", () => {
   var idx = DIAGNOSTICS_JS.indexOf("function _showDiagnosticToast");
   assert.ok(idx !== -1, "expected _showDiagnosticToast to exist");
-  var block = DIAGNOSTICS_JS.slice(idx, idx + 2000);
+  var block = DIAGNOSTICS_JS.slice(idx, idx + 2500);
 
   assert.match(
     block,
-    /_getToastContainer\(\)\.appendChild\(el\)/,
-    "_showDiagnosticToast must append into the shared stacking container, not document.body directly (lr-e901 placement/stacking defect)"
+    /showOverlay\(\{[^}]*kind:\s*"toast"/,
+    "_showDiagnosticToast must draw through the shared stacking overlay, not document.body directly (lr-e901 placement/stacking defect)"
   );
 });
 
-test("diagnostics.css: mobile media query keeps top-anchor behavior on the container (lr-2fdd intact)", () => {
-  var idx = DIAGNOSTICS_CSS.indexOf("@media (max-width: 768px)");
+test("overlay.css: the phone keeps the top-anchor behavior on the stack (lr-2fdd intact)", () => {
+  var idx = OVERLAY_CSS.indexOf("@media (max-width: 768px)");
   assert.ok(idx !== -1, "expected a mobile media query to exist");
-  var block = DIAGNOSTICS_CSS.slice(idx, idx + 900);
+  var block = OVERLAY_CSS.slice(idx, idx + 400);
 
   assert.match(
     block,
-    /#diagnostic-toast-container\s*\{[^}]*top:\s*calc\(var\(--safe-top\)/,
-    "mobile must keep the lr-2fdd top-anchor fix (clearing the notch/status bar via --safe-top) on the container"
+    /\.overlay-stack\s*\{[^}]*top:\s*calc\(var\(--safe-top\)/,
+    "mobile must keep the lr-2fdd top-anchor fix (clearing the notch/status bar via --safe-top) on the stack"
   );
 });

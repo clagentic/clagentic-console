@@ -81,7 +81,7 @@ async function rig(t) {
   dom.setupGlobals();
   var container = new dom.FakeElement("div");
   global.document.body.appendChild(container);
-  global.document.getElementById = function (id) { return id === "diagnostic-toast-container" ? container : null; };
+  global.document.getElementById = function (id) { return id === "overlay-stack" ? container : null; };
   var wsRef = await import(pathToFileURL(path.join(MODULES, "ws-ref.js")).href);
   var diagnostics = await import(dom.moduleUrl("diagnostics.js") + "?entry=" + (++instance));
 

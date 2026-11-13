@@ -45,7 +45,7 @@ async function client(t) {
   dom.setupGlobals();
   var container = new dom.FakeElement("div");
   global.document.body.appendChild(container);
-  global.document.getElementById = function (id) { return id === "diagnostic-toast-container" ? container : null; };
+  global.document.getElementById = function (id) { return id === "overlay-stack" ? container : null; };
   var sent = [];
   var socket = { readyState: 0, send: function (body) { sent.push(JSON.parse(body)); } };
   var wsRef = await import(pathToFileURL(path.join(MODULES, "ws-ref.js")).href);
@@ -148,7 +148,7 @@ test("Enter or Space on a toast button activates the button and does not dismiss
   var c = await client(t);
   c.socket.readyState = 1;
   c.diagnostics.addDiagnostic(confirmOffer("tok-k"));
-  var toast = c.container.querySelectorAll('[data-diag-source="build-update"]')[0];
+  var toast = c.container.querySelectorAll('[data-overlay-source="build-update"]')[0];
   var btn = c.button("Restart now");
   var fire = function (key, target) {
     toast._listeners.keydown.slice().forEach(function (fn) { fn({ key: key, target: target }); });
@@ -156,13 +156,13 @@ test("Enter or Space on a toast button activates the button and does not dismiss
   fire("Enter", btn);
   fire(" ", btn);
   t.mock.timers.tick(300);
-  assert.equal(c.container.querySelectorAll('[data-diag-source="build-update"]').length, 1, "still on screen");
+  assert.equal(c.container.querySelectorAll('[data-overlay-source="build-update"]').length, 1, "still on screen");
   btn.click();
   assert.equal(c.sent.length, 1, "the button still activates");
 
   fire("Escape", btn);
   t.mock.timers.tick(300);
-  assert.equal(c.container.querySelectorAll('[data-diag-source="build-update"]').length, 0, "Escape still dismisses");
+  assert.equal(c.container.querySelectorAll('[data-overlay-source="build-update"]').length, 0, "Escape still dismisses");
 });
 
 test("a re-issued confirmation replaces the spent one, even when its text is identical", async function (t) {
