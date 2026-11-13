@@ -79,6 +79,37 @@ img.emoji {
   --compact-card-height: 38px;
   --compact-card-height-touch: 54px;
   --compact-control-size: 28px;
+
+  /* Layer scale: every overlay takes its z-index from here, never a literal.
+     Order, low to high: raised in-flow content, anchored menus, modals and
+     panels, the toast/banner stack, tooltips. The toast layer sits above modals
+     so a toast raised while one is open is still read. */
+  --z-base: 10;
+  --z-menu: 200;
+  --z-modal: 400;
+  --z-toast: 9000;
+  --z-tooltip: 10000;
+
+  /* Toast and banner stack (css/overlay.css). One column, top-right on a wide
+     viewport and full width on a phone; the card chrome shared by every toast
+     and banner reads these. */
+  --overlay-stack-top: 48px;        /* clears the title bar */
+  --overlay-stack-inset: 8px;       /* gap to the viewport edge */
+  --overlay-gap: 8px;               /* between stacked cards */
+  --overlay-toast-gap: 4px;         /* between the rows of a toast */
+  --overlay-banner-gap: 10px;       /* between a banner's icon and its text */
+  --overlay-width: 360px;           /* card width on a wide viewport */
+  --overlay-radius: 10px;
+  --overlay-icon-radius: 8px;       /* the product logo in a banner's icon slot */
+  --overlay-pad-y: 10px;
+  --overlay-pad-x: 14px;
+  --overlay-accent-width: 3px;      /* severity edge on a card's left border */
+  --overlay-close-size: 22px;       /* the close control's hit area */
+  --overlay-close-inset: 6px;       /* its distance from the card's top-right corner */
+  --overlay-detail-size: 11px;      /* a toast's one-line detail */
+  --overlay-text-size: 13px;        /* a plain toast's message */
+  --overlay-icon-size: 12px;        /* the close control's glyph */
+  --overlay-rise: 8px;              /* how far a card slides in from above */
 }
 
 :root[data-chat-width="compact"] { --content-width: var(--chat-width-compact); }
@@ -191,74 +222,14 @@ html, body {
   overflow: hidden;
 }
 
-/* --- Toast --- */
-.toast {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%) translateY(8px);
-  background: var(--bg-alt);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 18px;
+/* --- Reload banner content ---
+   The card, its position, its close control and its severity edge come from
+   css/overlay.css; only what is inside the card is styled here. */
+.sw-update-banner-text {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   font-weight: 500;
-  z-index: 400;
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
-  pointer-events: none;
-  box-shadow: 0 4px 20px rgba(var(--shadow-rgb), 0.3);
-}
-
-.toast.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-/* lr-136f81: --warning-bg / --error-12 are translucent tokens designed for
-   inline diagnostic badges sitting inside an already-opaque panel
-   (diagnostics.css:310-312). A position:fixed overlay toast has live chat
-   content behind it, so a translucent background lets that content bleed
-   through and the toast reads as malformed. Layer the tint over the opaque
-   --bg-alt toast surface instead of using the translucent token directly —
-   --warning-bg itself stays untouched so the diagnostic-badge use case is
-   unaffected. */
-.toast.toast-warn {
-  background: linear-gradient(var(--warning-bg), var(--warning-bg)), var(--bg-alt);
-  border-color: var(--warning);
-  color: var(--warning);
-}
-.toast.toast-error {
-  background: linear-gradient(var(--error-12), var(--error-12)), var(--bg-alt);
-  border-color: var(--error);
-  color: var(--error);
-}
-
-/* SW update banner — shown when a new service worker activates while the page is visible */
-.sw-update-banner {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%) translateY(8px);
-  background: var(--bg-alt);
-  color: var(--text);
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  padding: 8px 12px 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  z-index: 400;
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
-  box-shadow: 0 4px 20px rgba(var(--shadow-rgb), 0.3);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  white-space: nowrap;
-}
-.sw-update-banner.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 .sw-update-banner-btn {
   background: var(--accent);
@@ -272,35 +243,5 @@ html, body {
 }
 .sw-update-banner-btn:hover {
   filter: brightness(1.1);
-}
-.sw-update-banner-dismiss {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 4px;
-  line-height: 1;
-}
-.sw-update-banner-dismiss:hover {
-  color: var(--text);
-}
-
-/* Mobile (lr-2fdd): bottom:80px occludes the bottom-nav / input box / content
-   on narrow viewports (iOS screenshot showed the toast covering content just
-   above the Projects/Chat/Team/More nav). Top-anchor instead — per Andy's
-   steer ("should top align more than bottom align") — clearing the notch /
-   status bar via the safe-area inset. Desktop placement is unchanged. */
-@media (max-width: 768px) {
-  .toast,
-  .sw-update-banner {
-    top: calc(var(--safe-top) + 12px);
-    bottom: auto;
-    transform: translateX(-50%) translateY(-8px);
-  }
-  .toast.visible,
-  .sw-update-banner.visible {
-    transform: translateX(-50%) translateY(0);
-  }
 }
 

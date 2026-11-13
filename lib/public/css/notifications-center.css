@@ -27,25 +27,15 @@
 .notif-badge.hidden { display: none; }
 
 /* ========================================================
-   Banner container (fixed top-right, stacks down)
+   Notification banner content
+   The card (position, layer, chrome, close control) is the shared overlay
+   (overlay.css); only what is inside it is styled here.
    ======================================================== */
-.notif-banner-container {
-  position: fixed;
-  top: 48px;
-  right: 8px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  pointer-events: none;
-  width: 340px;
-}
 
 /* "Clear all" pill — appears at the top of the stack when 2+ banners
    are showing. Small, muted, aligned to the right so it sits above the
    banners' corner without stealing attention. */
 .notif-banner-clear-all {
-  pointer-events: auto;
   align-self: flex-end;
   display: inline-flex;
   align-items: center;
@@ -72,33 +62,9 @@
   height: 12px;
 }
 
-/* Individual banner */
+/* A banner opens its session when tapped. */
 .notif-banner {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: var(--bg-alt, var(--bg));
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.22);
-  pointer-events: auto;
   cursor: pointer;
-  opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s ease;
-}
-.notif-banner.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-.notif-banner.hide {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-.notif-banner:hover {
-  border-color: var(--border-bright, var(--accent));
 }
 
 .notif-banner-icon {
@@ -114,6 +80,7 @@
   color: var(--text-muted);
 }
 .notif-banner-icon .lucide { width: 16px; height: 16px; }
+.notif-banner-logo { border-radius: var(--overlay-icon-radius); }
 .notif-banner-emoji { font-size: 18px; line-height: 1; }
 .notif-banner-avatar {
   width: 100%;
@@ -208,35 +175,6 @@
 .notif-banner-goto:hover { color: var(--text); }
 .notif-banner-goto .lucide { width: 13px; height: 13px; }
 
-/* Banner close button */
-.notif-banner-close {
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  background: var(--bg-surface, var(--bg-alt));
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 999px;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
-  box-shadow: 0 2px 6px rgba(var(--shadow-rgb), 0.20);
-  z-index: 2;
-}
-.notif-banner:hover .notif-banner-close { opacity: 1; }
-.notif-banner-close:hover {
-  color: var(--text);
-  border-color: var(--border-bright, var(--border));
-  transform: scale(1.08);
-}
-.notif-banner-close .lucide { width: 12px; height: 12px; }
-
 /* Update available banner */
 .notif-banner-update .notif-banner-icon {
   background: none;
@@ -286,20 +224,3 @@
 .notif-banner-update-now:hover { opacity: 0.85; }
 .notif-banner-update-now:disabled { opacity: 0.6; cursor: default; }
 
-/* light-theme overrides removed — all banner styles now use CSS vars */
-
-/* ========================================================
-   Mobile
-   ======================================================== */
-@media (max-width: 768px) {
-  .notif-banner-container {
-    right: 8px;
-    left: 8px;
-    width: auto;
-  }
-  .notif-banner-close {
-    top: -7px;
-    left: -7px;
-  }
-  .notif-banner:hover .notif-banner-close { opacity: 1; }
-}
