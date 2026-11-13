@@ -407,12 +407,34 @@ var MENU_SURFACES = [
   { name: "schedule popover", kind: "popover", node: "page", place: { placement: "below" }, at: { left: "100px", top: "126px" } },
   { name: "schedule end-type list", kind: "menu", node: "page", opener: true, place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
   { name: "loop pending popover", kind: "popover", node: "new", opener: true, id: "loop-pending-popover", place: { placement: "below-right-aligned" }, at: { left: "90px", top: "126px" } },
+  // B2: the static and bespoke panels and popovers. An `inline` panel stays in
+  // the column its container lays out: no anchor, so popover-position.js leaves it.
+  { name: "usage panel", b2: true, kind: "popover", node: "page", inline: true, closeButton: true, at: {} },
+  { name: "status panel", b2: true, kind: "popover", node: "page", inline: true, opener: true, closeButton: true, at: {} },
+  { name: "diagnostics panel", b2: true, kind: "popover", node: "page", inline: true, opener: true, closeButton: true, at: {} },
+  { name: "notification menu", b2: true, kind: "menu", node: "page", opener: true, place: { placement: "below-right-aligned", gap: 6 }, at: { left: "90px", top: "126px" } },
+  { name: "update popover", b2: true, kind: "popover", node: "page", opener: true, place: { placement: "below-right-aligned", gap: 6 }, at: { left: "90px", top: "126px" } },
+  { name: "extension popover", b2: true, kind: "popover", node: "page", opener: true, place: { placement: "below", gap: 8 }, at: { left: "100px", top: "128px" } },
+  { name: "rate-limit popover", b2: true, passive: true, kind: "popover", node: "new", place: { placement: "below-center", gap: 8 }, at: { left: "95px", top: "128px" } },
+  { name: "tool-palette menu", b2: true, kind: "menu", node: "new", point: { x: 300, y: 200 }, at: { left: "300px", top: "200px" } },
+  { name: "profile popover", b2: true, kind: "popover", node: "built", opener: true, closeButton: true, place: { placement: "above", gap: 8 }, at: { left: "100px", top: "62px" } },
+  { name: "speech-to-text language popover", b2: true, kind: "popover", node: "new", opener: true, place: { placement: "above", gap: 8 }, at: { left: "100px", top: "62px" } },
+  { name: "scheduler create popover", b2: true, kind: "popover", node: "page", opener: true, closeButton: true, place: { placement: "right", gap: 8, margin: 10 }, at: { left: "148px", top: "100px" } },
+  { name: "scheduler task list", b2: true, kind: "menu", node: "page", opener: true, place: { placement: "below", gap: 6 }, at: { left: "100px", top: "126px" } },
+  { name: "scheduler colour palette", b2: true, kind: "menu", node: "page", opener: true, place: { placement: "below", gap: 6 }, at: { left: "100px", top: "126px" } },
 ];
 
+function rowNamed(name) { return MENU_SURFACES.filter(function (s) { return s.name === name; })[0]; }
+
 function openSurface(m, row) {
-  var anchor = row.point || anchorEl(m);
-  var opts = Object.assign({ kind: row.kind, anchor: anchor, doc: m.doc, id: row.id, closeButton: row.closeButton }, row.place);
-  if (row.opener) opts.opener = anchor;
+  // The control the surface hangs from, or is opened by; a point has none.
+  var control = row.point ? null : anchorEl(m);
+  var anchor = row.point || control;
+  var opts = Object.assign({ kind: row.kind, doc: m.doc, id: row.id, closeButton: row.closeButton }, row.place);
+  if (row.inline) opts.inline = true;
+  else opts.anchor = anchor;
+  if (row.passive) opts.passive = true;
+  if (row.opener) opts.opener = control;
   if (row.node === "new") opts.content = "<span>x</span>";
   else {
     opts.el = sized(m.doc.createElement("div"), { width: 50, height: 30 });
@@ -443,7 +465,9 @@ test("menu: each B1 surface opens as the shared menu, placed by popover-position
     assert.equal(el.classList.contains("hidden"), false, row.name + ": an adopted page node is shown");
     assert.ok(el.parentNode, row.name + ": in the page");
     assert.deepEqual({ left: el.style.left, top: el.style.top, position: el.style.position },
-      { left: row.at.left, top: row.at.top, position: "fixed" }, row.name + ": placed by popover-position.js");
+      { left: row.at.left, top: row.at.top, position: row.inline ? undefined : "fixed" },
+      row.name + (row.inline ? ": left in its container's flow" : ": placed by popover-position.js"));
+    assert.equal(el.classList.contains("overlay-menu-inline"), !!row.inline, row.name + ": the inline option is a class");
     assert.equal(open.handle.isOpen(), true, row.name + ": tracked by the registry");
     assert.equal(el.querySelectorAll(".overlay-close").length, row.closeButton ? 1 : 0, row.name + ": the close control only where asked");
   }
@@ -563,10 +587,20 @@ var B1_SHEETS = [
   { file: "scheduler.css", selectors: [".schedule-popover"] },
   { file: "scheduler-modal.css", selectors: [".sched-custom-end-list"] },
   { file: "loop.css", selectors: [".loop-pending-popover"] },
+  // B2.
+  // The three adopted info panels set their layer on their own node (the column
+  // sits below modals); the stylesheet row above asserts it is the menu token.
+  { file: "menus.css", selectors: ["#notif-menu", "#usage-panel", "#status-panel", "#diagnostics-panel"], ownLayer: ["#usage-panel", "#status-panel", "#diagnostics-panel"] },
+  { file: "overlays.css", selectors: [".ext-popover", ".top-bar-popover"] },
+  { file: "title-bar.css", selectors: [".rate-limit-popover"] },
+  { file: "sidebar.css", selectors: [".tool-palette-ctx-menu"] },
+  { file: "profile.css", selectors: [".profile-popover"] },
+  { file: "stt.css", selectors: [".stt-lang-popover"] },
+  { file: "scheduler-modal.css", selectors: [".sched-create-popover", ".sched-create-color-palette", ".sched-create-task-list"] },
 ];
 var CHROME_PROPS = /^(position|z-index|top|left|right|bottom|background|background-color|border|border-radius|box-shadow)$/;
 
-test("stylesheet: no B1 menu keeps its own position, layer or card chrome", function () {
+test("stylesheet: no B1 or B2 menu keeps its own position, layer or card chrome", function () {
   B1_SHEETS.forEach(function (sheet) {
     var rules = cssRules.rules(css(sheet.file));
     sheet.selectors.forEach(function (selector) {
@@ -574,7 +608,8 @@ test("stylesheet: no B1 menu keeps its own position, layer or card chrome", func
       assert.ok(hits.length > 0, sheet.file + ": " + selector + " still styles its content");
       hits.forEach(function (r) {
         var props = r.body.split(";").map(function (d) { return d.split(":")[0].trim(); }).filter(Boolean);
-        assert.deepEqual(props.filter(function (p) { return CHROME_PROPS.test(p); }), [],
+        var allowed = (sheet.ownLayer || []).indexOf(selector) !== -1 ? "z-index" : null;
+        assert.deepEqual(props.filter(function (p) { return CHROME_PROPS.test(p) && p !== allowed; }), [],
           sheet.file + ": " + selector + " must leave position, layer and chrome to overlay.css");
       });
     });
@@ -597,12 +632,251 @@ var B1_MODULES = [
   { file: "sidebar-sessions.js", layer: true }, { file: "terminal.js", layer: true },
   { file: "sticky-notes.js", layer: false }, { file: "scheduler.js", layer: true },
   { file: "scheduler-config.js", layer: true }, { file: "app-loop-ui.js", layer: true },
+  // B2. `clicks` and `keys` are the document listeners the module may still add:
+  // none dismisses a menu (the registry does); tool-palette.js keeps the two of
+  // its hotkey-pick mode.
+  { file: "notifications.js", layer: true, clicks: 0, keys: 0 }, { file: "diagnostics.js", layer: true, clicks: 0, keys: 0 },
+  { file: "app-panels.js", layer: true }, { file: "info-panel.js", layer: true, clicks: 0, keys: 0 },
+  { file: "app-rate-limit.js", layer: true, clicks: 0, keys: 0 }, { file: "tool-palette.js", layer: true, clicks: 1, keys: 1 },
+  { file: "profile.js", layer: true, clicks: 0, keys: 0 }, { file: "stt.js", layer: true, clicks: 0, keys: 0 },
 ];
 
-test("modules: no B1 module sets a menu's z-index or places a menu by hand", function () {
+test("modules: no B1 or B2 module sets a menu's z-index or places a menu by hand", function () {
   B1_MODULES.forEach(function (row) {
     var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", row.file), "utf8");
     if (row.layer) assert.ok(!/zIndex/.test(src), row.file + " must take its layer from the token");
     assert.ok(!/\bpositionPopover\b|\bpositionAtPoint\b/.test(src), row.file + " places menus through showOverlay, not directly");
+    if (typeof row.clicks === "number") {
+      var clicks = src.match(/document\.addEventListener\(\s*["']click["']/g) || [];
+      var keys = src.match(/document\.addEventListener\(\s*["']keydown["']/g) || [];
+      assert.equal(clicks.length, row.clicks, row.file + ": document click listeners (the registry closes menus on an outside click)");
+      assert.equal(keys.length, row.keys, row.file + ": document keydown listeners (the registry closes menus on Escape)");
+    }
   });
+  // The scheduler's dropdowns and create popover have no listener of their own either.
+  var sched = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", "scheduler-config.js"), "utf8");
+  assert.ok(!/document\.addEventListener\(\s*["'](click|keydown)["']/.test(sched), "scheduler-config.js: outside click and Escape are the registry's");
+});
+
+test("stylesheet: the info-panels column sits below modals, each adopted panel takes the menu layer; an inline panel adds no layer or float", function () {
+  var MENUS = css("menus.css");
+  // --z-base is below --z-modal (the layer-scale test above asserts the order).
+  assert.equal(cssRules.valueAt(MENUS, "#info-panels", "z-index", DESKTOP), "var(--z-base)", "the column is below --z-modal");
+  ["#usage-panel", "#status-panel", "#diagnostics-panel"].forEach(function (id) {
+    assert.equal(cssRules.valueAt(MENUS, id, "z-index", DESKTOP), "var(--z-menu)", id + " takes the menu layer on its own node");
+  });
+  assert.notEqual(cssRules.valueAt(MENUS, "#context-panel", "z-index", DESKTOP), "var(--z-menu)", "the context panel is not a menu");
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu-inline", "position", DESKTOP), "relative");
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu-inline", "z-index", DESKTOP), "auto");
+});
+
+// ---------------------------------------------------------------------------
+// B2: one open across both groups, Escape beside a toast, owned dropdowns
+// ---------------------------------------------------------------------------
+
+test("menu: B2 one open: a B2 pair and a B1 and B2 pair close each other, in both directions", async function (t) {
+  var PAIRS = [
+    { name: "B2 and B2", a: "notification menu", b: "profile popover" },
+    { name: "B2 and B2, page node and built", a: "update popover", b: "tool-palette menu" },
+    { name: "an info panel and an anchored B2 popover", a: "diagnostics panel", b: "extension popover" },
+    { name: "B1 and B2", a: "session context menu", b: "scheduler create popover" },
+    { name: "B1 page node and B2 inline panel", a: "schedule popover", b: "usage panel" },
+  ];
+  for (var i = 0; i < PAIRS.length; i++) {
+    var pair = PAIRS[i];
+    for (var d = 0; d < 2; d++) {
+      var first = d === 0 ? pair.a : pair.b;
+      var second = d === 0 ? pair.b : pair.a;
+      t.mock.timers.reset();
+      var m = await menuBrowser(t);
+      var one = openSurface(m, rowNamed(first)).handle;
+      var two = openSurface(m, rowNamed(second)).handle;
+      assert.equal(gone(one), true, pair.name + ": " + first + " closed when " + second + " opened");
+      assert.equal(two.isOpen(), true, pair.name + ": " + second + " is the open one");
+      assert.equal(m.registry.getOpenMenu(), two.el, pair.name + ": the registry holds " + second);
+      assert.equal(m.handlerCount("click"), 1, pair.name + ": one outside-click handler");
+      assert.equal(m.handlerCount("keydown"), 1, pair.name + ": one Escape handler");
+    }
+  }
+});
+
+test("menu: a passive notice opens beside a menu the user has open and closes nothing; Escape takes the menu first", async function (t) {
+  var ROWS = [
+    { name: "B1 menu", open: "session context menu" },
+    { name: "B2 menu", open: "notification menu" },
+  ];
+  for (var i = 0; i < ROWS.length; i++) {
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    var menu = openSurface(m, rowNamed(ROWS[i].open)).handle;
+    var notice = openSurface(m, rowNamed("rate-limit popover")).handle;
+    assert.equal(menu.isOpen(), true, ROWS[i].name + ": the notice leaves the open menu open");
+    assert.equal(notice.isOpen(), true, ROWS[i].name + ": the notice is shown");
+    assert.equal(m.registry.getOpenMenu(), menu.el, ROWS[i].name + ": the registry still holds the menu");
+    m.escape();
+    assert.equal(gone(menu), true, ROWS[i].name + ": Escape closes the menu first");
+    assert.equal(notice.isOpen(), true, ROWS[i].name + ": and leaves the notice");
+    m.escape();
+    assert.equal(gone(notice), true, ROWS[i].name + ": a second Escape closes the notice");
+  }
+});
+
+test("menu: Escape closes each B2 surface and leaves a toast; with no menu open it leaves the toast too", async function (t) {
+  var rows = MENU_SURFACES.filter(function (s) { return s.b2; });
+  for (var i = 0; i < rows.length; i++) {
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    m.b.utils.showToast("Saved", "error", "detail");
+    var toast = m.b.stack().querySelector(".overlay-toast");
+    var card = m.overlay.showOverlay({ kind: "toast", content: "x", dismissible: true });
+    var handle = openSurface(m, rows[i]).handle;
+    m.escape();
+    assert.equal(gone(handle), true, rows[i].name + ": Escape closes it");
+    assert.equal(toast.classList.contains("hide"), false, rows[i].name + ": the plain toast stays");
+    assert.equal(card.el.classList.contains("hide"), false, rows[i].name + ": the dismissible toast stays");
+    m.escape();
+    assert.equal(card.el.classList.contains("hide"), false, rows[i].name + ": with no menu open Escape leaves the toast");
+  }
+});
+
+test("menu: a dropdown a popover owns leaves the popover open; a click inside the popover closes the dropdown alone; Escape peels one at a time", async function (t) {
+  var m = await menuBrowser(t);
+  var pop = openSurface(m, rowNamed("scheduler create popover"));
+  // The dropdown belongs to `owner` (the current popover unless one is given).
+  var dropdown = function (owner) {
+    return m.overlay.showOverlay({
+      kind: "menu", el: sized(m.doc.createElement("div"), { width: 50, height: 30 }), retain: true,
+      parent: (owner || pop.handle).el, anchor: anchorEl(m), doc: m.doc,
+    });
+  };
+
+  var dd = dropdown();
+  assert.equal(dd.isOpen() && pop.handle.isOpen(), true, "opening a dropdown leaves its popover open");
+  assert.equal(m.registry.getOpenMenu(), dd.el, "the innermost menu is the dropdown");
+
+  m.click(dd.el);
+  assert.equal(dd.isOpen() && pop.handle.isOpen(), true, "a click inside the dropdown leaves both");
+  m.click(pop.inside);
+  assert.equal(dd.isOpen(), false, "a click inside the popover closes the dropdown");
+  assert.equal(pop.handle.isOpen(), true, "and leaves the popover");
+
+  dd = dropdown();
+  m.escape();
+  assert.equal(dd.isOpen(), false, "the first Escape closes the dropdown");
+  assert.equal(pop.handle.isOpen(), true, "and leaves the popover");
+  m.escape();
+  assert.equal(pop.handle.isOpen(), false, "the second Escape closes the popover");
+
+  pop = openSurface(m, rowNamed("scheduler create popover"));
+  dd = dropdown();
+  m.click(m.doc.body);
+  assert.equal(dd.isOpen() || pop.handle.isOpen(), false, "a click outside closes both");
+
+  pop = openSurface(m, rowNamed("scheduler create popover"));
+  dd = dropdown();
+  pop.handle.close();
+  assert.equal(dd.isOpen(), false, "closing the popover closes the dropdown it owns");
+
+  var other = openSurface(m, rowNamed("scheduler create popover"));
+  dd = dropdown(other.handle);
+  assert.equal(dd.isOpen() && other.handle.isOpen(), true, "the dropdown is open inside the popover it belongs to");
+  var menu = openSurface(m, rowNamed("notification menu")).handle;
+  assert.equal(dd.isOpen() || other.handle.isOpen(), false, "another menu opening closes the popover and its dropdown");
+  assert.equal(menu.isOpen(), true, "and is the open one");
+
+  // A named parent that is not open counts as no parent: the dropdown is
+  // top-level and closes the other open menu (one-open).
+  var closedParent = openSurface(m, rowNamed("scheduler create popover")).handle;
+  closedParent.close();
+  menu = openSurface(m, rowNamed("notification menu")).handle;
+  dd = dropdown(closedParent);
+  assert.equal(menu.isOpen(), false, "a dropdown whose parent is not open closes the open menu");
+  assert.equal(dd.isOpen(), true, "and is open itself");
+});
+
+test("registry: a menu opened from a close hook stays open, whether the close came from closeMenu or Escape", async function (t) {
+  var ROWS = [
+    { name: "closeMenu", close: function (m, first) { first.close(); } },
+    { name: "Escape", close: function (m) { m.escape(); } },
+  ];
+  for (var i = 0; i < ROWS.length; i++) {
+    t.mock.timers.reset();
+    var m = await menuBrowser(t);
+    var opened = null;
+    var first = m.overlay.showOverlay({
+      kind: "popover", content: "x", doc: m.doc,
+      onRemove: function () { opened = m.overlay.showOverlay({ kind: "popover", content: "y", doc: m.doc }); },
+    });
+    ROWS[i].close(m, first);
+    assert.equal(first.isOpen(), false, ROWS[i].name + ": the first menu closed");
+    assert.ok(opened && opened.isOpen(), ROWS[i].name + ": the menu its close hook opened is still open");
+    assert.equal(m.registry.getOpenMenu(), opened.el, ROWS[i].name + ": the registry holds it");
+  }
+});
+
+test("diagnostics panel: focus returns to its toggle on Escape or its close control, not when another menu opens or a click lands elsewhere", async function (t) {
+  var b = await browser(t);
+  var overlay = await import(dom.moduleUrl("overlay.js"));
+  var registry = await import(dom.moduleUrl("overlay-registry.js"));
+  // The page's document does not fire events by itself; collect the registry's.
+  var listeners = {};
+  global.document.addEventListener = function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); };
+  var panel = new dom.FakeElement("div");
+  panel.id = "diagnostics-panel";
+  panel.className = "hidden";
+  var list = new dom.FakeElement("div");
+  list.id = "diagnostics-panel-list";
+  var toggle = new dom.FakeElement("button");
+  toggle.id = "diagnostics-panel-btn";
+  var focused = 0;
+  toggle.focus = function () { focused++; };
+  [panel, list, toggle].forEach(function (el) { global.document.body.appendChild(el); });
+  b.diagnostics.initDiagnostics();
+
+  var ROWS = [
+    { name: "Escape", restores: true, act: function () { listeners.keydown.forEach(function (fn) { fn({ key: "Escape" }); }); } },
+    { name: "its close control", restores: true, act: function () { panel.querySelector(".overlay-close").click(); } },
+    { name: "another menu opening", restores: false, act: function () { overlay.showOverlay({ kind: "popover", content: "x" }); } },
+    { name: "a click on another control", restores: false, act: function () {
+      listeners.click.forEach(function (fn) { fn({ target: global.document.body }); });
+    } },
+  ];
+  ROWS.forEach(function (row) {
+    registry.closeOpenMenu();
+    toggle.click();
+    assert.equal(registry.isMenuOpen(panel), true, row.name + ": the panel is open");
+    focused = 0;
+    row.act();
+    assert.equal(registry.isMenuOpen(panel), false, row.name + ": the panel closed");
+    assert.equal(focused, row.restores ? 1 : 0, row.name + (row.restores ? ": focus returns to the toggle" : ": focus is not moved to the toggle"));
+  });
+});
+
+test("menu: Escape is offered to the innermost menu first, and true keeps it open", async function (t) {
+  var m = await menuBrowser(t);
+  var offered = 0;
+  var handle = m.overlay.showOverlay({
+    kind: "popover", content: "x", doc: m.doc,
+    onEscape: function () { offered++; return offered === 1; },
+  });
+  m.escape();
+  assert.equal(handle.isOpen(), true, "a spent Escape leaves it open");
+  m.escape();
+  assert.equal(handle.isOpen(), false, "the next Escape closes it");
+  assert.equal(offered, 2);
+});
+
+test("profile popover: its close control is the shared one, and the module keeps no own close button", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", "profile.js"), "utf8");
+  assert.match(src, /closeButton:\s*true/, "the popover asks for the shared close control");
+  assert.ok(!/profile-close-btn/.test(src) && !/profile-close-btn/.test(css("profile.css")), "no .profile-close-btn is left");
+});
+
+test("B2 close controls: the surfaces that showed their own now use the shared one", function () {
+  var html = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "index.html"), "utf8");
+  ["usage-panel-close", "status-panel-close", "diagnostics-panel-close", "sched-create-cancel"].forEach(function (id) {
+    assert.ok(html.indexOf(id) === -1, id + " is gone from index.html");
+  });
+  var panels = ["usage panel", "status panel", "diagnostics panel", "scheduler create popover", "profile popover"];
+  panels.forEach(function (name) { assert.equal(rowNamed(name).closeButton, true, name + " draws the shared close control"); });
 });

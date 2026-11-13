@@ -262,13 +262,7 @@
    ============================ */
 
 .sched-create-popover {
-  position: fixed;
-  z-index: 320;
   width: 360px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.28), 0 2px 8px rgba(var(--shadow-rgb), 0.12);
   display: flex;
   flex-direction: column;
   overflow: visible;
@@ -278,12 +272,12 @@
   display: none;
 }
 
-/* --- Top row: date + time + close --- */
+/* --- Top row: date + time, and room for the shared close control --- */
 .sched-create-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 10px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 10px 12px;
   gap: 6px;
 }
 
@@ -351,30 +345,6 @@
   height: 13px;
 }
 
-/* --- Close button --- */
-.sched-create-close-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 3px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.sched-create-close-btn:hover {
-  color: var(--text);
-  background: var(--hover);
-}
-
-.sched-create-close-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
 /* --- Title row --- */
 .sched-create-title-row {
   display: flex;
@@ -413,18 +383,10 @@
 }
 
 .sched-create-color-palette {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.25);
   padding: 8px;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 6px;
-  z-index: 340;
 }
 
 .sched-create-color-palette.hidden {
@@ -551,15 +513,6 @@
 }
 
 .sched-create-task-list {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: -26px;
-  right: -14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.25);
-  z-index: 340;
   max-height: 200px;
   overflow-y: auto;
   padding: 4px;
@@ -901,23 +854,6 @@
 .sched-delete-option.cancel:hover {
   background: rgba(var(--overlay-rgb), 0.04);
 }
-
-/* --- Recurrence dropdown (floating) --- */
-.sched-create-recurrence-dropdown {
-  position: fixed;
-  width: 280px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.25);
-  z-index: 330;
-  overflow: hidden;
-}
-
-.sched-create-recurrence-dropdown.hidden {
-  display: none;
-}
-
 
 .sched-create-interval-btn {
   background: none;
@@ -1485,10 +1421,5 @@
 @media (max-width: 480px) {
   .sched-create-popover {
     width: calc(100vw - 20px);
-    left: 10px !important;
-    right: 10px !important;
-  }
-  .sched-create-recurrence-dropdown {
-    width: calc(100vw - 24px);
   }
 }

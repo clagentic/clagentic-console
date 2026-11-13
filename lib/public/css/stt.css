@@ -92,15 +92,6 @@
 
 /* --- Language popover --- */
 .stt-lang-popover {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  margin-bottom: 8px;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 -4px 24px rgba(var(--shadow-rgb), 0.4);
-  z-index: 20;
   min-width: 200px;
   overflow: hidden;
 }

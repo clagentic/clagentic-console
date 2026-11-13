@@ -57,6 +57,14 @@
   z-index: var(--z-menu);
 }
 
+/* A panel that keeps its place in the column its container lays out (the info
+   panels): no float, and no layer here; the surface sets its own layer on its
+   node. The close control still anchors to its corner. */
+.overlay-menu-inline {
+  position: relative;
+  z-index: auto;
+}
+
 .overlay {
   position: relative;
   display: flex;
@@ -106,6 +114,8 @@
 }
 .overlay-close {
   position: absolute;
+  /* Above the card's own raised content (a banner image, an avatar row). */
+  z-index: var(--z-base);
   top: var(--overlay-close-inset);
   right: var(--overlay-close-inset);
   display: flex;
