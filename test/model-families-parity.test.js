@@ -32,6 +32,27 @@ test('lr-d91ecf: CLAUDE_MODEL_FAMILIES is identical in both copies', () => {
   assert.deepStrictEqual(cjs.CLAUDE_MODEL_FAMILIES, esm.CLAUDE_MODEL_FAMILIES);
 });
 
+// Families derived from a vendor list's alias entries are identical in both copies.
+const DERIVE_CASES = [
+  [{ value: 'default' }, { value: 'opus' }, { value: 'newfam' }, { value: 'claude-opus-4-5' }],
+  ['sonnet', 'haiku', 'Sonnet'],
+  [{ value: 'default' }],
+  [],
+];
+
+for (const models of DERIVE_CASES) {
+  test('derived families parity — ' + JSON.stringify(models), () => {
+    assert.deepStrictEqual(cjs.deriveClaudeFamilies(models), esm.deriveClaudeFamilies(models));
+    try {
+      assert.strictEqual(cjs.setClaudeModelFamilies(models), esm.setClaudeModelFamilies(models));
+      assert.deepStrictEqual(cjs.CLAUDE_MODEL_FAMILIES, esm.CLAUDE_MODEL_FAMILIES);
+    } finally {
+      cjs.resetClaudeModelFamilies();
+      esm.resetClaudeModelFamilies();
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // isSonnetModel / isOpusModel / isHaikuModel parity
 // ---------------------------------------------------------------------------
