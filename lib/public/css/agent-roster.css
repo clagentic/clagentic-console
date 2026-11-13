@@ -4,6 +4,40 @@
 
 .ar-list { display: flex; flex-direction: column; gap: 8px; }
 
+/* The three groups: named agents, built-in helpers, models. The lower two start collapsed. */
+.ar-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.ar-group-title, .ar-group-toggle {
+  margin: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.ar-group-toggle {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.ar-group-toggle::before { content: "\25B8"; display: inline-block; width: 14px; }
+.ar-group-toggle[aria-expanded="true"]::before { content: "\25BE"; }
+.ar-group-toggle:hover { color: var(--text); }
+
+/* A helper or model row with no chosen avatar: the neutral tool or chip icon, or the vendor logo. */
+.ar-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: rgba(var(--overlay-rgb), 0.08);
+}
+.ar-glyph svg { width: 22px; height: 22px; }
+.ar-avatar.ar-logo { border-radius: 8px; object-fit: contain; }
+
 .ar-row {
   display: flex;
   flex-direction: column;
