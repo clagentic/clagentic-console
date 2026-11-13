@@ -255,7 +255,7 @@ html, body {
 }
 .sw-update-banner-btn {
   background: var(--accent);
-  color: var(--accent-text, #1a1208);
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   padding: 4px 10px;

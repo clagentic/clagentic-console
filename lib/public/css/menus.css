@@ -62,7 +62,7 @@
 
 #header-keepalive-btn.hidden { display: none; }
 #header-keepalive-btn:hover { color: var(--text-secondary); background: rgba(var(--overlay-rgb),0.04); border-color: var(--border); }
-#header-keepalive-btn.active { color: var(--accent, #63b3ed); }
+#header-keepalive-btn.active { color: var(--accent); }
 #header-keepalive-btn .lucide { width: 13px; height: 13px; }
 
 #header-info-btn {
@@ -188,7 +188,7 @@
   top: -4px;
   right: -4px;
   background: var(--success);
-  color: #fff;
+  color: var(--on-success);
   font-size: 9px;
   font-weight: 700;
   min-width: 14px;
@@ -231,7 +231,7 @@
 #qr-overlay.hidden { display: none; }
 
 #qr-overlay-inner {
-  background: #fff;
+  background: var(--bg-alt);
   border-radius: 16px;
   padding: 28px;
   display: flex;
@@ -241,12 +241,15 @@
   box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
 }
 
+/* A QR code scans as dark modules on a light quiet zone in both themes, so this
+   one surface stays light whatever the theme is. */
+#qr-canvas { background: #fff; box-shadow: 0 0 0 8px #fff; }
 #qr-canvas table { border-collapse: collapse; }
 #qr-canvas td { width: 4px; height: 4px; padding: 0; }
 
 #qr-url {
   font-size: 13px;
-  color: #555;
+  color: var(--text-secondary);
   word-break: break-all;
   text-align: center;
   max-width: 260px;
@@ -256,13 +259,13 @@
   border-radius: 6px;
   transition: background 0.15s, color 0.15s;
 }
-#qr-url:hover { background: #eee; color: #222; }
-#qr-url:active { background: #ddd; }
-#qr-url.copied { color: #16a34a; font-weight: 600; }
+#qr-url:hover { background: var(--bg-hover); color: var(--text); }
+#qr-url:active { background: var(--bg-active); }
+#qr-url.copied { color: var(--success); font-weight: 600; }
 .qr-hint {
   display: block;
   font-size: 11px;
-  color: #999;
+  color: var(--text-dimmer);
   margin-top: 2px;
   font-weight: 400;
 }
@@ -272,17 +275,17 @@
   gap: 6px;
   margin-top: 12px;
   padding: 8px 16px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
-  color: #333;
+  background: var(--bg);
+  color: var(--text);
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
 }
-.qr-share-btn:hover { background: #f5f5f5; }
+.qr-share-btn:hover { background: var(--bg-hover); }
 .qr-share-btn .lucide { width: 14px; height: 14px; }
 .qr-share-btn.hidden { display: none; }
 
@@ -389,7 +392,7 @@
 
 .notif-option input:checked + .toggle-track .toggle-thumb {
   transform: translateX(14px);
-  background: #fff;
+  background: var(--on-accent);
 }
 
 /* --- Notification menu items --- */
@@ -624,7 +627,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--warning, #e5a83d);
+  color: var(--warning);
 }
 
 /* --- Older models disclosure (lr-e03635) — session-chip model picker's
@@ -693,7 +696,7 @@
 .config-segment-btn.active {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(var(--accent-rgb, 99, 102, 241), 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
   font-weight: 600;
 }
 
@@ -735,7 +738,7 @@
 }
 
 .config-toggle-btn.active {
-  background: rgba(var(--accent-rgb, 99, 102, 241), 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   border-color: var(--accent);
 }
 

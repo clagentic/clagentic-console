@@ -43,7 +43,7 @@
   border-top: none;
   border-radius: 0 0 10px 10px;
   padding: 6px 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.12);
 }
 
 #find-in-session-input {
@@ -95,15 +95,15 @@
 
 /* Highlight marks */
 mark.session-search-highlight {
-  background: var(--accent-30, rgba(255, 165, 0, 0.3));
+  background: var(--accent-30);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
 }
 
 mark.session-search-highlight-active {
-  background: var(--accent, #f59e0b);
-  color: var(--bg, #fff);
+  background: var(--accent);
+  color: var(--on-accent);
   border-radius: 2px;
   padding: 0 1px;
 }

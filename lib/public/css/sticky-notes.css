@@ -37,7 +37,7 @@
   top: -4px;
   right: -4px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 9px;
   font-weight: 700;
   min-width: 14px;
@@ -79,21 +79,29 @@
   transition: none;
 }
 
-/* --- Note color themes (light) --- */
-.sticky-note[data-color="yellow"] { background: color-mix(in srgb, #FFF9C4 calc(var(--note-opacity, 1) * 100%), transparent); border: 1px solid color-mix(in srgb, #EFD74E calc(var(--note-opacity, 1) * 100%), transparent); }
-.sticky-note[data-color="blue"]   { background: color-mix(in srgb, #BBDEFB calc(var(--note-opacity, 1) * 100%), transparent); border: 1px solid color-mix(in srgb, #64B5F6 calc(var(--note-opacity, 1) * 100%), transparent); }
-.sticky-note[data-color="green"]  { background: color-mix(in srgb, #C8E6C9 calc(var(--note-opacity, 1) * 100%), transparent); border: 1px solid color-mix(in srgb, #66BB6A calc(var(--note-opacity, 1) * 100%), transparent); }
-.sticky-note[data-color="pink"]   { background: color-mix(in srgb, #F8BBD0 calc(var(--note-opacity, 1) * 100%), transparent); border: 1px solid color-mix(in srgb, #F06292 calc(var(--note-opacity, 1) * 100%), transparent); }
-.sticky-note[data-color="orange"] { background: color-mix(in srgb, #FFE0B2 calc(var(--note-opacity, 1) * 100%), transparent); border: 1px solid color-mix(in srgb, #FFA726 calc(var(--note-opacity, 1) * 100%), transparent); }
-.sticky-note[data-color="purple"] { background: color-mix(in srgb, #E1BEE7 calc(var(--note-opacity, 1) * 100%), transparent); border: 1px solid color-mix(in srgb, #AB47BC calc(var(--note-opacity, 1) * 100%), transparent); }
+/* --- Note colors ---
+   A note colour is a hue the user picks. The six hues below are the only
+   literals; the surface, edge and text of a note and of an archive card are
+   mixed from the hue and the active theme's tokens, so one rule set holds in
+   Dark, Light and a custom theme. */
+.sticky-note[data-color="yellow"], .notes-archive-card[data-color="yellow"], .sticky-note-color-dot[data-color="yellow"] { --note-hue: #F9E04B; }
+.sticky-note[data-color="blue"],   .notes-archive-card[data-color="blue"],   .sticky-note-color-dot[data-color="blue"]   { --note-hue: #64B5F6; }
+.sticky-note[data-color="green"],  .notes-archive-card[data-color="green"],  .sticky-note-color-dot[data-color="green"]  { --note-hue: #66BB6A; }
+.sticky-note[data-color="pink"],   .notes-archive-card[data-color="pink"],   .sticky-note-color-dot[data-color="pink"]   { --note-hue: #F06292; }
+.sticky-note[data-color="orange"], .notes-archive-card[data-color="orange"], .sticky-note-color-dot[data-color="orange"] { --note-hue: #FFA726; }
+.sticky-note[data-color="purple"], .notes-archive-card[data-color="purple"], .sticky-note-color-dot[data-color="purple"] { --note-hue: #AB47BC; }
 
-/* --- Note color themes (dark) --- */
-.dark-theme .sticky-note[data-color="yellow"] { background: color-mix(in srgb, #3D3A1E calc(var(--note-opacity, 1) * 100%), transparent); border-color: color-mix(in srgb, #8B7E2A calc(var(--note-opacity, 1) * 100%), transparent); }
-.dark-theme .sticky-note[data-color="blue"]   { background: color-mix(in srgb, #1A2A3D calc(var(--note-opacity, 1) * 100%), transparent); border-color: color-mix(in srgb, #3A7BD5 calc(var(--note-opacity, 1) * 100%), transparent); }
-.dark-theme .sticky-note[data-color="green"]  { background: color-mix(in srgb, #1A2D1A calc(var(--note-opacity, 1) * 100%), transparent); border-color: color-mix(in srgb, #4A8F4A calc(var(--note-opacity, 1) * 100%), transparent); }
-.dark-theme .sticky-note[data-color="pink"]   { background: color-mix(in srgb, #3D1A2A calc(var(--note-opacity, 1) * 100%), transparent); border-color: color-mix(in srgb, #C44A72 calc(var(--note-opacity, 1) * 100%), transparent); }
-.dark-theme .sticky-note[data-color="orange"] { background: color-mix(in srgb, #3D2A1A calc(var(--note-opacity, 1) * 100%), transparent); border-color: color-mix(in srgb, #C47A3A calc(var(--note-opacity, 1) * 100%), transparent); }
-.dark-theme .sticky-note[data-color="purple"] { background: color-mix(in srgb, #2A1A3D calc(var(--note-opacity, 1) * 100%), transparent); border-color: color-mix(in srgb, #8A4AAA calc(var(--note-opacity, 1) * 100%), transparent); }
+.sticky-note[data-color],
+.notes-archive-card[data-color] {
+  --note-surface: color-mix(in srgb, var(--note-hue) 24%, var(--bg-alt));
+  --note-edge: color-mix(in srgb, var(--note-hue) 70%, var(--bg-alt));
+  --note-ink: color-mix(in srgb, var(--note-hue) 20%, var(--text));
+}
+
+.sticky-note[data-color] {
+  background: color-mix(in srgb, var(--note-surface) calc(var(--note-opacity, 1) * 100%), transparent);
+  border: 1px solid color-mix(in srgb, var(--note-edge) calc(var(--note-opacity, 1) * 100%), transparent);
+}
 
 /* --- Header (drag bar) --- */
 .sticky-note-header {
@@ -140,7 +148,7 @@
 }
 
 .sticky-note:hover .sticky-note-header button { opacity: 0.5; }
-.sticky-note .sticky-note-header button:hover { opacity: 0.9; background: rgba(0,0,0,0.06); }
+.sticky-note .sticky-note-header button:hover { opacity: 0.9; background: color-mix(in srgb, var(--note-ink) 8%, transparent); }
 
 /* Opacity slider */
 .sticky-note-opacity {
@@ -159,7 +167,7 @@
   appearance: none;
   width: 32px;
   height: 2px;
-  background: rgba(0,0,0,0.15);
+  background: color-mix(in srgb, var(--note-ink) 20%, transparent);
   border-radius: 1px;
   cursor: pointer;
   margin: 0;
@@ -170,7 +178,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(0,0,0,0.35);
+  background: color-mix(in srgb, var(--note-ink) 45%, transparent);
   border: none;
   cursor: pointer;
 }
@@ -178,43 +186,24 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(0,0,0,0.35);
+  background: color-mix(in srgb, var(--note-ink) 45%, transparent);
   border: none;
   cursor: pointer;
 }
-.dark-theme .sticky-note-opacity-slider { background: rgba(255,255,255,0.15); }
-.dark-theme .sticky-note-opacity-slider::-webkit-slider-thumb { background: rgba(255,255,255,0.4); }
-.dark-theme .sticky-note-opacity-slider::-moz-range-thumb { background: rgba(255,255,255,0.4); }
-.dark-theme .sticky-note-opacity-slider { accent-color: rgba(255,255,255,0.4); }
+.sticky-note-opacity-slider { accent-color: color-mix(in srgb, var(--note-ink) 45%, transparent); }
 
 .sticky-note-header button .lucide { width: 13px; height: 13px; }
 
-/* Text colors per note color (light) */
-.sticky-note[data-color="yellow"] .sticky-note-header button { color: #6D5E00; }
-.sticky-note[data-color="blue"]   .sticky-note-header button { color: #0D47A1; }
-.sticky-note[data-color="green"]  .sticky-note-header button { color: #1B5E20; }
-.sticky-note[data-color="pink"]   .sticky-note-header button { color: #880E4F; }
-.sticky-note[data-color="orange"] .sticky-note-header button { color: #E65100; }
-.sticky-note[data-color="purple"] .sticky-note-header button { color: #4A148C; }
-
-/* Text colors per note color (dark) */
-.dark-theme .sticky-note[data-color="yellow"] .sticky-note-header button { color: #E8E0A8; }
-.dark-theme .sticky-note[data-color="blue"]   .sticky-note-header button { color: #B0D4F1; }
-.dark-theme .sticky-note[data-color="green"]  .sticky-note-header button { color: #B0D8B0; }
-.dark-theme .sticky-note[data-color="pink"]   .sticky-note-header button { color: #F0B8CC; }
-.dark-theme .sticky-note[data-color="orange"] .sticky-note-header button { color: #F0D0A8; }
-.dark-theme .sticky-note[data-color="purple"] .sticky-note-header button { color: #D8B8F0; }
+/* Text colour per note colour */
+.sticky-note[data-color] .sticky-note-header button { color: var(--note-ink); }
 
 /* --- Placeholder for empty contenteditable --- */
 .sticky-note-rendered.is-empty::before {
   content: "Click to start writing...";
-  color: rgba(0, 0, 0, 0.3);
+  color: color-mix(in srgb, var(--note-ink) 45%, transparent);
   font-style: italic;
   font-size: 12px;
   pointer-events: none;
-}
-.dark-theme .sticky-note-rendered.is-empty::before {
-  color: rgba(255, 255, 255, 0.25);
 }
 
 /* Contenteditable focus outline */
@@ -244,21 +233,8 @@
   color: inherit;
 }
 
-/* Body text colors (light) */
-.sticky-note[data-color="yellow"] .sticky-note-body { color: #5D4E00; }
-.sticky-note[data-color="blue"]   .sticky-note-body { color: #0D47A1; }
-.sticky-note[data-color="green"]  .sticky-note-body { color: #1B5E20; }
-.sticky-note[data-color="pink"]   .sticky-note-body { color: #880E4F; }
-.sticky-note[data-color="orange"] .sticky-note-body { color: #E65100; }
-.sticky-note[data-color="purple"] .sticky-note-body { color: #4A148C; }
-
-/* Body text colors (dark) */
-.dark-theme .sticky-note[data-color="yellow"] .sticky-note-body { color: #E8E0A8; }
-.dark-theme .sticky-note[data-color="blue"]   .sticky-note-body { color: #B0D4F1; }
-.dark-theme .sticky-note[data-color="green"]  .sticky-note-body { color: #B0D8B0; }
-.dark-theme .sticky-note[data-color="pink"]   .sticky-note-body { color: #F0B8CC; }
-.dark-theme .sticky-note[data-color="orange"] .sticky-note-body { color: #F0D0A8; }
-.dark-theme .sticky-note[data-color="purple"] .sticky-note-body { color: #D8B8F0; }
+/* Body text colour */
+.sticky-note[data-color] .sticky-note-body { color: var(--note-ink); }
 
 .sticky-note-text::placeholder {
   opacity: 0.35;
@@ -304,11 +280,7 @@
   font-size: 12px;
   padding: 1px 4px;
   border-radius: 3px;
-  background: rgba(0,0,0,0.06);
-}
-
-.dark-theme .sticky-note-rendered code {
-  background: rgba(255,255,255,0.08);
+  background: rgba(var(--overlay-rgb), 0.07);
 }
 
 .sticky-note-rendered del {
@@ -414,12 +386,7 @@
 .sticky-note-color-dot:hover { transform: scale(1.2); }
 .sticky-note-color-dot.active { border-color: var(--text); }
 
-.sticky-note-color-dot[data-color="yellow"] { background: #F9E04B; }
-.sticky-note-color-dot[data-color="blue"]   { background: #64B5F6; }
-.sticky-note-color-dot[data-color="green"]  { background: #66BB6A; }
-.sticky-note-color-dot[data-color="pink"]   { background: #F06292; }
-.sticky-note-color-dot[data-color="orange"] { background: #FFA726; }
-.sticky-note-color-dot[data-color="purple"] { background: #AB47BC; }
+.sticky-note-color-dot[data-color] { background: var(--note-hue); }
 
 /* --- Format toolbar (WYSIWYG selection popup) --- */
 .sn-format-toolbar {
@@ -484,11 +451,8 @@
 }
 .sticky-note-md-btn.active {
   opacity: 1 !important;
-  background: rgba(0, 0, 0, 0.12) !important;
+  background: color-mix(in srgb, var(--note-ink) 14%, transparent) !important;
   border-radius: 4px;
-}
-.dark-theme .sticky-note-md-btn.active {
-  background: rgba(255, 255, 255, 0.15) !important;
 }
 
 .sn-fmt-bold { font-weight: 800; }
@@ -661,21 +625,8 @@
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.18);
 }
 
-/* Card colors (light) */
-.notes-archive-card[data-color="yellow"] { background: #FFF9C4; border: 1px solid #EFD74E; }
-.notes-archive-card[data-color="blue"]   { background: #BBDEFB; border: 1px solid #64B5F6; }
-.notes-archive-card[data-color="green"]  { background: #C8E6C9; border: 1px solid #66BB6A; }
-.notes-archive-card[data-color="pink"]   { background: #F8BBD0; border: 1px solid #F06292; }
-.notes-archive-card[data-color="orange"] { background: #FFE0B2; border: 1px solid #FFA726; }
-.notes-archive-card[data-color="purple"] { background: #E1BEE7; border: 1px solid #AB47BC; }
-
-/* Card colors (dark) */
-.dark-theme .notes-archive-card[data-color="yellow"] { background: #3D3A1E; border-color: #8B7E2A; }
-.dark-theme .notes-archive-card[data-color="blue"]   { background: #1A2A3D; border-color: #3A7BD5; }
-.dark-theme .notes-archive-card[data-color="green"]  { background: #1A2D1A; border-color: #4A8F4A; }
-.dark-theme .notes-archive-card[data-color="pink"]   { background: #3D1A2A; border-color: #C44A72; }
-.dark-theme .notes-archive-card[data-color="orange"] { background: #3D2A1A; border-color: #C47A3A; }
-.dark-theme .notes-archive-card[data-color="purple"] { background: #2A1A3D; border-color: #8A4AAA; }
+/* Card colours: the hue and its mixes are declared with the note colours above */
+.notes-archive-card[data-color] { background: var(--note-surface); border: 1px solid var(--note-edge); }
 
 /* Archived (hidden from canvas) cards — dimmed with indicator */
 .notes-archive-card.archived {
@@ -705,21 +656,7 @@
   min-width: 0;
 }
 
-/* Title text colors (light) */
-.notes-archive-card[data-color="yellow"] .notes-archive-card-title { color: #6D5E00; }
-.notes-archive-card[data-color="blue"]   .notes-archive-card-title { color: #0D47A1; }
-.notes-archive-card[data-color="green"]  .notes-archive-card-title { color: #1B5E20; }
-.notes-archive-card[data-color="pink"]   .notes-archive-card-title { color: #880E4F; }
-.notes-archive-card[data-color="orange"] .notes-archive-card-title { color: #E65100; }
-.notes-archive-card[data-color="purple"] .notes-archive-card-title { color: #4A148C; }
-
-/* Title text colors (dark) */
-.dark-theme .notes-archive-card[data-color="yellow"] .notes-archive-card-title { color: #E8E0A8; }
-.dark-theme .notes-archive-card[data-color="blue"]   .notes-archive-card-title { color: #B0D4F1; }
-.dark-theme .notes-archive-card[data-color="green"]  .notes-archive-card-title { color: #B0D8B0; }
-.dark-theme .notes-archive-card[data-color="pink"]   .notes-archive-card-title { color: #F0B8CC; }
-.dark-theme .notes-archive-card[data-color="orange"] .notes-archive-card-title { color: #F0D0A8; }
-.dark-theme .notes-archive-card[data-color="purple"] .notes-archive-card-title { color: #D8B8F0; }
+.notes-archive-card[data-color] .notes-archive-card-title { color: var(--note-ink); }
 
 /* --- Delete button --- */
 .notes-archive-card-delete {
@@ -740,7 +677,7 @@
 
 .notes-archive-card-delete .lucide { width: 14px; height: 14px; }
 .notes-archive-card:hover .notes-archive-card-delete { opacity: 0.5; }
-.notes-archive-card-delete:hover { opacity: 1 !important; background: rgba(0,0,0,0.08); }
+.notes-archive-card-delete:hover { opacity: 1 !important; background: color-mix(in srgb, var(--note-ink) 10%, transparent); }
 
 /* --- Restore button (archived cards) --- */
 .notes-archive-card-restore {
@@ -749,7 +686,7 @@
   gap: 4px;
   height: 24px;
   border: none;
-  background: rgba(0, 0, 0, 0.06);
+  background: color-mix(in srgb, var(--note-ink) 8%, transparent);
   border-radius: 6px;
   cursor: pointer;
   flex-shrink: 0;
@@ -762,15 +699,13 @@
   transition: opacity 0.15s, background 0.15s;
 }
 .notes-archive-card-restore .lucide { width: 12px; height: 12px; }
-.notes-archive-card-restore:hover { opacity: 1; background: rgba(0, 0, 0, 0.1); }
-.dark-theme .notes-archive-card-restore { background: rgba(255, 255, 255, 0.08); }
-.dark-theme .notes-archive-card-restore:hover { background: rgba(255, 255, 255, 0.14); }
+.notes-archive-card-restore:hover { opacity: 1; background: color-mix(in srgb, var(--note-ink) 14%, transparent); }
 
 /* Confirm-delete state: red trash */
 .notes-archive-card.confirm-delete .notes-archive-card-delete {
   opacity: 1 !important;
-  color: #E53935;
-  background: rgba(229, 57, 53, 0.12);
+  color: var(--error);
+  background: var(--error-12);
 }
 
 /* Deleting animation */
@@ -792,31 +727,14 @@
   word-break: break-word;
 }
 
-/* Body text colors (light) */
-.notes-archive-card[data-color="yellow"] .notes-archive-card-body { color: #5D4E00; }
-.notes-archive-card[data-color="blue"]   .notes-archive-card-body { color: #0D47A1; }
-.notes-archive-card[data-color="green"]  .notes-archive-card-body { color: #1B5E20; }
-.notes-archive-card[data-color="pink"]   .notes-archive-card-body { color: #880E4F; }
-.notes-archive-card[data-color="orange"] .notes-archive-card-body { color: #E65100; }
-.notes-archive-card[data-color="purple"] .notes-archive-card-body { color: #4A148C; }
-
-/* Body text colors (dark) */
-.dark-theme .notes-archive-card[data-color="yellow"] .notes-archive-card-body { color: #E8E0A8; }
-.dark-theme .notes-archive-card[data-color="blue"]   .notes-archive-card-body { color: #B0D4F1; }
-.dark-theme .notes-archive-card[data-color="green"]  .notes-archive-card-body { color: #B0D8B0; }
-.dark-theme .notes-archive-card[data-color="pink"]   .notes-archive-card-body { color: #F0B8CC; }
-.dark-theme .notes-archive-card[data-color="orange"] .notes-archive-card-body { color: #F0D0A8; }
-.dark-theme .notes-archive-card[data-color="purple"] .notes-archive-card-body { color: #D8B8F0; }
+.notes-archive-card[data-color] .notes-archive-card-body { color: var(--note-ink); }
 
 .notes-archive-card-body code {
   font-family: "Roboto Mono", monospace;
   font-size: 11px;
   padding: 1px 3px;
   border-radius: 3px;
-  background: rgba(0,0,0,0.06);
-}
-.dark-theme .notes-archive-card-body code {
-  background: rgba(255,255,255,0.08);
+  background: rgba(var(--overlay-rgb), 0.07);
 }
 
 /* --- Sidebar button active state --- */
@@ -832,8 +750,8 @@
 
 /* Pulsing glow on the title bar button */
 @keyframes snOnboardingPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb, 99, 102, 241), 0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(var(--accent-rgb, 99, 102, 241), 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(var(--accent-rgb), 0); }
 }
 
 /* --- Mobile: hide entirely --- */

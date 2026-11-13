@@ -51,7 +51,7 @@
 
 .sched-dow-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -79,7 +79,7 @@
 
 .sched-btn-save {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .sched-btn-save:hover {
@@ -268,7 +268,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.12);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.28), 0 2px 8px rgba(var(--shadow-rgb), 0.12);
   display: flex;
   flex-direction: column;
   overflow: visible;
@@ -408,7 +408,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--accent, #ffb86c);
+  background: var(--accent);
   display: block;
 }
 
@@ -419,7 +419,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.25);
   padding: 8px;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -547,7 +547,7 @@
 }
 
 .sched-create-task-btn.invalid .sched-create-task-label {
-  color: var(--error, #ff5555);
+  color: var(--error);
 }
 
 .sched-create-task-list {
@@ -558,7 +558,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.25);
   z-index: 340;
   max-height: 200px;
   overflow-y: auto;
@@ -765,7 +765,7 @@
 
 .sched-create-save-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   padding: 7px 20px;
@@ -799,9 +799,9 @@
 }
 .sched-create-delete-btn .lucide { width: 15px; height: 15px; }
 .sched-create-delete-btn:hover {
-  color: #e55;
-  border-color: #e55;
-  background: rgba(238, 85, 85, 0.08);
+  color: var(--error);
+  border-color: var(--error);
+  background: var(--error-8);
 }
 .sched-create-delete-btn.hidden { display: none; }
 
@@ -810,7 +810,7 @@
   position: fixed;
   inset: 0;
   z-index: 400;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(var(--shadow-rgb), 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -825,7 +825,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 40px rgba(var(--shadow-rgb), 0.35);
   width: 320px;
   max-width: 90vw;
   overflow: hidden;
@@ -856,16 +856,16 @@
   gap: 8px;
 }
 .sched-delete-confirm-btn {
-  color: #fff !important;
-  background: #e55 !important;
-  border-color: #e55 !important;
+  color: var(--on-error) !important;
+  background: var(--error) !important;
+  border-color: var(--error) !important;
   border-radius: 8px;
   padding: 7px 18px;
   font-weight: 600;
 }
 .sched-delete-confirm-btn:hover {
-  background: #d44 !important;
-  border-color: #d44 !important;
+  background: color-mix(in srgb, var(--error) 88%, var(--on-error)) !important;
+  border-color: color-mix(in srgb, var(--error) 88%, var(--on-error)) !important;
 }
 .sched-delete-confirm-btn.hidden { display: none; }
 .sched-delete-option {
@@ -886,11 +886,11 @@
   border-color: var(--text-secondary);
 }
 .sched-delete-option[data-delete="all"] {
-  color: #e55;
+  color: var(--error);
 }
 .sched-delete-option[data-delete="all"]:hover {
-  background: rgba(238, 85, 85, 0.08);
-  border-color: #e55;
+  background: var(--error-8);
+  border-color: var(--error);
 }
 .sched-delete-option.cancel {
   color: var(--text-muted);
@@ -909,7 +909,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.25);
   z-index: 330;
   overflow: hidden;
 }
@@ -954,7 +954,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.18);
   min-width: 220px;
   max-width: 280px;
   overflow: hidden;
@@ -1013,7 +1013,7 @@
 
 .sched-interval-seg.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -1164,7 +1164,7 @@
   top: 2px;
   width: 12px;
   height: 12px;
-  background: #fff;
+  background: var(--on-accent);
   border-radius: 50%;
   transition: transform 0.2s;
 }
@@ -1304,7 +1304,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.25);
   z-index: 350;
   padding: 3px;
   display: flex;
@@ -1466,7 +1466,7 @@
 
 .sched-cal-day.selected {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 700;
 }
 
@@ -1476,7 +1476,7 @@
 }
 
 .sched-cal-day.today.selected {
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* Calendar cell clickable */

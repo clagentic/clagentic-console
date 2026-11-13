@@ -29,11 +29,11 @@
 }
 
 .team-member-status-dot.alive {
-  background: #4caf50;
+  background: var(--success);
 }
 
 .team-member-status-dot.idle {
-  background: #ff9800;
+  background: var(--warning);
 }
 
 .team-member-status-dot.gone,
@@ -74,23 +74,23 @@
 }
 
 .team-task-status.completed {
-  background: rgba(76, 175, 80, 0.15);
-  color: #4caf50;
+  background: var(--success-15);
+  color: var(--success);
 }
 
 .team-task-status.in_progress {
-  background: rgba(33, 150, 243, 0.15);
-  color: #2196f3;
+  background: var(--accent2-15);
+  color: var(--accent2);
 }
 
 .team-task-status.pending {
-  background: rgba(158, 158, 158, 0.15);
+  background: rgba(var(--overlay-rgb), 0.1);
   color: var(--text-dim);
 }
 
 .team-task-status.blocked {
-  background: rgba(244, 67, 54, 0.15);
-  color: #f44336;
+  background: var(--error-15);
+  color: var(--error);
 }
 
 .team-message-item {
@@ -119,8 +119,8 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: #ff9800;
-  color: #fff;
+  background: var(--warning);
+  color: var(--on-warning);
   vertical-align: middle;
   margin-left: 4px;
   font-weight: 600;

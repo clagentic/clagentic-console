@@ -519,9 +519,9 @@ pre.mermaid-error {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--shadow-rgb), 0.5);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
   border: none;
-  color: #fff;
+  color: var(--text);
   cursor: pointer;
   padding: 8px;
   border-radius: 50%;
@@ -1304,7 +1304,7 @@ pre.mermaid-error {
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--text-dimmer);
-  color: #fff;
+  color: var(--bg);
   cursor: pointer;
   flex-shrink: 0;
   transition: opacity 0.15s, background 0.15s;
@@ -1486,7 +1486,7 @@ pre.mermaid-error {
   border: none;
   border-radius: 4px;
   background: var(--error);
-  color: #fff;
+  color: var(--on-error);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -1529,7 +1529,7 @@ pre.mermaid-error {
   border: none;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
   font-family: inherit;
@@ -1714,7 +1714,7 @@ pre.mermaid-error {
 .dm-header-name {
   font-size: 15px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1801,14 +1801,14 @@ pre.mermaid-error {
   background: rgba(var(--overlay-rgb), 0.06);
 }
 .perm-allow {
-  background: var(--accent, #6c5ce7);
-  color: #fff;
-  border-color: var(--accent, #6c5ce7);
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 .perm-allow:hover {
   opacity: 0.9;
-  background: var(--accent, #6c5ce7);
-  border-color: var(--accent, #6c5ce7);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .perm-deny {
   color: var(--text-muted);

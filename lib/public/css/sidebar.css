@@ -358,12 +358,12 @@
 }
 .tool-palette-edit-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   opacity: 1;
 }
 .tool-palette-edit-btn.active:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   opacity: 1;
   filter: brightness(1.1);
 }
@@ -446,7 +446,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
@@ -542,14 +542,14 @@
   padding: 0 4px;
   border-radius: 4px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 10px;
   font-weight: 700;
   line-height: 16px;
   text-align: center;
   pointer-events: none;
   z-index: 3;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.25);
   animation: tool-palette-hotkey-in 0.12s ease-out;
 }
 @keyframes tool-palette-hotkey-in {
@@ -888,7 +888,7 @@
 /* IO blink on session processing dot */
 .session-item .session-processing.io,
 .mate-session-item .session-processing.io {
-  background: #fff !important;
+  background: var(--text) !important;
   box-shadow: 0 0 4px var(--success);
 }
 
@@ -898,7 +898,7 @@
 .session-item .session-processing.other,
 .mate-session-item .session-processing.other {
   background: transparent;
-  border: 1.5px solid var(--activity-other, #B77BF3);
+  border: 1.5px solid var(--activity-other);
   box-sizing: border-box;
 }
 /* Waiting on a prompt: dashed ring, warning hue. */
@@ -911,7 +911,7 @@
 /* Alert tone (lr-66c118): unread activity wins over processing green. */
 .session-item .session-processing.alert,
 .mate-session-item .session-processing.alert {
-  background: var(--danger, #e74c3c);
+  background: var(--danger);
 }
 
 /* Session unread badge */
@@ -923,8 +923,8 @@
   min-width: 18px;
   height: 18px;
   border-radius: 9px;
-  background: #e74c3c;
-  color: #fff;
+  background: var(--danger);
+  color: var(--on-error);
   font-size: 11px;
   font-weight: 700;
   display: none;
@@ -991,14 +991,14 @@
   pointer-events: auto;
   width: 20px;
   height: 20px;
-  color: #fff;
-  background: rgba(220, 38, 38, 0.92);
+  color: var(--on-error);
+  background: color-mix(in srgb, var(--error) 92%, transparent);
   box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.18);
 }
 
 .session-close-btn.armed:hover {
-  color: #fff;
-  background: rgba(220, 38, 38, 1);
+  color: var(--on-error);
+  background: var(--error);
 }
 
 .session-close-btn.armed .lucide,
@@ -1290,7 +1290,7 @@
   color: var(--text);
 }
 .session-loop-group.scheduled .session-processing {
-  background: var(--success, #27ae60);
+  background: var(--success);
 }
 
 .session-loop-group .session-item-text {
@@ -1318,7 +1318,7 @@
   color: var(--accent);
   flex-shrink: 0;
 }
-.session-loop-icon.scheduled { color: var(--success, #27ae60); }
+.session-loop-icon.scheduled { color: var(--success); }
 .session-loop-icon .lucide { width: 13px; height: 13px; }
 
 .session-loop-name {
@@ -1339,8 +1339,8 @@
   margin-left: auto;
 }
 .session-loop-count.scheduled {
-  color: var(--success, #27ae60);
-  background: color-mix(in srgb, var(--success, #27ae60) 12%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
 }
 
 /* Chevron */
@@ -1444,8 +1444,8 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .session-loop-role-badge.scheduled {
-  color: var(--success, #27ae60);
-  background: color-mix(in srgb, var(--success, #27ae60) 10%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
 .session-loop-badge {
@@ -1458,7 +1458,7 @@
 }
 .session-loop-badge.crafting {
   color: var(--accent);
-  background: var(--accent-12, rgba(108, 92, 231, 0.12));
+  background: var(--accent-12);
 }
 
 /* --- Loop run sub-groups (interval runs within a date group) --- */
@@ -1612,7 +1612,7 @@
   height: 32px;
   border-radius: 50%;
   background: var(--success);
-  color: #fff;
+  color: var(--on-success);
   font-family: "Pretendard", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 15px;
   font-weight: 800;
@@ -1642,7 +1642,7 @@
 
 .user-island-cta {
   font-size: 11px;
-  color: var(--accent, #7c3aed);
+  color: var(--accent);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -1689,19 +1689,19 @@
 }
 
 .user-island-actions button#user-theme-toggle-btn.theme-toggle-light {
-  color: #7b8cff;
+  color: var(--accent2);
 }
 
 .user-island-actions button#user-theme-toggle-btn.theme-toggle-light:hover {
-  color: #98a4ff;
+  color: var(--accent2-hover);
 }
 
 .user-island-actions button#user-theme-toggle-btn.theme-toggle-dark {
-  color: #f2b84d;
+  color: var(--warning);
 }
 
 .user-island-actions button#user-theme-toggle-btn.theme-toggle-dark:hover {
-  color: #ffca6b;
+  color: color-mix(in srgb, var(--warning) 80%, var(--text));
 }
 
 .user-island-actions button .lucide {
@@ -1719,7 +1719,7 @@
   position: relative;
 }
 .cursor-share-btn.on {
-  color: var(--accent, #0ACF83);
+  color: var(--accent);
 }
 .cursor-share-btn.off {
   color: var(--text-muted);
@@ -1732,13 +1732,13 @@
   left: 50%;
   width: 22px;
   height: 2px;
-  background: var(--danger, #F24822);
+  background: var(--danger);
   transform: translate(-50%, -50%) rotate(-45deg);
   border-radius: 1px;
   pointer-events: none;
 }
 .cursor-share-btn.on:hover {
-  color: var(--accent, #0ACF83);
+  color: var(--accent);
 }
 .cursor-share-btn.off:hover {
   opacity: 0.7;
@@ -1823,70 +1823,6 @@
   height: 20px;
 }
 
-/* --- Theme picker --- */
-.theme-picker {
-  position: fixed;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0;
-  min-width: 220px;
-  max-height: 70vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
-  z-index: 200;
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-  transition: opacity 0.15s, transform 0.15s;
-}
-
-.theme-picker.visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.theme-picker-header {
-  padding: 8px 14px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dimmer);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  position: sticky;
-  top: 0;
-  background: var(--bg-alt);
-  z-index: 1;
-}
-
-.theme-picker-section {
-  padding-bottom: 4px;
-}
-
-.theme-picker-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 14px;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.theme-picker-item:hover {
-  background: rgba(var(--overlay-rgb), 0.05);
-}
-
-.theme-picker-item.active {
-  color: var(--text);
-}
-
 .theme-swatches {
   display: flex;
   gap: 3px;
@@ -1898,22 +1834,6 @@
   height: 12px;
   border-radius: 3px;
   border: 1px solid rgba(var(--overlay-rgb), 0.1);
-}
-
-.theme-picker-label {
-  flex: 1;
-  text-align: left;
-}
-
-.theme-picker-check {
-  font-size: 14px;
-  color: var(--accent);
-  opacity: 0;
-  flex-shrink: 0;
-}
-
-.theme-picker-item.active .theme-picker-check {
-  opacity: 1;
 }
 
 /* --- Sidebar resize handle (overlay, no layout space) --- */
@@ -2015,7 +1935,7 @@
   width: 48px;
   height: 10px;
   border-radius: 4px;
-  background: var(--text-muted, #888);
+  background: var(--text-muted);
   margin-bottom: 10px;
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
@@ -2023,7 +1943,7 @@
   width: 100%;
   height: 28px;
   border-radius: 8px;
-  background: var(--text-muted, #888);
+  background: var(--text-muted);
   margin-bottom: 6px;
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
@@ -2039,7 +1959,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent, #63b3ed);
+  color: var(--accent);
   margin-right: 4px;
   vertical-align: middle;
 }

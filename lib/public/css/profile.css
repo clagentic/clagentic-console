@@ -7,7 +7,7 @@
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 30px rgba(var(--shadow-rgb), 0.35);
   z-index: 100;
   overflow: visible;
   animation: profile-popover-in 0.15s ease-out;
@@ -34,8 +34,8 @@
   width: 24px;
   height: 24px;
   border: none;
-  background: rgba(0, 0, 0, 0.3);
-  color: #fff;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--text);
   border-radius: 50%;
   font-size: 16px;
   line-height: 1;
@@ -47,7 +47,7 @@
 }
 
 .profile-close-btn:hover {
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
 }
 
 /* Avatar row (overlaps banner) */
@@ -269,20 +269,20 @@
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(0,0,0,0.6);
+  background: rgba(var(--shadow-rgb), 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .avatar-positioner-container {
-  background: var(--bg-secondary, #1e1e2e);
+  background: var(--bg-secondary);
   border-radius: 16px;
   padding: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.4);
   min-width: 260px;
   position: relative;
 }
@@ -304,7 +304,7 @@
   line-height: 1;
 }
 .avatar-positioner-close:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.1));
+  background: var(--bg-active);
   color: var(--text);
 }
 .avatar-positioner-title {
@@ -363,7 +363,7 @@
 }
 .avatar-positioner-btn-done {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .avatar-positioner-btn-done:hover {
   filter: brightness(1.1);
@@ -391,7 +391,7 @@
 }
 
 .profile-color-swatch.profile-color-active {
-  border-color: #fff;
+  border-color: var(--text);
   box-shadow: 0 0 0 2px var(--accent);
 }
 
