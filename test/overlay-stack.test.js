@@ -151,7 +151,7 @@ test("the manager replaces by source, clears a group, and a card leaves once how
   assert.deepEqual(removed, ["a"], "the removal hook runs once");
   stackMod.clearGroup("g");
   assert.equal(b.stack().querySelectorAll(".overlay").length, 0, "the group is gone at once");
-  assert.throws(function () { overlay.showOverlay({ kind: "modal", content: "z" }); }, /kind must be toast or banner/);
+  assert.throws(function () { overlay.showOverlay({ kind: "dialog", content: "z" }); }, /kind must be toast or banner/);
 });
 
 // ---------------------------------------------------------------------------
@@ -879,4 +879,381 @@ test("B2 close controls: the surfaces that showed their own now use the shared o
   });
   var panels = ["usage panel", "status panel", "diagnostics panel", "scheduler create popover", "profile popover"];
   panels.forEach(function (name) { assert.equal(rowNamed(name).closeButton, true, name + " draws the shared close control"); });
+});
+
+// ---------------------------------------------------------------------------
+// C1: modals and sheets. The confirm, paste and image modals, the project action
+// sheet and the bottom-nav sheet all open through showOverlay as kind "modal" or
+// "sheet". The rows below drive the real modules (app-modals.js,
+// mobile-action-sheet.js, mobile-nav-sheet.js) over the fake DOM.
+// ---------------------------------------------------------------------------
+
+var MOBILE_NAV = css("mobile-nav.css");
+
+// One browser whose document collects the registry's Escape listener, and a
+// #mobile-sheet as index.html draws it (its own scrim and dialog, hidden).
+async function modalBrowser(t) {
+  t.mock.timers.reset();
+  var b = await browser(t);
+  var listeners = {};
+  global.document.addEventListener = function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); };
+  var registry = await import(dom.moduleUrl("overlay-registry.js"));
+  // A modal a failed row left open belongs to no later row.
+  while (registry.getTopModal()) registry.closeModal(registry.getTopModal(), { immediate: true });
+  registry.closeOpenMenu();
+
+  var sheet = new dom.FakeElement("div");
+  sheet.id = "mobile-sheet";
+  sheet.className = "hidden";
+  var scrim = new dom.FakeElement("div");
+  scrim.className = "overlay-modal-backdrop";
+  var content = new dom.FakeElement("div");
+  content.className = "mobile-sheet-content overlay-modal-dialog";
+  sheet.appendChild(scrim);
+  sheet.appendChild(content);
+  global.document.body.appendChild(sheet);
+
+  return {
+    b: b, t: t, registry: registry, sheet: sheet, confirmed: 0, acted: 0,
+    overlay: await import(dom.moduleUrl("overlay.js")),
+    modals: await import(dom.moduleUrl("app-modals.js")),
+    actionSheet: await import(dom.moduleUrl("mobile-action-sheet.js")),
+    navSheet: await import(dom.moduleUrl("mobile-nav-sheet.js")),
+    top: function () { return registry.getTopModal(); },
+    escape: function () { (listeners.keydown || []).forEach(function (fn) { fn({ key: "Escape" }); }); },
+    tick: function (ms) { t.mock.timers.tick(ms); },
+  };
+}
+
+// Closed: not in the registry, and removed (built) or hidden (the page's own node).
+function modalGone(m, el, adopted) {
+  return !m.registry.isModalOpen(el) && (adopted ? el.classList.contains("hidden") : el.parentNode === null);
+}
+
+// Each C1 surface, opened through its own module.
+var MODAL_SURFACES = [
+  { name: "confirm", kind: "modal", open: function (m) { m.modals.showConfirm("Delete it?", function () { m.confirmed++; }); } },
+  { name: "paste", kind: "modal", open: function (m) { m.modals.showPasteModal("pasted text"); } },
+  { name: "image", kind: "modal", card: false, open: function (m) { m.modals.showImageModal("pic.png"); } },
+  { name: "action sheet", kind: "sheet", open: function (m) {
+    m.actionSheet.showActionSheet({ actions: [{ icon: "settings", label: "Project Settings", handler: function () { m.acted++; } }] });
+  } },
+  { name: "nav sheet", kind: "sheet", adopted: true, nav: true, open: function (m) { m.navSheet.showNavSheet("projects"); } },
+];
+
+test("modal: each C1 surface opens as the shared modal or sheet, with the shared top-right close control", async function (t) {
+  for (var i = 0; i < MODAL_SURFACES.length; i++) {
+    var row = MODAL_SURFACES[i];
+    var m = await modalBrowser(t);
+    row.open(m);
+    var el = m.top();
+    assert.ok(el, row.name + ": open in the registry");
+    assert.ok(el.classList.contains("overlay-modal"), row.name + ": the shared modal");
+    assert.equal(el.classList.contains("overlay-sheet"), row.kind === "sheet", row.name + ": a sheet is an option");
+    assert.equal(el.classList.contains("overlay-nav-sheet"), !!row.nav, row.name + ": the nav rule is an option");
+    assert.equal(el.getAttribute("data-overlay-kind"), row.kind, row.name + ": the kind is an attribute");
+    assert.equal(el.classList.contains("hidden"), false, row.name + ": shown");
+    var dialog = el.querySelector(".overlay-modal-dialog");
+    assert.ok(dialog && el.querySelector(".overlay-modal-backdrop"), row.name + ": the shared scrim and dialog");
+    assert.equal(dialog.classList.contains("overlay-modal-bare"), row.card === false, row.name + ": the card is an option");
+    var closes = el.querySelectorAll(".overlay-close");
+    assert.equal(closes.length, 1, row.name + ": one close control");
+    assert.equal(closes[0].tagName, "BUTTON", row.name + ": a button");
+    assert.ok(closes[0].getAttribute("aria-label"), row.name + ": named for assistive tech");
+    assert.equal(closes[0]._parent, dialog, row.name + ": the dialog's own child, at its corner");
+    assert.equal(el.querySelectorAll(".confirm-backdrop, .confirm-dialog, .paste-modal-close, .image-modal-close, .mobile-sheet-close, .mobile-sheet-backdrop").length, 0,
+      row.name + ": no surface-owned scrim, card or close control");
+  }
+});
+
+var DISMISS_WAYS = [
+  { name: "Escape", act: function (m) { m.escape(); } },
+  { name: "a click on the scrim", act: function (m, el) { el.querySelector(".overlay-modal-backdrop").click(); } },
+  { name: "the close control", act: function (m, el) { el.querySelector(".overlay-close").click(); } },
+];
+
+test("modal: Escape, the scrim and the close control each close every C1 surface and run no action", async function (t) {
+  for (var i = 0; i < MODAL_SURFACES.length; i++) {
+    for (var w = 0; w < DISMISS_WAYS.length; w++) {
+      var row = MODAL_SURFACES[i];
+      var m = await modalBrowser(t);
+      row.open(m);
+      var el = m.top();
+      DISMISS_WAYS[w].act(m, el);
+      m.tick(300);
+      assert.equal(modalGone(m, el, row.adopted), true, row.name + ": closed by " + DISMISS_WAYS[w].name);
+      assert.equal(m.confirmed + m.acted, 0, row.name + ": " + DISMISS_WAYS[w].name + " is a cancel: nothing ran");
+    }
+  }
+});
+
+test("modal: a modal that cannot be dismissed has no close control and neither Escape nor the scrim closes it", async function (t) {
+  var m = await modalBrowser(t);
+  var handle = m.overlay.showOverlay({ kind: "modal", content: "x", dismissible: false });
+  assert.equal(handle.el.querySelectorAll(".overlay-close").length, 0);
+  m.escape();
+  handle.el.querySelector(".overlay-modal-backdrop").click();
+  assert.equal(handle.isOpen(), true);
+  handle.close();
+  assert.equal(handle.isOpen(), false, "the surface itself can still close it");
+});
+
+// What each way out of the confirm does with the caller's callback.
+var CONFIRM_WAYS = [
+  { name: "OK", act: function (m, el) { el.querySelector(".confirm-delete").click(); }, runs: 1 },
+  { name: "Cancel", act: function (m, el) { el.querySelector(".confirm-cancel").click(); }, runs: 0 },
+  { name: "Escape", act: function (m) { m.escape(); }, runs: 0 },
+  { name: "the scrim", act: function (m, el) { el.querySelector(".overlay-modal-backdrop").click(); }, runs: 0 },
+  { name: "the close control", act: function (m, el) { el.querySelector(".overlay-close").click(); }, runs: 0 },
+];
+
+test("confirm: only OK runs the callback, once, after the modal has closed; the rest cancel", async function (t) {
+  for (var i = 0; i < CONFIRM_WAYS.length; i++) {
+    var m = await modalBrowser(t);
+    var wasOpenInCallback = null;
+    var el = null;
+    m.modals.showConfirm("Sure?", function () { m.confirmed++; wasOpenInCallback = m.registry.isModalOpen(el); });
+    el = m.top();
+    CONFIRM_WAYS[i].act(m, el);
+    assert.equal(m.confirmed, CONFIRM_WAYS[i].runs, CONFIRM_WAYS[i].name + ": callback runs");
+    assert.equal(m.registry.isModalOpen(el), false, CONFIRM_WAYS[i].name + ": closed");
+    if (CONFIRM_WAYS[i].runs) assert.equal(wasOpenInCallback, false, "the callback runs after the modal closed");
+  }
+});
+
+test("confirm: labels, the plain-text message, the destructive option, replacement, and a confirmation opened by a confirmation", async function (t) {
+  var m = await modalBrowser(t);
+  m.modals.showConfirm("<b>Delete</b> it?", function () {});
+  var el = m.top();
+  assert.equal(el.querySelector(".confirm-text").textContent, "<b>Delete</b> it?", "the message is text, never markup");
+  assert.equal(el.querySelector(".confirm-text")._children.length, 0);
+  assert.equal(el.querySelector(".confirm-delete").textContent, "Delete", "the default label");
+
+  m.modals.showConfirm("Stop it?", function () {}, "Stop", false);
+  assert.equal(m.registry.isModalOpen(el), false, "a second confirmation replaces the first");
+  var second = m.top();
+  assert.equal(second.querySelector(".confirm-ok").textContent, "Stop", "a plain accent button with its own label");
+  assert.equal(second.querySelectorAll(".confirm-delete").length, 0);
+  assert.equal(global.document.body.querySelectorAll(".overlay-modal").filter(function (n) { return n.getAttribute("data-overlay-kind") === "modal"; }).length, 1, "one confirmation in the page");
+
+  var chained = null;
+  m.modals.showConfirm("First?", function () { m.modals.showConfirm("Second?", function () {}); });
+  m.top().querySelector(".confirm-delete").click();
+  chained = m.top();
+  assert.equal(chained.querySelector(".confirm-text").textContent, "Second?", "the confirmation its callback opened stays open");
+});
+
+test("modal: paste shows the text as text and offers Copy; the image shows the picture with no card", async function (t) {
+  var m = await modalBrowser(t);
+  m.modals.showPasteModal("<i>raw</i>");
+  var paste = m.top();
+  assert.equal(paste.querySelector(".paste-modal-body").textContent, "<i>raw</i>");
+  assert.equal(paste.querySelectorAll(".paste-modal-copy").length, 1, "Copy stays");
+  assert.ok(paste.querySelector(".overlay-modal-dialog").classList.contains("paste-modal-dialog"));
+  m.modals.showImageModal("pic.png");
+  var image = m.top();
+  assert.equal(image.querySelector(".image-modal-img").getAttribute("src"), "pic.png");
+  assert.ok(image.classList.contains("overlay-scrim-dark"), "the lightbox scrim is the dark option");
+  assert.equal(m.registry.isModalOpen(paste), true, "an image opened over a paste leaves it open beneath");
+});
+
+test("action sheet: a row closes the sheet and then runs its action; Cancel only closes", async function (t) {
+  var m = await modalBrowser(t);
+  var seen = [];
+  var open = function () {
+    m.actionSheet.showActionSheet({ actions: [
+      { icon: "settings", label: "<b>Settings</b>", handler: function () { seen.push(m.registry.isModalOpen(el)); } },
+      { icon: "smile", label: "Set Icon", handler: function () {} },
+    ] });
+    return m.top();
+  };
+  var el = open();
+  var rows = el.querySelectorAll(".mobile-action-sheet-item");
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].querySelector("span").textContent, "<b>Settings</b>", "a label is text");
+  rows[0].click();
+  assert.deepEqual(seen, [false], "the action runs after the sheet closed");
+  assert.equal(m.registry.isModalOpen(el), false);
+
+  el = open();
+  el.querySelector(".mobile-action-sheet-cancel").click();
+  assert.equal(m.registry.isModalOpen(el), false, "Cancel closes it");
+  assert.deepEqual(seen, [false], "and ran nothing");
+});
+
+// ---------------------------------------------------------------------------
+// C1 stacking: layers from tokens, a later modal over an earlier one
+// ---------------------------------------------------------------------------
+
+function layer(name) { return Number(new RegExp("--z-" + name + ":\\s*(\\d+)").exec(BASE)[1]); }
+
+test("stacking css: a modal sits under the toast stack and the menus, over the nav, at each width", function () {
+  WIDTHS.forEach(function (width) {
+    var at = "at " + width + "px";
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", width), "calc(var(--z-modal) + var(--overlay-order, 0))", "the modal layer plus its place in the order " + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "z-index", width), "var(--z-toast)", "toasts " + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "z-index", width), "var(--z-menu)", "menus " + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "position", width), "fixed", "the modal covers the viewport " + at);
+  });
+  assert.ok(layer("nav") < layer("modal"), "the nav is under every modal");
+  // The order is a count of open modals; any plausible count stays under the next layer.
+  assert.ok(layer("modal") + 99 < layer("menu"), "the first 100 open modals stay under the menu layer");
+  assert.ok(layer("menu") < layer("toast"));
+});
+
+test("stacking: a later modal sits over an earlier one, wherever its node lives; Escape closes the top first; a toast and a menu stay beside it", async function (t) {
+  var m = await modalBrowser(t);
+  var order = function (el) { return Number(el.style["--overlay-order"]); };
+
+  m.navSheet.showNavSheet("projects");
+  var sheet = m.sheet;
+  m.modals.showConfirm("Sure?", function () {});
+  var confirm = m.top();
+  assert.ok(order(confirm) > order(sheet), "a confirmation opened over the nav sheet sits over it");
+  m.modals.showPasteModal("x");
+  var paste = m.top();
+  assert.ok(order(paste) > order(confirm), "a third sits over the second");
+
+  m.b.utils.showToast("Saved", "error", "detail");
+  var toast = m.b.stack().querySelector(".overlay-toast");
+  m.escape();
+  assert.equal(m.registry.isModalOpen(paste), false, "Escape closed the top modal");
+  assert.equal(m.registry.isModalOpen(confirm) && m.registry.isModalOpen(sheet), true, "and left the others");
+  assert.equal(toast.classList.contains("hide"), false, "and the toast");
+
+  var menu = m.overlay.showOverlay({ kind: "menu", content: "m" });
+  m.escape();
+  assert.equal(menu.isOpen(), false, "a menu opened over a modal closes first");
+  assert.equal(m.registry.isModalOpen(confirm), true, "and the modal stays");
+  m.escape();
+  assert.equal(m.registry.isModalOpen(confirm), false);
+  assert.equal(order(sheet), 0, "the nav sheet is the only modal left, at the bottom of the order");
+  m.escape();
+  m.tick(300);
+  assert.equal(modalGone(m, sheet, true), true, "the last Escape closes the nav sheet");
+});
+
+// ---------------------------------------------------------------------------
+// C1 nav sheets: the bottom nav stays in view; the same button closes, another switches
+// ---------------------------------------------------------------------------
+
+var NAV_TABS = ["projects", "chat", "team", "more"];
+
+test("nav sheet css: at phone width the sheet stops above the nav, which stays on its own layer under it", function () {
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-nav-sheet", "bottom", PHONE), "var(--mobile-nav-height)", "the sheet ends where the nav begins");
+  assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-tab-bar", "height", PHONE), "var(--mobile-nav-height)", "the nav is that tall");
+  assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-tab-bar", "z-index", PHONE), "var(--z-nav)");
+  assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-tab-bar", "position", PHONE), "fixed");
+  assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-tab-bar", "bottom", PHONE), "0", "the nav sits on the bottom edge the sheet clears");
+  assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-sheet", "display", DESKTOP), "none", "no nav sheet on a wide viewport");
+  assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-sheet", "display", PHONE), "flex");
+  assert.match(BASE, /--mobile-nav-height:\s*calc\(56px \+ var\(--safe-bottom\)\)/);
+  ["position", "z-index", "inset", "background"].forEach(function (prop) {
+    assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-sheet", prop, PHONE), null, "#mobile-sheet keeps no own " + prop);
+    assert.equal(cssRules.valueAt(MOBILE_NAV, ".mobile-sheet-content", prop, PHONE), null, ".mobile-sheet-content keeps no own " + prop);
+  });
+});
+
+test("nav sheet: the same nav button closes the sheet, another switches it, the close control, Escape and a quick second tap behave", async function (t) {
+  var m = await modalBrowser(t);
+  var bar = new dom.FakeElement("div");
+  bar.id = "mobile-tab-bar";
+  var tabs = NAV_TABS.map(function (name) {
+    var tab = new dom.FakeElement("button");
+    tab.dataset.tab = name;
+    bar.appendChild(tab);
+    return tab;
+  });
+  global.document.body.appendChild(bar);
+  var opened = [];
+  m.navSheet.wireNavTabs(tabs, {
+    open: function (type, name) { opened.push(name); m.navSheet.showNavSheet(type); },
+    close: function () { m.navSheet.closeNavSheet(); },
+  });
+  var tab = function (name) { return tabs[NAV_TABS.indexOf(name)]; };
+  var sheetOpen = function () { return m.registry.isModalOpen(m.sheet) && !m.sheet.classList.contains("hidden") && !m.sheet.classList.contains("closing"); };
+  var nowShowing = function () { return m.navSheet.navSheetType(); };
+
+  var STEPS = [
+    { name: "a nav button opens its sheet", act: function () { tab("projects").click(); }, shows: "projects" },
+    { name: "the same button closes it", act: function () { tab("projects").click(); m.tick(300); }, shows: null },
+    { name: "a nav button opens Chat", act: function () { tab("chat").click(); }, shows: "sessions" },
+    { name: "another button switches to its sheet, which stays open", act: function () { tab("team").click(); }, shows: "team" },
+    { name: "and another", act: function () { tab("more").click(); }, shows: "more" },
+    { name: "the sheet the Files list opens (a More entry) is switched away from by any nav button", act: function () { m.navSheet.showNavSheet("files"); tab("more").click(); }, shows: "more" },
+    { name: "the close control closes it", act: function () { m.sheet.querySelector(".overlay-close").click(); m.tick(300); }, shows: null },
+    { name: "a closed sheet opens again from any button", act: function () { tab("team").click(); }, shows: "team" },
+    { name: "Escape closes it", act: function () { m.escape(); m.tick(300); }, shows: null },
+    { name: "a second tap while it slides down opens it again", act: function () { tab("chat").click(); tab("chat").click(); tab("chat").click(); m.tick(300); }, shows: "sessions" },
+    { name: "the scrim closes it", act: function () { m.sheet.querySelector(".overlay-modal-backdrop").click(); m.tick(300); }, shows: null },
+  ];
+  STEPS.forEach(function (step) {
+    step.act();
+    assert.equal(nowShowing(), step.shows, step.name + ": what the sheet shows");
+    assert.equal(sheetOpen(), step.shows !== null, step.name + ": " + (step.shows ? "open and not sliding away" : "closed"));
+    assert.equal(bar.classList.contains("hidden") || bar.contains(m.sheet) || m.sheet.contains(bar), false, step.name + ": the nav is neither hidden nor inside the sheet");
+  });
+  assert.deepEqual(opened, ["projects", "chat", "team", "more", "more", "team", "chat", "chat"], "each tap that did not close the sheet opened its own");
+
+  // A button that opens no nav sheet (the middle button's full-screen view).
+  assert.equal(m.navSheet.navTabAction("home"), null);
+  assert.deepEqual(m.navSheet.navTabAction("projects"), { action: "open", type: "projects" });
+});
+
+test("nav sheet: sidebar-mobile.js routes every nav button, its close and its action sheet through the shared modules", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", "sidebar-mobile.js"), "utf8");
+  assert.match(src, /wireNavTabs\(mobileTabs,/, "the nav buttons use the one rule");
+  assert.match(src, /showNavSheet\(type,/, "every sheet type opens through it");
+  assert.match(src, /showActionSheet\(\{ actions: actions \}\)/, "the project actions use the shared sheet");
+  assert.doesNotMatch(src, /mobile-action-sheet-overlay|mobile-sheet-close|mobile-sheet-backdrop/, "no surface-owned scrim or close control");
+  assert.doesNotMatch(src, /mobile-sheet"\)[^;]*classList\.add\("hidden"\)|sheet\.classList\.add\("hidden"\)/, "nothing hides the sheet by hand");
+  assert.match(src, /mobileHomeBtn\.addEventListener\("click", function \(\) \{\s*\/\/[^\n]*\n\s*closeMobileSheet\(\);/, "the middle button closes an open nav sheet before its full-screen view");
+});
+
+// ---------------------------------------------------------------------------
+// C1 guard: no overlay-band literal z-index in the files C1 touches
+// ---------------------------------------------------------------------------
+
+// A z-index from 100 up is an overlay layer and comes from the scale in base.css;
+// -1 to 99 is local stacking inside a component and stays a literal. What is left
+// below belongs to surfaces C1 did not move: the remaining modals (C2) and the
+// panels, menus and other layers (C3). Each of those tasks removes its rows; the
+// guard fails on a new literal and on a row whose literal is gone.
+// TODO(lr-528910): the modal rows go with the remaining modals.
+// TODO(lr-5ebc02): the other rows go with the repo-wide sweep.
+var OVERLAY_BAND_MIN = 100;
+var UNMOVED_LITERALS = {
+  "overlays.css": [
+    ".pwa-modal|700", "#skill-install-modal|300", "#session-grants-modal|300", ".remove-project-task-modal|310",
+    "#rewind-modal|300", "#resume-modal|300", "#notif-help-modal|300", "#add-project-modal|300", "#connect-overlay|999",
+  ],
+  "messages.css": [".remote-cursor|9999", "#todo-sticky .todo-sticky-items|200", "#mermaid-modal|300"],
+  "input.css": ["#context-sources-picker|200", "#sidebar|1000", "#sidebar-overlay|999", "#input-more-sheet|10000"],
+  "mobile-nav.css": [], "overlay.css": [], "base.css": [],
+};
+var UNMOVED_JS_LITERALS = { "app-misc.js": 1 };
+var C1_MODULES = ["overlay.js", "overlay-modal.js", "overlay-registry.js", "app-modals.js", "mobile-nav-sheet.js", "mobile-action-sheet.js", "sidebar-mobile.js", "app-misc.js"];
+
+test("guard: the files C1 touches hold no overlay-band literal z-index but the named unmoved ones", function () {
+  Object.keys(UNMOVED_LITERALS).forEach(function (file) {
+    var found = [];
+    cssRules.rules(css(file)).forEach(function (r) {
+      var m = /(?:^|[;\s])z-index\s*:\s*(-?\d+)\s*(?:;|$)/.exec(r.body);
+      if (m && Number(m[1]) >= OVERLAY_BAND_MIN) found.push(r.selector + "|" + m[1]);
+    });
+    assert.deepEqual(found.sort(), UNMOVED_LITERALS[file].slice().sort(), file + ": overlay-band literal z-index values");
+  });
+  C1_MODULES.forEach(function (file) {
+    var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", file), "utf8");
+    var hits = src.match(/z-index\s*:\s*\d{3,}|zIndex\s*=\s*["']?\d{3,}/g) || [];
+    assert.equal(hits.length, UNMOVED_JS_LITERALS[file] || 0, file + ": overlay-band literal z-index in script");
+  });
+  // The moved surfaces' own scrim, card and close rules are gone from their stylesheets.
+  var html = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "index.html"), "utf8");
+  ["paste-modal", "image-modal", "confirm-modal", "mobile-sheet-backdrop", "mobile-sheet-close"].forEach(function (name) {
+    assert.ok(html.indexOf(name) === -1, name + " is gone from index.html");
+  });
+  var sheets = ["overlays.css", "input.css", "messages.css", "mobile-nav.css"].map(css).join("\n");
+  [/#confirm-modal/, /#paste-modal\b/, /#image-modal\b/, /\.image-modal-close/, /\.paste-modal-close/, /\.mobile-action-sheet-overlay/, /\.mobile-sheet-backdrop/, /\.mobile-sheet-close/]
+    .forEach(function (re) { assert.doesNotMatch(sheets, re, String(re) + " is gone from the stylesheets"); });
 });
