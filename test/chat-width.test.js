@@ -253,9 +253,106 @@ test("change: choosing a width applies at once with no reload, is cached and sav
   assert.ok(heard.indexOf("compact") !== -1);
 });
 
+// The theme module under the same fake page. Its profile is `profile`; the theme
+// list is empty (the two built-in themes are always there). holdPuts works as in
+// freshWidthModule.
+async function freshThemeModule(t, profile, seed, holdPuts) {
+  var env = await freshWidthModule(t, profile, seed, holdPuts);
+  document.documentElement.style = { setProperty: function () {} };
+  var plain = global.fetch;
+  global.fetch = function (url, init) {
+    if (url === "/api/themes") {
+      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ bundled: {}, custom: {} }); } });
+    }
+    return plain(url, init);
+  };
+  env.theme = await import(dom.moduleUrl("theme.js") + "?load=" + (++loads));
+  return env;
+}
+
+function settle() {
+  return new Promise(function (resolve) { setImmediate(function () { setImmediate(resolve); }); });
+}
+
+// Runs fn with console.error replaced and returns what was reported.
+async function reportedErrors(fn) {
+  var real = console.error;
+  var logged = [];
+  console.error = function () { logged.push(Array.prototype.join.call(arguments, " ")); };
+  try { await fn(); } finally { console.error = real; }
+  return logged;
+}
+
 // Cases that need a module of their own: saves kept in flight, and listeners
 // that unsubscribe or throw while a change is announced.
 var CHANGE_CASES = [
+  ["theme: the saved choice applies at load without opening Settings, and is cached", async function (env, t) {
+    var theme = await freshThemeModule(t, { themeMode: "light", themeId: null });
+    theme.theme.initTheme();
+    await settle();
+    assert.equal(theme.theme.getThemeId(), "clagentic-light");
+    assert.equal(global.localStorage.getItem("clagentic-mode"), "light");
+    assert.equal(global.localStorage.getItem("clagentic-theme"), "clagentic-light");
+    assert.deepEqual(theme.puts, [], "loading sends nothing to the server");
+  }],
+  ["theme: with no saved choice the device's own choice stands; a choice made on this page beats a late reply", async function (env, t) {
+    var none = await freshThemeModule(t, { themeMode: null, themeId: null }, { "clagentic-mode": "light" });
+    none.theme.initTheme();
+    await settle();
+    assert.equal(none.theme.getThemeId(), "clagentic-light");
+    assert.equal(global.localStorage.getItem("clagentic-mode"), "light");
+    var late = await freshThemeModule(t, { themeMode: "light", themeId: null });
+    late.theme.initTheme();
+    late.theme.setThemeMode("dark");
+    await settle();
+    assert.equal(late.theme.getThemeId(), "clagentic-dark", "the older profile reply (light) did not win");
+  }],
+  ["theme: quick choices are saved one at a time and the server ends on the last", async function (env, t) {
+    var theme = await freshThemeModule(t, null, null, true);
+    theme.theme.setThemeMode("light");
+    theme.theme.setThemeMode("dark");
+    theme.theme.setThemeMode(null);
+    assert.deepEqual(theme.puts, [["/api/user/theme-mode", { themeMode: "light" }]], "one save in flight");
+    await theme.release();
+    assert.deepEqual(theme.puts.slice(1), [["/api/user/theme-mode", { themeMode: null }]], "the last choice follows, the middle one is dropped");
+    await theme.release();
+    assert.equal(theme.puts.length, 2);
+  }],
+  ["theme: a listener that unsubscribes and one that throws do not make another miss the change; the error is reported", async function (env, t) {
+    var theme = await freshThemeModule(t, null);
+    var heard = [];
+    var off = theme.theme.onThemeChange(function () { heard.push("first"); off(); });
+    theme.theme.onThemeChange(function () { throw new Error("boom"); });
+    theme.theme.onThemeChange(function (id) { heard.push(id); });
+    var logged = await reportedErrors(function () { theme.theme.applyTheme("clagentic-light"); });
+    assert.deepEqual(heard, ["first", "clagentic-light"]);
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /theme listener failed.*boom/);
+  }],
+  ["a failed profile load or preference save is reported by name for the theme, the width and the avatars", async function (env, t) {
+    var theme = await freshThemeModule(t, null);
+    var avatars = await import(dom.moduleUrl("session-list-avatars.js") + "?load=" + (++loads));
+    var logged = await reportedErrors(async function () {
+      theme.theme.initTheme();
+      await theme.mod.initChatWidth();
+      await avatars.initSessionListAvatars();
+      await settle();
+    });
+    ["theme", "chat width", "session list avatars"].forEach(function (name) {
+      assert.ok(logged.some(function (line) { return line.indexOf("Loading the " + name + " preference failed") === 0; }), name + " load is reported");
+    });
+    var base = global.fetch;
+    global.fetch = function (url, init) {
+      if (init && init.method === "PUT") return Promise.resolve({ ok: false, status: 503 });
+      return base(url, init);
+    };
+    var saveLogged = await reportedErrors(async function () {
+      theme.theme.setThemeMode("dark");
+      await settle();
+    });
+    assert.equal(saveLogged.length, 1);
+    assert.match(saveLogged[0], /Saving themeMode failed: HTTP 503/);
+  }],
   ["quick choices are saved one at a time and only the latest is kept", async function (env) {
     env.mod.setChatWidth("wide");
     env.mod.setChatWidth("compact");
