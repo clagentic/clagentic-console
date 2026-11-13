@@ -72,6 +72,13 @@ img.emoji {
   --msg-text-size: 15px;
   --msg-meta-size: 12px;
   --msg-touch-target: 44px;
+
+  /* The compact one-line card (the pending scheduled card in the composer outbox):
+     a 38 px row of 28 px icon buttons on a fine pointer; on a coarse pointer the
+     buttons take --msg-touch-target and the row 54 px. */
+  --compact-card-height: 38px;
+  --compact-card-height-touch: 54px;
+  --compact-control-size: 28px;
 }
 
 :root[data-chat-width="compact"] { --content-width: var(--chat-width-compact); }
