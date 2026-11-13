@@ -2,10 +2,10 @@
    Skills Modal
    ========================================================================== */
 
-#skills-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; }
-#skills-modal.hidden { display: none; }
-
+/* Drawn by the shared overlay component (scrim, card, layer and close control);
+   this sizes the dialog and styles what is inside it. */
 .skills-dialog {
+  /* The catalogue grid is laid out for this width (named reason: dialog width). */
   width: 1060px;
   max-width: 94vw;
   height: 90vh;
@@ -20,7 +20,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 0;
+  /* The right side clears the shared close control. */
+  padding: 16px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 0 20px;
   flex-shrink: 0;
 }
 
@@ -50,21 +51,6 @@
 .skills-powered-by a:hover {
   text-decoration: underline;
 }
-
-.skills-close {
-  background: none;
-  border: none;
-  color: var(--text-dimmer);
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  border-radius: 6px;
-  transition: color 0.15s, background 0.15s;
-}
-
-.skills-close:hover { color: var(--text); background: var(--sidebar-hover); }
-.skills-close .lucide { width: 16px; height: 16px; }
 
 /* --- Tabs --- */
 .skills-tabs {

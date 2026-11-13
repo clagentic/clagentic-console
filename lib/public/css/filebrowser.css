@@ -420,9 +420,10 @@
 }
 
 /* MCP Servers Modal */
-#mcp-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; }
-#mcp-modal.hidden { display: none; }
+/* Drawn by the shared overlay component (scrim, card, layer and close control);
+   this sizes the dialog and styles what is inside it. */
 .mcp-dialog {
+  /* The server rows are laid out for this width (named reason: dialog width). */
   width: 480px;
   max-width: 94vw;
   max-height: 70vh;
@@ -435,7 +436,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  /* The right side clears the shared close control. */
+  padding: 16px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 16px 20px;
   border-bottom: 1px solid var(--border);
 }
 .mcp-title {

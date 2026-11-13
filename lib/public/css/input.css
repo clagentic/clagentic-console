@@ -1002,47 +1002,34 @@
    Input More Bottom Sheet (mobile)
    ========================================================================== */
 
-#input-more-sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
-  pointer-events: none;
-}
-
-#input-more-sheet.hidden {
-  display: none;
-}
-
-.input-more-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--shadow-rgb), 0.4);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  pointer-events: auto;
-}
-
-#input-more-sheet.open .input-more-backdrop {
-  opacity: 1;
-}
-
+/* The sheet is drawn by the shared overlay component (a "sheet": scrim, card,
+   layer and close control, css/overlay.css). It slides up on open and, through the
+   exit class the script asks for, slides back down before it is hidden. */
 .input-more-content {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--bg);
-  border-top-left-radius: 16px;
-  border-top-right-radius: 16px;
-  padding: 8px 0 calc(var(--safe-bottom) + 16px);
-  transform: translateY(100%);
-  transition: transform 0.25s ease;
-  pointer-events: auto;
-  box-shadow: 0 -8px 24px rgba(var(--shadow-rgb), 0.15);
+  animation: inputMoreSlideUp 0.25s ease;
 }
 
-#input-more-sheet.open .input-more-content {
-  transform: translateY(0);
+#input-more-sheet.closing .input-more-content {
+  animation: inputMoreSlideDown 0.25s ease forwards;
+}
+
+#input-more-sheet.closing .overlay-modal-backdrop {
+  animation: inputMoreFadeOut 0.25s ease forwards;
+}
+
+@keyframes inputMoreSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes inputMoreSlideDown {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
+@keyframes inputMoreFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 .input-more-handle {

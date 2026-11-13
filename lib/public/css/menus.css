@@ -213,26 +213,15 @@
 #qr-btn:hover { color: var(--text-secondary); background: rgba(var(--overlay-rgb),0.04); border-color: var(--border); }
 #qr-btn.active { color: var(--text); background: rgba(var(--overlay-rgb),0.06); border-color: var(--border); }
 
-#qr-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(var(--shadow-rgb), 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 500;
-}
-#qr-overlay.hidden { display: none; }
-
+/* The QR dialog is drawn by the shared overlay component (scrim, card, layer and
+   close control); this lays out what is inside it. */
 #qr-overlay-inner {
-  background: var(--bg-alt);
-  border-radius: 16px;
-  padding: 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
+  /* The dialog is as wide as the code. */
+  width: auto;
 }
 
 /* A QR code scans as dark modules on a light quiet zone in both themes, so this

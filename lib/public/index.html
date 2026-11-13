@@ -459,8 +459,8 @@
   </div>
   <!-- Mobile input-more bottom sheet: attach / image + context sources -->
   <div id="input-more-sheet" class="hidden">
-    <div class="input-more-backdrop"></div>
-    <div class="input-more-content">
+    <div class="overlay-modal-backdrop"></div>
+    <div class="overlay-modal-dialog input-more-content">
       <div class="input-more-handle"></div>
       <div class="input-more-actions">
         <button class="input-more-action" id="input-more-attach">
@@ -812,7 +812,8 @@
 
 <!-- QR / Share overlay -->
 <div id="qr-overlay" class="hidden">
-  <div id="qr-overlay-inner">
+  <div class="overlay-modal-backdrop"></div>
+  <div id="qr-overlay-inner" class="overlay-modal-dialog">
     <div id="qr-canvas"></div>
     <div id="qr-url"></div>
     <button id="qr-share-btn" class="qr-share-btn hidden"><i data-lucide="share-2"></i> Share</button>
@@ -1522,13 +1523,12 @@
 </div>
 
 <div id="mermaid-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="mermaid-modal-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog mermaid-modal-dialog">
     <div class="mermaid-modal-header">
       <span class="mermaid-modal-title">Diagram</span>
       <div class="mermaid-modal-actions">
-        <button class="mermaid-modal-btn" id="mermaid-download-btn" title="Download PNG"><i data-lucide="download" style="width:16px;height:16px"></i></button>
-        <button class="mermaid-modal-btn" title="Close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+        <button class="mermaid-modal-btn" id="mermaid-download-btn" title="Download PNG"><i data-lucide="download"></i></button>
       </div>
     </div>
     <div class="mermaid-modal-body" id="mermaid-modal-body"></div>
@@ -1536,8 +1536,8 @@
 </div>
 
 <div id="notif-help-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog" style="max-width: 380px;">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog notif-help-dialog">
     <div class="notif-help-title">Notifications blocked</div>
     <div class="notif-help-body">
       <p>Your browser has blocked notification permissions for this site. To re-enable:</p>
@@ -1558,8 +1558,8 @@
 </div>
 
 <div id="resume-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog resume-picker-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog resume-picker-dialog">
     <div class="resume-modal-title">Resume CLI session</div>
     <div class="resume-picker-body">
       <div id="resume-picker-loading" class="resume-picker-loading">
@@ -1578,8 +1578,8 @@
 </div>
 
 <div id="rewind-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog rewind-dialog">
     <div class="rewind-modal-title">Rewind to this point?</div>
     <div class="rewind-modal-body">
       <p id="rewind-summary"></p>
@@ -1598,8 +1598,8 @@
 </div>
 
 <div id="skill-install-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog skill-install-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog skill-install-dialog">
     <div class="skill-install-title" id="skill-install-title"></div>
     <div class="skill-install-reason" id="skill-install-reason"></div>
     <div class="skill-install-list" id="skill-install-list"></div>
@@ -1612,8 +1612,8 @@
 </div>
 
 <div id="add-project-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog add-project-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog add-project-dialog">
     <div class="add-project-title">Add project</div>
     <div id="add-project-removed" class="hidden"></div>
     <div class="add-project-modes">
@@ -1646,13 +1646,12 @@
 </div>
 
 <div id="skills-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog skills-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog skills-dialog">
     <div class="skills-header">
       <span class="skills-title"><i data-lucide="puzzle"></i> Skills <span class="skills-powered-by">powered by <a href="https://skills.sh" target="_blank" rel="noopener noreferrer">skills.sh</a></span></span>
       <div class="skills-header-actions">
         <button class="skills-back-btn hidden" id="skills-back-btn"><i data-lucide="arrow-left"></i></button>
-        <button class="skills-close" id="skills-modal-close"><i data-lucide="x"></i></button>
       </div>
     </div>
     <div class="skills-search" id="skills-search">
@@ -1675,11 +1674,10 @@
 
 <!-- MCP Servers Modal -->
 <div id="mcp-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="confirm-dialog mcp-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog mcp-dialog">
     <div class="mcp-header">
       <span class="mcp-title"><i data-lucide="cable"></i> MCP Servers</span>
-      <button class="skills-close" id="mcp-modal-close"><i data-lucide="x"></i></button>
     </div>
     <div class="mcp-content" id="mcp-content">
       <p class="mcp-no-servers">No MCP servers detected. Configure in Clagentic: Console Chrome Extension.</p>
@@ -2166,9 +2164,9 @@
 })();
 </script>
 <script type="module" src="app.js" id="app-module-script"></script>
-<div id="pwa-install-modal" class="pwa-modal hidden">
-  <div class="pwa-modal-backdrop"></div>
-  <div class="pwa-modal-card">
+<div id="pwa-install-modal" class="hidden">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog pwa-modal-card">
     <div class="pwa-modal-icon">📲</div>
     <h3 class="pwa-modal-title">Add to Home Screen</h3>
     <p class="pwa-modal-desc">Add Clagentic: Console to your home screen for a better experience.</p>
