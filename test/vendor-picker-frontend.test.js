@@ -240,6 +240,8 @@ function sessionVendorModules() {
   { name: "an unreadable vendor shows none, locked, not the default", msg: { vendor: null, vendorSource: "error", hasHistory: true }, current: { currentVendor: "claude", vendorSelectionLocked: false }, want: { currentVendor: null, vendorSelectionLocked: true } },
   { name: "a default-bound vendor is applied as sent", msg: { vendor: "claude", vendorSource: "default-bound", hasHistory: true }, current: { currentVendor: null, vendorSelectionLocked: false }, want: { currentVendor: "claude", vendorSelectionLocked: true } },
   { name: "a new session keeps the vendor picked before its first message", msg: { vendor: null, vendorSource: "absent", hasHistory: false }, current: { currentVendor: "codex", vendorSelectionLocked: true, sameSession: true }, want: { currentVendor: "codex", vendorSelectionLocked: true } },
+  { name: "a different new session takes the vendor the server resolved, not the held pick", msg: { vendor: "codex", vendorSource: "default-bound", hasHistory: false }, current: { currentVendor: "claude", vendorSelectionLocked: true, sameSession: false }, want: { currentVendor: "codex", vendorSelectionLocked: true } },
+  { name: "an unreadable vendor without history is neutral and locked", msg: { vendor: null, vendorSource: "error", hasHistory: false }, current: { currentVendor: "claude", vendorSelectionLocked: false }, want: { currentVendor: null, vendorSelectionLocked: true } },
   { name: "a pick made on another session is not carried to a new one", msg: { vendor: null, vendorSource: "absent", hasHistory: false }, current: { currentVendor: "codex", vendorSelectionLocked: true, sameSession: false }, want: null },
 ].forEach(function (row) {
   test("session_switched vendor state: " + row.name, async function () {
@@ -259,11 +261,22 @@ function sessionVendorModules() {
   });
 });
 
-test("the placeholder subscription redraws on a change of the active vendor, not of the map", function () {
+[
+  { name: "the active session's vendor changed", state: { currentVendor: "codex", activeSessionId: 1, sessionVendors: {} }, prev: { currentVendor: "claude", activeSessionId: 1, sessionVendors: {} }, want: true },
+  { name: "the active session changed to one the list records another vendor for", state: { currentVendor: null, activeSessionId: 2, sessionVendors: { 1: "claude", 2: "codex" } }, prev: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "claude", 2: "codex" } }, want: true },
+  { name: "a new session_list map with the same active vendor", state: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "codex" } }, prev: { currentVendor: null, activeSessionId: 1, sessionVendors: { 1: "codex" } }, want: false },
+  { name: "loop-queue mode keeps the queue placeholder", state: { loopQueueMode: true, currentVendor: "codex", activeSessionId: 1, sessionVendors: {} }, prev: { currentVendor: "claude", activeSessionId: 1, sessionVendors: {} }, want: false },
+].forEach(function (row) {
+  test("placeholder recompute: " + row.name, async function () {
+    var [state] = await sessionVendorModules();
+    assert.equal(state.placeholderNeedsRecompute(row.state, row.prev), row.want);
+  });
+});
+
+test("the placeholder subscription asks the shared recompute rule", function () {
   var source = require("fs").readFileSync(path.join(PUBLIC, "modules", "app-rendering.js"), "utf8");
   var sub = source.slice(source.indexOf("store.subscribe(['currentVendor', 'activeSessionId', 'sessionVendors']"));
-  assert.match(sub.slice(0, 700), /activeVendorId/);
-  assert.doesNotMatch(sub.slice(0, 700), /state\.sessionVendors !== prev\.sessionVendors/);
+  assert.match(sub.slice(0, 700), /placeholderNeedsRecompute\(state, prev\)/);
 });
 
 test("session_switched applies the settled vendor again after resetClientState() wipes it", function () {
