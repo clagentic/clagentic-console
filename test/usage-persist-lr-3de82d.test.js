@@ -58,6 +58,24 @@ test("pre-reset fields survive persist and reload; a file without them loads unc
   assert.equal(y.lastKnownPreReset, false);
 });
 
+test("a record persisted in the host state reads as last known hours later, never a zero", function () {
+  var t = tmpFile();
+  fs.writeFileSync(t.file, JSON.stringify({ version: 1, vendors: { claude: { seven_day: {
+    utilization: 0.99, utilizationObservedAt: "2026-11-12T11:56:06.000Z", resetsAt: "2026-11-17T00:00:00.000Z",
+    status: "allowed", observedAt: "2026-11-12T13:59:00.000Z", confirmedAt: null, source: "s", sessionLocalId: null,
+  } } } }));
+  var s = createUsageStore({ file: t.file, log: function () {} });
+  s.load();
+  var x = snap(s, Date.parse("2026-11-12T14:00:00Z")).vendors.claude.buckets.seven_day;
+  assert.equal(x.utilization, null);
+  assert.equal(x.lastKnownUtilization, 0.99);
+  assert.equal(x.lastKnownObservedAt, "2026-11-12T11:56:06.000Z");
+  assert.equal(x.lastKnownStale, true);
+  assert.equal(x.lastKnownAgeSeconds, 7434);
+  assert.equal(x.lastKnownPreReset, false);
+  assert.equal(x.utilizationObservedAt, "2026-11-12T11:56:06.000Z");
+});
+
 test("reloaded old record reads stale, then expired, never re-stamped fresh", function () {
   var t = tmpFile();
   var a = createUsageStore({ file: t.file, log: function () {} });
