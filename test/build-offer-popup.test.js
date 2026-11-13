@@ -189,14 +189,19 @@ test("repro: the admin's socket is sent the offer (delivery)", async function ()
   assert.equal(w.created()[0].notification.category, "system");
 });
 
-test("repro: the page draws the offer's banner and its diagnostics entry (render, banner)", async function (t) {
+test("one alert: the page draws the offer's pop-up and no stack banner, on arrival, on connect and from the bell", async function (t) {
   var w = daemonWorld();
   var page = await adminPage(t);
   w.poll(); w.poll();
   await w.settle();
   page.deliver(w);
   var offer = w.created()[0].notification;
-  assert.ok(page.bannerOf(offer.id), "the stack banner is drawn");
+  assert.equal(page.bannerOf(offer.id), null, "no stack banner for the offer");
+  assert.equal(page.banners.querySelectorAll(".notif-banner").length, 0, "nothing in the banner stack");
+  assert.equal(page.popups().length, 1, "the pop-up is the one alert");
+  page.receive(w.connect());
+  assert.equal(page.bannerOf(offer.id), null, "none after a reconnect's state either");
+  assert.equal(page.popups().length, 1);
 });
 
 test("AC1: while a tab is open the offer is a visible pop-up carrying the restart action", async function (t) {
@@ -241,6 +246,20 @@ test("AC1: a pop-up the operator closed is not brought back by the refresh; clos
   assert.ok(w.created().length >= 2, "the core sent the refreshed offer");
   assert.equal(page.popups().length, 0, "it does not pop up again");
   assert.deepEqual(page.sent, [], "closing a pop-up declined nothing");
+});
+
+test("AC3: a clear-all with the pop-up up draws no banner and leaves the offer undeclined", async function (t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  w.poll(); w.poll();
+  await w.settle();
+  page.deliver(w);
+  var from = w.frames.length;
+  w.store.handleNotificationMessage({ _clagenticUser: { id: ADMIN } }, { type: "notification_dismiss_all" });
+  page.deliver(w, from);
+  assert.equal(page.banners.querySelectorAll(".notif-banner").length, 0);
+  assert.deepEqual(w.resolvedByOperator, []);
+  assert.equal(page.popups().length, 1);
 });
 
 test("AC1: with the banner surface muted for the system category the entry is held but no pop-up shows", async function (t) {
@@ -334,6 +353,7 @@ test("AC4: after a decline no pop-up shows until the cooldown has elapsed", asyn
   w.poll(); w.poll();
   await w.settle();
   page.deliver(w);
+  assert.equal(page.banners.querySelectorAll(".notif-banner").length, 0, "no banner exists: the pop-up's decline alone carries the cooldown");
   declineViaPage(w, page);
   t.mock.timers.tick(300);
   assert.equal(page.popups().length, 0, "declined");

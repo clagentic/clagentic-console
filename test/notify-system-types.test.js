@@ -306,40 +306,19 @@ function offerCreated(id) {
   };
 }
 
-test("tapping the offer banner opens the place its action lives and does not decline it; its close button does (AC6, AC4)", async function (t) {
+test("the offer is raised to the page but draws no stack banner and sends nothing (AC1)", async function (t) {
   var c = await pageWith(t);
-  var opened = 0;
-  // The fake DOM does not parse innerHTML, so the banner's close button is
-  // supplied here: the page wires its listener when the banner is built.
-  var closeButtons = {};
-  var realCreate = global.document.createElement;
-  global.document.createElement = function (tag) {
-    var el = realCreate.call(global.document, tag);
-    var realQuery = el.querySelector;
-    el.querySelector = function (sel) {
-      if (sel !== ".notif-banner-close") return realQuery.call(el, sel);
-      var btn = { listeners: [], addEventListener: function (ev, fn) { if (ev === "click") this.listeners.push(fn); } };
-      closeButtons[el.dataset.notifId] = btn;
-      return btn;
-    };
-    return el;
-  };
-  c.client.registerPlace("build_update_offer", function () { opened++; });
   c.mod.handleNotificationCreated(offerCreated("o1"));
-  assert.ok(c.banner("o1"), "the offer is a banner");
-  c.tap("o1");
-  assert.equal(opened, 1);
-  assert.deepEqual(c.sent.filter(function (m) { return m.type === "notification_dismiss"; }), [], "looking at the offer does not decline it");
-  c.mod.handleNotificationCreated(offerCreated("o1b"));
-  closeButtons.o1b.listeners[0]({ stopPropagation: function () {} });
-  assert.deepEqual(c.sent.filter(function (m) { return m.type === "notification_dismiss"; }), [{ type: "notification_dismiss", ids: ["o1b"] }], "the close button declines it");
+  assert.equal(c.banner("o1"), null, "the diagnostics pop-up is its one alert");
+  assert.deepEqual(c.sent.filter(function (m) { return m.type === "notification_dismiss"; }), [], "nothing declined");
 });
 
-test("a dismissal from the server removes the offer's banner on every page (AC4)", async function (t) {
+test("a dismissal from the server leaves the page with no banner and no error for the offer (AC4)", async function (t) {
   var c = await pageWith(t);
   c.mod.handleNotificationCreated(offerCreated("o2"));
+  assert.equal(c.banner("o2"), null);
   c.mod.handleNotificationDismissed({ ids: ["o2"], unreadCount: 0 });
-  assert.ok(c.banner("o2").classList.contains("hide"));
+  assert.equal(c.banner("o2"), null);
 });
 
 test("an update notice renders its banner from the notification, for the admins it reached (AC5, AC6)", async function (t) {
