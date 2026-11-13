@@ -889,7 +889,9 @@
   #project-settings {
     position: fixed;
     inset: 0;
-    z-index: 300;
+    /* One above the phone Settings list that opens it (#settings-hub is on
+       --z-panel and stays open under it). */
+    z-index: calc(var(--z-panel) + 1);
     border-left: none;
   }
 }

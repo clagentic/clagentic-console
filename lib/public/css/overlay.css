@@ -114,10 +114,13 @@
 
 /* A panel (the panel option of modules/overlay-modal.js): a modal on the panel
    layer, under the dialogs a panel opens, so a confirmation or a picker the
-   panel raises shows over it. Panels do not take the order number: they stay on
-   the one layer and the page's order settles two of them. */
+   panel raises shows over it. Panels are ordered as modals are: the registry
+   numbers the open panels in --overlay-order (clamped, so the band stays under the
+   modal layer) and a later one sits over an earlier one. The phone Settings list
+   (#settings-hub) is on --z-panel itself and project settings one above it, so a
+   registry panel (the +2 here) opened from either shows over it. */
 .overlay-modal.overlay-panel {
-  z-index: var(--z-panel);
+  z-index: calc(var(--z-panel) + 2 + var(--overlay-order, 0));
 }
 /* Its dialog fills the page, with no card chrome. A surface that is a card or a
    drop-down sizes and paints its own dialog class, which loads after this rule. */

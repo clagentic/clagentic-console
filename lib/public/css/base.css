@@ -92,8 +92,10 @@ img.emoji {
      the nav stays in view and tappable beneath it. */
   --z-nav: 200;
   /* A full-screen settings panel: under the modal layer, so a dialog a panel opens
-     (an admin form, the avatar positioner) shows over it. */
-  --z-panel: 399;
+     (an admin form, the avatar positioner) shows over it. The panel layer is a band
+     from here up to 392 (the registry numbers open panels, at most 40 apart, and two
+     legacy panels sit at +0 and +1), clear of the literal 300 layers below. */
+  --z-panel: 350;
   --z-modal: 400;
   --z-menu: 5000;
   --z-toast: 9000;
