@@ -1218,9 +1218,9 @@ test("nav sheet: sidebar-mobile.js routes every nav button, its close and its ac
 // -1 to 99 is local stacking inside a component and stays a literal. What is left
 // below belongs to surfaces C1 and C2 did not move: the panels, menus and other
 // layers (C3). That task removes its rows; the guard fails on a new literal and on
-// a row whose literal is gone. The files the C2 modals lived in are listed with no
-// rows left.
-// TODO(lr-5ebc02): the other rows go with the repo-wide sweep.
+// a row whose literal is gone. The files the C2 modals and the C3a panels lived in
+// are listed with no rows left.
+// TODO(lr-b5d2de): the other rows go with the repo-wide sweep.
 var OVERLAY_BAND_MIN = 100;
 var UNMOVED_LITERALS = {
   "overlays.css": ["#connect-overlay|999"],
@@ -1228,12 +1228,19 @@ var UNMOVED_LITERALS = {
   "input.css": ["#context-sources-picker|200", "#sidebar|1000", "#sidebar-overlay|999"],
   "mobile-nav.css": [], "overlay.css": [], "base.css": [],
   "admin.css": [], "profile.css": [], "skills.css": [],
+  // C3a: the panels, the ralph and scheduler dialogs and the literals they owned.
+  "command-palette.css": [], "agent-picker.css": [], "playbook.css": [], "scheduler-modal.css": [], "loop.css": [],
+  "server-settings.css": [], "user-settings.css": [], "settings-nav.css": [],
 };
 var UNMOVED_JS_LITERALS = {};
 var C1_MODULES = ["overlay.js", "overlay-modal.js", "overlay-registry.js", "app-modals.js", "mobile-nav-sheet.js", "mobile-action-sheet.js", "sidebar-mobile.js", "app-misc.js"];
 var C2_MODULES = [
   "admin.js", "sidebar-projects.js", "app-projects.js", "app-loop-ui.js", "qrcode.js", "profile.js", "notifications.js", "rewind.js",
   "sidebar-sessions.js", "app-skills-install.js", "session-grants.js", "skills.js", "mcp-ui.js", "markdown.js", "input.js", "context-sources.js",
+];
+var C3A_MODULES = [
+  "user-settings.js", "server-settings.js", "command-palette.js", "agent-picker.js", "app-loop-wizard.js", "scheduler-config.js",
+  "overlay-history.js",
 ];
 
 test("guard: the files C1 touches hold no overlay-band literal z-index but the named unmoved ones", function () {
@@ -1245,7 +1252,7 @@ test("guard: the files C1 touches hold no overlay-band literal z-index but the n
     });
     assert.deepEqual(found.sort(), UNMOVED_LITERALS[file].slice().sort(), file + ": overlay-band literal z-index values");
   });
-  C1_MODULES.concat(C2_MODULES).forEach(function (file) {
+  C1_MODULES.concat(C2_MODULES, C3A_MODULES).forEach(function (file) {
     var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", file), "utf8");
     var hits = src.match(/z-index\s*:\s*\d{3,}|zIndex\s*=\s*["']?\d{3,}/g) || [];
     assert.equal(hits.length, UNMOVED_JS_LITERALS[file] || 0, file + ": overlay-band literal z-index in script");
@@ -1429,8 +1436,10 @@ test("C2 css: no moved dialog keeps its own scrim, card chrome, position or laye
     });
   });
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-scrim-solid .overlay-modal-backdrop", "background", DESKTOP), "var(--bg)", "the solid scrim is an option of the shared modal");
-  assert.equal(cssRules.valueAt(css("user-settings.css"), "#user-settings", "z-index", DESKTOP), "var(--z-panel)");
-  assert.equal(cssRules.valueAt(css("server-settings.css"), "#server-settings", "z-index", DESKTOP), "var(--z-panel)");
+  // C3a: the panels' layer is the shared panel option's, no longer a rule on their own node.
+  assert.equal(cssRules.valueAt(css("user-settings.css"), "#user-settings", "z-index", DESKTOP), null);
+  assert.equal(cssRules.valueAt(css("server-settings.css"), "#server-settings", "z-index", DESKTOP), null);
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", DESKTOP), "var(--z-panel)");
 });
 
 // The page's static modals: the shared scrim and dialog, no close control of their own.
@@ -1491,4 +1500,274 @@ test("C2 force change PIN: a modal that cannot be dismissed on a solid scrim has
   assert.equal(handle.isOpen(), true, "Escape and the scrim leave it");
   handle.close();
   assert.equal(handle.isOpen(), false, "the surface itself closes it once the PIN is saved");
+});
+
+// ---------------------------------------------------------------------------
+// C3a: the panel option, the panels on it, the dialogs moved off .confirm-backdrop
+// ---------------------------------------------------------------------------
+
+// modalBrowser plus the browser's history, which the panel option holds an entry
+// in, and the phone breakpoint the settings panel asks about.
+async function panelBrowser(t, phone) {
+  var m = await modalBrowser(t);
+  var calls = { push: 0, back: 0 };
+  global.history = { pushState: function () { calls.push++; }, back: function () { calls.back++; } };
+  global.window.matchMedia = function () { return { matches: !!phone }; };
+  m.history = calls;
+  m.historyMod = await import(dom.moduleUrl("overlay-history.js"));
+  // The popstate of each back an earlier row issued has arrived by now.
+  while (m.historyMod.consumeOwnPopstate()) { /* delivered */ }
+  return m;
+}
+
+// user-settings.js as the page has it: the page's own panel node (the shared scrim
+// and a dialog, hidden) and the gear button that opens it.
+function userSettingsPage() {
+  var root = new dom.FakeElement("div");
+  root.id = "user-settings";
+  root.className = "hidden";
+  var scrim = new dom.FakeElement("div");
+  scrim.className = "overlay-modal-backdrop";
+  var dialog = new dom.FakeElement("div");
+  dialog.className = "overlay-modal-dialog us-modal";
+  root.appendChild(scrim);
+  root.appendChild(dialog);
+  var btn = new dom.FakeElement("button");
+  btn.id = "user-settings-btn";
+  global.document.body.appendChild(root);
+  global.document.body.appendChild(btn);
+  return { root: root, dialog: dialog, btn: btn };
+}
+
+// How a panel is dismissed: the ways every panel shares (Escape, the scrim, the
+// shared close control) and the phone's back swipe, which is the browser's
+// popstate (app.js consumes it, then closes the top panel that holds an entry).
+var PANEL_WAYS = [
+  { name: "Escape", act: function (m) { m.escape(); } },
+  { name: "a click on the scrim", act: function (m, el) { el.querySelector(".overlay-modal-backdrop").click(); } },
+  { name: "the shared close control", act: function (m, el) { el.querySelector(".overlay-close").click(); } },
+  { name: "the back swipe", phoneOnly: true, act: function (m) {
+    assert.equal(m.historyMod.consumeOwnPopstate(), false, "a swipe is not the echo of our own back");
+    assert.equal(m.historyMod.consumeOverlayPopstate(), true, "an entry is held");
+    assert.equal(m.registry.closeTopHeldPanel(), true, "the panel closes itself");
+  } },
+];
+
+test("C3a panel: the real user settings module opens as the panel option, closes by each way, and holds its history entry on a phone only", async function (t) {
+  global.fetch = function () { return Promise.reject(new Error("offline")); };
+  for (var p = 0; p < 2; p++) {
+    var phone = p === 1;
+    for (var w = 0; w < PANEL_WAYS.length; w++) {
+      var way = PANEL_WAYS[w];
+      if (way.phoneOnly && !phone) continue;
+      var m = await panelBrowser(t, phone);
+      var page = userSettingsPage();
+      var mod = await import(dom.moduleUrl("user-settings.js") + "?c3a=" + (++instance));
+      mod.initUserSettings({});
+      var at = (phone ? "phone" : "desktop") + ", " + way.name;
+      page.btn.click();
+      var el = m.top();
+      assert.equal(el, page.root, at + ": the page's own panel is the one in the registry");
+      assert.equal(mod.isUserSettingsOpen(), true, at + ": open");
+      assert.ok(el.classList.contains("overlay-modal") && el.classList.contains("overlay-panel"), at + ": the shared modal with the panel option");
+      assert.equal(el.getAttribute("data-overlay-kind"), "modal", at + ": a modal, not a sheet");
+      assert.equal(el.classList.contains("hidden"), false, at + ": shown");
+      assert.ok(page.dialog.classList.contains("overlay-panel-dialog"), at + ": the dialog is the panel's");
+      var closes = el.querySelectorAll(".overlay-close");
+      assert.equal(closes.length, 1, at + ": one close control");
+      assert.equal(closes[0]._parent, page.dialog, at + ": the dialog's own child, at its corner");
+      assert.equal(m.history.push, phone ? 1 : 0, at + ": a history entry only where the panel is a page of the phone list");
+      assert.equal(m.historyMod.hasOverlayState(), phone, at + ": and the history module knows it");
+      page.btn.click();
+      assert.equal(m.history.push, phone ? 1 : 0, at + ": opened again while open, it holds one entry, not two");
+      assert.ok(page.btn.classList.contains("active"), at + ": its gear shows it open");
+
+      way.act(m, el);
+      m.tick(300);
+      assert.equal(mod.isUserSettingsOpen(), false, at + ": closed");
+      assert.equal(modalGone(m, el, true), true, at + ": hidden and kept in the page");
+      assert.equal(page.btn.classList.contains("active"), false, at + ": its gear shows it closed");
+      assert.equal(m.history.back, phone && !way.phoneOnly ? 1 : 0, at + ": the entry is released once, and the swipe's own pop issues no second back");
+      assert.equal(m.historyMod.hasOverlayState(), false, at + ": no entry is left");
+    }
+  }
+});
+
+test("C3a panel: the history option, a re-opened panel, and the back swipe closing the panel opened last that holds an entry", async function (t) {
+  var HISTORY_ROWS = [
+    { name: "a panel holds an entry by default", history: undefined, held: true },
+    { name: "history: false holds none", history: false, held: false },
+    { name: "a function answering true holds one", history: function () { return true; }, held: true },
+    { name: "a function answering false holds none", history: function () { return false; }, held: false },
+  ];
+  for (var i = 0; i < HISTORY_ROWS.length; i++) {
+    var row = HISTORY_ROWS[i];
+    var m = await panelBrowser(t, false);
+    var handle = m.overlay.showOverlay({ kind: "modal", panel: true, content: "x", history: row.history });
+    assert.equal(m.history.push, row.held ? 1 : 0, row.name + ": entries pushed");
+    handle.close();
+    assert.equal(m.history.back, row.held ? 1 : 0, row.name + ": released on close");
+    assert.equal(m.historyMod.hasOverlayState(), false, row.name + ": none left");
+  }
+
+  var n = await panelBrowser(t, false);
+  var first = n.overlay.showOverlay({ kind: "modal", panel: true, content: "a" });
+  var unheld = n.overlay.showOverlay({ kind: "modal", panel: true, content: "b", history: false });
+  var second = n.overlay.showOverlay({ kind: "modal", panel: true, content: "c" });
+  var dialog = n.overlay.showOverlay({ kind: "modal", content: "d" });
+  n.historyMod.consumeOverlayPopstate();
+  assert.equal(n.registry.closeTopHeldPanel(), true);
+  assert.deepEqual([first.isOpen(), unheld.isOpen(), second.isOpen(), dialog.isOpen()], [true, true, false, true], "the panel opened last that holds an entry closed; a dialog and a panel with no entry stay");
+  n.historyMod.consumeOverlayPopstate();
+  assert.equal(n.registry.closeTopHeldPanel(), true);
+  assert.deepEqual([first.isOpen(), unheld.isOpen(), dialog.isOpen()], [false, true, true], "then the earlier one");
+  assert.equal(n.registry.closeTopHeldPanel(), false, "none holds an entry now; the router falls through to the others");
+  assert.equal(n.history.back, 0, "a swipe's pops issue no back of their own");
+  unheld.close();
+  dialog.close();
+});
+
+test("C3a panel: a dialog opened from a panel sits over it and takes Escape first, whichever opened last", async function (t) {
+  var m = await panelBrowser(t, false);
+  var panel = m.overlay.showOverlay({ kind: "modal", panel: true, content: "panel" });
+  m.modals.showConfirm("Sure?", function () {});
+  var confirm = m.top();
+  m.escape();
+  assert.equal(m.registry.isModalOpen(confirm), false, "Escape closed the dialog opened from the panel");
+  assert.equal(panel.isOpen(), true, "and left the panel");
+  m.escape();
+  assert.equal(panel.isOpen(), false, "the next Escape closes the panel");
+
+  // A panel opened while a dialog is up (the palette over a confirmation) is
+  // under it on the page, so the dialog still takes the key.
+  var dialog = m.overlay.showOverlay({ kind: "modal", content: "d" });
+  var later = m.overlay.showOverlay({ kind: "modal", panel: true, content: "later" });
+  m.escape();
+  assert.equal(dialog.isOpen(), false, "the dialog closed first");
+  assert.equal(later.isOpen(), true, "the later panel stays");
+  m.escape();
+  assert.equal(later.isOpen(), false);
+
+  WIDTHS.forEach(function (width) {
+    var at = " at " + width + "px";
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", width), "var(--z-panel)", "a panel is on the panel layer" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", width), "calc(var(--z-modal) + var(--overlay-order, 0))", "a dialog on the modal layer" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-panel-dialog", "width", width), "100%", "the panel dialog fills the page" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-panel-dialog > .overlay-close", "top", width), "calc(var(--safe-top) + var(--overlay-close-inset))", "its close control clears the notch" + at);
+  });
+  assert.ok(layer("nav") < layer("panel") && layer("panel") < layer("modal"), "base < nav < panel < modal");
+});
+
+// The page's static panels and dialogs: the shared scrim and dialog, no scrim,
+// close control or backdrop of their own.
+var C3A_STATIC_IDS = ["user-settings", "ralph-wizard", "ralph-preview-modal", "sched-delete-dialog"];
+
+// Surfaces whose module cannot be imported and driven under node:test (the palette
+// and the picker build their markup through innerHTML, which the fake DOM drops;
+// server settings and the ralph and scheduler modules read dozens of page nodes at
+// start): pinned by source. Each opens through showOverlay and keeps no scrim,
+// close control, Escape or history handling of its own.
+var C3A_SOURCE_ROWS = [
+  { name: "command palette", file: "command-palette.js",
+    has: [/showOverlay\(\{ kind: "modal", panel: true, el: paletteEl, closeLabel: "Close search", onRemove: resetPalette \}\)/, /overlay-modal-backdrop"><\/div>' \+\s*'<div class="overlay-modal-dialog cmd-palette-dialog">/],
+    gone: [/overlay-history|pushOverlayState|popOverlayState/, /cmd-palette-backdrop|cmd-palette-close|cmd-palette-kbd/, /e\.key === "Escape"/, /paletteEl\.classList/] },
+  { name: "agent picker", file: "agent-picker.js",
+    has: [/showOverlay\(\{ kind: "modal", panel: true, el: paletteEl, closeLabel: "Close agents", onRemove: resetPicker \}\)/, /overlay-modal-backdrop"><\/div>' \+\s*'<div class="overlay-modal-dialog cmd-palette-dialog">/],
+    gone: [/cmd-palette-backdrop|agent-picker-close|cmd-palette-kbd/, /e\.key === "Escape"/, /paletteEl\.classList\.(add|remove)\("hidden"\)/] },
+  { name: "server settings", file: "server-settings.js",
+    has: [/showOverlay\(\{ kind: "modal", panel: true, el: settingsEl, onEscape: onSettingsEscape, onRemove: onSettingsClosed \}\)/, /if \(!paletteOpen\) return false;\s*closeSettingsPalette\(\);\s*return true;/],
+    gone: [/overlay-history|pushOverlayState|popOverlayState/, /server-settings-close|closeBtn/, /e\.key === "Escape" && !settingsEl/, /settingsEl\.classList\.(add|remove)\("hidden"\)/] },
+  { name: "user settings", file: "user-settings.js",
+    has: [/kind: 'modal', panel: true, el: settingsEl, history: isPhoneSettingsLayout,/],
+    gone: [/overlay-history|pushOverlayState|popOverlayState|holdsHistoryEntry/, /user-settings-close|user-settings-backdrop|closeBtn|backdrop/, /e\.key === 'Escape' && isUserSettingsOpen/] },
+  { name: "ralph wizard", file: "app-loop-wizard.js",
+    has: [/showOverlay\(\{ kind: "modal", el: el \}\)/],
+    gone: [/ralph-wizard-close|ralph-wizard-backdrop/, /(^|[^\w])el\.classList\.(add|remove)\("hidden"\)/] },
+  { name: "ralph preview", file: "app-loop-ui.js",
+    has: [/previewHandle = showOverlay\(\{ kind: "modal", el: modal \}\)/],
+    gone: [/modal\.classList\.(add|remove)\("hidden"\)/, /Backdrop click intentionally does NOT close/] },
+  { name: "scheduler delete dialog", file: "scheduler-config.js",
+    has: [/deleteHandle = showOverlay\(\{ kind: "modal", el: dialog, onRemove: forgetDeleteTarget \}\)/],
+    gone: [/e\.target === deleteDialog/, /dialog\.classList\.(add|remove)\("hidden"\)/] },
+];
+
+test("C3a html: the user settings, ralph and scheduler dialogs are the shared scrim and dialog, and server settings is the panel dialog, with no close control of their own", function () {
+  C3A_STATIC_IDS.forEach(function (id) {
+    var re = new RegExp('id="' + id + '"[^>]*>\\s*<div class="overlay-modal-backdrop"></div>\\s*<div [^>]*class="[^"]*overlay-modal-dialog');
+    assert.match(INDEX_HTML, re, id + " is the shared scrim and dialog");
+  });
+  assert.match(INDEX_HTML, /id="server-settings"[^>]*>\s*<div class="overlay-modal-dialog server-settings-layout">/, "server settings is a full-page panel dialog");
+  assert.doesNotMatch(INDEX_HTML, /id="user-settings-close"|id="server-settings-close"|us-modal-close|id="ralph-wizard-close"|ralph-wizard-backdrop|server-settings-close-col|sched-delete-dialog-backdrop/, "no own close control, backdrop or column is left");
+});
+
+test("C3a source: the palette, the picker, server settings and the ralph and scheduler dialogs open through the shared overlay and keep no handler of their own", function () {
+  C3A_SOURCE_ROWS.forEach(function (row) {
+    var src = publicFile(path.join("modules", row.file));
+    row.has.forEach(function (re) { assert.match(src, re, row.name + " (" + row.file + "): opens through the shared overlay"); });
+    row.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + " (" + row.file + "): " + String(re) + " is gone"); });
+  });
+  var app = publicFile("app.js");
+  assert.match(app, /if \(closeTopHeldPanel\(\)\) return;\s*\/\/ The overlays that still keep their own entry/, "the popstate routing asks the panel option first");
+  assert.doesNotMatch(app, /isCommandPaletteOpen|isUserSettingsOpen|closeUserSettings|isSettingsOpen\(\)|closeSettings\(\)/, "and no longer names the panels it moved");
+});
+
+test("C3a css: .confirm-backdrop and .confirm-dialog exist in no stylesheet, markup or module, and the moved dialogs keep no scrim, card, position or layer of their own", function () {
+  var gone = /confirm-backdrop|confirm-dialog/;
+  fs.readdirSync(CSS_DIR).filter(function (f) { return /\.css$/.test(f); }).forEach(function (f) {
+    assert.doesNotMatch(css(f), gone, f);
+  });
+  assert.doesNotMatch(INDEX_HTML, gone, "index.html");
+  assert.doesNotMatch(publicFile("app.js"), gone, "app.js");
+  fs.readdirSync(path.join(PUBLIC_DIR, "modules")).filter(function (f) { return /\.js$/.test(f); }).forEach(function (f) {
+    assert.doesNotMatch(publicFile(path.join("modules", f)), gone, f);
+  });
+  // (user settings' .us-modal keeps its own look, sized for the panel; it is the panel's dialog)
+  var DIALOGS = [
+    [".ralph-wizard-card", "loop.css"], [".ralph-preview-dialog", "loop.css"], [".sched-delete-dialog", "scheduler-modal.css"],
+  ];
+  WIDTHS.forEach(function (width) {
+    DIALOGS.forEach(function (row) {
+      ["position", "z-index", "box-shadow", "inset"].forEach(function (prop) {
+        assert.equal(cssRules.valueAt(css(row[1]), row[0], prop, width), null, row[0] + " keeps no own " + prop + " at " + width + "px");
+      });
+    });
+    ["#user-settings", "#ralph-wizard", "#ralph-preview-modal", "#sched-delete-dialog"].forEach(function (id) {
+      ["position", "z-index", "inset"].forEach(function (prop) {
+        ["user-settings.css", "loop.css", "scheduler-modal.css"].forEach(function (file) {
+          assert.equal(cssRules.valueAt(css(file), id, prop, width), null, id + " keeps no own " + prop + " in " + file);
+        });
+      });
+    });
+  });
+  var GONE_SELECTORS = [".ralph-wizard-backdrop", "#ralph-wizard", "#ralph-preview-modal", ".sched-delete-dialog-backdrop", ".us-modal-close", ".server-settings-close-col", ".cmd-palette-kbd", ".cmd-palette", ".cmd-palette.hidden"];
+  fs.readdirSync(CSS_DIR).filter(function (f) { return /\.css$/.test(f); }).forEach(function (file) {
+    cssRules.rules(css(file)).forEach(function (r) {
+      r.selector.split(",").map(function (s) { return s.trim(); }).forEach(function (sel) {
+        assert.equal(GONE_SELECTORS.indexOf(sel), -1, file + ": " + sel + " is gone");
+      });
+    });
+  });
+});
+
+// The literals the C3a surfaces owned, and the token each took (400 is --z-modal;
+// the Settings list is a panel's layer; the dropdown and the panel's own Jump to
+// setting palette are menu-like popups).
+var C3A_TOKENS = [
+  { file: "command-palette.css", selector: ".project-switcher", was: 400, want: "var(--z-modal)" },
+  { file: "playbook.css", selector: ".playbook-overlay", was: 400, want: "var(--z-modal)" },
+  { file: "scheduler-modal.css", selector: ".sched-create-interval-dropdown", was: 1200, want: "var(--z-menu)" },
+  { file: "loop.css", selector: "#ralph-exec-modal", was: 310, want: "var(--z-modal)" },
+  { file: "server-settings.css", selector: ".settings-palette", was: 650, want: "var(--z-menu)" },
+  { file: "settings-nav.css", selector: "#settings-hub", was: 260, want: "var(--z-panel)", width: PHONE },
+];
+
+test("C3a tokens: each literal the C3a surfaces owned is a layer token, and its scale value is where the literal sat or the surface moved onto the shared layer", function () {
+  C3A_TOKENS.forEach(function (row) {
+    assert.equal(cssRules.valueAt(css(row.file), row.selector, "z-index", row.width || DESKTOP), row.want, row.file + ": " + row.selector + " (was " + row.was + ")");
+  });
+  // Where the value is kept it is kept exactly: 400 is the modal layer.
+  assert.equal(layer("modal"), 400);
+  // The moved ralph and scheduler dialogs, and the panels, are on the shared layers (overlay.css).
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", DESKTOP), "calc(var(--z-modal) + var(--overlay-order, 0))");
+  assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", DESKTOP), "var(--z-panel)");
 });
