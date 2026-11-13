@@ -284,34 +284,11 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .ext-popover-connected .lucide { width: 15px; height: 15px; }
 .ext-popover-connected.hidden { display: none; }
 
-/* PWA install modal */
-.pwa-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.pwa-modal.hidden { display: none; }
-
-.pwa-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--shadow-rgb), 0.55);
-}
-
+/* PWA install modal: drawn by the shared overlay component (scrim, card, layer and
+   close control); this sizes and aligns what is inside. */
 .pwa-modal-card {
-  position: relative;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 28px 24px 20px;
+  /* The copy is set for this width (named reason: dialog width). */
   max-width: 340px;
-  width: 100%;
-  box-shadow: 0 16px 48px rgba(var(--shadow-rgb), 0.35);
   animation: modal-in 0.2s ease-out;
   text-align: center;
 }
@@ -497,28 +474,9 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .popover-copy:hover { color: var(--text); border-color: var(--text-dimmer); }
 .popover-copy.copied { color: var(--success); border-color: var(--success); }
 
-/* The confirm modal is drawn by the shared overlay component (overlay.css); the
-   rules below keep the button and text styling it shares with the modals that
-   still use the .confirm-* classes. */
-#skill-install-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#skill-install-modal.hidden { display: none; }
-
-#session-grants-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+/* Every modal is drawn by the shared overlay component (overlay.css): the scrim,
+   the card, the layer and the close control. The rules below size each dialog and
+   keep the button and text styling the modals share (.confirm-*). */
 .session-grants-dialog { max-width: 520px; }
 .session-grants-title { font-weight: 600; font-size: 16px; margin-bottom: 12px; color: var(--text); }
 .session-grants-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 50vh; overflow-y: auto; }
@@ -529,7 +487,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .session-grants-revoke:disabled { opacity: 0.5; cursor: default; }
 .session-grants-empty { font-size: 13px; color: var(--text-muted); }
 
-.skill-install-dialog { max-width: 460px; padding: 28px 32px; }
+.skill-install-dialog { max-width: 460px; }
 .skill-install-title { font-weight: 600; font-size: 17px; margin-bottom: 8px; color: var(--text); }
 .skill-install-reason { color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin-bottom: 18px; }
 .skill-install-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
@@ -552,17 +510,6 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   position: absolute;
   inset: 0;
   background: rgba(var(--shadow-rgb), 0.5);
-}
-
-.confirm-dialog {
-  position: relative;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 20px 24px;
-  max-width: 320px;
-  width: 90%;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
 }
 
 .confirm-text {
@@ -612,28 +559,9 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .confirm-ok:hover { opacity: 0.85; }
 
 /* --- Remove project task dialog --- */
-.remove-project-task-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 310;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.remove-project-task-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--shadow-rgb), 0.45);
-}
 .remove-project-task-dialog {
-  position: relative;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  min-width: 340px;
+  /* The option buttons are laid out for this width (named reason: dialog width). */
   max-width: 420px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.5);
 }
 .remove-project-task-title {
   font-size: 15px;
@@ -703,10 +631,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 
 /* --- Resume modal --- */
 /* --- Rewind modal --- */
-#rewind-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; }
-#rewind-modal.hidden { display: none; }
-
-#rewind-modal .confirm-dialog {
+.rewind-dialog {
   max-width: 620px;
   width: 94%;
   max-height: 80vh;
@@ -836,9 +761,6 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 }
 
 /* --- Resume / Session Picker modal --- */
-#resume-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; }
-#resume-modal.hidden { display: none; }
-
 .resume-modal-title {
   font-size: 15px;
   font-weight: 600;
@@ -910,8 +832,7 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 }
 
 /* --- Notification help modal --- */
-#notif-help-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; }
-#notif-help-modal.hidden { display: none; }
+.notif-help-dialog { max-width: 380px; }
 
 .notif-help-title {
   font-size: 15px;
@@ -973,9 +894,6 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .notif-help-url .popover-copy.copied { color: var(--success); border-color: var(--success); }
 
 /* --- Add project modal --- */
-#add-project-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; }
-#add-project-modal.hidden { display: none; }
-
 .add-project-dialog { max-width: 420px; }
 
 .add-project-title {
@@ -1272,6 +1190,90 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
   color: var(--text-dimmer);
   letter-spacing: 0.3px;
   font-family: var(--font-mono);
+}
+
+/* --- Force change PIN ---
+   A modal that cannot be dismissed (modules/app-misc.js), drawn by the shared
+   overlay component on a solid scrim with no card. The digit boxes are the ones
+   the login page draws (lib/pages.js); their pixel sizes are carried over from
+   there so the two screens match. */
+.fcp-card {
+  /* The form's width (named reason: matches the login page's PIN form). */
+  width: min(380px, 100vw);
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: center;
+}
+.fcp-title {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 22px;
+}
+.fcp-desc {
+  margin: 0 0 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.fcp-card .pin-wrap {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.fcp-card .pin-digit {
+  /* The login page's box (named reason: parity with the login page). */
+  width: 44px;
+  height: 56px;
+  background: var(--input-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Courier New', Courier, 'Roboto Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 56px;
+  outline: none;
+  caret-color: transparent;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fcp-card .pin-digit:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-25);
+}
+.fcp-card .pin-digit.filled {
+  color: var(--text);
+}
+.fcp-save {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.fcp-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.fcp-err {
+  margin-top: 12px;
+  color: var(--error);
+  font-size: 13px;
+  min-height: 1.3em;
+}
+.fcp-logout {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  color: var(--text-dimmer);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 /* --- Connect overlay --- */

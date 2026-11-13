@@ -81,6 +81,9 @@
 .overlay-scrim-dark .overlay-modal-backdrop {
   background: rgba(var(--shadow-rgb), var(--overlay-scrim-dark));
 }
+.overlay-scrim-solid .overlay-modal-backdrop {
+  background: var(--bg);
+}
 /* The dialog's look is the shared card chrome above; this is its size and place. */
 .overlay-modal-dialog {
   position: relative;

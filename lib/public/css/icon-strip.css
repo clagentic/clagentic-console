@@ -1404,27 +1404,11 @@
   background: rgba(var(--accent-rgb), 0.08);
 }
 
-/* --- Worktree creation modal --- */
-.wt-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(var(--shadow-rgb), 0.5);
-  z-index: 9998;
-}
-
+/* --- Worktree creation modal ---
+   Drawn by the shared overlay component; this sizes the dialog. */
 .wt-modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 9999;
-  min-width: 340px;
+  /* The form is laid out for this width (named reason: dialog width). */
   max-width: 420px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.3);
 }
 
 .wt-modal-title {

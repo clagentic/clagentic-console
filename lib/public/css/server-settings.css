@@ -12,7 +12,7 @@
 #server-settings {
   position: fixed;
   inset: 0;
-  z-index: 600;
+  z-index: var(--z-panel);
   animation: settingsFadeIn 0.2s ease;
   overflow: hidden;
 }
