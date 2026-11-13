@@ -58,8 +58,8 @@
 }
 
 /* A panel that keeps its place in the column its container lays out (the info
-   panels): no float, no layer of its own; the container carries the layer. The
-   close control still anchors to its corner. */
+   panels): no float, and no layer here; the surface sets its own layer on its
+   node. The close control still anchors to its corner. */
 .overlay-menu-inline {
   position: relative;
   z-index: auto;

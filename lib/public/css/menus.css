@@ -762,9 +762,10 @@
   width: 280px;
   max-height: calc(100vh - 160px);
   overflow-y: auto;
-  /* The column carries the layer of the menus it holds (usage, status and
-     diagnostics are menus; the context panel is not, and rides with them). */
-  z-index: var(--z-menu);
+  /* The column holds the persistent context panel, which is not a menu and sits
+     below modals; only the usage, status and diagnostics panels take the menu
+     layer, each on its own node (below). */
+  z-index: var(--z-base);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -779,6 +780,11 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+}
+
+/* The three adopted panels are menus and take the menu layer. */
+#usage-panel, #status-panel, #diagnostics-panel {
+  z-index: var(--z-menu);
 }
 
 /* --- Usage panel --- */
