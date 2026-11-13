@@ -8,11 +8,9 @@
    - The bg colors bleed out to the edges via pseudo-elements.
    ========================================================================== */
 
-/* --- Full-screen overlay --- */
+/* --- Full-screen overlay: a panel of the shared overlay component
+   (position, layer and the close control are overlay.css's) --- */
 #server-settings {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-panel);
   animation: settingsFadeIn 0.2s ease;
   overflow: hidden;
 }
@@ -51,8 +49,8 @@
   pointer-events: none;
 }
 
-/* --- Centered container: nav + content + close --- */
-.server-settings-layout > * {
+/* --- Centered container: nav + content (the shared close control keeps its own corner) --- */
+.server-settings-layout > :not(.overlay-close) {
   position: relative;
   z-index: 1;
 }
@@ -151,14 +149,7 @@
   padding: calc(var(--safe-top) + 60px) 40px calc(var(--safe-bottom) + 60px) 40px;
 }
 
-/* ==========  CLOSE COLUMN  ========== */
-.server-settings-close-col {
-  position: fixed;
-  top: calc(var(--safe-top) + 60px);
-  right: 20px;
-  z-index: 5;
-}
-
+/* ==========  CLOSE BUTTON (project settings' own; server settings uses the shared one)  ========== */
 .server-settings-close-btn {
   display: flex;
   flex-direction: column;
@@ -865,13 +856,6 @@
     padding: 24px 16px calc(var(--safe-bottom) + 24px);
   }
 
-  .server-settings-close-col {
-    position: absolute;
-    top: calc(var(--safe-top) + 6px);
-    right: 8px;
-    z-index: 10;
-  }
-
   .server-settings-close-btn {
     width: 36px;
     height: 36px;
@@ -885,10 +869,12 @@
 }
 
 /* ==========  SETTINGS COMMAND PALETTE ========== */
+/* Local to the panel, which is its own stacking context: over the settings
+   content and the shared close control, never above a dialog. */
 .settings-palette {
   position: fixed;
   inset: 0;
-  z-index: 650;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   padding: 56px 14px 14px;

@@ -68,13 +68,17 @@
   }
 }
 
-.cmd-palette {
+/* The command palette and the agent picker are panels of the shared overlay
+   (overlay.css: position, layer, scrim, close control); their dialog and rows
+   below are theirs. The project switcher below is not a panel: it keeps its own
+   shell, on the dialog layer. */
+.project-switcher {
   position: fixed;
   inset: 0;
-  z-index: 400;
+  z-index: var(--z-modal);
 }
 
-.cmd-palette.hidden { display: none; }
+.project-switcher.hidden { display: none; }
 
 .cmd-palette-backdrop {
   position: absolute;
@@ -87,6 +91,8 @@
   left: 50%;
   transform: translateX(-50%);
   top: 0;
+  /* A drop-down the height of its rows, not the full page a panel dialog fills. */
+  height: auto;
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-top: none;
@@ -104,12 +110,19 @@
   to { opacity: 1; max-height: 70vh; }
 }
 
+/* The drop-down is not at the page's top edge on a phone (a bottom sheet), so
+   its close control keeps to the dialog's own corner, not below the notch. */
+.cmd-palette-dialog > .overlay-close {
+  top: var(--overlay-close-inset);
+}
+
 /* --- Search input row --- */
 .cmd-palette-input-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  /* The right end is the shared close control's corner. */
+  padding: 10px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 10px 14px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -133,21 +146,6 @@
 
 .cmd-palette-input::placeholder {
   color: var(--text-muted);
-}
-
-.cmd-palette-kbd {
-  font-size: 11px;
-  color: var(--text-dimmer);
-  cursor: pointer;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cmd-palette-kbd .lucide {
-  width: 18px;
-  height: 18px;
 }
 
 /* --- Results area --- */
@@ -376,7 +374,7 @@
    macOS Cmd+Tab-style quick switcher: centered modal with a darker
    backdrop than the command palette, projects laid out horizontally
    as icon+label tiles that wrap to multiple rows when there are many.
-   Reuses .cmd-palette shell so positioning/animations stay consistent. */
+   Reuses the .cmd-palette-* dialog and rows so animations stay consistent. */
 .project-switcher .cmd-palette-backdrop {
   background: rgba(var(--shadow-rgb), 0.55);
 }

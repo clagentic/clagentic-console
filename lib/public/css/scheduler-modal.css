@@ -758,29 +758,12 @@
 }
 .sched-create-delete-btn.hidden { display: none; }
 
-/* Delete recurring event — standalone dialog */
-.sched-delete-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 400;
-  background: rgba(var(--shadow-rgb), 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: sched-delete-backdrop-in 0.15s ease-out;
-}
-.sched-delete-dialog-backdrop.hidden { display: none; }
-@keyframes sched-delete-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+/* Delete recurring event — a shared modal (overlay.css draws its scrim, card,
+   layer and close control); this sizes and fills the dialog */
 .sched-delete-dialog {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(var(--shadow-rgb), 0.35);
   width: 320px;
   max-width: 90vw;
+  padding: 0;
   overflow: hidden;
   animation: sched-delete-dialog-in 0.15s ease-out;
 }
@@ -792,7 +775,8 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
-  padding: 16px 18px 8px;
+  /* The right end is the shared close control's corner. */
+  padding: 16px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 8px 18px;
 }
 .sched-delete-dialog-body {
   display: flex;
@@ -883,23 +867,6 @@
   width: 13px;
   height: 13px;
 }
-
-.sched-create-interval-dropdown {
-  position: fixed;
-  z-index: 1200;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.18);
-  min-width: 220px;
-  max-width: 280px;
-  overflow: hidden;
-}
-
-.sched-create-interval-dropdown.hidden {
-  display: none;
-}
-
 
 /* --- Interval custom row --- */
 .sched-interval-custom-row {

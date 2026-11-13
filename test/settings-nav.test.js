@@ -344,8 +344,13 @@ test("no copied pill, overlay or section dropdown remains in the code", function
 // ---------------------------------------------------------------------------
 
 test("desktop keeps its section lists, openers, close buttons and Cmd+K palette", function () {
-  ["server-settings-btn", "user-settings-btn", "server-settings-close", "project-settings-close", "user-settings-close", "settings-palette-input"].forEach(function (id) {
+  ["server-settings-btn", "user-settings-btn", "project-settings-close", "settings-palette-input"].forEach(function (id) {
     assert.match(HTML, new RegExp('id="' + id + '"'), id);
+  });
+  // The user and server panels close through the shared panel option's control,
+  // so neither page keeps a close button of its own.
+  ["server-settings-close", "user-settings-close"].forEach(function (id) {
+    assert.doesNotMatch(HTML, new RegExp('id="' + id + '"'), id + " is the shared close control now");
   });
   assert.match(moduleSource("server-settings.js"), /\(e\.metaKey \|\| e\.ctrlKey\) && e\.key === "k"/);
   assert.match(moduleSource("user-settings.js"), /openBtn\.addEventListener\('click', function \(\) \{\s*openUserSettings\(\);/);

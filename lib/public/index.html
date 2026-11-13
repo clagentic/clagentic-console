@@ -845,11 +845,10 @@
 
 <!-- === User Settings (modal dialog) === -->
 <div id="user-settings" class="hidden">
-  <div class="confirm-backdrop" id="user-settings-backdrop"></div>
-  <div class="us-modal">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog us-modal">
     <div class="us-modal-header">
       <span class="us-modal-title">User Settings</span>
-      <button class="us-modal-close" id="user-settings-close" title="Close"><i data-lucide="x"></i></button>
     </div>
     <div class="us-modal-body">
       <nav class="us-modal-nav">
@@ -987,7 +986,7 @@
 
 <!-- === Server Settings (full-screen overlay) === -->
 <div id="server-settings" class="hidden">
-  <div class="server-settings-layout">
+  <div class="overlay-modal-dialog server-settings-layout">
     <div class="server-settings-nav">
       <div class="server-settings-nav-inner">
         <div class="server-settings-nav-header" id="settings-server-name"></div>
@@ -1502,12 +1501,6 @@
         </div>
       </div>
     </div>
-    <div class="server-settings-close-col">
-      <button id="server-settings-close" class="server-settings-close-btn">
-        <i data-lucide="x"></i>
-        <span>ESC</span>
-      </button>
-    </div>
   </div>
   <div id="settings-palette" class="settings-palette hidden" role="dialog" aria-modal="true" aria-label="Jump to setting">
     <div class="settings-palette-backdrop"></div>
@@ -1687,11 +1680,10 @@
 
 <!-- Ralph Wizard -->
 <div id="ralph-wizard" class="hidden">
-  <div class="ralph-wizard-backdrop"></div>
-  <div class="ralph-wizard-card">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog ralph-wizard-card">
     <div class="ralph-wizard-header">
       <span>New Loop</span>
-      <button id="ralph-wizard-close">&times;</button>
     </div>
     <div class="ralph-wizard-progress">
       <span class="ralph-dot active" data-step="1"></span>
@@ -1803,8 +1795,8 @@
 
 <!-- Ralph Preview Modal (also serves as the execution modal) -->
 <div id="ralph-preview-modal" class="hidden">
-  <div class="confirm-backdrop"></div>
-  <div class="ralph-preview-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog ralph-preview-dialog">
     <div class="ralph-preview-header">
       <span class="ralph-preview-name" id="ralph-preview-name">Loop</span>
       <div class="ralph-preview-actions">
@@ -2040,8 +2032,9 @@
 </div>
 
 <!-- Delete recurring event dialog -->
-<div class="sched-delete-dialog-backdrop hidden" id="sched-delete-dialog">
-  <div class="sched-delete-dialog">
+<div class="hidden" id="sched-delete-dialog">
+  <div class="overlay-modal-backdrop"></div>
+  <div class="overlay-modal-dialog sched-delete-dialog">
     <div class="sched-delete-dialog-title">Delete recurring event</div>
     <div class="sched-delete-dialog-body">
       <button class="sched-delete-option" data-delete="this">This event only</button>

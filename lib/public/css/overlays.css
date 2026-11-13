@@ -506,12 +506,6 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 .confirm-proceed { background: var(--success); color: var(--on-success); border: none; }
 .confirm-proceed:hover { opacity: 0.9; }
 
-.confirm-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--shadow-rgb), 0.5);
-}
-
 .confirm-text {
   font-size: 14px;
   color: var(--text);

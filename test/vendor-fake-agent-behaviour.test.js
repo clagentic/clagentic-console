@@ -102,7 +102,7 @@ function pageElement(id) {
   if (!PAGE_ELEMENTS[id]) {
     PAGE_ELEMENTS[id] = withLayoutStubs(new fakeDom.FakeElement("div"));
     PAGE_ELEMENTS[id].parentElement = PAGE_LAYOUT;
-    if (id === "resume-modal") PAGE_ELEMENTS[id].appendChild(Object.assign(new fakeDom.FakeElement("div"), { className: "confirm-backdrop" }));
+    if (id === "resume-modal") PAGE_ELEMENTS[id].appendChild(Object.assign(new fakeDom.FakeElement("div"), { className: "overlay-modal-backdrop" }));
   }
   return PAGE_ELEMENTS[id];
 }
