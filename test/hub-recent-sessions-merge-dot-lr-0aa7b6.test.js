@@ -163,10 +163,15 @@ test("home-hub.css: .hub-recent-dot.alert is styled with the established alert r
   assert.ok(idx !== -1, "expected a .hub-recent-dot.alert rule in home-hub.css");
   var block = HOME_HUB_CSS.slice(idx, idx + 300);
 
-  assert.match(
-    block,
-    /#e74c3c/,
-    "alert dot state must use the same red (#e74c3c) as the removed .hub-recent-alert-dot / .icon-strip-project-badge unread badge"
+  var ICON_STRIP_CSS = fs.readFileSync(path.join(__dirname, "../lib/public/css/icon-strip.css"), "utf8");
+  var badge = ICON_STRIP_CSS.slice(ICON_STRIP_CSS.indexOf(".icon-strip-project-badge {"));
+  var badgeToken = /background:\s*(var\(--[a-z-]+\))/.exec(badge.slice(0, 400));
+  var dotToken = /background:\s*(var\(--[a-z-]+\))/.exec(block);
+  assert.ok(badgeToken && dotToken, "both the unread badge and the alert dot take their background from a theme token");
+  assert.equal(
+    dotToken[1],
+    badgeToken[1],
+    "alert dot state must use the same theme token as the .icon-strip-project-badge unread badge"
   );
 });
 

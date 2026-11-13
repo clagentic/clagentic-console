@@ -21,7 +21,7 @@ var PUBLIC = path.join(ROOT, "lib", "public");
 // Server files that hold page styles or a colour default. The shipped frontend
 // is scanned whole; these are the files outside it that write a colour.
 var SERVER_FILES = ["users.js", "server-settings.js", "server-auth.js", "project-user-mention.js",
-                    "server-dm.js", "server.js", "daemon.js", "default-avatar-color.js"];
+                    "server-dm.js", "server.js", "daemon.js", "default-avatar-color.js", "pages.js"];
 
 function walk(dir, exts, out) {
   out = out || [];

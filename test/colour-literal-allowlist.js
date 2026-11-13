@@ -73,6 +73,11 @@ var ALLOWLIST = [
     reason: "The PDF export raster and its waiting page: paper white behind a diagram, and a plain popup before the print document replaces it.",
   },
   {
+    file: "lib/pages.js",
+    keys: ["#DA7756", "#57AB5A", "#6CB6FF", "#E8D44D", "#DB61A2", "#F0883E"],
+    reason: "The setup page confetti colours: decorative celebration colours, theme-independent.",
+  },
+  {
     file: "lib/public/theme-core.js",
     keys: ["#000000", "#FFFFFF"],
     reason: "The overlay and shadow bases of the derivation in the palette source itself.",
