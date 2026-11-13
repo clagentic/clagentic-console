@@ -855,23 +855,6 @@
   background: rgba(var(--overlay-rgb), 0.04);
 }
 
-/* --- Recurrence dropdown (floating) --- */
-.sched-create-recurrence-dropdown {
-  position: fixed;
-  width: 280px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.25);
-  z-index: 330;
-  overflow: hidden;
-}
-
-.sched-create-recurrence-dropdown.hidden {
-  display: none;
-}
-
-
 .sched-create-interval-btn {
   background: none;
   border: 1px solid var(--border);
@@ -1438,8 +1421,5 @@
 @media (max-width: 480px) {
   .sched-create-popover {
     width: calc(100vw - 20px);
-  }
-  .sched-create-recurrence-dropdown {
-    width: calc(100vw - 24px);
   }
 }
