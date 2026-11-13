@@ -56,8 +56,8 @@
   min-height: 0;
 }
 
-/* Header actions group: Clear all + Close, side by side (parity with the
-   Notifications panel's .notif-banner-clear-all placement). */
+/* Header actions group: Clear all, beside the shared close control (parity with
+   the Notifications panel's .notif-banner-clear-all placement). */
 .diagnostics-panel-header-actions {
   display: flex;
   align-items: center;

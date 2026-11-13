@@ -306,19 +306,9 @@
 #notif-btn.active { color: var(--text); background: rgba(var(--overlay-rgb),0.06); border-color: var(--border); }
 
 #notif-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 10px;
   padding: 8px 0;
   min-width: 200px;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
-  z-index: 200;
 }
-
-#notif-menu.hidden { display: none; }
 
 .notif-option {
   display: flex;
@@ -772,7 +762,9 @@
   width: 280px;
   max-height: calc(100vh - 160px);
   overflow-y: auto;
-  z-index: 50;
+  /* The column carries the layer of the menus it holds (usage, status and
+     diagnostics are menus; the context panel is not, and rides with them). */
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -781,12 +773,16 @@
 
 #info-panels:empty { display: none; }
 
-/* --- Usage panel --- */
-#usage-panel, #status-panel, #context-panel, #diagnostics-panel {
+/* The context panel is not a menu and keeps its own card. */
+#context-panel {
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+}
+
+/* --- Usage panel --- */
+#usage-panel, #status-panel, #context-panel, #diagnostics-panel {
   font-size: 12px;
   pointer-events: auto;
 }
@@ -802,6 +798,11 @@
   font-weight: 600;
   font-size: 13px;
   color: var(--text);
+}
+
+/* A header in a menu leaves room for the shared close control at the corner. */
+.overlay-menu .usage-panel-header {
+  padding-right: calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset));
 }
 
 .usage-panel-actions {

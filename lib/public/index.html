@@ -39,7 +39,7 @@
       <button id="pwa-install-pill" class="top-bar-install-btn hidden" title="Open as app"><i data-lucide="download"></i> Open as app</button>
       <div id="ext-pill-wrap" class="ext-pill-wrap">
         <button id="ext-pill" class="top-bar-ext-btn" title="Chrome Extension"><i data-lucide="puzzle"></i> Extension</button>
-        <div id="ext-popover" class="ext-popover">
+        <div id="ext-popover" class="ext-popover hidden">
           <div class="ext-popover-header">
             <div class="ext-popover-title">Clagentic: Console for Chrome <span class="ext-experimental">Experimental</span></div>
             <div class="ext-popover-sub">v0.1.0</div>
@@ -61,7 +61,7 @@
       </div>
       <div id="update-pill-wrap" class="top-bar-update hidden">
         <button id="update-pill" class="top-bar-update-btn"><i data-lucide="arrow-up-circle"></i> <span id="update-version"></span> is available. Update now</button>
-      <div id="update-popover" class="top-bar-popover">
+      <div id="update-popover" class="top-bar-popover hidden">
         <div class="popover-row"><button id="update-now" class="popover-action popover-action-primary"><i data-lucide="download"></i> Update now</button></div>
         <div class="popover-row"><div class="popover-label">Or run manually:</div><div class="popover-cmd"><code id="update-manual-cmd">npx @clagentic/console@latest</code><button class="popover-copy" title="Copy"><i data-lucide="copy"></i></button></div></div>
       </div>
@@ -285,7 +285,6 @@
       <div id="usage-panel" class="hidden">
         <div class="usage-panel-header">
           <span>Usage</span>
-          <button id="usage-panel-close" aria-label="Close"><i data-lucide="x"></i></button>
         </div>
         <div class="usage-panel-body">
           <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener" class="usage-external-link">
@@ -304,7 +303,6 @@
       <div id="status-panel" class="hidden">
         <div class="usage-panel-header">
           <span>Status</span>
-          <button id="status-panel-close" aria-label="Close"><i data-lucide="x"></i></button>
         </div>
         <div class="usage-panel-body">
           <div class="usage-section-label">Process</div>
@@ -328,7 +326,6 @@
           <span>Diagnostics</span>
           <div class="diagnostics-panel-header-actions">
             <button class="diagnostics-panel-clear-all" aria-label="Clear all diagnostics">Clear all</button>
-            <button class="diagnostics-panel-close" aria-label="Close diagnostics panel"><i data-lucide="x"></i></button>
           </div>
         </div>
         <div class="usage-panel-body diagnostics-panel-body">
@@ -824,7 +821,7 @@
 <!-- Hidden notification toggles (synced by server-settings) -->
 <div id="notif-menu-wrap" style="display:none">
   <button id="notif-btn"></button>
-  <div id="notif-menu">
+  <div id="notif-menu" class="hidden">
     <label class="notif-option" id="notif-push-row">
       <span>Push notifications</span>
       <input type="checkbox" id="notif-toggle-push">
@@ -1879,7 +1876,6 @@
       <input type="date" class="sched-create-date-input" id="sched-create-date-picker" value="">
       <input type="time" class="sched-create-time-input" id="sched-create-time" value="09:00">
     </div>
-    <button class="sched-create-close-btn" id="sched-create-cancel" title="Close"><i data-lucide="x"></i></button>
   </div>
   <!-- Title with color picker -->
   <div class="sched-create-title-row">
