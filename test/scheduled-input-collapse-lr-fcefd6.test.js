@@ -35,7 +35,7 @@ test("collapsible-text: preview lines, threshold and the non-typed predicate", a
   assert.equal(m.isNonTypedInput(null), false);
 });
 
-test("the outbox row of a long prompt has a real expand and collapse beside Fire now and Cancel; a short one has none", async function () {
+test("the outbox row has a real expand and collapse beside Fire now and Cancel, for a long and a short prompt", async function () {
   var dom = require("./fake-dom-prompt-cards");
   dom.setupGlobals();
   document.removeEventListener = function () {};
@@ -63,7 +63,7 @@ test("the outbox row of a long prompt has a real expand and collapse beside Fire
     assert.equal(toggle.getAttribute("aria-expanded"), "true");
     press(toggle);
     assert.ok(text.classList.contains("is-collapsed"), "collapsed again");
-    assert.equal(rows[1].querySelector(".collapsible-toggle"), null, "a short prompt needs none");
+    assert.ok(rows[1].querySelector(".collapsible-toggle"), "a one-line card always has Expand: its meta is in the expanded view");
     assert.equal(rows[1].querySelector(".shell-queued-text").textContent, "short");
   } finally { ob.removeScheduledOutbox(); }
 });
@@ -108,7 +108,16 @@ VIEWPORTS.forEach(function (vp) {
       assert.equal(await card.locator(".scheduled-queued-cancel").isVisible(), true, "Cancel visible");
       assert.match(await card.locator(".scheduled-queued-time").textContent(), /Sends at/);
       assert.equal(await card.locator(".collapsible-full").isVisible(), false, "collapsed at first");
+      assert.equal(await card.locator(".scheduled-queued-time").isVisible(), false, "the meta is in the expanded view only");
+      var fine = await page.evaluate(function () { return !matchMedia("(pointer: coarse)").matches; });
+      var box = await card.boundingBox();
+      var btn = await card.locator(".scheduled-queued-fire").boundingBox();
+      if (fine) {
+        assert.ok(box.height >= 38 && box.height < 42, "one row of about 38 px");
+        assert.equal(Math.round(btn.height), 28, "28 px buttons");
+      }
       await card.locator(".collapsible-toggle").click();
+      assert.equal(await card.locator(".scheduled-queued-time").isVisible(), true, "the meta shows when expanded");
       assert.equal(await card.locator(".collapsible-full").textContent(), PROMPT);
       assert.equal(await card.locator(".collapsible-full").isVisible(), true, "expanded on the row");
       await card.locator(".collapsible-toggle").click();

@@ -142,3 +142,81 @@
 }
 
 .shell-queued.scheduled-queued .scheduled-queued-error:empty { display: none; }
+
+/* The pending scheduled card is one compact line: the prompt clamped to one line
+   (collapsible-text.js lines 1, compact, inline) and Fire now, Cancel and Expand
+   as icon buttons side by side with no gap. The fire time, cadence and remaining
+   count are in the expanded view only. */
+.shell-queued.scheduled-queued {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--compact-card-height);
+  padding-top: 0;
+  padding-bottom: 0;
+  white-space: normal;
+}
+
+.shell-queued.scheduled-queued .shell-queued-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.shell-queued.scheduled-queued .collapsible-inline { display: block; }
+
+.collapsible-compact {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.shell-queued.scheduled-queued .shell-queued-actions {
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 0;
+  margin-top: 0;
+}
+
+.shell-queued.scheduled-queued .shell-queued-btn.shell-queued-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--compact-control-size);
+  height: var(--compact-control-size);
+  min-height: var(--compact-control-size);
+  padding: 0;
+  border-radius: 14px;
+}
+
+.shell-queued.scheduled-queued .shell-queued-icon-btn svg,
+.shell-queued.scheduled-queued .shell-queued-icon-btn i {
+  width: 16px;
+  height: 16px;
+}
+
+.shell-queued.scheduled-queued .shell-queued-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.shell-queued.scheduled-queued .scheduled-queued-time {
+  display: none;
+  flex: 1 0 100%;
+  margin: 0 0 6px;
+}
+
+.shell-queued.scheduled-queued.is-expanded { align-items: flex-start; padding-top: 4px; }
+.shell-queued.scheduled-queued.is-expanded .scheduled-queued-time { display: block; order: 1; }
+.shell-queued.scheduled-queued .scheduled-queued-error { flex: 1 0 100%; order: 2; }
+
+@media (pointer: coarse) {
+  .shell-queued.scheduled-queued { min-height: var(--compact-card-height-touch); }
+
+  .shell-queued.scheduled-queued .shell-queued-btn.shell-queued-icon-btn {
+    width: var(--msg-touch-target);
+    height: var(--msg-touch-target);
+    min-width: var(--msg-touch-target);
+    min-height: var(--msg-touch-target);
+  }
+}
