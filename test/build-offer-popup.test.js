@@ -110,7 +110,11 @@ async function adminPage(t) {
   global.requestAnimationFrame = function (fn) { fn(); return 0; };
   var toasts = new dom.FakeElement("div");
   global.document.body.appendChild(toasts);
-  global.document.getElementById = function (id) { return id === "diagnostic-toast-container" ? toasts : null; };
+  var bell = new dom.FakeElement("button");
+  var badge = new dom.FakeElement("span");
+  badge.classList.add("hidden");
+  var byId = { "diagnostic-toast-container": toasts, "notif-center-btn": bell, "notif-center-badge": badge };
+  global.document.getElementById = function (id) { return byId[id] || null; };
   var storeMod = await import(dom.moduleUrl("store.js"));
   storeMod.store.set({ currentSlug: "proj-a", activeSessionId: 1 });
   var sent = [];
@@ -133,6 +137,10 @@ async function adminPage(t) {
       else if (m.type === "notification_dismissed") mod.handleNotificationDismissed(m);
       else if (m.type === "notification_dismissed_all") mod.handleNotificationDismissedAll(m);
     },
+    badge: badge,
+    // The unread count the bell shows; null while the badge is hidden.
+    badgeCount: function () { return badge.classList.contains("hidden") ? null : badge.textContent; },
+    clickBell: function () { bell._listeners.click.forEach(function (fn) { fn({ stopPropagation: function () {} }); }); },
     popups: function () {
       return toasts.querySelectorAll('[data-diag-source="build-update"]').filter(function (el) {
         return el.classList.contains("visible") && el.querySelectorAll("button").some(function (b) { return b.textContent === RESTART_LABEL; });
@@ -202,6 +210,27 @@ test("one alert: the page draws the offer's pop-up and no stack banner, on arriv
   page.receive(w.connect());
   assert.equal(page.bannerOf(offer.id), null, "none after a reconnect's state either");
   assert.equal(page.popups().length, 1);
+  page.clickBell();
+  assert.equal(page.bannerOf(offer.id), null, "none from the bell either");
+  assert.equal(page.banners.querySelectorAll('[data-notif-type="build_update_offer"]').length, 0, "no build banner drawn by the bell");
+  assert.equal(page.popups().length, 1);
+});
+
+test("the bell leaves the offer out of its count: alone it shows no unread, beside another it counts only the other", async function (t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  w.poll(); w.poll();
+  await w.settle();
+  page.deliver(w);
+  assert.equal(page.badgeCount(), null, "the offer alone is no unread count");
+  page.receive(w.connect());
+  assert.equal(page.badgeCount(), null, "nor after a connect's state");
+  var from = w.frames.length;
+  w.store.notify("loop_complete", { slug: "proj-a", name: "L", reason: "complete", iterations: 1 }, {});
+  page.deliver(w, from);
+  assert.equal(page.badgeCount(), "1", "only the other notification is counted");
+  page.receive(w.connect());
+  assert.equal(page.badgeCount(), "1", "and the same after a connect's state");
 });
 
 test("AC1: while a tab is open the offer is a visible pop-up carrying the restart action", async function (t) {
