@@ -91,6 +91,9 @@ img.emoji {
      sheet a nav button opens is laid out above the nav (--mobile-nav-height), so
      the nav stays in view and tappable beneath it. */
   --z-nav: 200;
+  /* A full-screen settings panel: under the modal layer, so a dialog a panel opens
+     (an admin form, the avatar positioner) shows over it. */
+  --z-panel: 399;
   --z-modal: 400;
   --z-menu: 5000;
   --z-toast: 9000;
