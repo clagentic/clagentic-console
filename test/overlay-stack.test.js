@@ -1666,6 +1666,31 @@ test("C3a panel: one back closes the topmost overlay in open order and keeps the
     assert.equal(m.historyMod.hasOverlayState(), false, row.name + ": no entry is orphaned");
   }
 
+  // Only the topmost modal is looked at: back never reaches a dialog under it.
+  var TOP_ROWS = [
+    { name: "a non-dismissible dialog over a dismissible one", build: function (m) {
+      var below = m.overlay.showOverlay({ kind: "modal", content: "d" });
+      var top = m.overlay.showOverlay({ kind: "modal", content: "f", dismissible: false });
+      m.historyMod.pushOverlayState(); // an entry for the back to pop, held by neither dialog
+      return { handles: [below, top] };
+    }, first: "blocking", open: [true, true] },
+    { name: "a panel over a dialog", build: function (m) {
+      var below = m.overlay.showOverlay({ kind: "modal", content: "d" });
+      var top = m.overlay.showOverlay({ kind: "modal", panel: true, content: "p" });
+      return { handles: [below, top] };
+    }, first: "panel", open: [true, false] },
+  ];
+  for (var k = 0; k < TOP_ROWS.length; k++) {
+    var tr = TOP_ROWS[k];
+    var q = await panelBrowser(t, false);
+    var made = tr.build(q);
+    assert.equal(backGesture(q), tr.first, tr.name + ": the back is taken by the topmost modal's rule");
+    assert.deepEqual(made.handles.map(function (h) { return h.isOpen(); }), tr.open, tr.name + ": nothing under the top modal closes");
+    made.handles.forEach(function (h) { if (h.isOpen()) h.close(); });
+    while (q.historyMod.hasOverlayState()) q.historyMod.popOverlayState();
+    while (q.historyMod.consumeOwnPopstate()) { /* delivered */ }
+  }
+
   var n = await panelBrowser(t, false);
   var lower = n.overlay.showOverlay({ kind: "modal", panel: true, content: "a" });
   n.historyMod.pushOverlayState(); // a legacy overlay opened after the panel (the session search)
@@ -1795,7 +1820,19 @@ test("C3a source: the palette, the picker, server settings and the ralph and sch
     row.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + " (" + row.file + "): " + String(re) + " is gone"); });
   });
   var app = publicFile("app.js");
-  assert.match(app, /if \(closeTopBlockingOverlay\(\)\) \{ restoreOverlayState\(\); return; \}\s*var owner = topOverlayOwner\(\);\s*consumeOverlayPopstate\(\);(?:\s*\/\/[^\n]*)*\s*if \(owner\) \{\s*if \(!closeHeldPanel\(owner\)\) restoreOverlayState\(\);\s*return;\s*\}\s*\/\/ The overlays that still keep their own entry/, "the popstate routing closes a menu or dialog first, then the owner of the newest entry (backGesture mirrors it)");
+  var cm = "(?:\\s*\\/\\/[^\\n]*)*\\s*";
+  var routing = new RegExp(
+    "if \\(consumeOwnPopstate\\(\\)\\) return;" + cm +
+    "if \\(hasOverlayState\\(\\)\\) \\{" + cm +
+    "if \\(closeTopBlockingOverlay\\(\\)\\) \\{ restoreOverlayState\\(\\); return; \\}\\s*" +
+    "var owner = topOverlayOwner\\(\\);\\s*consumeOverlayPopstate\\(\\);" + cm +
+    "if \\(owner\\) \\{\\s*if \\(!closeHeldPanel\\(owner\\)\\) restoreOverlayState\\(\\);\\s*return;\\s*\\}" + cm +
+    "if \\(isProjectSettingsOpen\\(\\)\\) \\{ closeProjectSettings\\(\\); return; \\}\\s*" +
+    "if \\(isSettingsHubOpen\\(\\)\\) \\{ closeSettingsHub\\(\\); return; \\}\\s*" +
+    "if \\(isSearchOpen\\(\\)\\) \\{ closeSearch\\(\\); return; \\}\\s*" +
+    "if \\(isArchiveOpen\\(\\)\\) \\{ closeArchive\\(\\); return; \\}\\s*" +
+    "if \\(isSchedulerOpen\\(\\)\\) \\{ closeScheduler\\(\\); return; \\}\\s*return;\\s*\\}");
+  assert.match(app, routing, "the whole popstate routing: own echo, the entry guard, a menu or the top dialog, the owner of the newest entry, then the legacy overlays (backGesture mirrors it)");
   assert.doesNotMatch(app, /isCommandPaletteOpen|isUserSettingsOpen|closeUserSettings|isSettingsOpen\(\)|closeSettings\(\)/, "and no longer names the panels it moved");
 });
 
