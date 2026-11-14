@@ -702,6 +702,164 @@ test("menu: B2 one open: a B2 pair and a B1 and B2 pair close each other, in bot
   }
 });
 
+// ---------------------------------------------------------------------------
+// B3: the input autocomplete lists are one-open members, and only that
+// ---------------------------------------------------------------------------
+
+var listInstance = 0;
+
+// The real list modules over the hand-built page, each behind the same four
+// operations. The page's document collects the registry's click and Escape
+// listeners, so a row can fire them as the browser would.
+function pageListeners() {
+  var heard = {};
+  global.document.addEventListener = function (type, fn) { (heard[type] = heard[type] || []).push(fn); };
+  return {
+    click: function (target) { (heard.click || []).forEach(function (fn) { fn({ target: target }); }); },
+    escape: function () { (heard.keydown || []).forEach(function (fn) { fn({ key: "Escape", preventDefault: function () {} }); }); },
+  };
+}
+
+// The fake elements have no closest(); the lists' own click handlers ask for it.
+function plain(el) { el.closest = function () { return null; }; return el; }
+
+function keyEvent(key) { return { key: key, shiftKey: false, ctrlKey: false, metaKey: false, preventDefault: function () {} }; }
+
+var INPUT_LISTS = [
+  { name: "mention list", file: "mention.css", selector: "#mention-menu", token: "var(--z-base)",
+    build: async function (n) {
+      var el = plain(new dom.FakeElement("div"));
+      el.id = "mention-menu";
+      global.document.body.appendChild(el);
+      var mod = await import(dom.moduleUrl("mention.js") + "?b3=" + n);
+      var input = plain(new dom.FakeElement("textarea"));
+      mod.initMention({ inputEl: input, allUsers: function () { return []; }, myUserId: function () { return null; } });
+      return {
+        el: el, input: input,
+        open: function () { mod.showMentionMenu(""); },
+        visible: function () { return mod.isMentionMenuVisible() && el.classList.contains("visible"); },
+        own: function (key) { return mod.mentionMenuKeydown(keyEvent(key)); },
+      };
+    } },
+  { name: "slash command list", file: "input.css", selector: "#slash-menu", token: "var(--z-base)",
+    build: async function (n) {
+      var el = plain(new dom.FakeElement("div"));
+      var input = plain(new dom.FakeElement("textarea"));
+      var mod = await import(dom.moduleUrl("input.js") + "?b3=" + n);
+      mod.initInput({
+        ws: { readyState: 1, send: function () {} }, connected: true, inputEl: input, sendBtn: new dom.FakeElement("button"),
+        slashMenu: el, imagePreviewBar: new dom.FakeElement("div"), slashCommands: function () { return []; },
+      });
+      return {
+        el: el, input: input,
+        open: function () { dom.typeInto(input, "/"); },
+        visible: function () { return el.classList.contains("visible"); },
+        own: function (key) {
+          var ev = keyEvent(key);
+          (input._listeners.keydown || []).forEach(function (fn) { fn(ev); });
+          return ev;
+        },
+      };
+    } },
+  { name: "@agent list", file: "at-agents.css", selector: ".at-agents-menu", token: "calc(var(--z-base) + 1)", ownClickHides: true,
+    build: async function (n) {
+      var input = plain(new dom.FakeElement("textarea"));
+      var mod = await import(dom.moduleUrl("at-agents.js") + "?b3=" + n);
+      mod.initAtAgents({ inputEl: input });
+      mod.handleProjectAgentsList({ agents: [{ name: "Scout", slug: "scout", description: "looks around" }] });
+      var el = global.document.body.querySelector(".at-agents-menu");
+      return {
+        el: el, input: input,
+        open: function () { mod.showAgentMenu(""); },
+        visible: function () { return mod.isAgentMenuActive() && el.classList.contains("visible"); },
+        own: function (key) { return mod.agentMenuKeydown(keyEvent(key)); },
+      };
+    } },
+];
+
+// A menu of each kind: an element-anchored built card and a retained page node.
+var LIST_MENUS = ["session context menu", "schedule popover"];
+
+async function listBrowser(t, width, list) {
+  var m = await menuBrowser(t);
+  global.window.innerWidth = width;
+  m.page = pageListeners();
+  m.list = await list.build(++listInstance);
+  m.list.input.focus = function () { m.focusCalls = (m.focusCalls || 0) + 1; };
+  m.list.open();
+  return m;
+}
+
+test("B3 one open: a menu opening closes an open input list, and a list opening closes an open menu, for each list, menu and width", async function (t) {
+  for (var l = 0; l < INPUT_LISTS.length; l++) {
+    for (var w = 0; w < WIDTHS.length; w++) {
+      for (var k = 0; k < LIST_MENUS.length; k++) {
+        var list = INPUT_LISTS[l];
+        var at = list.name + " with the " + LIST_MENUS[k] + " at " + WIDTHS[w] + "px";
+
+        t.mock.timers.reset();
+        var a = await listBrowser(t, WIDTHS[w], list);
+        assert.equal(a.list.visible(), true, at + ": the list opens");
+        assert.equal(a.registry.getOpenMenu(), a.list.el, at + ": the registry holds the list");
+        var menu = openSurface(a, rowNamed(LIST_MENUS[k])).handle;
+        assert.equal(a.list.visible(), false, at + ", list then menu: the list closed");
+        assert.equal(menu.isOpen(), true, at + ", list then menu: the menu is open");
+        assert.equal(a.registry.getOpenMenu(), menu.el, at + ", list then menu: the registry holds the menu");
+
+        t.mock.timers.reset();
+        var b = await listBrowser(t, WIDTHS[w], list);
+        b.list.own("Escape");
+        var first = openSurface(b, rowNamed(LIST_MENUS[k])).handle;
+        assert.equal(b.list.visible(), false, at + ", menu then list: the list is closed to start");
+        b.list.open();
+        assert.equal(gone(first), true, at + ", menu then list: the menu closed");
+        assert.equal(b.list.visible(), true, at + ", menu then list: the list stays open");
+        assert.equal(b.registry.getOpenMenu(), b.list.el, at + ", menu then list: the registry holds the list");
+        assert.equal(b.focusCalls || 0, 0, at + ", menu then list: nothing moved focus off the text box");
+      }
+    }
+  }
+});
+
+test("B3 a list keeps its own Escape; the registry's Escape and a click in the text box leave it; an outside click closes it", async function (t) {
+  for (var l = 0; l < INPUT_LISTS.length; l++) {
+    for (var w = 0; w < WIDTHS.length; w++) {
+      var list = INPUT_LISTS[l];
+      var at = list.name + " at " + WIDTHS[w] + "px";
+      t.mock.timers.reset();
+      var m = await listBrowser(t, WIDTHS[w], list);
+
+      m.page.click(m.list.input);
+      // The @agent list has always hidden itself on any click outside the list,
+      // its text box included (at-agents.js); that is its own handler, unchanged.
+      assert.equal(m.list.visible(), !list.ownClickHides, at + ": the registry does not take a click in the text box as outside" + (list.ownClickHides ? " (this list's own handler does)" : ""));
+      if (list.ownClickHides) m.list.open();
+      m.page.click(plain(m.list.el));
+      assert.equal(m.list.visible(), true, at + ": nor is a click in the list");
+      m.page.escape();
+      assert.equal(m.list.visible(), true, at + ": the registry's Escape does not close it from under the text box");
+
+      m.list.own("Escape");
+      assert.equal(m.list.visible(), false, at + ": its own Escape closes it");
+      assert.equal(m.registry.getOpenMenu(), null, at + ": and the registry lets it go");
+
+      m.list.open();
+      assert.equal(m.list.visible(), true, at + ": it opens again after its own Escape");
+      m.page.click(plain(m.doc.body));
+      assert.equal(m.list.visible(), false, at + ": an outside click closes it, clearing its own state");
+      assert.equal(m.registry.getOpenMenu(), null, at + ": and the registry lets it go");
+    }
+  }
+});
+
+test("B3 css: each list's layer is a token at each width", function () {
+  INPUT_LISTS.forEach(function (list) {
+    WIDTHS.forEach(function (width) {
+      assert.equal(cssRules.valueAt(css(list.file), list.selector, "z-index", width), list.token, list.name + " at " + width + "px");
+    });
+  });
+});
+
 test("menu: a passive notice opens beside a menu the user has open and closes nothing; Escape takes the menu first", async function (t) {
   var ROWS = [
     { name: "B1 menu", open: "session context menu" },
