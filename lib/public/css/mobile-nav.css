@@ -17,7 +17,7 @@
     left: 0;
     right: 0;
     height: var(--mobile-nav-height);
-    padding-top: 1px;
+    padding-top: var(--space-1);
     padding-bottom: var(--safe-bottom);
     background: var(--bg);
     border-top: 1px solid var(--border);
@@ -38,7 +38,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: var(--space-1);
     height: 56px;
     background: none;
     border: none;
@@ -55,7 +55,7 @@
   }
 
   .mobile-tab-label {
-    font-size: 10px;
+    font-size: var(--font-size-2xs);
     font-family: "Pretendard", system-ui, sans-serif;
     font-weight: 500;
     line-height: 1;
@@ -76,16 +76,16 @@
     right: calc(50% - 18px);
     background: var(--success);
     color: var(--on-success);
-    font-size: 9px;
+    font-size: var(--font-size-2xs);
     font-weight: 700;
     font-family: "Roboto Mono", monospace;
     min-width: 14px;
     height: 14px;
-    border-radius: 7px;
+    border-radius: var(--radius-4);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0 3px;
+    padding: 0 var(--space-2);
     line-height: 1;
   }
 
@@ -132,15 +132,15 @@
   .mobile-project-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     width: 100%;
-    padding: 10px 12px;
+    padding: var(--space-5) var(--space-6);
     background: none;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
@@ -159,12 +159,12 @@
   .mobile-project-abbrev {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     background: var(--bg-alt);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-secondary);
     flex-shrink: 0;
@@ -176,7 +176,7 @@
     width: 26px;
     height: 26px;
     object-fit: contain;
-    border-radius: 4px;
+    border-radius: var(--radius-2);
   }
 
   .mobile-project-item.active .mobile-project-abbrev {
@@ -189,7 +189,7 @@
     width: 28px;
     height: 28px;
     object-fit: contain;
-    border-radius: 4px;
+    border-radius: var(--radius-2);
   }
 
   /* mobile-folder-emoji-overlay: icon overlaid on folder icon */
@@ -234,16 +234,16 @@
   .mobile-project-unread {
     min-width: 18px;
     height: 18px;
-    border-radius: 9px;
+    border-radius: var(--radius-5);
     background: var(--danger);
     color: var(--on-error);
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 5px;
-    line-height: 18px;
+    padding: 0 var(--space-3);
+    line-height: var(--line-height-sm);
     flex-shrink: 0;
     margin-left: auto;
   }
@@ -255,16 +255,16 @@
     right: calc(50% - 18px);
     background: var(--danger);
     color: var(--on-error);
-    font-size: 9px;
+    font-size: var(--font-size-2xs);
     font-weight: 700;
     font-family: "Roboto Mono", monospace;
     min-width: 14px;
     height: 14px;
-    border-radius: 7px;
+    border-radius: var(--radius-4);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0 3px;
+    padding: 0 var(--space-2);
     line-height: 1;
   }
   .mobile-tab-projects-badge.hidden { display: none; }
@@ -274,7 +274,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: 0 12px 4px;
+    padding: 0 var(--space-6) var(--space-2);
   }
   .mobile-projects-add-btn {
     display: flex;
@@ -284,7 +284,7 @@
     height: 32px;
     border: none;
     background: none;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     color: var(--text-dimmer);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
@@ -294,22 +294,22 @@
 
   /* Indented project row inside a folder */
   .mobile-project-item-indent {
-    padding-left: 28px;
+    padding-left: var(--space-14);
   }
 
   /* Folder header row */
   .mobile-folder-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     width: 100%;
-    padding: 10px 12px;
+    padding: var(--space-5) var(--space-6);
     background: none;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     color: var(--text-dimmer);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     cursor: pointer;
     text-align: left;
@@ -335,7 +335,7 @@
     position: absolute;
     bottom: 0;
     right: 0;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     line-height: 1;
     pointer-events: none;
   }
@@ -363,20 +363,20 @@
   .mobile-chat-project-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px 10px;
+    gap: var(--space-5);
+    padding: var(--space-4) var(--space-6) var(--space-5);
     border-bottom: 1px solid var(--border-subtle, var(--border));
-    margin-bottom: 4px;
+    margin-bottom: var(--space-2);
   }
   .mobile-chat-project-icon {
     width: 28px;
     height: 28px;
-    border-radius: 7px;
+    border-radius: var(--radius-4);
     background: var(--bg-alt);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-secondary);
     flex-shrink: 0;
@@ -385,14 +385,14 @@
   .mobile-chat-project-titlearea {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     flex: 1;
     min-width: 0;
     background: none;
     border: none;
     padding: 0;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     -webkit-tap-highlight-color: transparent;
     text-align: left;
   }
@@ -401,7 +401,7 @@
   .mobile-chat-project-name {
     flex: 1;
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--text);
     overflow: hidden;
@@ -416,7 +416,7 @@
     height: 32px;
     border: none;
     background: none;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     color: var(--text-dimmer);
     cursor: pointer;
     flex-shrink: 0;
@@ -434,14 +434,14 @@
   .mobile-action-sheet-item {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--space-7);
     width: 100%;
-    padding: 14px 20px;
+    padding: var(--space-7) var(--space-10);
     background: none;
     border: none;
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
@@ -450,14 +450,14 @@
   .mobile-action-sheet-item .lucide { width: 20px; height: 20px; color: var(--text-dimmer); flex-shrink: 0; }
   .mobile-action-sheet-cancel {
     width: calc(100% - 32px);
-    margin: 8px 16px 0;
-    padding: 14px;
+    margin: var(--space-4) var(--space-8) 0;
+    padding: var(--space-7);
     border: none;
-    border-radius: 12px;
+    border-radius: var(--radius-6);
     background: var(--bg-alt);
     color: var(--text);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
@@ -471,18 +471,18 @@
   .mobile-more-inline-value {
     margin-left: auto;
     color: var(--text-dimmer);
-    font-size: 13px;
+    font-size: var(--font-size-md);
   }
   .mobile-more-toggle-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
+    gap: var(--space-5);
+    padding: var(--space-6) var(--space-8);
   }
   .mobile-more-toggle-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     flex: 1;
     color: var(--text-secondary);
   }
@@ -542,11 +542,11 @@
   .mobile-sheet-handle {
     width: 36px;
     height: 4px;
-    border-radius: 2px;
+    border-radius: var(--radius-1);
     background: var(--text-dimmer);
     opacity: 0.4;
     margin: 0 auto;
-    padding: 12px 0;
+    padding: var(--space-6) 0;
     background-clip: content-box;
     flex-shrink: 0;
     touch-action: none;
@@ -558,14 +558,14 @@
   .mobile-sheet-header {
     display: flex;
     align-items: center;
-    padding: 12px calc(16px + var(--overlay-close-touch)) 8px 16px;
+    padding: var(--space-6) calc(var(--space-8) + var(--overlay-close-touch)) var(--space-4) var(--space-8);
     flex-shrink: 0;
   }
 
   .mobile-sheet-title {
     flex: 1;
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 17px;
+    font-size: var(--font-size-2xl);
     font-weight: 700;
     color: var(--text);
   }
@@ -576,8 +576,8 @@
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 4px 8px;
-    padding-bottom: calc(var(--safe-bottom) + 16px);
+    padding: var(--space-2) var(--space-4);
+    padding-bottom: calc(var(--safe-bottom) + var(--space-8));
   }
 
   /* --- Session action grid (2-column) --- */
@@ -585,21 +585,21 @@
     display: flex;
     flex-direction: column;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 4px;
+    margin-bottom: var(--space-2);
   }
 
   /* --- New session button --- */
   .mobile-session-new {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 12px 12px;
+    padding: var(--space-6) var(--space-6);
     background: none;
     border: none;
     color: var(--accent);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
     cursor: pointer;
     text-align: left;
@@ -617,8 +617,8 @@
   /* --- Chat filter bar (horizontal scroll chips) --- */
   .mobile-chat-filter-bar {
     display: flex;
-    gap: 8px;
-    padding: 8px 16px;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-8);
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
@@ -630,14 +630,14 @@
   .mobile-chat-chip {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-6);
     background: rgba(var(--overlay-rgb), 0.05);
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     color: var(--text-secondary, var(--text-muted));
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-size-md);
     font-weight: 500;
     white-space: nowrap;
     cursor: pointer;
@@ -660,12 +660,12 @@
   .mobile-chat-chip-icon {
     width: 20px;
     height: 20px;
-    border-radius: 4px;
+    border-radius: var(--radius-2);
     background: rgba(var(--overlay-rgb), 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: var(--font-size-2xs);
     font-weight: 700;
     flex-shrink: 0;
   }
@@ -685,16 +685,16 @@
   .mobile-chat-chip-badge {
     min-width: 16px;
     height: 16px;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     background: var(--danger);
     color: var(--on-error);
-    font-size: 10px;
+    font-size: var(--font-size-2xs);
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 4px;
-    line-height: 16px;
+    padding: 0 var(--space-2);
+    line-height: var(--line-height-xs);
     flex-shrink: 0;
   }
 
@@ -711,12 +711,12 @@
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 0 8px 8px;
+    padding: 0 var(--space-4) var(--space-4);
   }
 
   .mobile-chat-context-note {
-    padding: 8px 12px;
-    font-size: 12px;
+    padding: var(--space-4) var(--space-6);
+    font-size: var(--font-size-sm);
     color: var(--text-dimmer, var(--text-muted));
   }
 
@@ -724,16 +724,16 @@
   .mobile-session-unread {
     min-width: 18px;
     height: 18px;
-    border-radius: 9px;
+    border-radius: var(--radius-5);
     background: var(--accent);
     color: var(--on-accent);
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 5px;
-    line-height: 18px;
+    padding: 0 var(--space-3);
+    line-height: var(--line-height-sm);
     flex-shrink: 0;
     margin-left: auto;
   }
@@ -776,16 +776,16 @@
   .mobile-session-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     width: 100%;
     min-height: 48px;
-    padding: 12px 12px;
+    padding: var(--space-6) var(--space-6);
     background: none;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-5);
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
@@ -806,7 +806,7 @@
     flex: 1;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -843,8 +843,8 @@
 
   /* Date group header inside sheet */
   .mobile-sheet-group {
-    padding: 14px 12px 6px;
-    font-size: 12px;
+    padding: var(--space-7) var(--space-6) var(--space-3);
+    font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--text-dimmer);
     letter-spacing: 0.3px;
@@ -852,29 +852,29 @@
 
   /* Separator between favorites and the rest of the session list */
   .mobile-sheet-divider {
-    margin: 6px 12px;
+    margin: var(--space-3) var(--space-6);
     border: none;
     border-top: 1px solid var(--border);
   }
 
   /* --- Loop session grouping (scheduled tasks / Ralph) --- */
   .mobile-loop-wrapper {
-    margin-top: 2px;
+    margin-top: var(--space-1);
   }
 
   .mobile-loop-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
     min-height: 48px;
-    padding: 10px 12px;
+    padding: var(--space-5) var(--space-6);
     background: none;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-5);
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
@@ -936,10 +936,10 @@
   }
 
   .mobile-loop-count {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 10px;
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--radius-5);
     background: rgba(var(--overlay-rgb), 0.1);
     color: var(--text-dimmer);
     flex-shrink: 0;
@@ -951,34 +951,34 @@
   }
 
   .mobile-loop-badge.crafting {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 10px;
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--radius-5);
     background: rgba(var(--warning-rgb), 0.15);
     color: var(--warning);
     flex-shrink: 0;
   }
 
   .mobile-loop-children {
-    padding-left: 20px;
+    padding-left: var(--space-10);
     border-left: 2px solid rgba(var(--overlay-rgb), 0.08);
-    margin-left: 20px;
+    margin-left: var(--space-10);
   }
 
   .mobile-loop-child {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     width: 100%;
     min-height: 42px;
-    padding: 8px 12px;
+    padding: var(--space-4) var(--space-6);
     background: none;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
@@ -996,10 +996,10 @@
   }
 
   .mobile-loop-role-badge {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 6px;
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--radius-3);
     background: rgba(var(--overlay-rgb), 0.08);
     color: var(--text-muted);
   }
@@ -1016,22 +1016,22 @@
 
   /* Loop run sub-group (time-based grouping within a loop group) */
   .mobile-loop-run-wrapper {
-    margin-top: 2px;
+    margin-top: var(--space-1);
   }
 
   .mobile-loop-run {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
     min-height: 40px;
-    padding: 8px 12px;
+    padding: var(--space-4) var(--space-6);
     background: none;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-4);
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
@@ -1052,23 +1052,23 @@
     font-weight: 500;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   /* --- More sheet menu items --- */
   .mobile-more-item {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-6);
     width: 100%;
     min-height: 48px;
-    padding: 12px 16px;
+    padding: var(--space-6) var(--space-8);
     background: none;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-5);
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     cursor: pointer;
     text-align: left;
     touch-action: manipulation;
@@ -1092,11 +1092,11 @@
   }
 
   .mobile-more-item-badge {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     color: var(--text-dimmer);
     background: rgba(var(--overlay-rgb), 0.06);
-    padding: 2px 7px;
-    border-radius: 8px;
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--radius-4);
     flex-shrink: 0;
   }
 
@@ -1105,15 +1105,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    padding: var(--space-6) var(--space-8);
     min-height: 48px;
   }
 
   .mobile-settings-toggle-label {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 15px;
+    gap: var(--space-6);
+    font-size: var(--font-size-lg);
     color: var(--text-secondary);
   }
 
@@ -1126,18 +1126,18 @@
 
   /* --- Search sheet --- */
   .mobile-search-input-wrap {
-    padding: 8px 16px 12px;
+    padding: var(--space-4) var(--space-8) var(--space-6);
     flex-shrink: 0;
   }
 
   .mobile-search-input {
     width: 100%;
-    padding: 10px 14px;
+    padding: var(--space-5) var(--space-7);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-5);
     background: var(--bg-alt);
     color: var(--text);
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     font-family: "Pretendard", system-ui, sans-serif;
     outline: none;
   }
@@ -1154,16 +1154,16 @@
   .mobile-alert-item {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--space-5);
     width: 100%;
     min-height: 48px;
-    padding: 12px 16px;
+    padding: var(--space-6) var(--space-8);
     background: none;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-5);
     color: var(--text-secondary);
     font-family: "Pretendard", system-ui, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     cursor: pointer;
     text-align: left;
     touch-action: manipulation;
@@ -1180,14 +1180,14 @@
     height: 18px;
     color: var(--text-muted);
     flex-shrink: 0;
-    margin-top: 1px;
+    margin-top: var(--space-1);
   }
 
   .mobile-alert-empty {
     text-align: center;
-    padding: 32px 16px;
+    padding: var(--space-16) var(--space-8);
     color: var(--text-dimmer);
-    font-size: 14px;
+    font-size: var(--font-size-base);
   }
 
   .mobile-alert-unread {
@@ -1196,11 +1196,11 @@
 
   /* --- Session items inside chat/search sheet with project/mate tag --- */
   .mobile-session-tag {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     color: var(--text-dimmer);
     background: rgba(var(--overlay-rgb), 0.06);
-    padding: 1px 6px;
-    border-radius: 6px;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-3);
     flex-shrink: 0;
     margin-left: auto;
   }
