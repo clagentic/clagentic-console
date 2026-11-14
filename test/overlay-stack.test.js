@@ -1242,6 +1242,14 @@ function publicFilesUnder(dir) {
 function zValueProblem(value) {
   var v = String(value).trim().replace(/\s*!important$/, "");
   if (LOCAL_Z_KEYWORDS.indexOf(v) !== -1) return "";
+  // A var() fallback is a value the browser can use, so it is read like any other:
+  // 100 or more is a layer and has to be a token; a fallback under 100 is an offset.
+  var fallbacks = v.match(/var\(--[a-z-]+\s*,[^)]*\)/g) || [];
+  var bigFallback = fallbacks.some(function (f) {
+    var fb = f.replace(/^var\(--[a-z-]+\s*,/, "").replace(/var\(--z-[a-z]+\)/g, "");
+    return (fb.match(/\d+/g) || []).some(function (d) { return Number(d) >= 100; });
+  });
+  if (bigFallback) return "a var() fallback of 100 or more: " + v;
   var bare = v.replace(/var\(--z-[a-z]+\)/g, "").replace(/var\(--[a-z-]+(?:,[^)]*)?\)/g, "");
   if (/^-?\d+$/.test(v)) {
     var n = Number(v);
@@ -1253,14 +1261,26 @@ function zValueProblem(value) {
 }
 
 // Every z-index declaration in a source: CSS, a cssText string, an inline style
-// attribute, or a style.zIndex assignment. Comments are not read.
+// attribute, a style.zIndex assignment, an object-literal zIndex, a
+// setProperty("z-index", v) call, or a string built as "z-index:" + v (its first
+// operand is the value). Comments are not read.
+var Z_DECLARATION = new RegExp([
+  "z-index\\s*:\\s*([^;}\"'`\\n]+)",
+  "\\bzIndex\\s*=(?!=)\\s*([^;\\n]+)",
+  // Only a literal value: a plain data field such as { el: el, zIndex: zIndex } is not a style.
+  "\\bzIndex\\s*:\\s*(\"[^\"]*\"|'[^']*'|`[^`]*`|-?\\d[^,;}\\n]*)",
+  "setProperty\\(\\s*[\"']z-index[\"']\\s*,\\s*(\"[^\"]*\"|'[^']*'|`[^`]*`|[^,)\\n]+)",
+  "z-index\\s*:\\s*[\"'`]\\s*\\+\\s*(\"[^\"]*\"|'[^']*'|[^\\s+;,)]+)",
+].join("|"), "g");
+
 function zDeclarations(src, file) {
   var text = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
   var found = [];
-  var re = /z-index\s*:\s*([^;}"'\n]+)|\bzIndex\s*=(?!=)\s*([^;\n]+)/g;
+  var re = new RegExp(Z_DECLARATION.source, "g");
   var m;
   while ((m = re.exec(text))) {
-    var value = (m[1] !== undefined ? m[1] : m[2]).trim().replace(/^["']|["']$/g, "");
+    var raw = m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4] !== undefined ? m[4] : m[5];
+    var value = raw.trim().replace(/^["'`]|["'`]$/g, "");
     found.push({ file: file, value: value, where: text.slice(0, m.index).split("\n").length });
   }
   return found;
@@ -1289,13 +1309,19 @@ test("guard: no z-index in lib/public is a literal at or above 100, with no exem
   assert.deepEqual(bad, [], "z-index values outside the scale and the named bands");
 
   // The guard fails on a new overlay-band literal, in a stylesheet and in a script.
-  ["z-index: 100;", "z-index: 9999 !important;", "z-index: calc(var(--z-panel) + 100);", "el.style.zIndex = 100 + order;", 'el.style.zIndex = "10000";', "a{z-index:1000}"]
+  ["z-index: 100;", "z-index: 9999 !important;", "z-index: calc(var(--z-panel) + 100);", "el.style.zIndex = 100 + order;", 'el.style.zIndex = "10000";', "a{z-index:1000}",
+    "Object.assign(el.style, { zIndex: 9999 });", 'Object.assign(el.style, { zIndex: "9999", top: 0 });',
+    'el.style.setProperty("z-index", 9999);', 'el.style.setProperty("z-index", "500", "important");',
+    'el.style.cssText = "z-index:" + 9999;', 'el.style.cssText = "z-index:" + n + ";";', "el.style.cssText = `top: 0; z-index: 9999;`;",
+    "a{z-index: var(--x, 9999)}", "a{z-index: calc(var(--z-panel) + var(--x, 100))}"]
     .forEach(function (src) {
       var hits = zDeclarations(src, "x").filter(function (d) { return zValueProblem(d.value); });
       assert.equal(hits.length, 1, src + " is refused");
     });
   ["z-index: 99;", "z-index: -1;", "z-index: var(--z-menu);", "z-index: calc(var(--z-modal) + var(--overlay-order, 0));", "z-index: calc(var(--z-sidebar) - 1);", "z-index: auto;",
-    'el.style.zIndex = "var(--z-tooltip)";', "/* z-index: 5000 */"]
+    'el.style.zIndex = "var(--z-tooltip)";', "/* z-index: 5000 */",
+    "Object.assign(el.style, { zIndex: 5, top: 0 });", 'el.style.setProperty("z-index", "var(--z-menu)");',
+    'el.style.cssText = "z-index:" + "var(--z-menu)";', "a{z-index: calc(var(--z-note) + var(--note-order, 0))}", "a{z-index: var(--x, var(--z-menu))}"]
     .forEach(function (src) {
       var hits = zDeclarations(src, "x").filter(function (d) { return zValueProblem(d.value); });
       assert.equal(hits.length, 0, src + " is allowed");
