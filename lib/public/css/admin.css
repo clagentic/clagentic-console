@@ -10,8 +10,8 @@
 .admin-error {
   text-align: center;
   color: var(--text-muted);
-  font-size: 14px;
-  padding: 32px 0;
+  font-size: var(--font-size-base);
+  padding: var(--space-16) 0;
 }
 
 .admin-error {
@@ -23,11 +23,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: var(--space-4) var(--space-8);
 }
 
 .admin-section-header h3 {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text);
   margin: 0;
@@ -36,13 +36,13 @@
 .admin-action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   background: var(--accent);
   color: var(--on-accent);
   border: none;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 13px;
+  padding: var(--space-3) var(--space-7);
+  border-radius: var(--radius-4);
+  font-size: var(--font-size-md);
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
@@ -62,15 +62,15 @@
 .admin-user-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .admin-user-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  border-radius: 10px;
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-5);
   transition: background 0.1s;
 }
 
@@ -84,37 +84,37 @@
 }
 
 .admin-user-name {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .admin-user-meta {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .admin-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   background: var(--accent-15);
   color: var(--accent);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
 }
 
 .admin-you-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-muted);
   background: var(--border);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
 }
 
 .admin-remove-btn {
@@ -122,8 +122,8 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
+  padding: var(--space-3);
+  border-radius: var(--radius-3);
   display: flex;
   align-items: center;
   transition: color 0.15s, background 0.15s;
@@ -143,15 +143,15 @@
 .admin-invite-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .admin-invite-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  border-radius: 10px;
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-5);
 }
 
 .admin-invite-item:hover {
@@ -161,19 +161,19 @@
 .admin-invite-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-6);
 }
 
 .admin-invite-code {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   background: var(--bg-alt);
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-3);
   color: var(--text);
 }
 
 .admin-invite-expiry {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
 }
 
@@ -182,8 +182,8 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
+  padding: var(--space-3);
+  border-radius: var(--radius-3);
   display: flex;
   align-items: center;
 }
@@ -201,7 +201,7 @@
 .admin-invite-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .admin-revoke-btn {
@@ -209,8 +209,8 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
+  padding: var(--space-3);
+  border-radius: var(--radius-3);
   display: flex;
   align-items: center;
 }
@@ -229,15 +229,15 @@
 .admin-project-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .admin-project-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  border-radius: 10px;
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-5);
 }
 
 .admin-project-item:hover {
@@ -250,21 +250,21 @@
 }
 
 .admin-project-name {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text);
 }
 
 .admin-project-slug {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
-  margin-top: 1px;
+  margin-top: var(--space-1);
 }
 
 .admin-project-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .admin-owner-select,
@@ -272,9 +272,9 @@
   background: var(--bg-alt);
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-3);
   cursor: pointer;
   font-family: inherit;
 }
@@ -294,8 +294,8 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
+  padding: var(--space-3);
+  border-radius: var(--radius-3);
   display: flex;
   align-items: center;
 }
@@ -327,18 +327,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 var(--space-8);
 }
 
 .admin-modal-header h3 {
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--text);
   margin: 0;
 }
 
 .admin-modal-body {
-  padding: 16px;
+  padding: var(--space-8);
 }
 
 /* A confirmation: one line of text, no header. */
@@ -347,27 +347,27 @@
 }
 .admin-modal-desc.admin-modal-desc-plain {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
 }
 .admin-modal-desc.admin-modal-desc-note {
-  margin-top: 12px;
+  margin-top: var(--space-6);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .admin-modal-desc {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-6);
 }
 
 .admin-user-check {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 4px;
-  font-size: 14px;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-2);
+  font-size: var(--font-size-base);
   color: var(--text);
   cursor: pointer;
 }
@@ -380,23 +380,23 @@
 
 .admin-user-check small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .admin-modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 0 16px 16px;
+  gap: var(--space-4);
+  padding: 0 var(--space-8) var(--space-8);
 }
 
 .admin-modal-save {
   background: var(--accent);
   color: var(--on-accent);
   border: none;
-  padding: 8px 18px;
-  border-radius: 8px;
-  font-size: 13px;
+  padding: var(--space-4) var(--space-9);
+  border-radius: var(--radius-4);
+  font-size: var(--font-size-md);
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
@@ -415,9 +415,9 @@
   background: none;
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 8px 18px;
-  border-radius: 8px;
-  font-size: 13px;
+  padding: var(--space-4) var(--space-9);
+  border-radius: var(--radius-4);
+  font-size: var(--font-size-md);
   cursor: pointer;
   font-family: inherit;
 }
@@ -429,7 +429,7 @@
 /* --- Admin header buttons row --- */
 .admin-header-btns {
   display: flex;
-  gap: 8px;
+  gap: var(--space-4);
   align-items: center;
 }
 
@@ -458,24 +458,24 @@
 
 /* --- Invite email label --- */
 .admin-invite-email {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--accent);
 }
 
 /* --- SMTP Configuration Form --- */
 .admin-smtp-form {
-  padding: 8px 0;
+  padding: var(--space-4) 0;
 }
 
 .admin-smtp-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-size: 13px;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-4);
+  font-size: var(--font-size-md);
   font-weight: 500;
-  margin: 0 16px 16px;
+  margin: 0 var(--space-8) var(--space-8);
 }
 
 .admin-smtp-status svg {
@@ -497,17 +497,17 @@
 .admin-smtp-fields {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0 16px;
-  margin-bottom: 16px;
+  gap: var(--space-6);
+  padding: 0 var(--space-8);
+  margin-bottom: var(--space-8);
 }
 
 .admin-smtp-row > label:not(.admin-smtp-toggle) {
   display: block;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -515,7 +515,7 @@
 .admin-smtp-row-half {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--space-6);
 }
 
 .admin-smtp-input {
@@ -523,9 +523,9 @@
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 13px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  font-size: var(--font-size-md);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-3);
   font-family: inherit;
   outline: none;
   box-sizing: border-box;
@@ -538,14 +538,14 @@
 .admin-smtp-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
+  gap: var(--space-5);
+  font-size: var(--font-size-md);
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
   color: var(--text);
   cursor: pointer;
-  margin-top: 6px;
+  margin-top: var(--space-3);
 }
 
 .admin-smtp-toggle input[type="checkbox"] {
@@ -556,36 +556,36 @@
 }
 
 .admin-smtp-row-otp {
-  margin-top: 4px;
-  padding-top: 12px;
+  margin-top: var(--space-2);
+  padding-top: var(--space-6);
   border-top: 1px solid var(--border);
 }
 
 .admin-smtp-actions {
   display: flex;
-  gap: 8px;
-  padding: 0 16px;
-  margin-bottom: 12px;
+  gap: var(--space-4);
+  padding: 0 var(--space-8);
+  margin-bottom: var(--space-6);
 }
 
 .admin-smtp-error {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--error);
-  padding: 0 16px;
+  padding: 0 var(--space-8);
   min-height: 0;
   overflow: hidden;
   transition: all 0.15s;
 }
 
 .admin-smtp-error-visible {
-  margin-top: 8px;
+  margin-top: var(--space-4);
   min-height: 18px;
 }
 
 .admin-smtp-hint {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-dimmer);
-  padding: 8px 16px 12px;
+  padding: var(--space-4) var(--space-8) var(--space-6);
   line-height: 1.5;
 }
 
@@ -597,16 +597,16 @@
 .admin-temp-pin-box {
   background: var(--bg-alt);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 16px;
-  margin-top: 12px;
+  border-radius: var(--radius-5);
+  padding: var(--space-6) var(--space-8);
+  margin-top: var(--space-6);
 }
 
 .admin-temp-pin-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 0;
+  padding: var(--space-3) 0;
 }
 
 .admin-temp-pin-row + .admin-temp-pin-row {
@@ -614,7 +614,7 @@
 }
 
 .admin-temp-pin-label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -622,15 +622,15 @@
 }
 
 .admin-temp-pin-value {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
   background: var(--bg);
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-3);
 }
 
 .admin-temp-pin-highlight {
-  font-size: 18px;
+  font-size: var(--font-size-2xl);
   font-weight: 700;
   letter-spacing: 3px;
   color: var(--accent);
@@ -640,7 +640,7 @@
 .session-private-icon {
   display: inline-flex;
   align-items: center;
-  margin-right: 4px;
+  margin-right: var(--space-2);
   color: var(--text-dimmer);
   vertical-align: middle;
 }
@@ -654,15 +654,15 @@
 .admin-perms-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .admin-perm-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-4);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -674,17 +674,17 @@
 .admin-perm-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .admin-perm-label {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text);
 }
 
 .admin-perm-desc {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
 }
 
@@ -694,7 +694,7 @@
   appearance: none;
   -webkit-appearance: none;
   background: var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   position: relative;
   cursor: pointer;
   transition: background 0.2s;
@@ -724,22 +724,22 @@
 .migration-callout {
   background: var(--overlay-soft);
   border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
+  border-radius: var(--radius-4);
+  padding: var(--space-7) var(--space-8);
+  margin-bottom: var(--space-8);
 }
 
 .migration-callout strong {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 
 .migration-callout p {
-  margin: 0 0 10px 0;
-  font-size: 13px;
+  margin: 0 0 var(--space-5) 0;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
 }
 
 .migration-callout .admin-action-btn {
-  margin-top: 4px;
+  margin-top: var(--space-2);
 }
