@@ -305,7 +305,7 @@ test("Parity: task_started carries subagentType, taskType, workflowName, skipTra
     task_id: "task_1",
     tool_use_id: "toolu_1",
     description: "Researching",
-    subagent_type: "prax",
+    subagent_type: "researcher",
     task_type: "local_workflow",
     workflow_name: "spec",
     skip_transcript: true,
@@ -314,8 +314,8 @@ test("Parity: task_started carries subagentType, taskType, workflowName, skipTra
   };
   var result = flattenEvent(raw);
   assert.strictEqual(result.yokeType, "task_started");
-  assert.strictEqual(result.subagentType, "prax",
-    "subagent_type is HIGHEST VALUE per the task — the data behind 'PRAX researching...'");
+  assert.strictEqual(result.subagentType, "researcher",
+    "subagent_type is HIGHEST VALUE per the task — the data behind '<agent> researching...'");
   assert.strictEqual(result.taskType, "local_workflow");
   assert.strictEqual(result.workflowName, "spec");
   assert.strictEqual(result.skipTranscript, true);
@@ -345,13 +345,13 @@ test("Parity: task_progress carries subagentType", function() {
     task_id: "task_1",
     tool_use_id: "toolu_1",
     description: "Working",
-    subagent_type: "prax",
+    subagent_type: "researcher",
     usage: { total_tokens: 100, tool_uses: 2, duration_ms: 5000 },
     uuid: "u1",
     session_id: "s1",
   };
   var result = flattenEvent(raw);
-  assert.strictEqual(result.subagentType, "prax");
+  assert.strictEqual(result.subagentType, "researcher");
 });
 
 // ---------------------------------------------------------------------------

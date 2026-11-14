@@ -51,7 +51,7 @@ test("nothing to apply when the installed build is the loaded one", async functi
 
 test("asking for the offer restarts nothing and names every live session and background agent", async function () {
   var w = world();
-  w.add("lore", session("s1", "HOLDEN lane", { isProcessing: true, activeTaskToolIds: { t1: true, t2: true, t3: false } }));
+  w.add("lore", session("s1", "build lane", { isProcessing: true, activeTaskToolIds: { t1: true, t2: true, t3: false } }));
   w.add("workspace", session("s2", "idle one"));
   w.add("workspace", session("s3", "not live", { queryInstance: null, worker: null }));
   var r = await w.controller.request(null);
@@ -63,9 +63,9 @@ test("asking for the offer restarts nothing and names every live session and bac
   assert.equal(offer.changes.commits[0].subject, "fix a thing");
   assert.equal(offer.interruptions.sessionCount, 2, "the session without a running agent process is not live");
   assert.equal(offer.interruptions.agentCount, 2, "a finished (false) task is not an agent");
-  assert.deepEqual(offer.interruptions.sessions.map(function (s) { return s.slug + "/" + s.title; }), ["lore/HOLDEN lane", "workspace/idle one"]);
+  assert.deepEqual(offer.interruptions.sessions.map(function (s) { return s.slug + "/" + s.title; }), ["lore/build lane", "workspace/idle one"]);
   assert.match(offer.interruptionText, /2 live sessions and 2 background agents/);
-  assert.match(offer.interruptionText, /\[lore\] HOLDEN lane \(running a turn; background agents:/);
+  assert.match(offer.interruptionText, /\[lore\] build lane \(running a turn; background agents:/);
   assert.match(offer.interruptionText, /\[workspace\] idle one \(idle\)/);
   assert.doesNotMatch(offer.interruptionText, /second|wait|finish first/i, "the card promises no wait");
   assert.ok(offer.token);

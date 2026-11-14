@@ -75,7 +75,7 @@ A trigger file cannot name a mode; it takes the server setting.
 Example:
 
 ```bash
-clagentic-console open-session --project my-project --agent reviewer \
+clagentic-console open-session --project my-project --agent <agent> \
   --permission-mode plan \
   --prompt "Review the open change and propose fixes. Do not edit files."
 ```

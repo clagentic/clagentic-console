@@ -203,8 +203,8 @@ test("the daemon fixes the id from the build SHA it loaded at start", () => {
 
 const stored = {
   type: "user_message", source: "external-trigger", initiator: "trigger", text: "report",
-  senderKind: "extracted", fromName: "holden@lore", senderProject: "lore",
-  senderSessionId: "923", senderAgent: "holden", senderVendor: "claude",
+  senderKind: "extracted", fromName: "agent-a@lore", senderProject: "lore",
+  senderSessionId: "923", senderAgent: "agent-a", senderVendor: "claude",
 };
 
 function rendered(entry) {
@@ -214,7 +214,7 @@ function rendered(entry) {
 
 test("live path: the entry sent to the client renders as agent@project with the extracted marker", () => {
   const r = rendered(stored);
-  assert.equal(r.name, "holden@lore");
+  assert.equal(r.name, "agent-a@lore");
   assert.match(r.label, /extracted/);
 });
 
