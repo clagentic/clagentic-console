@@ -2316,6 +2316,25 @@ test("C3b panel over a dialog: Ctrl+K with a dialog open opens nothing, and with
   assert.equal(backGesture(m), "panel", "then back closes the palette");
 });
 
+test("C3b input list under a panel: the slash list open, then Ctrl+K, closes the list, opens the palette, and one Escape closes the palette", async function (t) {
+  var m = await dialogOverPage(t);
+  global.fetch = function () { return Promise.reject(new Error("offline")); };
+  teachPaletteMarkup();
+  var palette = await import(dom.moduleUrl("command-palette.js") + "?c3b=" + (++instance));
+  palette.initCommandPalette({ currentSlug: function () { return "proj-a"; } });
+  var list = await INPUT_LISTS[1].build(++listInstance);
+
+  list.open();
+  assert.equal(list.visible(), true, "the slash list is open");
+  m.key({ key: "k", ctrlKey: true });
+  assert.equal(list.visible(), false, "Ctrl+K closed the list");
+  assert.equal(palette.isCommandPaletteOpen(), true, "and the palette is open");
+  assert.equal(m.registry.getOpenMenu(), null, "no list is left in the registry above it");
+  m.escape();
+  assert.equal(palette.isCommandPaletteOpen(), false, "one Escape closes the palette");
+  assert.equal(m.registry.getTopModal(), null, "and nothing is left open");
+});
+
 test("C3b panel over a dialog: the update_available route, by banner click or push, opens nothing over a dialog, and opens server settings with none", async function (t) {
   var m = await dialogOverPage(t);
   var page = { me: true };
