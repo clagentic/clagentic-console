@@ -55,6 +55,11 @@ var ALLOWLIST = [
     reason: "The loading and empty states' 48px top and bottom padding is past the largest spacing step (40px); rounding would move it 8px.",
   },
   {
+    file: "lib/public/css/skills.css",
+    keys: ["margin-bottom: -1px"],
+    reason: "A 1px offset coupled to a 1px border (border widths are not on the spacing scale); rounding would break the overlap.",
+  },
+  {
     file: "lib/public/css/input.css",
     keys: ["56px"],
     reason: "The mobile input area clears the 56px bottom tab bar; the clearance is sized to that bar, past the largest spacing step (40px), and rounding would move it 16px.",
