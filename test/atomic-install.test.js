@@ -204,6 +204,51 @@ test("a bin repoint that fails twice during the undo names where the previous bu
   } finally { cleanup(prefix); }
 });
 
+test("the staging npm install is pointed at the real global npmrc for the target prefix, unless the caller names one", async function () {
+  var prefix = makeLive("old");
+  try {
+    var seen = [];
+    var spy = function (tag) {
+      var inner = fakeNpm(tag);
+      return async function (args, o) { seen.push(o.env.npm_config_globalconfig); return inner(args, o); };
+    };
+    await installGlobalAtomically({ spec: "x", prefix: prefix, env: {}, runNpm: spy("new") });
+    assert.equal(seen[0], path.join(prefix, "etc", "npmrc"), "not <stageRoot>/etc/npmrc");
+    await installGlobalAtomically({ spec: "x", prefix: prefix, env: { npm_config_globalconfig: "/caller/npmrc" }, runNpm: spy("newer") });
+    assert.equal(seen[1], "/caller/npmrc", "a globalconfig the caller set is kept");
+  } finally { cleanup(prefix); }
+});
+
+test("a main-path swap failure with a failed rollback names where the previous build is and carries the rollback failure", async function () {
+  var prefix = makeLive("old");
+  try {
+    var binRenames = 0;
+    var failing = Object.assign({}, fs, {
+      // The bin repoint after the old build moves aside fails, and so does the
+      // move back, leaving the previous build at the dotted retired name.
+      renameSync: function (from, to) {
+        if (String(from).endsWith(".tmp")) {
+          binRenames++;
+          if (binRenames === 2) throw new Error("injected bin failure");
+        }
+        if (String(from).indexOf(".retired-") !== -1 && String(to).endsWith("console")) throw new Error("injected move-back failure");
+        return fs.renameSync(from, to);
+      },
+    });
+    var thrown = null;
+    try {
+      await installGlobalAtomically({ spec: "x", prefix: prefix, fs: failing, runNpm: fakeNpm("new") });
+    } catch (err) { thrown = err; }
+    assert.ok(thrown, "the install fails");
+    var keptAt = /the previous build is kept at (\S+)$/.exec(thrown.message);
+    assert.ok(keptAt, "the error names where the previous build is");
+    assert.match(path.basename(keptAt[1]), /\.retired-/);
+    assert.equal(fs.readFileSync(path.join(keptAt[1], "bin", "cli.js"), "utf8"), "old", "that path holds the previous build");
+    assert.match(thrown.message, /rollback also failed \(injected move-back failure\)/);
+    assert.equal(thrown.cause.message, "injected move-back failure");
+  } finally { cleanup(prefix); }
+});
+
 test("install:local-test: a build already installed with identical files still skips the install",async function () {
   var installs = 0;
   var outcome = await installLocalTest.main({
