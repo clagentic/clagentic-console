@@ -7,5 +7,5 @@ paths:
   ".crew/**": {class: internal}
 test:
   prepare: [npm, ci]
-  full: [node, --test, --test-reporter=junit, "--test-reporter-destination={junit}", "test/*.test.js"]
-  files: [node, --test, --test-reporter=junit, "--test-reporter-destination={junit}"]
+  full: [node, --test, --test-timeout=300000, --test-reporter=junit, "--test-reporter-destination={junit}", "test/*.test.js"]
+  files: [node, --test, --test-timeout=300000, --test-reporter=junit, "--test-reporter-destination={junit}"]
