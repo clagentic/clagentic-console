@@ -61,6 +61,10 @@ To skip the postinstall script:
 npm install -g @clagentic/console --ignore-scripts
 ```
 
+### Updating while commands are running
+
+The in-app update and the startup update install the new build beside the current one and swap it in, so `clagentic-console` stays on `PATH` the whole time and a command run during the update keeps working. A plain `npm install -g @clagentic/console` run by hand is npm's own install: npm removes the old command before it links the new one, so a `clagentic-console` call made in those few seconds can exit 127 (command not found). If a script or hook calls `clagentic-console`, retry on exit 127, or update from inside the app.
+
 ## What it does
 
 - **Real team accounts.** Every team member gets their own login. Multiple users connect to the same Console daemon simultaneously — each with their own session history, project access, and tool approval flow. No shared credentials, no per-user installs.
@@ -198,7 +202,7 @@ To install the current working-tree build globally and test it as a real end-use
 npm run install:local-test
 ```
 
-This runs `npm pack` (which respects the `files` list in `package.json`, so you get exactly what would ship to npm), installs the resulting tarball globally with `npm install -g`, and removes the tarball. The result is indistinguishable from `npm install -g @clagentic/console` — no symlinks, no `node_modules` shortcuts.
+This runs `npm pack` (which respects the `files` list in `package.json`, so you get exactly what would ship to npm), installs the resulting tarball globally, and removes the tarball. The tarball is installed into a staging prefix and swapped into the global prefix with renames, so `clagentic-console` stays on `PATH` during the install. The result is the same files and links as `npm install -g @clagentic/console` — no symlinks, no `node_modules` shortcuts.
 
 When done testing, uninstall with:
 
