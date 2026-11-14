@@ -82,7 +82,7 @@ When a result is `ambiguous`, pick a candidate and send again with `--project <s
 A name makes one session addressable exactly. It is set once, when the session is opened, and cannot be changed:
 
 ```bash
-clagentic-console open-session --project my-project --agent reviewer --name pass-2 --prompt "Review the open change."
+clagentic-console open-session --project my-project --agent <agent> --name pass-2 --prompt "Review the open change."
 clagentic-console open-session --to reviewer@my-project/pass-2 --prompt "Review the open change."
 ```
 
@@ -123,7 +123,7 @@ clagentic-console open-session (--project <slug> | --to <address>) --prompt <tex
 Example:
 
 ```bash
-clagentic-console open-session --project my-project --agent reviewer --name pass-2 \
+clagentic-console open-session --project my-project --agent <agent> --name pass-2 \
   --context-note "Review of the open change" \
   --prompt "Review the open change and report findings."
 ```
@@ -152,7 +152,7 @@ If the first turn fails to start, the session the call created is removed and th
 A session opened here starts in a permission mode, chosen in this order: the call's `--permission-mode`, then the server setting "Mode for sessions opened by the CLI or a trigger", then `acceptEdits`. Defaults are unchanged by this: a caller that gives no flag, on a server whose setting has not been touched, opens in `acceptEdits` as it always did. The mode is saved with the session, so a follow-up, a resume and a daemon restart keep it.
 
 ```bash
-clagentic-console open-session --project my-project --agent reviewer \
+clagentic-console open-session --project my-project --agent <agent> \
   --permission-mode plan \
   --prompt "Review the open change and propose fixes. Do not edit files."
 ```
@@ -355,7 +355,7 @@ clagentic-console list-sessions [--project <slug>] [--agent <name>] [--vendor <i
 | Flag | Meaning |
 |---|---|
 | `--project <slug>` | Only this project. An unknown project is `refused`. |
-| `--agent <name>` | Only sessions running this named agent. Compared by slug, so `Reviewer` and `reviewer` are one agent. |
+| `--agent <name>` | Only sessions running this named agent. Compared by slug, so `Agent-A` and `agent-a` are one agent. |
 | `--vendor <id>` | Only sessions on this vendor (case-insensitive). |
 | `--state <list>` | Only sessions in these states: one of `live`, `idle`, `reaped`, several as a comma list (`live,idle`), or `any` for every state. Without `--state`, the default above applies; an explicit value is an exact match and adds no lane row. An unknown name is `refused`, and the reason lists the valid names. `live` is a running turn or a session blocked on a pending prompt, so it includes sessions waiting on the operator; read `pendingPrompts` to tell them apart. Every row carries `pendingPrompts` whatever the filter. |
 | `--limit <n>` | At most `n` rows, the newest. Applied after the filter and the sort, so `--limit 1` is the most recent match. `total` in the result still counts every row the filter shows. |
@@ -365,9 +365,9 @@ The filters combine. Each of these is one command, with nothing piped or filtere
 
 ```bash
 clagentic-console list-sessions --project my-project
-clagentic-console list-sessions --project my-project --agent reviewer --limit 1
+clagentic-console list-sessions --project my-project --agent <agent> --limit 1
 clagentic-console list-sessions --project my-project --state live,idle
-clagentic-console list-sessions --agent reviewer --state any --limit 5
+clagentic-console list-sessions --agent <agent> --state any --limit 5
 ```
 
 Result, compact (the default):
