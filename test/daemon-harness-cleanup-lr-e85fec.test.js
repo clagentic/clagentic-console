@@ -28,9 +28,9 @@ test("a partial daemon.json fails cleanup, naming the path", { timeout: 60000 },
 
 var HOLD = "setTimeout(function () {}, 60000)";
 
-// spawn() returns once the child is forked, not once it has exec'd. Until the
-// exec, /proc/<pid>/environ still shows the parent's environment, so under load
-// a read right after spawn sees no token. Wait for the child's own entry.
+// spawn() returns once exec closes libuv's CLOEXEC pipe, but the kernel publishes
+// the new image's environ later in exec, so an immediate read can be empty.
+// Wait for the child's own entry.
 // The caller passes one deadline shared by every wait, kept well inside the test
 // timeout so a missing token fails with this error, not the test-level timeout.
 async function waitForEnvEntry(label, proc, entry, deadline) {
