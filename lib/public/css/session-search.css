@@ -9,10 +9,10 @@
   justify-content: center;
   background: none;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 4px;
+  padding: var(--space-2);
   transition: color 0.15s, background 0.15s, border-color 0.15s;
   position: relative;
 }
@@ -37,23 +37,23 @@
 .session-search-inner {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0 0 10px 10px;
-  padding: 6px 8px;
+  border-radius: 0 0 var(--radius-5) var(--radius-5);
+  padding: var(--space-3) var(--space-4);
   box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.12);
 }
 
 #find-in-session-input {
   width: 200px;
-  padding: 4px 8px;
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   outline: none;
   font-family: inherit;
 }
@@ -67,7 +67,7 @@
 }
 
 .session-search-count {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
   min-width: 60px;
   text-align: center;
@@ -83,7 +83,7 @@
   border: none;
   background: transparent;
   color: var(--text-muted);
-  border-radius: 5px;
+  border-radius: var(--radius-3);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -97,15 +97,15 @@
 mark.session-search-highlight {
   background: var(--accent-30);
   color: inherit;
-  border-radius: 2px;
-  padding: 0 1px;
+  border-radius: var(--radius-1);
+  padding: 0 var(--space-1);
 }
 
 mark.session-search-highlight-active {
   background: var(--accent);
   color: var(--on-accent);
-  border-radius: 2px;
-  padding: 0 1px;
+  border-radius: var(--radius-1);
+  padding: 0 var(--space-1);
 }
 
 @keyframes sessionSearchSlideDown {
@@ -133,7 +133,7 @@ mark.session-search-highlight-active {
 
 @keyframes searchBlink {
   0%, 100% { box-shadow: none; }
-  50% { box-shadow: 0 0 0 2px var(--accent); border-radius: 12px; }
+  50% { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--radius-6); }
 }
 
 /* Mobile */
@@ -154,7 +154,7 @@ mark.session-search-highlight-active {
   }
 
   .session-search-inner {
-    padding: 4px 6px;
+    padding: var(--space-2) var(--space-3);
   }
 }
 

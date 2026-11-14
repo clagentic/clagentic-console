@@ -21,12 +21,12 @@
   right: -3px;
   min-width: 15px;
   height: 15px;
-  line-height: 15px;
-  border-radius: 8px;
-  font-size: 9px;
+  line-height: var(--line-height-xs);
+  border-radius: var(--radius-4);
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   text-align: center;
-  padding: 0 3px;
+  padding: 0 var(--space-2);
   pointer-events: none;
   font-family: inherit;
   color: var(--bg);
@@ -61,18 +61,18 @@
 .diagnostics-panel-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .diagnostics-panel-clear-all {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: var(--space-2) var(--space-4);
   background: none;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-family: var(--font-mono, monospace);
-  font-size: 9.5px;
+  font-size: var(--font-size-2xs);
   font-weight: 400;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -92,11 +92,11 @@
    Diagnostic items
    -------------------------------------------------------- */
 .diagnostics-item {
-  padding: 10px 14px;
+  padding: var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--border-subtle, var(--border));
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 .diagnostics-item:last-child { border-bottom: none; }
 .diagnostics-item:hover { background: rgba(var(--overlay-rgb), 0.02); }
@@ -109,18 +109,18 @@
 .diagnostics-item-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 /* Severity badge pill */
 .diagnostics-sev-badge {
   font-family: var(--font-mono, monospace);
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  border-radius: 4px;
-  padding: 1px 5px;
+  border-radius: var(--radius-2);
+  padding: var(--space-1) var(--space-3);
   line-height: 1.4;
   flex-shrink: 0;
 }
@@ -140,7 +140,7 @@
 /* Source label */
 .diagnostics-source {
   font-family: var(--font-mono, monospace);
-  font-size: 9.5px;
+  font-size: var(--font-size-2xs);
   color: var(--text-dimmer);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -153,11 +153,11 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 2px;
+  padding: var(--space-1);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-2);
   flex-shrink: 0;
   transition: color 0.15s, background 0.15s;
 }
@@ -173,7 +173,7 @@
 
 /* Message text */
 .diagnostics-message {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: 1.5;
   word-break: break-word;
@@ -183,11 +183,11 @@
 .diagnostics-actionable {
   display: flex;
   align-items: flex-start;
-  gap: 5px;
-  margin-top: 2px;
-  padding: 4px 6px;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   background: var(--accent2-8);
-  border-radius: 4px;
+  border-radius: var(--radius-2);
 }
 .diagnostics-actionable-icon {
   flex-shrink: 0;
@@ -197,7 +197,7 @@
 }
 .diagnostics-actionable-icon .lucide { width: 11px; height: 11px; }
 .diagnostics-actionable-text {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   line-height: 1.4;
 }
@@ -210,13 +210,13 @@
 .diagnostics-actionable-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
   background: var(--accent2);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   color: var(--on-accent2);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s;
@@ -236,9 +236,9 @@
 .build-update-detail {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 4px;
-  font-size: 11px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
@@ -246,7 +246,7 @@
 .build-update-heading { font-weight: 600; }
 .build-update-commits {
   margin: 0;
-  padding-left: 16px;
+  padding-left: var(--space-8);
   max-height: 140px;
   overflow-y: auto;
 }
@@ -256,7 +256,7 @@
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border);
-  margin-left: 6px;
+  margin-left: var(--space-3);
 }
 
 /* The sessions a restart would end: a count line and an expand control above the
@@ -265,20 +265,20 @@
 .build-update-sessions {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
-  font-size: 11px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
 .build-update-sessions-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 .build-update-sessions.is-collapsed .build-update-session-list { display: none; }
 .build-update-session-list {
   margin: 0;
-  padding-left: 16px;
+  padding-left: var(--space-8);
   max-height: 160px;
   overflow-y: auto;
   overflow-wrap: anywhere;
@@ -286,15 +286,15 @@
 
 /* Shown beside a restart button whose click could not be sent. */
 .build-update-send-failed {
-  margin-top: 4px;
-  font-size: 11px;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
   color: var(--error);
 }
 
 /* Empty state */
 .diagnostics-empty {
-  padding: 20px 14px;
-  font-size: 12px;
+  padding: var(--space-10) var(--space-7);
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
   text-align: center;
 }
@@ -307,17 +307,17 @@
 .toast-diagnostic-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .toast-diagnostic-severity {
   font-family: var(--font-mono, monospace);
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  border-radius: 4px;
-  padding: 1px 5px;
+  border-radius: var(--radius-2);
+  padding: var(--space-1) var(--space-3);
   line-height: 1.4;
   flex-shrink: 0;
 }
@@ -327,7 +327,7 @@
 
 .toast-diagnostic-source {
   font-family: var(--font-mono, monospace);
-  font-size: 9.5px;
+  font-size: var(--font-size-2xs);
   color: var(--text-dimmer);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -335,7 +335,7 @@
 }
 
 .toast-diagnostic-msg {
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   line-height: 1.5;
   /* lr-fab390: mirrors the mobile overflow-wrap:anywhere fix (lr-4ef618,
@@ -347,9 +347,9 @@
 }
 
 .toast-diagnostic-hint {
-  font-size: 10.5px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 /* lr-e85fec: same actuator button as .diagnostics-actionable-btn, sized for
@@ -357,13 +357,13 @@
    sees the condition, not only once they open the panel. */
 .toast-diagnostic-action-btn {
   align-self: flex-start;
-  margin-top: 4px;
-  padding: 5px 12px;
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-6);
   background: var(--accent2);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   color: var(--on-accent2);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s;

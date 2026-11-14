@@ -6,9 +6,9 @@
   position: fixed;
   background: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
+  border-radius: var(--radius-4);
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   pointer-events: none;
@@ -28,21 +28,21 @@
 
 /* Context sources tooltip */
 .ctx-tip-header {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 
 .ctx-tip-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .ctx-tip-row .lucide {
@@ -56,7 +56,7 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-1);
 }
 
 .ctx-tip-row span {

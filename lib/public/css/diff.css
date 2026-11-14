@@ -6,7 +6,7 @@
 .diff-split-view {
   overflow: auto;
   font-family: "Roboto Mono", monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 
@@ -20,7 +20,7 @@
 .diff-ln {
   width: 40px;
   min-width: 40px;
-  padding: 0 8px 0 4px;
+  padding: 0 var(--space-4) 0 var(--space-2);
   text-align: right;
   color: var(--text-dimmer);
   user-select: none;
@@ -34,7 +34,7 @@
 .diff-marker {
   width: 16px;
   min-width: 16px;
-  padding: 0 2px;
+  padding: 0 var(--space-1);
   text-align: center;
   color: var(--text-dimmer);
   user-select: none;
@@ -43,7 +43,7 @@
 
 /* --- Code cells --- */
 .diff-code {
-  padding: 0 12px;
+  padding: 0 var(--space-6);
   white-space: pre;
   vertical-align: top;
   tab-size: 2;
@@ -74,7 +74,7 @@
 .diff-row-hunk .diff-hunk-text {
   color: var(--text-dimmer);
   font-style: italic;
-  padding: 2px 12px;
+  padding: var(--space-1) var(--space-6);
 }
 
 /* --- Split diff specifics --- */
@@ -119,18 +119,18 @@
 
 /* --- Compact mode for inline previews --- */
 .diff-compact .diff-table {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 1.4;
 }
 
 .diff-compact .diff-ln {
   width: 28px;
   min-width: 28px;
-  padding: 0 4px 0 2px;
+  padding: 0 var(--space-2) 0 var(--space-1);
 }
 
 .diff-compact .diff-code {
-  padding: 0 6px;
+  padding: 0 var(--space-3);
 }
 
 .diff-compact .diff-marker {

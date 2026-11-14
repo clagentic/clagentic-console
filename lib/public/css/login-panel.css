@@ -3,11 +3,11 @@
   box-sizing: border-box;
   flex-shrink: 0;
   max-width: 100%;
-  padding: 10px 12px;
+  padding: var(--space-5) var(--space-6);
   background: var(--bg);
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   overflow-wrap: anywhere;
 }
 .login-panel-head {
@@ -15,37 +15,37 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
 }
 .login-panel-title { font-weight: 600; min-width: 0; }
-.login-panel-host { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+.login-panel-host { color: var(--text-muted); font-size: var(--font-size-sm); margin-bottom: var(--space-4); }
 .login-panel-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
   min-width: 0;
 }
 .login-panel-btn,
 .login-panel-dismiss {
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 var(--space-6);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: transparent;
   color: var(--text);
   font: inherit;
   cursor: pointer;
 }
-.login-panel-dismiss { min-height: 28px; padding: 0 8px; color: var(--text-muted); }
+.login-panel-dismiss { min-height: 28px; padding: 0 var(--space-4); color: var(--text-muted); }
 .login-panel-btn:hover,
 .login-panel-dismiss:hover { background: rgba(var(--overlay-rgb), 0.06); }
 .login-panel-label { color: var(--text-muted); }
 .login-panel-code-value {
   font-family: var(--font-mono, monospace);
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   letter-spacing: 0.04em;
   min-width: 0;
 }
@@ -55,18 +55,18 @@
   max-width: 100%;
   box-sizing: border-box;
   min-height: 36px;
-  padding: 0 10px;
+  padding: 0 var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: transparent;
   color: var(--text);
   /* 16px stops iOS from zooming the page when the field takes focus. */
-  font-size: 16px;
+  font-size: var(--font-size-xl);
 }
-.login-panel-identity { margin-top: 8px; color: var(--text-muted); font-size: 12px; }
+.login-panel-identity { margin-top: var(--space-4); color: var(--text-muted); font-size: var(--font-size-sm); }
 
 @media (max-width: 480px) {
-  .login-panel { padding: 10px; }
+  .login-panel { padding: var(--space-5); }
   .login-panel-links .login-panel-btn,
   .login-panel-shown-code .login-panel-btn,
   .login-panel-code-entry .login-panel-btn { flex: 1 1 100%; }

@@ -32,14 +32,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 28px;
+  padding: var(--space-8) var(--space-14);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
 .team-view-title {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--text);
 }
@@ -52,8 +52,8 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-2);
+  border-radius: var(--radius-2);
 }
 
 .team-view-close:hover { color: var(--text); background: rgba(var(--overlay-rgb), 0.06); }
@@ -63,7 +63,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px 28px 40px;
+  padding: var(--space-10) var(--space-14) var(--space-20);
 }
 
 /* Sections read as a column, not a full-width stretch. */
@@ -75,8 +75,8 @@
 
 .team-view-tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -87,9 +87,9 @@
   color: var(--text-dim);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
-  padding: 8px 12px;
+  padding: var(--space-4) var(--space-6);
 }
 
 .team-view-tab:hover { color: var(--text); }
