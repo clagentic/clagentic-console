@@ -9,15 +9,15 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   height: 24px;
-  padding: 0 10px;
+  padding: 0 var(--space-5);
   background: rgba(var(--overlay-rgb), 0.04);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   cursor: pointer;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-dimmer);
   transition: background 0.15s, border-color 0.15s;
   width: min(520px, 40%);
@@ -44,15 +44,15 @@
 }
 
 .cmd-palette-searchbar-kbd {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-muted);
   background: rgba(var(--overlay-rgb), 0.08);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0 5px;
+  border-radius: var(--radius-2);
+  padding: 0 var(--space-3);
   font-family: inherit;
-  line-height: 16px;
+  line-height: var(--line-height-xs);
   flex-shrink: 0;
 }
 
@@ -96,7 +96,7 @@
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-6) var(--radius-6);
   width: min(560px, 44%);
   box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.4);
   display: flex;
@@ -120,9 +120,9 @@
 .cmd-palette-input-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   /* The right end is the shared close control's corner. */
-  padding: 10px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 10px 14px;
+  padding: var(--space-5) calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -138,7 +138,7 @@
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-family: inherit;
   outline: none;
   min-width: 0;
@@ -151,25 +151,25 @@
 /* --- Results area --- */
 .cmd-palette-results {
   overflow-y: auto;
-  padding: 6px 0;
+  padding: var(--space-3) 0;
   flex: 1;
   min-height: 0;
 }
 
 .cmd-palette-group-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  padding: 8px 16px 4px;
+  padding: var(--space-4) var(--space-8) var(--space-2);
 }
 
 .cmd-palette-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-8);
   cursor: pointer;
   transition: background 0.1s;
 }
@@ -185,9 +185,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: var(--font-size-xl);
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: rgba(var(--overlay-rgb), 0.04);
 }
 
@@ -196,17 +196,17 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .cmd-palette-item-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .cmd-palette-item-title {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -215,7 +215,7 @@
 }
 
 .cmd-palette-item-date {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
   white-space: nowrap;
   flex-shrink: 0;
@@ -224,8 +224,8 @@
 .cmd-palette-item-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: var(--space-3);
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
 
@@ -257,16 +257,16 @@
 
 /* --- Empty / loading --- */
 .cmd-palette-empty {
-  padding: 24px 16px;
+  padding: var(--space-12) var(--space-8);
   text-align: center;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
 }
 
 .cmd-palette-loading {
-  padding: 24px 16px;
+  padding: var(--space-12) var(--space-8);
   text-align: center;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
 }
 
@@ -275,18 +275,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 14px;
+  padding: var(--space-3) var(--space-7);
   border-top: 1px solid var(--border-subtle);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
 
 .cmd-palette-brand {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   font-family: "Nunito", sans-serif;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--text-muted);
   text-decoration: none;
@@ -294,7 +294,7 @@
 }
 
 .cmd-palette-brand img {
-  border-radius: 3px;
+  border-radius: var(--radius-2);
 }
 
 .cmd-palette-brand:hover {
@@ -304,16 +304,16 @@
 .cmd-palette-footer-shortcuts {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-5);
 }
 
 .cmd-palette-footer kbd {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--text-secondary);
   background: rgba(var(--overlay-rgb), 0.08);
   border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0 4px;
+  border-radius: var(--radius-2);
+  padding: 0 var(--space-2);
   font-family: inherit;
 }
 
@@ -333,7 +333,7 @@
     transform: none;
     width: 100%;
     max-height: 85dvh;
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--radius-8) var(--radius-8) 0 0;
     border: none;
     border-top: 1px solid var(--border-subtle);
     animation: cmdPaletteMobileUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -347,16 +347,16 @@
 
   /* Bigger input for touch */
   .cmd-palette-input-row {
-    padding: 14px 16px;
+    padding: var(--space-7) var(--space-8);
   }
 
   .cmd-palette-input {
-    font-size: 16px; /* prevents iOS zoom */
+    font-size: var(--font-size-xl); /* prevents iOS zoom */
   }
 
   /* Bigger tap targets */
   .cmd-palette-item {
-    padding: 12px 16px;
+    padding: var(--space-6) var(--space-8);
     min-height: 44px;
   }
 
@@ -383,7 +383,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   border-top: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-8);
   width: min(820px, 85vw);
   max-height: 80vh;
   background: var(--bg-alt);
@@ -395,18 +395,18 @@
   to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 .project-switcher-header {
-  padding: 14px 20px 6px;
-  font-size: 11px;
+  padding: var(--space-7) var(--space-10) var(--space-3);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-dimmer);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 .project-switcher-dialog .cmd-palette-results {
-  padding: 12px 16px;
+  padding: var(--space-6) var(--space-8);
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-4);
   justify-content: flex-start;
   overflow-y: auto;
   max-height: calc(80vh - 110px);
@@ -415,14 +415,14 @@
   flex: 0 0 auto;
   width: 96px;
   height: 104px;
-  padding: 10px 6px;
+  padding: var(--space-5) var(--space-3);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--space-4);
   border: 2px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: transparent;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
@@ -434,12 +434,12 @@
 .project-switcher-item .cmd-palette-item-icon {
   width: 44px;
   height: 44px;
-  font-size: 28px;
+  font-size: var(--font-size-6xl);
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--bg-alt);
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -469,7 +469,7 @@
 .project-switcher-avatar {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   object-fit: cover;
 }
 .project-switcher-item .cmd-palette-item-body {
@@ -480,11 +480,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
   width: 100%;
 }
 .project-switcher-item .cmd-palette-item-title {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   line-height: 1.2;
   color: var(--text-secondary);
@@ -506,7 +506,7 @@
 }
 
 .project-switcher-current {
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-dimmer);
   text-transform: uppercase;
@@ -527,7 +527,7 @@
   background: transparent;
 }
 .project-switcher-disabled-reason {
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 500;
   color: var(--text-dimmer);
   font-style: italic;
@@ -538,8 +538,8 @@
 }
 
 .project-switcher-footer {
-  padding: 10px 16px;
-  font-size: 11px;
+  padding: var(--space-5) var(--space-8);
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
   border-top: 1px solid var(--border-subtle);
   display: flex;
@@ -547,11 +547,11 @@
 }
 .project-switcher-footer kbd {
   display: inline-block;
-  padding: 1px 5px;
-  margin: 0 1px;
+  padding: var(--space-1) var(--space-3);
+  margin: 0 var(--space-1);
   background: rgba(var(--overlay-rgb), 0.1);
-  border-radius: 4px;
-  font-size: 10px;
+  border-radius: var(--radius-2);
+  font-size: var(--font-size-2xs);
   font-family: inherit;
   color: var(--text-muted);
 }

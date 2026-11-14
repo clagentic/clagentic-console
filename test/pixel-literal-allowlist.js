@@ -13,12 +13,11 @@
 // guard fails on a row whose file no longer holds a literal, so the list only
 // shrinks.
 
-var BATCH_B2 = "lr-b1bf71";
 var BATCH_B3 = "lr-16d9a0";
 var BATCH_B4 = "lr-b182d8";
 var BATCH_B5 = "lr-d3e1ea";
 
-var BATCHES = [BATCH_B2, BATCH_B3, BATCH_B4, BATCH_B5];
+var BATCHES = [BATCH_B3, BATCH_B4, BATCH_B5];
 
 function unswept(batch, files) {
   return files.map(function (name) {
@@ -30,9 +29,28 @@ function unswept(batch, files) {
   });
 }
 
-var ALLOWLIST = []
-  .concat(unswept(BATCH_B2, ["profile", "mention", "playbook", "user-shell", "team-panel", "user-settings", "title-bar",
-                             "command-palette", "sticky-notes", "home-hub"]))
+var ALLOWLIST = [
+  {
+    file: "lib/public/css/title-bar.css",
+    keys: ["+ 0px"],
+    reason: "A zero term that keeps the safe-area sum a length; zero is not a spacing step.",
+  },
+  {
+    file: "lib/public/css/command-palette.css",
+    keys: ["env(safe-area-inset-bottom, 0px)"],
+    reason: "The zero fallback of the safe-area inset where the platform reports none; zero is not a spacing step.",
+  },
+  {
+    file: "lib/public/css/sticky-notes.css",
+    keys: ["80px"],
+    reason: "The empty archive's top and bottom clearance is 80px, past the largest spacing step (40px); rounding would halve it.",
+  },
+  {
+    file: "lib/public/css/home-hub.css",
+    keys: ["48px", "80px", "44px"],
+    reason: "Clearances sized to the hub's close button and the bottom navigation (48px top padding, 80px mobile bottom padding, 44px mobile content offset), past or between the spacing steps; rounding would move them more than 1px.",
+  },
+]
   .concat(unswept(BATCH_B3, ["skills", "menus", "rewind", "admin", "input", "icon-strip"]))
   .concat(unswept(BATCH_B4, ["mobile-nav", "sidebar", "server-settings", "scheduler"]))
   .concat(unswept(BATCH_B5, ["scheduler-modal", "loop", "overlays", "messages", "filebrowser"]));

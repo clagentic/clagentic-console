@@ -12,8 +12,8 @@
   overflow-y: auto;
   background: var(--sidebar-bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  margin-bottom: 8px;
+  border-radius: var(--radius-5);
+  margin-bottom: var(--space-4);
   box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.15);
   z-index: var(--z-base);
 }
@@ -23,8 +23,8 @@
 .mention-hint {
   position: sticky;
   top: 0;
-  padding: 8px 16px;
-  font-size: 12px;
+  padding: var(--space-4) var(--space-8);
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
   background: var(--sidebar-bg);
   border-bottom: 1px solid var(--border-subtle);
@@ -37,9 +37,9 @@
   border: none;
   background: none;
   color: var(--text-dimmer);
-  font-size: 16px;
+  font-size: var(--font-size-xl);
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0 var(--space-1);
   line-height: 1;
 }
 .mention-close-btn:hover {
@@ -49,9 +49,9 @@
 .mention-item {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  padding: var(--space-5) var(--space-8);
   cursor: pointer;
-  gap: 10px;
+  gap: var(--space-5);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -92,15 +92,15 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-1);
 }
 .mention-item-name {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text);
 }
 .mention-item-bio {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -108,15 +108,15 @@
 }
 .mention-item-badge {
   display: inline-block;
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 800;
   letter-spacing: 0.5px;
-  padding: 1px 5px;
-  border-radius: 3px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
   background: var(--accent-12);
   color: var(--accent);
   vertical-align: middle;
-  margin-left: 5px;
+  margin-left: var(--space-3);
 }
 
 .mention-item-dot {
@@ -135,8 +135,8 @@
   color: var(--accent);
   font-weight: 600;
   background: rgba(var(--accent-rgb), 0.12);
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
   font-size: inherit;
 }
 
@@ -147,10 +147,10 @@
 #input-mention-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 6px 3px 4px;
-  margin: 0 0 4px 0;
-  border-radius: 6px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  margin: 0 0 var(--space-2) 0;
+  border-radius: var(--radius-3);
   background: color-mix(in srgb, var(--chip-color, var(--accent)) 15%, var(--bg-alt));
   border: 1px solid color-mix(in srgb, var(--chip-color, var(--accent)) 30%, var(--border));
   cursor: default;
@@ -172,10 +172,10 @@
 }
 
 .input-mention-chip-name {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   white-space: nowrap;
-  line-height: 18px;
+  line-height: var(--line-height-sm);
 }
 
 .input-mention-chip-remove {
@@ -184,8 +184,8 @@
   padding: 0;
   margin: 0;
   cursor: pointer;
-  font-size: 15px;
-  line-height: 18px;
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-sm);
   color: var(--text-dimmer);
   opacity: 0.6;
   transition: opacity 0.1s;
@@ -205,14 +205,14 @@
   margin-left: auto;
   background: none;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-2);
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px 6px;
+  padding: var(--space-1) var(--space-3);
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
   transition: color 0.15s, border-color 0.15s;
 }
 .mention-stop-btn:hover {
@@ -221,7 +221,7 @@
 }
 
 .mention-content {
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   line-height: 1.7;
   word-break: break-word;
   color: var(--text);
@@ -233,25 +233,25 @@
 
 /* Badge next to mate name */
 .mention-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text-dimmer);
   background: rgba(var(--overlay-rgb), 0.08);
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
 }
 
 /* Activity bar inside a mention response */
 .msg-mention-dm .mention-activity-bar {
-  margin: 4px 0;
+  margin: var(--space-2) 0;
   padding: 0;
 }
 
 /* Error state */
 .mention-error {
   color: var(--danger);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-style: italic;
 }
 

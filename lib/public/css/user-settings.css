@@ -5,7 +5,7 @@
 /* --- Overlay container: a panel of the shared overlay component (position,
    layer, scrim and the close control are overlay.css's); this is its margin --- */
 #user-settings {
-  padding: 20px;
+  padding: var(--space-10);
 }
 
 #user-settings.hidden {
@@ -24,7 +24,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: var(--radius-9);
   border: 1px solid rgba(var(--overlay-rgb), 0.08);
   background:
     linear-gradient(180deg, rgba(var(--overlay-rgb), 0.02), transparent 18%),
@@ -45,15 +45,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 16px 18px 14px;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-9) var(--space-7);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   background: rgba(var(--overlay-rgb), 0.02);
 }
 
 .us-modal-title {
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 700;
   color: var(--text);
   letter-spacing: 0.01em;
@@ -71,7 +71,7 @@
 .us-modal-nav {
   width: 220px;
   flex-shrink: 0;
-  padding: 14px 10px;
+  padding: var(--space-7) var(--space-5);
   border-right: 1px solid var(--border-subtle);
   background:
     linear-gradient(180deg, rgba(var(--overlay-rgb), 0.015), transparent 24%),
@@ -82,21 +82,21 @@
 .us-modal-nav-items {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .us-nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-4) var(--space-5);
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
@@ -121,7 +121,7 @@
 .us-nav-separator {
   height: 1px;
   background: var(--border-subtle);
-  margin: 8px 8px;
+  margin: var(--space-4) var(--space-4);
 }
 
 .us-nav-danger {
@@ -144,7 +144,7 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow-y: auto;
-  padding: 24px 26px 26px;
+  padding: var(--space-12) var(--space-14) var(--space-14);
   background:
     radial-gradient(circle at top right, rgba(var(--overlay-rgb), 0.03), transparent 36%),
     var(--bg);
@@ -160,16 +160,16 @@
 }
 
 .us-section h2 {
-  margin: 0 0 14px;
-  font-size: 18px;
+  margin: 0 0 var(--space-7);
+  font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.01em;
 }
 
 .us-section h3 {
-  margin: 22px 0 10px;
-  font-size: 12px;
+  margin: var(--space-11) 0 var(--space-5);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -178,9 +178,9 @@
 
 /* --- Settings cards --- */
 #user-settings .settings-card {
-  margin-bottom: 14px;
+  margin-bottom: var(--space-7);
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: var(--radius-7);
   border: 1px solid var(--border);
   background:
     linear-gradient(180deg, rgba(var(--overlay-rgb), 0.02), transparent 22%),
@@ -191,14 +191,14 @@
 }
 
 #user-settings .settings-card:has(.layout-switcher) {
-  padding: 14px;
+  padding: var(--space-7);
 }
 
 #user-settings .us-account-hero {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
+  gap: var(--space-7);
+  padding: var(--space-8);
 }
 
 #user-settings .us-account-avatar {
@@ -230,7 +230,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--text);
@@ -247,7 +247,7 @@
 }
 
 #user-settings .us-account-name {
-  font-size: 17px;
+  font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--text);
   line-height: 1.2;
@@ -255,8 +255,8 @@
 }
 
 #user-settings .us-account-subline {
-  margin-top: 3px;
-  font-size: 13px;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-md);
   color: var(--text-muted);
   line-height: 1.4;
   font-family: "Roboto Mono", monospace;
@@ -270,7 +270,7 @@
 }
 
 #user-settings .settings-field {
-  padding: 12px 16px;
+  padding: var(--space-6) var(--space-8);
 }
 
 #user-settings .settings-field + .settings-field {
@@ -281,8 +281,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 11px 16px;
+  gap: var(--space-7);
+  padding: var(--space-6) var(--space-8);
 }
 
 #user-settings .settings-field-row + .settings-field-row {
@@ -301,28 +301,28 @@
 
 #user-settings .settings-label {
   display: block;
-  margin-bottom: 4px;
-  font-size: 13px;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-md);
   font-weight: 700;
   color: var(--text-secondary);
 }
 
 #user-settings .settings-value {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
   word-break: break-word;
 }
 
 #user-settings .settings-hint {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-dimmer);
 }
 
 #user-settings .settings-mono {
   font-family: "Roboto Mono", monospace;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
 }
 
@@ -331,8 +331,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -358,19 +358,19 @@
 #user-settings .settings-select,
 #user-settings #settings-pin-input {
   width: 100%;
-  padding: 9px 12px;
+  padding: var(--space-5) var(--space-6);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   background: var(--bg);
   color: var(--text);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   outline: none;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 #user-settings .settings-select {
-  padding-right: 34px;
+  padding-right: var(--space-16);
   -webkit-appearance: none;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ea8c7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
@@ -380,7 +380,7 @@
 }
 
 #user-settings .us-lang-select {
-  margin-top: 10px;
+  margin-top: var(--space-5);
 }
 
 #user-settings .us-text-input:focus,
@@ -397,17 +397,17 @@
 
 #user-settings .us-btn,
 #user-settings .settings-btn-sm {
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   font-family: inherit;
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, transform 0.15s;
 }
 
 #user-settings .us-btn {
-  padding: 8px 16px;
+  padding: var(--space-4) var(--space-8);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   cursor: pointer;
 }
@@ -427,11 +427,11 @@
 }
 
 #user-settings .settings-btn-sm {
-  padding: 6px 12px;
+  padding: var(--space-3) var(--space-6);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   cursor: pointer;
 }
@@ -468,8 +468,8 @@
 }
 
 #user-settings .settings-pin-form-title {
-  margin-bottom: 8px;
-  font-size: 12px;
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -477,13 +477,13 @@
 }
 
 #user-settings .settings-pin-current-row {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-6);
 }
 
 #user-settings .settings-pin-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: var(--space-5);
 }
 
 #user-settings .settings-pin-field .us-text-input {
@@ -494,13 +494,13 @@
 #user-settings .settings-pin-actions-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
   flex-wrap: wrap;
 }
 
 #user-settings .settings-pin-error {
-  margin-top: 8px;
+  margin-top: var(--space-4);
 }
 
 #user-settings .settings-pin-error.hidden {
@@ -515,18 +515,18 @@
 #user-settings .layout-switcher {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--space-6);
 }
 
 #user-settings .layout-option {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   min-height: 136px;
-  padding: 18px 16px;
+  padding: var(--space-9) var(--space-8);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-7);
   background:
     linear-gradient(180deg, rgba(var(--overlay-rgb), 0.02), transparent 30%),
     var(--bg);
@@ -557,18 +557,18 @@
 }
 
 #user-settings .layout-option-icon {
-  font-size: 28px;
+  font-size: var(--font-size-6xl);
   line-height: 1;
 }
 
 #user-settings .layout-option-label {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: var(--text);
 }
 
 #user-settings .layout-option-desc {
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   line-height: 1.45;
   color: var(--text-muted);
 }
@@ -582,13 +582,13 @@
 /* ==========  RESPONSIVE  ========== */
 @media (max-width: 580px) {
   #user-settings {
-    padding: 12px;
+    padding: var(--space-6);
   }
 
   .us-modal {
     width: 100%;
     height: calc(100vh - 24px);
-    border-radius: 14px;
+    border-radius: var(--radius-7);
   }
 
   .us-modal-body {
@@ -599,7 +599,7 @@
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border-subtle);
-    padding: 10px 12px;
+    padding: var(--space-5) var(--space-6);
     overflow-y: visible;
   }
 
@@ -608,7 +608,7 @@
   }
 
   .us-modal-content {
-    padding: 18px 16px 20px;
+    padding: var(--space-9) var(--space-8) var(--space-10);
   }
 
   #user-settings .layout-switcher {

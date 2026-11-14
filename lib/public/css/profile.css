@@ -15,10 +15,10 @@
 .profile-avatar-row {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  padding: 0 14px;
-  margin-top: -28px;
-  margin-bottom: 12px;
+  gap: var(--space-5);
+  padding: 0 var(--space-7);
+  margin-top: calc(-1 * var(--space-14));
+  margin-bottom: var(--space-6);
   position: relative;
   z-index: var(--z-base);
 }
@@ -48,7 +48,7 @@
   background: none;
   border: none;
   padding: 0;
-  margin-left: 4px;
+  margin-left: var(--space-2);
   cursor: pointer;
   color: var(--text-muted);
   vertical-align: middle;
@@ -68,23 +68,23 @@
 
 .profile-name-display {
   font-family: "Pretendard", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-bottom: 6px;
+  padding-bottom: var(--space-3);
 }
 
 /* Body */
 .profile-popover-body {
-  padding: 0 14px 14px;
+  padding: 0 var(--space-7) var(--space-7);
 }
 
 /* Fields */
 .profile-field {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-6);
 }
 
 .profile-field:last-child {
@@ -94,16 +94,16 @@
 .profile-field-label {
   display: block;
   font-family: "Pretendard", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-dimmer);
   letter-spacing: 0.5px;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 
 .profile-field-hint {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   color: var(--text-dimmer);
   font-weight: 400;
   text-transform: none;
@@ -114,13 +114,13 @@
 /* Text input */
 .profile-field-input {
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-4) var(--space-5);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   color: var(--text);
   font-family: "Pretendard", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   outline: none;
   transition: border-color 0.15s;
@@ -139,13 +139,13 @@
 /* Select dropdown */
 .profile-field-select {
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-4) var(--space-5);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   color: var(--text);
   font-family: "Pretendard", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   outline: none;
   cursor: pointer;
@@ -154,7 +154,7 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
-  padding-right: 28px;
+  padding-right: var(--space-14);
   box-sizing: border-box;
   transition: border-color 0.15s;
 }
@@ -167,17 +167,17 @@
 .profile-avatar-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .profile-avatar-option {
   width: 100%;
   aspect-ratio: 1;
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   border: 2px solid var(--border);
   background: var(--bg);
   cursor: pointer;
-  padding: 3px;
+  padding: var(--space-2);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -189,7 +189,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
 }
 
 .profile-avatar-option:hover {
@@ -222,7 +222,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
 }
 
 /* Avatar positioner: drawn by the shared overlay component (scrim, card, layer and
@@ -236,10 +236,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-8);
 }
 .avatar-positioner-title {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text);
 }
@@ -264,7 +264,7 @@
 }
 .avatar-positioner-slider-wrap {
   width: 100%;
-  padding: 0 8px;
+  padding: 0 var(--space-4);
 }
 .avatar-positioner-slider {
   width: 100%;
@@ -272,16 +272,16 @@
 }
 .avatar-positioner-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--space-4);
   width: 100%;
 }
 .avatar-positioner-btn {
   flex: 1;
-  padding: 8px 0;
-  border-radius: 8px;
+  padding: var(--space-4) 0;
+  border-radius: var(--radius-4);
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
 }
 .avatar-positioner-btn-cancel {
@@ -304,7 +304,7 @@
 .profile-color-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .profile-color-swatch {

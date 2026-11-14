@@ -2,13 +2,13 @@
 
 .shell-result {
   max-width: var(--content-width);
-  margin: 8px auto;
-  padding: 8px 12px;
+  margin: var(--space-4) auto;
+  padding: var(--space-4) var(--space-6);
   border: 1px solid var(--border);
   border-left-width: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--code-bg);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   overflow: hidden;
 }
 
@@ -28,17 +28,17 @@
 
 .shell-result .shell-prompt {
   color: var(--accent);
-  margin-right: 6px;
+  margin-right: var(--space-3);
   user-select: none;
 }
 
 .shell-result .shell-output {
-  margin: 8px 0 0;
+  margin: var(--space-4) 0 0;
   padding: 0;
   max-height: 360px;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.45;
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -46,23 +46,23 @@
 }
 
 .shell-result .shell-status {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
 }
 
 .shell-result.failed .shell-status,
 .shell-result.error .shell-status { color: var(--error); }
 
-.shell-result .shell-actions { margin-top: 8px; }
+.shell-result .shell-actions { margin-top: var(--space-4); }
 
 .shell-result .shell-edit {
-  padding: 3px 10px;
+  padding: var(--space-2) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-2);
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
 }
 
@@ -71,11 +71,11 @@
 /* A chat message typed while a command runs, waiting for it to end (shell-queue.js). */
 .shell-queued {
   max-width: var(--content-width);
-  margin: 8px auto;
-  padding: 6px 12px;
+  margin: var(--space-4) auto;
+  padding: var(--space-3) var(--space-6);
   border: 1px dashed var(--border);
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-md);
   color: var(--text-muted);
   white-space: pre-wrap;
   word-break: break-word;
@@ -84,8 +84,8 @@
 .shell-queued.unsent { border-color: var(--error); }
 
 .shell-queued .shell-queued-tag {
-  margin-right: 8px;
-  font-size: 11px;
+  margin-right: var(--space-4);
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
   color: var(--text-dimmer);
   user-select: none;
@@ -97,18 +97,18 @@
 .shell-queued .shell-queued-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 6px;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
 }
 
 .shell-queued .shell-queued-btn {
   min-height: 36px;
-  padding: 0 14px;
+  padding: 0 var(--space-7);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-9);
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -124,8 +124,8 @@
    prompt collapses with the shared control (collapsible-text.js), placed with the
    other controls. */
 .shell-queued.scheduled-queued .scheduled-queued-time {
-  margin-right: 8px;
-  font-size: 12px;
+  margin-right: var(--space-4);
+  font-size: var(--font-size-sm);
   color: var(--accent);
 }
 
@@ -136,8 +136,8 @@
 
 .shell-queued.scheduled-queued .scheduled-queued-error {
   display: block;
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
   color: var(--error);
 }
 
@@ -166,7 +166,7 @@
 .shell-queued.scheduled-queued .collapsible-inline { display: block; }
 
 .collapsible-compact {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 1.4;
 }
 
@@ -186,7 +186,7 @@
   height: var(--compact-control-size);
   min-height: var(--compact-control-size);
   padding: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-7);
 }
 
 .shell-queued.scheduled-queued .shell-queued-icon-btn svg,
@@ -203,7 +203,7 @@
 .shell-queued.scheduled-queued .scheduled-queued-time {
   display: none;
   flex: 1 0 100%;
-  margin: 0 0 6px;
+  margin: 0 0 var(--space-3);
 }
 
 /* The collapsed line's fire time: never shrinks or wraps, so the prompt text
@@ -212,7 +212,7 @@
    line carries it. */
 .shell-queued.scheduled-queued .scheduled-queued-fire-at {
   flex: none;
-  margin: 0 8px;
+  margin: 0 var(--space-4);
   font-size: var(--msg-meta-size);
   color: var(--accent);
   white-space: nowrap;
@@ -224,7 +224,7 @@
   .shell-queued.scheduled-queued .shell-queued-tag { display: none; }
 }
 
-.shell-queued.scheduled-queued.is-expanded { align-items: flex-start; padding-top: 4px; }
+.shell-queued.scheduled-queued.is-expanded { align-items: flex-start; padding-top: var(--space-2); }
 .shell-queued.scheduled-queued.is-expanded .scheduled-queued-time { display: block; order: 1; }
 .shell-queued.scheduled-queued .scheduled-queued-error { flex: 1 0 100%; order: 2; }
 
