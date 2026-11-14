@@ -1,7 +1,7 @@
 // Type size, line height, spacing and radius in a component stylesheet come from
 // the scales declared in lib/public/css/base.css, the way colours come from the
-// theme. This scans lib/public/css for a pixel literal in font-size, line-height,
-// margin, padding, gap or border-radius and fails on any that is not on the
+// theme. This scans lib/public/css for a pixel literal in font (the shorthand),
+// font-size, line-height, margin, padding, gap or border-radius and fails on any that is not on the
 // allowlist in test/pixel-literal-allowlist.js, each row of which carries a
 // reason. It sits beside test/colour-literal-guard.test.js and the layer-scale
 // guard in test/overlay-stack.test.js.
@@ -26,9 +26,10 @@ var CSS_DIR = path.join(ROOT, "lib", "public", "css");
 
 var SIDES = "(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?";
 // A covered property, not a custom property that ends in the same word (--msg-gap)
-// and not part of a longer one (scroll-padding-top).
+// and not part of a longer one (scroll-padding-top, font-family, font-weight). The
+// font shorthand is covered because it sets a size and a line height.
 var DECLARATION = new RegExp(
-  "(?<![\\w-])((?:font-size|line-height|row-gap|column-gap|gap|margin" + SIDES + "|padding" + SIDES +
+  "(?<![\\w-])((?:font-size|font|line-height|row-gap|column-gap|gap|margin" + SIDES + "|padding" + SIDES +
   "|border(?:-(?:top|bottom|start|end)-(?:left|right|start|end))?-radius))\\s*:\\s*([^;{}]*)", "g");
 var PIXELS = /(?<![\w.])-?\d*\.?\d+px(?![\w-])/;
 
@@ -96,11 +97,13 @@ test("the allowlist names each file once", function () {
 });
 
 // A literal the guard must catch, and a form it must leave alone.
-var UNSWEPT = allowlist.ALLOWLIST[0].file;
 [
   ["a font size", "a { font-size: 13px; }", 1],
   ["a decimal font size", "a { font-size: 9.5px; }", 1],
   ["a pixel line height", "a { line-height: 15px; }", 1],
+  ["a font shorthand with a size and line height", "a { font: 12px/1.4 sans-serif; }", 1],
+  ["a font shorthand with a weight and a size", "a { font: 600 12px var(--font-mono); }", 1],
+  ["an important padding", "a { padding: 6px !important; }", 1],
   ["a margin", "a { margin: 0 auto 8px; }", 1],
   ["a side margin", "a { margin-left: 6px; }", 1],
   ["a negative margin", "a { margin-top: -4px; }", 1],
@@ -125,6 +128,9 @@ var UNSWEPT = allowlist.ALLOWLIST[0].file;
   ["a zero and auto", "a { margin: 0 auto; padding: 0; gap: 0; }", 0],
   ["a circle", "a { border-radius: 50%; }", 0],
   ["a unitless line height", "a { line-height: 1.5; }", 0],
+  ["a font shorthand that inherits", "a { font: inherit; }", 0],
+  ["a font shorthand on the scale tokens", "a { font: 600 var(--font-size-sm)/1.4 var(--font-mono); }", 0],
+  ["font properties that are not the shorthand", "a { font-family: 'Fira 12px'; font-weight: 600; font-style: italic; font-variant: small-caps; }", 0],
   ["a relative size", "a { font-size: 0.85em; padding: 0 1rem; }", 0],
   ["a property that is not covered", "a { width: 14px; height: 14px; border: 1px solid var(--border); top: -3px; }", 0],
   ["a custom property that ends in gap", "a { --msg-gap: 6px; }", 0],
@@ -142,10 +148,15 @@ test("the scan reports the line of a literal", function () {
 
 // The allowlist forms: a whole unswept file passes, a keyed row passes only the
 // declaration that holds its key, and a file with no row is refused.
+// Every row here brings its own fixture rows, so nothing reads the live allowlist
+// when the module loads (it is empty once the last batch lands).
 var KEYED = [{ file: "lib/public/css/fixture.css", keys: ["999px"], reason: "A named literal, with its reason." }];
+var WHOLE = [{ file: "lib/public/css/fixture-unswept.css", batch: allowlist.BATCHES[0], reason: "A whole file not swept yet, with its reason." }];
 [
-  ["an unswept file on the allowlist", UNSWEPT, "a { padding: 6px; }", undefined, 0],
-  ["a file that is not on the allowlist", "lib/public/css/fixture.css", "a { padding: 6px; }", undefined, 1],
+  ["an unswept file on the allowlist", "lib/public/css/fixture-unswept.css", "a { padding: 6px; }", WHOLE, 0],
+  ["a whole-file row for another file", "lib/public/css/fixture.css", "a { padding: 6px; }", WHOLE, 1],
+  ["an empty allowlist", "lib/public/css/fixture-unswept.css", "a { padding: 6px; }", [], 1],
+  ["a file that is not on the allowlist", "lib/public/css/fixture.css", "a { padding: 6px; }", KEYED, 1],
   ["a keyed literal on its row", "lib/public/css/fixture.css", "a { border-radius: 999px; }", KEYED, 0],
   ["another literal in a file with a keyed row", "lib/public/css/fixture.css", "a { border-radius: 999px; padding: 6px; }", KEYED, 1],
   ["a keyed row for another file", "lib/public/css/other.css", "a { border-radius: 999px; }", KEYED, 1],
