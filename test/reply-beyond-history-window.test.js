@@ -41,12 +41,12 @@ test("reply: an injected message older than the in-memory window still answers",
     caller.vendor = "claude";
     sm.saveSessionFile(caller);
     sm.sendAndRecord(caller, Object.assign({ type: "user_message", text: "ping", source: "external-trigger", initiator: "trigger" },
-      senderFields("trigger", undefined, { name: "naomi@lane", project: "lane", sessionId: "3", cliSessionId: "cli-3", agent: "naomi", agentSlug: "naomi", vendor: "claude" })));
+      senderFields("trigger", undefined, { name: "agent-b@lane", project: "lane", sessionId: "3", cliSessionId: "cli-3", agent: "agent-b", agentSlug: "agent-b", vendor: "claude" })));
     for (var i = 0; i < sm.HISTORY_INMEM_MAX * 3; i++) sm.sendAndRecord(caller, { type: "assistant_message", text: "filler " + i });
     assert.ok(!caller.history.some(function (e) { return e.source === "external-trigger"; }), "the injected entry is outside the window");
 
     var pushed = [];
-    var peer = { localId: 3, cliSessionId: "cli-3", agentName: "naomi", vendor: "claude", title: "t", lastActivity: 1, isProcessing: false, queryInstance: {}, history: [] };
+    var peer = { localId: 3, cliSessionId: "cli-3", agentName: "agent-b", vendor: "claude", title: "t", lastActivity: 1, isProcessing: false, queryInstance: {}, history: [] };
     var peerSm = { sessions: new Map([[3, peer]]), defaultVendor: "claude", recordHistoryEntry: function () {}, appendToSessionFile: function () {} };
     var projects = {
       lore: { cwd: "/unused", sm: sm, sdk: {}, onProcessingChanged: function () {}, getLinuxUserForSession: function () { return null; } },

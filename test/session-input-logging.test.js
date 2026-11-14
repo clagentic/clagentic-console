@@ -49,7 +49,7 @@ function makeProject(opts) {
 function makeInput(project) {
   return createSessionInput({
     getProject: function (slug) { return slug === "alpha" ? project : null; },
-    agentCatalog: function () { return [{ name: "holden" }]; },
+    agentCatalog: function () { return [{ name: "agent-a" }]; },
   });
 }
 

@@ -71,7 +71,7 @@ function world(byProject) {
   var input = createSessionInput({
     getProject: function (slug) { return Object.prototype.hasOwnProperty.call(projects, slug) ? projects[slug] : null; },
     listProjects: function () { return Object.keys(projects).map(function (slug) { return { slug: slug, project: projects[slug] }; }); },
-    agentCatalog: function () { return [{ name: "Holden" }, { name: "naomi" }]; },
+    agentCatalog: function () { return [{ name: "Agent-A" }, { name: "agent-b" }]; },
   });
   return { calls: calls, input: input, projects: projects };
 }
@@ -83,7 +83,7 @@ test("list: every kind of session, with label, state and activity, newest first"
     lore: [
       session(1, { vendor: "claude", runtime: "reaped" }),
       session(2, { vendor: "codex", runtime: "idle" }),
-      session(3, { agent: "Holden", runtime: "live" }),
+      session(3, { agent: "Agent-A", runtime: "live" }),
       session(4, { vendor: "claude", hidden: true }),
       session(5, { cliSessionId: null, runtime: "reaped" }),
     ],
@@ -94,8 +94,8 @@ test("list: every kind of session, with label, state and activity, newest first"
   assert.equal(r.count, 3);
   assert.deepEqual(r.sessions.map(function (s) { return s.consoleSessionId; }), ["3", "2", "1"]);
   var named = r.sessions[0];
-  assert.equal(named.label, "Holden@lore");
-  assert.equal(named.agent, "Holden");
+  assert.equal(named.label, "Agent-A@lore");
+  assert.equal(named.agent, "Agent-A");
   assert.equal(named.state, "live");
   assert.equal(named.project, "lore");
   assert.equal(named.sessionId, "cli-3");
@@ -113,12 +113,12 @@ test("list: a plain session with no vendor of its own takes the project default"
 
 test("list: filters by project, agent, vendor and state combine", function () {
   var w = world({
-    lore: [session(1, { vendor: "claude" }), session(2, { vendor: "codex", runtime: "reaped" }), session(3, { agent: "Holden", runtime: "live" })],
+    lore: [session(1, { vendor: "claude" }), session(2, { vendor: "codex", runtime: "reaped" }), session(3, { agent: "Agent-A", runtime: "live" })],
     other: [session(1, { vendor: "claude" })],
   });
   var ids = function (req) { return w.input.listSessions(req).sessions.map(function (s) { return s.project + "/" + s.consoleSessionId; }).sort(); };
   assert.deepEqual(ids({ projectSlug: "other" }), ["other/1"]);
-  assert.deepEqual(ids({ agentName: "holden" }), ["lore/3"]);
+  assert.deepEqual(ids({ agentName: "agent-a" }), ["lore/3"]);
   assert.deepEqual(ids({ vendor: "codex", state: "any" }), ["lore/2"]);
   assert.deepEqual(ids({ state: "reaped" }), ["lore/2"]);
   assert.deepEqual(ids({ projectSlug: "lore", vendor: "claude", state: "idle" }), ["lore/1"]);
@@ -137,7 +137,7 @@ test("list: an unknown state or project is refused, and nothing is written", fun
 // ---- address parsing ----
 
 test("parseAddress: the three forms, and what is refused", function () {
-  assert.deepEqual(directory.parseAddress("holden@lore"), { project: "lore", token: "holden" });
+  assert.deepEqual(directory.parseAddress("agent-a@lore"), { project: "lore", token: "agent-a" });
   assert.deepEqual(directory.parseAddress("Claude@lore"), { project: "lore", token: "claude" });
   assert.deepEqual(directory.parseAddress("@lore"), { project: "lore", token: "" });
   ["", "lore", "a@", "a@b@c", "a b@lore", "!!!@lore", 7, null].forEach(function (bad) {
@@ -149,25 +149,25 @@ test("parseAddress: the three forms, and what is refused", function () {
 // ---- send-input --to ----
 
 test("to: a named agent resolves by agent and is delivered into its running query", function () {
-  var w = world({ lore: [session(1, { vendor: "claude" }), session(2, { agent: "Holden" })] });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "hi" });
+  var w = world({ lore: [session(1, { vendor: "claude" }), session(2, { agent: "Agent-A" })] });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "hi" });
   assert.equal(r.result, "delivered");
   assert.equal(r.resolvedBy, "to");
   assert.equal(r.project, "lore");
-  assert.equal(r.label, "Holden@lore");
+  assert.equal(r.label, "Agent-A@lore");
   assert.equal(r.consoleSessionId, "2");
   assert.deepEqual(w.calls.push.map(function (c) { return c.localId; }), [2]);
 });
 
 test("to: vendor@project reaches the one plain claude session, and plain codex the codex one", function () {
-  var w = world({ lore: [session(1, { vendor: "claude" }), session(2, { vendor: "codex" }), session(3, { agent: "Holden", vendor: "claude" })] });
+  var w = world({ lore: [session(1, { vendor: "claude" }), session(2, { vendor: "codex" }), session(3, { agent: "Agent-A", vendor: "claude" })] });
   assert.equal(w.input.sendInput({ to: "claude@lore", prompt: "a" }).consoleSessionId, "1");
   assert.equal(w.input.sendInput({ to: "codex@lore", prompt: "b" }).consoleSessionId, "2");
   assert.deepEqual(w.calls.push.map(function (c) { return c.localId; }), [1, 2]);
 });
 
 test("to: a vendor address never reaches a named-agent session of that vendor", function () {
-  var w = world({ lore: [session(3, { agent: "Holden", vendor: "claude" })] });
+  var w = world({ lore: [session(3, { agent: "Agent-A", vendor: "claude" })] });
   var r = w.input.sendInput({ to: "claude@lore", prompt: "a" });
   assert.equal(r.result, "not-found");
   assert.equal(w.calls.push.length, 0);
@@ -190,7 +190,7 @@ test("to: several plain sessions are refused with candidates, nothing is deliver
 });
 
 test("to: @project is ambiguous with several sessions and delivers with exactly one", function () {
-  var several = world({ lore: [session(1), session(2, { agent: "Holden" })] });
+  var several = world({ lore: [session(1), session(2, { agent: "Agent-A" })] });
   assert.equal(several.input.sendInput({ to: "@lore", prompt: "x" }).result, "ambiguous");
   var one = world({ lore: [session(7)] });
   var r = one.input.sendInput({ to: "@lore", prompt: "x" });
@@ -208,8 +208,8 @@ test("to: a refused ambiguity is resolved by the id it lists", function () {
 });
 
 test("to: a session with a runtime is preferred over a reaped one", function () {
-  var w = world({ lore: [session(1, { agent: "Holden", runtime: "reaped" }), session(2, { agent: "Holden", runtime: "idle" })] });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  var w = world({ lore: [session(1, { agent: "Agent-A", runtime: "reaped" }), session(2, { agent: "Agent-A", runtime: "idle" })] });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "x" });
   assert.equal(r.result, "delivered");
   assert.equal(r.consoleSessionId, "2");
   assert.equal(w.calls.start.length, 0);
@@ -217,43 +217,43 @@ test("to: a session with a runtime is preferred over a reaped one", function () 
 
 test("to: several live are ambiguous even when an idle and a reaped one exist; only the live tier is listed", function () {
   var w = world({ lore: [
-    session(1, { agent: "Holden", runtime: "reaped" }), session(2, { agent: "Holden" }),
-    session(3, { agent: "Holden", runtime: "live" }), session(4, { agent: "Holden", runtime: "live" }),
+    session(1, { agent: "Agent-A", runtime: "reaped" }), session(2, { agent: "Agent-A" }),
+    session(3, { agent: "Agent-A", runtime: "live" }), session(4, { agent: "Agent-A", runtime: "live" }),
   ] });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "x" });
   assert.equal(r.result, "ambiguous");
   assert.deepEqual(r.candidates.map(function (c) { return c.consoleSessionId; }).sort(), ["3", "4"]);
   assert.equal(w.calls.push.length + w.calls.start.length, 0);
 });
 
 test("tiers: one live and one idle delivers to the live one, whatever the order", function () {
-  var w = world({ lore: [session(256, { agent: "Holden", runtime: "idle" }), session(257, { agent: "Holden", runtime: "live" })] });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  var w = world({ lore: [session(256, { agent: "Agent-A", runtime: "idle" }), session(257, { agent: "Agent-A", runtime: "live" })] });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "x" });
   assert.equal(r.result, "delivered");
   assert.equal(r.consoleSessionId, "257");
-  var w2 = world({ lore: [session(257, { agent: "Holden", runtime: "live" }), session(256, { agent: "Holden", runtime: "idle" })] });
-  assert.equal(w2.input.sendInput({ to: "holden@lore", prompt: "x" }).consoleSessionId, "257");
+  var w2 = world({ lore: [session(257, { agent: "Agent-A", runtime: "live" }), session(256, { agent: "Agent-A", runtime: "idle" })] });
+  assert.equal(w2.input.sendInput({ to: "agent-a@lore", prompt: "x" }).consoleSessionId, "257");
 });
 
 test("tiers: several idle with no live are ambiguous, and a reaped one is not consulted", function () {
-  var w = world({ lore: [session(1, { agent: "Holden" }), session(2, { agent: "Holden" }), session(3, { agent: "Holden", runtime: "reaped" })] });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  var w = world({ lore: [session(1, { agent: "Agent-A" }), session(2, { agent: "Agent-A" }), session(3, { agent: "Agent-A", runtime: "reaped" })] });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "x" });
   assert.equal(r.result, "ambiguous");
   assert.deepEqual(r.candidates.map(function (c) { return c.consoleSessionId; }).sort(), ["1", "2"]);
 });
 
 test("tiers: one idle alone is delivered without a resume, and with a reaped one it still wins", function () {
-  var w = world({ lore: [session(1, { agent: "Holden", runtime: "reaped" }), session(2, { agent: "Holden" })] });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "x" });
+  var w = world({ lore: [session(1, { agent: "Agent-A", runtime: "reaped" }), session(2, { agent: "Agent-A" })] });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "x" });
   assert.equal(r.result, "delivered");
   assert.equal(r.consoleSessionId, "2");
   assert.equal(w.calls.start.length, 0);
 });
 
 test("tiers: several reaped are ambiguous, and the @project form tiers the same way", function () {
-  var w = world({ lore: [session(1, { agent: "Holden", runtime: "reaped" }), session(2, { runtime: "reaped" })] });
+  var w = world({ lore: [session(1, { agent: "Agent-A", runtime: "reaped" }), session(2, { runtime: "reaped" })] });
   assert.equal(w.input.sendInput({ to: "@lore", prompt: "x" }).result, "ambiguous");
-  var mixed = world({ lore: [session(1, { agent: "Holden" }), session(2, { runtime: "live" })] });
+  var mixed = world({ lore: [session(1, { agent: "Agent-A" }), session(2, { runtime: "live" })] });
   assert.equal(mixed.input.sendInput({ to: "@lore", prompt: "x" }).consoleSessionId, "2");
 });
 
@@ -266,93 +266,93 @@ function named(localId, name, opts) {
 }
 
 test("parseAddress: the optional /<name> follows the project in each form and is lowercased", function () {
-  assert.deepEqual(directory.parseAddress("holden@lore/Lane-2"), { project: "lore", token: "holden", name: "lane-2" });
+  assert.deepEqual(directory.parseAddress("agent-a@lore/Lane-2"), { project: "lore", token: "agent-a", name: "lane-2" });
   assert.deepEqual(directory.parseAddress("claude@lore/a_b"), { project: "lore", token: "claude", name: "a_b" });
   assert.deepEqual(directory.parseAddress("@lore/x"), { project: "lore", token: "", name: "x" });
-  ["holden@lore/", "holden@/x", "holden@lore/a/b", "holden@lore/-x", "holden@lore/" + "n".repeat(33), "holden@lore/a.b"].forEach(function (bad) {
+  ["agent-a@lore/", "agent-a@/x", "agent-a@lore/a/b", "agent-a@lore/-x", "agent-a@lore/" + "n".repeat(33), "agent-a@lore/a.b"].forEach(function (bad) {
     assert.ok(directory.parseAddress(bad).error, "refused: " + bad);
   });
 });
 
 test("list: a session carries its name, null when it has none", function () {
-  var w = world({ lore: [named(1, "lane-a", { agent: "Holden" }), session(2)] });
+  var w = world({ lore: [named(1, "lane-a", { agent: "Agent-A" }), session(2)] });
   var byId = {};
   w.input.listSessions({}).sessions.forEach(function (s) { byId[s.consoleSessionId] = s; });
   assert.equal(byId["1"].name, "lane-a");
-  assert.equal(byId["1"].label, "Holden@lore");
+  assert.equal(byId["1"].label, "Agent-A@lore");
   assert.equal(byId["2"].name, null);
 });
 
 test("named: the name reaches the chosen session when two of the agent are live", function () {
-  var w = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "live" }), named(2, "lane-b", { agent: "Holden", runtime: "live" })] });
-  assert.equal(w.input.sendInput({ to: "holden@lore", prompt: "x" }).result, "ambiguous");
-  var r = w.input.sendInput({ to: "holden@lore/lane-a", prompt: "x" });
+  var w = world({ lore: [named(1, "lane-a", { agent: "Agent-A", runtime: "live" }), named(2, "lane-b", { agent: "Agent-A", runtime: "live" })] });
+  assert.equal(w.input.sendInput({ to: "agent-a@lore", prompt: "x" }).result, "ambiguous");
+  var r = w.input.sendInput({ to: "agent-a@lore/lane-a", prompt: "x" });
   assert.equal(r.result, "delivered");
   assert.equal(r.consoleSessionId, "1");
-  assert.equal(w.input.sendInput({ to: "HOLDEN@lore/Lane-B", prompt: "x" }).consoleSessionId, "2");
+  assert.equal(w.input.sendInput({ to: "AGENT-A@lore/Lane-B", prompt: "x" }).consoleSessionId, "2");
   assert.equal(w.input.sendInput({ to: "@lore/lane-b", prompt: "x" }).consoleSessionId, "2");
 });
 
 test("named: an idle named session is reached though a live twin of the agent exists", function () {
-  var w = world({ lore: [named(1, "old", { agent: "Holden", runtime: "idle" }), session(2, { agent: "Holden", runtime: "live" })] });
-  assert.equal(w.input.sendInput({ to: "holden@lore", prompt: "x" }).consoleSessionId, "2");
-  var r = w.input.sendInput({ to: "holden@lore/old", prompt: "x" });
+  var w = world({ lore: [named(1, "old", { agent: "Agent-A", runtime: "idle" }), session(2, { agent: "Agent-A", runtime: "live" })] });
+  assert.equal(w.input.sendInput({ to: "agent-a@lore", prompt: "x" }).consoleSessionId, "2");
+  var r = w.input.sendInput({ to: "agent-a@lore/old", prompt: "x" });
   assert.equal(r.result, "delivered");
   assert.equal(r.consoleSessionId, "1");
 });
 
 test("named: no match is not-found and never falls to another session; a wrong agent does not match", function () {
-  var w = world({ lore: [named(1, "lane-a", { agent: "Holden" }), session(2, { agent: "Holden", runtime: "live" })] });
-  assert.equal(w.input.sendInput({ to: "holden@lore/missing", prompt: "x" }).result, "not-found");
-  assert.equal(w.input.sendInput({ to: "naomi@lore/lane-a", prompt: "x" }).result, "not-found");
+  var w = world({ lore: [named(1, "lane-a", { agent: "Agent-A" }), session(2, { agent: "Agent-A", runtime: "live" })] });
+  assert.equal(w.input.sendInput({ to: "agent-a@lore/missing", prompt: "x" }).result, "not-found");
+  assert.equal(w.input.sendInput({ to: "agent-b@lore/lane-a", prompt: "x" }).result, "not-found");
   assert.equal(w.calls.push.length + w.calls.start.length, 0);
 });
 
 test("named: a reaped named session is resumed, and a running twin of the name outranks a reaped one", function () {
-  var w = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "reaped" })] });
-  var r = w.input.sendInput({ to: "holden@lore/lane-a", prompt: "x" });
+  var w = world({ lore: [named(1, "lane-a", { agent: "Agent-A", runtime: "reaped" })] });
+  var r = w.input.sendInput({ to: "agent-a@lore/lane-a", prompt: "x" });
   assert.equal(r.result, "resumed-and-delivered");
   assert.equal(r.consoleSessionId, "1");
-  var twins = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "reaped" }), named(2, "lane-a", { agent: "Holden", runtime: "idle" })] });
-  assert.equal(twins.input.sendInput({ to: "holden@lore/lane-a", prompt: "x" }).consoleSessionId, "2");
+  var twins = world({ lore: [named(1, "lane-a", { agent: "Agent-A", runtime: "reaped" }), named(2, "lane-a", { agent: "Agent-A", runtime: "idle" })] });
+  assert.equal(twins.input.sendInput({ to: "agent-a@lore/lane-a", prompt: "x" }).consoleSessionId, "2");
 });
 
 test("open: --name names the session, shown in the result and passed to createSession; the address form does the same", function () {
   var w = world({ lore: [] });
-  var r = w.input.openSession({ projectSlug: "lore", agentName: "Holden", sessionName: "Lane-A", prompt: "go" });
+  var r = w.input.openSession({ projectSlug: "lore", agentName: "Agent-A", sessionName: "Lane-A", prompt: "go" });
   assert.equal(r.result, "opened");
   assert.equal(r.name, "lane-a");
-  assert.deepEqual(w.calls.created[0], { agentName: "Holden", sessionName: "lane-a", permissionMode: "acceptEdits", activate: false });
-  var viaAddress = w.input.openSession({ to: "naomi@lore/lane-b", prompt: "go" });
+  assert.deepEqual(w.calls.created[0], { agentName: "Agent-A", sessionName: "lane-a", permissionMode: "acceptEdits", activate: false });
+  var viaAddress = w.input.openSession({ to: "agent-b@lore/lane-b", prompt: "go" });
   assert.equal(viaAddress.result, "opened");
-  assert.deepEqual(w.calls.created[1], { agentName: "naomi", sessionName: "lane-b", permissionMode: "acceptEdits", activate: false });
+  assert.deepEqual(w.calls.created[1], { agentName: "agent-b", sessionName: "lane-b", permissionMode: "acceptEdits", activate: false });
 });
 
 test("open: a name in use by a non-reaped session of the project is refused, a reaped holder is not", function () {
-  var w = world({ lore: [named(1, "lane-a", { agent: "Holden", runtime: "idle" }), named(2, "old", { agent: "Holden", runtime: "reaped" })], other: [named(1, "lane-a", { agent: "Holden" })] });
+  var w = world({ lore: [named(1, "lane-a", { agent: "Agent-A", runtime: "idle" }), named(2, "old", { agent: "Agent-A", runtime: "reaped" })], other: [named(1, "lane-a", { agent: "Agent-A" })] });
   var clash = w.input.openSession({ projectSlug: "lore", sessionName: "LANE-A", prompt: "go" });
   assert.equal(clash.result, "refused");
   assert.match(clash.reason, /already in use by session 1/);
-  assert.equal(w.input.openSession({ to: "holden@lore/lane-a", prompt: "go" }).result, "refused");
+  assert.equal(w.input.openSession({ to: "agent-a@lore/lane-a", prompt: "go" }).result, "refused");
   assert.equal(w.calls.created.length, 0);
   assert.equal(w.input.openSession({ projectSlug: "lore", sessionName: "old", prompt: "go" }).result, "opened");
   assert.equal(w.input.openSession({ projectSlug: "other", sessionName: "fresh", prompt: "go" }).result, "opened");
 });
 
 test("open: claiming a name held only by reaped sessions clears it from all of them", function () {
-  var reaped = [1, 2, 3].map(function (i) { return named(i, "coordinator", { agent: "Holden", runtime: "reaped" }); });
-  var other = named(4, "keep", { agent: "Holden", runtime: "reaped" });
+  var reaped = [1, 2, 3].map(function (i) { return named(i, "coordinator", { agent: "Agent-A", runtime: "reaped" }); });
+  var other = named(4, "keep", { agent: "Agent-A", runtime: "reaped" });
   var w = world({ lore: reaped.concat([other]) });
   var saved = [];
   w.projects.lore.sm.saveSessionFile = function (s) { saved.push(s.localId); };
-  assert.equal(w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" }).result, "opened");
+  assert.equal(w.input.openSession({ to: "agent-a@lore/coordinator", prompt: "go" }).result, "opened");
   reaped.forEach(function (s) { assert.ok(!s.sessionName, "session " + s.localId); });
   assert.deepEqual(saved.filter(function (id) { return id <= 3; }).sort(), [1, 2, 3], "each cleared session is persisted");
   assert.equal(other.sessionName, "keep", "another name is untouched");
 });
 
 test("open: a failed first-turn start leaves the reaped holder of the name untouched and addressable", function () {
-  var old = named(1, "coordinator", { agent: "Holden", runtime: "reaped" });
+  var old = named(1, "coordinator", { agent: "Agent-A", runtime: "reaped" });
   var w = world({ lore: [old] });
   var sm = w.projects.lore.sm;
   var saved = [];
@@ -364,20 +364,20 @@ test("open: a failed first-turn start leaves the reaped holder of the name untou
     pendingTwinWins = old.sessionName === "coordinator";
     throw new Error("vendor down");
   };
-  var r = w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" });
+  var r = w.input.openSession({ to: "agent-a@lore/coordinator", prompt: "go" });
   assert.equal(r.result, "error");
   assert.ok(pendingTwinWins);
   assert.equal(old.sessionName, "coordinator", "the old holder keeps its name");
   assert.ok(!saved.includes(1), "the old holder was not rewritten");
   w.projects.lore.sdk.startQuery = function () {};
-  var again = w.input.sendInput({ to: "holden@lore/coordinator", prompt: "x" });
+  var again = w.input.sendInput({ to: "agent-a@lore/coordinator", prompt: "x" });
   assert.equal(again.consoleSessionId, "1", "the named address still resolves to it");
 });
 
 test("open: claiming a name held by a non-reaped session is refused and clears nothing", function () {
-  var reaped = named(1, "coordinator", { agent: "Holden", runtime: "reaped" });
-  var w = world({ lore: [reaped, named(2, "coordinator", { agent: "Holden", runtime: "idle" })] });
-  var r = w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" });
+  var reaped = named(1, "coordinator", { agent: "Agent-A", runtime: "reaped" });
+  var w = world({ lore: [reaped, named(2, "coordinator", { agent: "Agent-A", runtime: "idle" })] });
+  var r = w.input.openSession({ to: "agent-a@lore/coordinator", prompt: "go" });
   assert.equal(r.result, "refused");
   assert.equal(reaped.sessionName, "coordinator");
 });
@@ -385,13 +385,13 @@ test("open: claiming a name held by a non-reaped session is refused and clears n
 test("named: a coordinator addressed by name resolves when it and all its predecessors are reaped", function () {
   var w = world({ lore: [] });
   for (var i = 0; i < 8; i++) {
-    assert.equal(w.input.openSession({ to: "holden@lore/coordinator", prompt: "go" }).result, "opened");
+    assert.equal(w.input.openSession({ to: "agent-a@lore/coordinator", prompt: "go" }).result, "opened");
     w.projects.lore.sm.sessions.forEach(function (s) { s.cliSessionId = "cli-" + s.localId; s.queryInstance = null; s.isProcessing = false; });
   }
   var holders = [];
   w.projects.lore.sm.sessions.forEach(function (s) { if (s.sessionName === "coordinator") holders.push(s); });
   assert.equal(holders.length, 1, "only the newest still holds the name");
-  var r = w.input.sendInput({ to: "holden@lore/coordinator", prompt: "x" });
+  var r = w.input.sendInput({ to: "agent-a@lore/coordinator", prompt: "x" });
   assert.equal(r.result, "resumed-and-delivered");
   assert.equal(r.consoleSessionId, String(holders[0].localId));
 });
@@ -417,7 +417,7 @@ test("open: a bad name, or a name given twice, is refused and opens nothing", fu
 
 test("reply: shares the resolver, so live outranks idle among sessions of the recorded identity", function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "3", "dup-id"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("claude@lane", "lane", "3", "dup-id"))] })],
     lane: [session(3, { vendor: "claude", cliSessionId: "dup-id" }), session(4, { vendor: "claude", cliSessionId: "dup-id", runtime: "live" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -425,8 +425,8 @@ test("reply: shares the resolver, so live outranks idle among sessions of the re
 });
 
 test("to: a single reaped match is resumed and delivered", function () {
-  var w = world({ lore: [session(1, { agent: "Holden", runtime: "reaped" })] });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "wake up", initiator: "scheduled" });
+  var w = world({ lore: [session(1, { agent: "Agent-A", runtime: "reaped" })] });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "wake up", initiator: "scheduled" });
   assert.equal(r.result, "resumed-and-delivered");
   assert.equal(r.resolvedBy, "to");
   assert.deepEqual(w.calls.start, [{ localId: 1, text: "wake up", initiator: "scheduled" }]);
@@ -456,14 +456,14 @@ test("to: --project beside --to must be the address's project; one way of naming
 
 test("to: the delivered input is recorded with the caller's extracted sender", function () {
   var w = world({
-    lane: [session(3, { agent: "naomi", runtime: "idle" })],
-    lore: [session(2, { agent: "Holden" })],
+    lane: [session(3, { agent: "agent-b", runtime: "idle" })],
+    lore: [session(2, { agent: "Agent-A" })],
   });
-  var r = w.input.sendInput({ to: "holden@lore", prompt: "report", senderProject: "lane", senderSessionId: "3" });
+  var r = w.input.sendInput({ to: "agent-a@lore", prompt: "report", senderProject: "lane", senderSessionId: "3" });
   assert.equal(r.result, "delivered");
   var entry = w.calls.recorded[0].entry;
   assert.equal(entry.senderKind, "extracted");
-  assert.equal(entry.fromName, "naomi@lane");
+  assert.equal(entry.fromName, "agent-b@lane");
   assert.equal(entry.senderSessionId, "3");
   assert.equal(entry.senderCliSessionId, "cli-3", "recorded from the sender's own session at injection time");
 });
@@ -491,12 +491,12 @@ function extractedFrom(name, project, sessionId, cliSessionId) {
 test("reply: goes to the session that last injected into the caller", function () {
   var history = [
     { type: "user_message", text: "typed" },
-    injected(extractedFrom("naomi@lane", "lane", "3")),
+    injected(extractedFrom("agent-b@lane", "lane", "3")),
     { type: "assistant_message", text: "ok" },
   ];
   var w = world({
-    lore: [session(2, { agent: "Holden", history: history })],
-    lane: [session(3, { agent: "naomi" })],
+    lore: [session(2, { agent: "Agent-A", history: history })],
+    lane: [session(3, { agent: "agent-b" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "done", senderProject: "lore", senderSessionId: "2" });
   assert.equal(r.result, "delivered");
@@ -505,18 +505,18 @@ test("reply: goes to the session that last injected into the caller", function (
   assert.equal(r.consoleSessionId, "3");
   assert.deepEqual(w.calls.push.map(function (c) { return c.localId; }), [3]);
   var recorded = w.calls.recorded[0].entry;
-  assert.equal(recorded.fromName, "Holden@lore");
+  assert.equal(recorded.fromName, "Agent-A@lore");
   assert.equal(recorded.senderSessionId, "2");
 });
 
 test("reply: only the most recent injected message counts", function () {
   var history = [
-    injected(extractedFrom("naomi@lane", "lane", "3")),
+    injected(extractedFrom("agent-b@lane", "lane", "3")),
     injected(extractedFrom("claude@lane", "lane", "4")),
   ];
   var w = world({
-    lore: [session(2, { agent: "Holden", history: history })],
-    lane: [session(3, { agent: "naomi" }), session(4, { vendor: "claude" })],
+    lore: [session(2, { agent: "Agent-A", history: history })],
+    lane: [session(3, { agent: "agent-b" }), session(4, { vendor: "claude" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "done", senderProject: "lore", senderSessionId: "2" });
   assert.equal(r.consoleSessionId, "4");
@@ -524,8 +524,8 @@ test("reply: only the most recent injected message counts", function () {
 
 test("reply: a reaped sender is resumed and delivered", function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("naomi@lane", "lane", "3"))] })],
-    lane: [session(3, { agent: "naomi", runtime: "reaped" })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("agent-b@lane", "lane", "3"))] })],
+    lane: [session(3, { agent: "agent-b", runtime: "reaped" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "done", senderProject: "lore", senderSessionId: "2" });
   assert.equal(r.result, "resumed-and-delivered");
@@ -534,11 +534,11 @@ test("reply: a reaped sender is resumed and delivered", function () {
 
 test("reply: the caller's history is loaded before it is read", function () {
   var loaded = [];
-  var caller = session(2, { agent: "Holden" });
-  var w = world({ lore: [caller], lane: [session(3, { agent: "naomi" })] });
+  var caller = session(2, { agent: "Agent-A" });
+  var w = world({ lore: [caller], lane: [session(3, { agent: "agent-b" })] });
   w.projects.lore.sm.loadSessionHistory = function (s) {
     loaded.push(s.localId);
-    s.history = [injected(extractedFrom("naomi@lane", "lane", "3"))];
+    s.history = [injected(extractedFrom("agent-b@lane", "lane", "3"))];
   };
   var r = w.input.sendInput({ reply: true, prompt: "done", senderProject: "lore", senderSessionId: "2" });
   assert.deepEqual(loaded, [2]);
@@ -553,7 +553,7 @@ test("reply: refused, with the reason, when there is no recorded sender", functi
     { name: "none", history: [{ type: "user_message", text: "typed by a person" }], why: /no injected message/ },
   ];
   cases.forEach(function (c) {
-    var w = world({ lore: [session(2, { agent: "Holden", history: c.history })] });
+    var w = world({ lore: [session(2, { agent: "Agent-A", history: c.history })] });
     var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
     assert.equal(r.result, "refused", c.name);
     assert.match(r.reason, c.why, c.name);
@@ -562,10 +562,10 @@ test("reply: refused, with the reason, when there is no recorded sender", functi
 });
 
 test("reply: refused from outside a console session, or on a reference the console does not hold running", function () {
-  var history = [injected(extractedFrom("naomi@lane", "lane", "3"))];
+  var history = [injected(extractedFrom("agent-b@lane", "lane", "3"))];
   var w = world({
-    lore: [session(2, { agent: "Holden", history: history }), session(5, { agent: "Holden", runtime: "reaped", history: history })],
-    lane: [session(3, { agent: "naomi" })],
+    lore: [session(2, { agent: "Agent-A", history: history }), session(5, { agent: "Agent-A", runtime: "reaped", history: history })],
+    lane: [session(3, { agent: "agent-b" })],
   });
   var outside = w.input.sendInput({ reply: true, prompt: "x" });
   assert.equal(outside.result, "refused");
@@ -581,7 +581,7 @@ test("reply: refused from outside a console session, or on a reference the conso
 
 test("reply: a console id that now names a different session is never followed", async function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("naomi@lane", "lane", "3"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("agent-b@lane", "lane", "3"))] })],
     lane: [session(3, { agent: "someone-else", cliSessionId: "cli-other" })],
   });
   var r = await w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -592,7 +592,7 @@ test("reply: a console id that now names a different session is never followed",
 
 test("reply: a recorded vendor session id is never read as a console id", async function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("naomi@lane", "lane", "3", "7"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("agent-b@lane", "lane", "3", "7"))] })],
     lane: [session(7, { vendor: "claude", cliSessionId: "cli-seven" })],
   });
   var r = await w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -602,7 +602,7 @@ test("reply: a recorded vendor session id is never read as a console id", async 
 
 test("reply: the same vendor session id under two vendors goes to the recorded vendor's session, whichever is listed first", function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "4", "shared-id"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("claude@lane", "lane", "4", "shared-id"))] })],
     lane: [session(3, { vendor: "codex", cliSessionId: "shared-id" }), session(4, { vendor: "claude", cliSessionId: "shared-id" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -613,7 +613,7 @@ test("reply: the same vendor session id under two vendors goes to the recorded v
 
 test("reply: the same vendor session id under another vendor only is not-found", function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "3", "shared-id"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("claude@lane", "lane", "3", "shared-id"))] })],
     lane: [session(3, { vendor: "codex", cliSessionId: "shared-id" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -623,7 +623,7 @@ test("reply: the same vendor session id under another vendor only is not-found",
 
 test("reply: an identity matching several sessions is refused with candidates, never guessed", function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "3", "dup-id"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("claude@lane", "lane", "3", "dup-id"))] })],
     lane: [session(3, { vendor: "claude", cliSessionId: "dup-id" }), session(4, { vendor: "claude", cliSessionId: "dup-id" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -645,8 +645,8 @@ test("directory.resolve: an identity needs project, vendor and vendor session id
 
 test("reply: a sender that runs as another OS user is refused", function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("naomi@lane", "lane", "3"))] })],
-    lane: [session(3, { agent: "naomi" })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("agent-b@lane", "lane", "3"))] })],
+    lane: [session(3, { agent: "agent-b" })],
   });
   w.projects.lane.getLinuxUserForSession = function (s) { return s.localId === 3 ? "otheruser" : null; };
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -657,11 +657,11 @@ test("reply: a sender that runs as another OS user is refused", function () {
 
 test("reply: a message recorded before the vendor and vendor id were kept is refused, never routed by console id", function () {
   [["senderVendor"], ["senderCliSessionId"], ["senderVendor", "senderCliSessionId"]].forEach(function (drop) {
-    var fields = extractedFrom("naomi@lane", "lane", "3");
+    var fields = extractedFrom("agent-b@lane", "lane", "3");
     drop.forEach(function (k) { delete fields[k]; });
     var w = world({
-      lore: [session(2, { agent: "Holden", history: [injected(fields)] })],
-      lane: [session(3, { agent: "naomi" })],
+      lore: [session(2, { agent: "Agent-A", history: [injected(fields)] })],
+      lane: [session(3, { agent: "agent-b" })],
     });
     var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
     assert.equal(r.result, "refused", drop.join("+"));
@@ -679,7 +679,7 @@ test("reply: a caller-supplied resolvedBy is ignored and cannot trigger or skip 
 
 test("reply: delivers when the stable id matches, even for a reaped plain session", function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("claude@lane", "lane", "3", "cli-keep"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("claude@lane", "lane", "3", "cli-keep"))] })],
     lane: [session(3, { vendor: "claude", cliSessionId: "cli-keep", runtime: "reaped" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -688,11 +688,11 @@ test("reply: delivers when the stable id matches, even for a reaped plain sessio
 });
 
 test("reply: a message with no stable sender id is refused with a reason, never matched by label", function () {
-  var recorded = extractedFrom("naomi@lane", "lane", "3", null);
+  var recorded = extractedFrom("agent-b@lane", "lane", "3", null);
   assert.equal(recorded.senderCliSessionId, undefined);
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(recorded)] })],
-    lane: [session(3, { agent: "naomi" })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(recorded)] })],
+    lane: [session(3, { agent: "agent-b" })],
   });
   var r = w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
   assert.equal(r.result, "refused");
@@ -701,17 +701,17 @@ test("reply: a message with no stable sender id is refused with a reason, never 
 });
 
 test("sender record: the vendor session id is stored beside the console id, and only with its vendor", function () {
-  var fields = extractedFrom("naomi@lane", "lane", "3");
+  var fields = extractedFrom("agent-b@lane", "lane", "3");
   assert.equal(fields.senderSessionId, "3");
   assert.equal(fields.senderCliSessionId, "cli-3");
   assert.equal(fields.senderVendor, "claude");
-  var noVendor = senderFields("trigger", undefined, { name: "naomi@lane", project: "lane", sessionId: "3", cliSessionId: "cli-3", agent: "naomi", vendor: null });
+  var noVendor = senderFields("trigger", undefined, { name: "agent-b@lane", project: "lane", sessionId: "3", cliSessionId: "cli-3", agent: "agent-b", vendor: null });
   assert.equal(noVendor.senderCliSessionId, undefined);
 });
 
 test("reply: a sender that no longer exists is not-found", async function () {
   var w = world({
-    lore: [session(2, { agent: "Holden", history: [injected(extractedFrom("naomi@lane", "lane", "3"))] })],
+    lore: [session(2, { agent: "Agent-A", history: [injected(extractedFrom("agent-b@lane", "lane", "3"))] })],
     lane: [],
   });
   var r = await w.input.sendInput({ reply: true, prompt: "x", senderProject: "lore", senderSessionId: "2" });
@@ -723,8 +723,8 @@ test("reply: a sender that no longer exists is not-found", async function () {
 
 test("open --to: an agent address opens that agent in the project, and a vendor address a plain session", function () {
   var w = world({ lore: [] });
-  assert.equal(w.input.openSession({ to: "holden@lore", prompt: "go" }).result, "opened");
-  assert.deepEqual(w.calls.created[0], { agentName: "Holden", permissionMode: "acceptEdits", activate: false });
+  assert.equal(w.input.openSession({ to: "agent-a@lore", prompt: "go" }).result, "opened");
+  assert.deepEqual(w.calls.created[0], { agentName: "Agent-A", permissionMode: "acceptEdits", activate: false });
   assert.equal(w.input.openSession({ to: "codex@lore", prompt: "go" }).result, "opened");
   assert.deepEqual(w.calls.created[1], { vendor: "codex", permissionMode: "acceptEdits", activate: false });
   assert.equal(w.input.openSession({ to: "@lore", prompt: "go" }).result, "opened");
@@ -734,10 +734,10 @@ test("open --to: an agent address opens that agent in the project, and a vendor 
 test("open --to: an unknown name, a clashing flag or a project mismatch is refused and opens nothing", function () {
   var w = world({ lore: [], other: [] });
   assert.equal(w.input.openSession({ to: "nobody@lore", prompt: "go" }).result, "refused");
-  assert.equal(w.input.openSession({ to: "holden@lore", vendor: "codex", prompt: "go" }).result, "refused");
-  assert.equal(w.input.openSession({ to: "holden@lore", agentName: "naomi", prompt: "go" }).result, "refused");
-  assert.equal(w.input.openSession({ to: "holden@lore", projectSlug: "other", prompt: "go" }).result, "refused");
-  assert.equal(w.input.openSession({ to: "holden@nowhere", prompt: "go" }).result, "refused");
+  assert.equal(w.input.openSession({ to: "agent-a@lore", vendor: "codex", prompt: "go" }).result, "refused");
+  assert.equal(w.input.openSession({ to: "agent-a@lore", agentName: "agent-b", prompt: "go" }).result, "refused");
+  assert.equal(w.input.openSession({ to: "agent-a@lore", projectSlug: "other", prompt: "go" }).result, "refused");
+  assert.equal(w.input.openSession({ to: "agent-a@nowhere", prompt: "go" }).result, "refused");
   assert.equal(w.calls.created.length, 0);
 });
 
@@ -763,8 +763,8 @@ test("ipc: to, reply and list_sessions reach session-input", function () {
 // ---- the CLI ----
 
 test("cli: send-input takes --to, or --reply, in place of a project and session", function () {
-  var to = cli.parseSessionArgs("send-input", ["--to", "holden@lore", "--prompt", "x"]);
-  assert.deepEqual(to.request, { to: "holden@lore", prompt: "x" });
+  var to = cli.parseSessionArgs("send-input", ["--to", "agent-a@lore", "--prompt", "x"]);
+  assert.deepEqual(to.request, { to: "agent-a@lore", prompt: "x" });
   var reply = cli.parseSessionArgs("send-input", ["--reply", "--prompt", "x"]);
   assert.deepEqual(reply.request, { reply: true, prompt: "x" });
   var withProject = cli.parseSessionArgs("send-input", ["--project", "lore", "--to", "@lore", "--prompt", "x"]);
@@ -828,7 +828,7 @@ test("cli: the caller's session reference is passed, and absent outside a consol
 });
 
 test("cli: a caller outside the console reaches a daemon that refuses a reply for lack of a reference", async function () {
-  var w = world({ lore: [session(2, { history: [injected(extractedFrom("naomi@lane", "lane", "3"))] })] });
+  var w = world({ lore: [session(2, { history: [injected(extractedFrom("agent-b@lane", "lane", "3"))] })] });
   var request = cli.withSenderRef({ cmd: "send_session_input", reply: true, prompt: "x" }, {});
   var res = await cli.requestDaemon(request, {
     isDaemonAlive: function () { return Promise.resolve(true); },

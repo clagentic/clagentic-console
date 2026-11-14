@@ -57,7 +57,7 @@ function makeProject(opts) {
 function makeInput(project, extra) {
   return createSessionInput(Object.assign({
     getProject: function (slug) { return slug === "p" ? project : null; },
-    agentCatalog: function () { return [{ name: "holden" }]; },
+    agentCatalog: function () { return [{ name: "agent-a" }]; },
   }, extra || {}));
 }
 
@@ -105,12 +105,12 @@ test("send: a session whose runtime ended is resumed in place and gets the turn"
   var s = liveSession();
   s.queryInstance = null;
   s.vendor = "codex";
-  s.agentName = "holden";
+  s.agentName = "agent-a";
   var project = makeProject({ existing: [s] });
   var r = makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-live", prompt: "wake", initiator: "scheduled" });
   assert.equal(r.result, "resumed-and-delivered");
   assert.equal(r.vendor, "codex");
-  assert.equal(r.agent, "holden");
+  assert.equal(r.agent, "agent-a");
   assert.deepEqual(project.calls.start, [{ localId: 100, text: "wake", initiator: "scheduled" }]);
   assert.equal(project.calls.push.length, 0);
   assert.equal(s.isProcessing, true);
@@ -158,17 +158,17 @@ test("send: a stored session not in memory is resumed on its own vendor and agen
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-si-"));
   try {
     fs.writeFileSync(path.join(dir, "cli-stored.jsonl"), [
-      JSON.stringify({ type: "meta", cliSessionId: "cli-stored", title: "old", vendor: "codex", agentName: "holden", sessionVisibility: "private" }),
+      JSON.stringify({ type: "meta", cliSessionId: "cli-stored", title: "old", vendor: "codex", agentName: "agent-a", sessionVisibility: "private" }),
       JSON.stringify({ type: "user_message", text: "earlier" }),
     ].join("\n") + "\n");
     var project = makeProject({ sessionsDir: dir });
     var r = await makeInput(project).sendInput({ projectSlug: "p", sessionId: "cli-stored", prompt: "again", initiator: "trigger" });
     assert.equal(r.result, "resumed-and-delivered");
     assert.equal(r.vendor, "codex");
-    assert.equal(r.agent, "holden");
+    assert.equal(r.agent, "agent-a");
     var resume = project.calls.resumed[0];
     assert.equal(resume.opts.vendor, "codex");
-    assert.equal(resume.opts.agentName, "holden");
+    assert.equal(resume.opts.agentName, "agent-a");
     assert.equal(resume.opts.sessionVisibility, "private");
     assert.equal(resume.opts.activate, false, "injected input does not move the clients' view");
     assert.deepEqual(resume.opts.history, [{ type: "user_message", text: "earlier" }]);
@@ -215,11 +215,11 @@ test("open: default is today's default vendor and no agent; the initiator defaul
 
 test("open: vendor, agent and visibility reach createSession as the browser path passes them", function () {
   var project = makeProject({});
-  var r = makeInput(project).openSession({ projectSlug: "p", prompt: "go", vendor: "codex", agentName: "holden", sessionVisibility: "private", initiator: "scheduled-now" });
+  var r = makeInput(project).openSession({ projectSlug: "p", prompt: "go", vendor: "codex", agentName: "agent-a", sessionVisibility: "private", initiator: "scheduled-now" });
   assert.equal(r.result, "opened");
-  assert.deepEqual(project.calls.created, [{ vendor: "codex", agentName: "holden", sessionVisibility: "private", permissionMode: "acceptEdits", activate: false }]);
+  assert.deepEqual(project.calls.created, [{ vendor: "codex", agentName: "agent-a", sessionVisibility: "private", permissionMode: "acceptEdits", activate: false }]);
   assert.equal(r.vendor, "codex");
-  assert.equal(r.agent, "holden");
+  assert.equal(r.agent, "agent-a");
   assert.equal(project.calls.start[0].initiator, "scheduled-now");
 });
 
@@ -291,7 +291,7 @@ test("file drop and IPC verb give matching results for open, send, not-found and
     });
   }
   var cases = [
-    { drop: { version: 1, id: "open-1", vendor: "codex", agentName: "holden" }, ipc: { cmd: "open_session", projectSlug: "p", prompt: "go", vendor: "codex", agentName: "holden" } },
+    { drop: { version: 1, id: "open-1", vendor: "codex", agentName: "agent-a" }, ipc: { cmd: "open_session", projectSlug: "p", prompt: "go", vendor: "codex", agentName: "agent-a" } },
     { drop: { version: 2, id: "send-1", sessionId: "cli-live", initiator: "loop" }, ipc: { cmd: "send_session_input", projectSlug: "p", sessionId: "cli-live", prompt: "go", initiator: "loop" } },
     { drop: { version: 2, id: "gone-1", sessionId: "cli-gone" }, ipc: { cmd: "send_session_input", projectSlug: "p", sessionId: "cli-gone", prompt: "go" } },
     { drop: { version: 1, id: "refuse-1", initiator: "human" }, ipc: { cmd: "open_session", projectSlug: "p", prompt: "go", initiator: "human" } },
@@ -322,8 +322,8 @@ test("file drop: a reaped session is resumed, not left waiting", async function 
 // ---- CLI argument parsing ----
 
 test("cli: open-session and send-input parse their flags", function () {
-  var open = parseSessionArgs("open-session", ["--project", "p", "--prompt", "go", "--vendor", "codex", "--agent", "holden", "--visibility", "private", "--initiator", "loop", "--context-note", "n"]);
-  assert.deepEqual(open.request, { projectSlug: "p", prompt: "go", vendor: "codex", agentName: "holden", sessionVisibility: "private", initiator: "loop", contextNote: "n" });
+  var open = parseSessionArgs("open-session", ["--project", "p", "--prompt", "go", "--vendor", "codex", "--agent", "agent-a", "--visibility", "private", "--initiator", "loop", "--context-note", "n"]);
+  assert.deepEqual(open.request, { projectSlug: "p", prompt: "go", vendor: "codex", agentName: "agent-a", sessionVisibility: "private", initiator: "loop", contextNote: "n" });
   var send = parseSessionArgs("send-input", ["--project", "p", "--session", "abc", "--prompt", "-"]);
   assert.deepEqual(send.request, { projectSlug: "p", sessionId: "abc", prompt: "-" });
 });
@@ -352,7 +352,7 @@ test("resume through a real session manager restores vendor and agent and does n
       return sessionsModule.createSessionManager({ cwd: home, send: function () {}, sendTo: function () {}, sendEach: function () {} });
     }
     var sm1 = newManager();
-    var made = sm1.createSessionRaw({ vendor: "codex", agentName: "holden", sessionVisibility: "private" });
+    var made = sm1.createSessionRaw({ vendor: "codex", agentName: "agent-a", sessionVisibility: "private" });
     made.cliSessionId = "cli-real-1";
     made.title = "stored";
     sm1.saveSessionFile(made);
@@ -371,7 +371,7 @@ test("resume through a real session manager restores vendor and agent and does n
     var r = await createSessionInput({ getProject: function () { return project; } }).sendInput({ projectSlug: "p", sessionId: "cli-real-1", prompt: "hi", initiator: "scheduled" });
     assert.equal(r.result, "resumed-and-delivered");
     assert.equal(r.vendor, "codex");
-    assert.equal(r.agent, "holden");
+    assert.equal(r.agent, "agent-a");
     assert.equal(started.length, 1);
     assert.equal(started[0].initiator, "scheduled");
     assert.equal(started[0].session.sessionVisibility, "private");

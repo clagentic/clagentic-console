@@ -25,12 +25,12 @@ test("senderFields: a declared sending session is stored; an extracted one wins 
   assert.equal(declared.fromSession, "ses_declared");
   assert.equal(declared.senderKind, "declared");
 
-  var extracted = { name: "holden@p", project: "p", sessionId: "3", vendor: "claude", cliSessionId: "cli-holden" };
+  var extracted = { name: "agent-a@p", project: "p", sessionId: "3", vendor: "claude", cliSessionId: "cli-agent-a" };
   var both = sender.senderFields("trigger", "ops-bot", extracted, "ses_declared");
-  assert.equal(both.fromSession, "cli-holden");
+  assert.equal(both.fromSession, "cli-agent-a");
   assert.equal(both.senderKind, "extracted");
 
-  var noVendorId = sender.senderFields("trigger", null, { name: "holden@p", project: "p", sessionId: "3", vendor: "claude" }, "ses_declared");
+  var noVendorId = sender.senderFields("trigger", null, { name: "agent-a@p", project: "p", sessionId: "3", vendor: "claude" }, "ses_declared");
   assert.equal(noVendorId.fromSession, "ses_declared", "an extracted sender without a vendor session id falls back to the declared one");
 
   assert.equal("fromSession" in sender.senderFields("trigger", "ops-bot", null), false);

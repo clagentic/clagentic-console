@@ -16,7 +16,7 @@ function session(localId, runtime, blocked) {
   var s = {
     localId: localId,
     cliSessionId: "cli-" + localId,
-    agentName: "holden",
+    agentName: "agent-a",
     vendor: "claude",
     title: "t" + localId,
     lastActivity: 1700000000000 + localId * 1000,
@@ -38,7 +38,7 @@ function entriesOf(sessions) {
 }
 
 function resolveAddress(sessions) {
-  return directory.resolve(entriesOf(sessions), directory.parseAddress("holden@lane"));
+  return directory.resolve(entriesOf(sessions), directory.parseAddress("agent-a@lane"));
 }
 
 test("AC1: a prompt-blocked session does not outrank an idle twin", function () {

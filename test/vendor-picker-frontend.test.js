@@ -293,7 +293,7 @@ test("session_switched applies the settled vendor again after resetClientState()
   { name: "the page's own vendor outranks the list's", args: ["claude", null, "codex"], name_: "Claude Code", avatar: "/claude-code-avatar.png" },
   { name: "no vendor known anywhere: a neutral assistant, no vendor avatar", args: [null, null, null], name_: "Assistant", avatar: null },
   { name: "a vendor the registry does not know: a neutral assistant", args: ["ghost", null, null], name_: "Assistant", avatar: null },
-  { name: "a named agent keeps its own name", args: [null, "Holden", "codex"], name_: "Holden", avatar: null },
+  { name: "a named agent keeps its own name", args: [null, "Agent-A", "codex"], name_: "Agent-A", avatar: null },
 ].forEach(function (row) {
   test("assistant header: " + row.name, async function () {
     var [, identity] = await sessionVendorModules();

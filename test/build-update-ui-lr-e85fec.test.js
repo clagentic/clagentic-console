@@ -32,7 +32,7 @@ function standingOffer() {
 function confirmOffer(token) {
   return {
     type: "diagnostic", severity: "warning", source: "build-update",
-    message: "A restart now would end 2 live sessions and 1 background agent: [lore] HOLDEN lane (running a turn)",
+    message: "A restart now would end 2 live sessions and 1 background agent: [lore] build lane (running a turn)",
     buildUpdate: Object.assign({ token: token }, BUILDS),
     actionable: { label: "Restart now", action: "confirm_build_update_restart" },
   };
@@ -73,7 +73,7 @@ test("the first click only asks for the offer: no token, no restart; the interru
   c.diagnostics.addDiagnostic(confirmOffer("tok-1"));
   var shown = c.container.textContent;
   assert.ok(shown.indexOf("would end 2 live sessions and 1 background agent") !== -1, shown);
-  assert.ok(shown.indexOf("[lore] HOLDEN lane") !== -1, shown);
+  assert.ok(shown.indexOf("[lore] build lane") !== -1, shown);
   assert.equal(c.sent.length, 1, "showing the list sent nothing further");
   assert.ok(c.sent.every(function (m) { return m.confirmToken === undefined; }), "no frame carries a token yet");
 });
