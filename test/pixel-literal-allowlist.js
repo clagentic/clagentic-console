@@ -13,11 +13,10 @@
 // guard fails on a row whose file no longer holds a literal, so the list only
 // shrinks.
 
-var BATCH_B3 = "lr-16d9a0";
 var BATCH_B4 = "lr-b182d8";
 var BATCH_B5 = "lr-d3e1ea";
 
-var BATCHES = [BATCH_B3, BATCH_B4, BATCH_B5];
+var BATCHES = [BATCH_B4, BATCH_B5];
 
 function unswept(batch, files) {
   return files.map(function (name) {
@@ -50,8 +49,22 @@ var ALLOWLIST = [
     keys: ["48px", "80px", "44px"],
     reason: "Clearances sized to the hub's close button and the bottom navigation (48px top padding, 80px mobile bottom padding, 44px mobile content offset), past or between the spacing steps; rounding would move them more than 1px.",
   },
+  {
+    file: "lib/public/css/skills.css",
+    keys: ["48px"],
+    reason: "The loading and empty states' 48px top and bottom padding is past the largest spacing step (40px); rounding would move it 8px.",
+  },
+  {
+    file: "lib/public/css/input.css",
+    keys: ["56px"],
+    reason: "The mobile input area clears the 56px bottom tab bar; the clearance is sized to that bar, past the largest spacing step (40px), and rounding would move it 16px.",
+  },
+  {
+    file: "lib/public/css/icon-strip.css",
+    keys: ["64px"],
+    reason: "The strip's 64px bottom padding clears the user island that sits over it, past the largest spacing step (40px); rounding would move it 24px.",
+  },
 ]
-  .concat(unswept(BATCH_B3, ["skills", "menus", "rewind", "admin", "input", "icon-strip"]))
   .concat(unswept(BATCH_B4, ["mobile-nav", "sidebar", "server-settings", "scheduler"]))
   .concat(unswept(BATCH_B5, ["scheduler-modal", "loop", "overlays", "messages", "filebrowser"]));
 

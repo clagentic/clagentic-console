@@ -16,7 +16,7 @@
 
 .header-title {
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -33,10 +33,10 @@
   background: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   flex-shrink: 0;
   padding: 0;
-  margin-left: 4px;
+  margin-left: var(--space-2);
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
@@ -53,10 +53,10 @@
   background: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   flex-shrink: 0;
   padding: 0;
-  margin-left: 4px;
+  margin-left: var(--space-2);
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
@@ -75,10 +75,10 @@
   background: transparent;
   color: var(--text-dimmer);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   flex-shrink: 0;
   padding: 0;
-  margin-left: 6px;
+  margin-left: var(--space-3);
   transition: color 0.15s, background 0.15s;
   position: relative;
 }
@@ -97,16 +97,16 @@
 
 /* Session info popover */
 .session-info-popover {
-  padding: 12px 16px;
+  padding: var(--space-6) var(--space-8);
   min-width: 260px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: 1.6;
 }
 .session-info-popover .info-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 .session-info-popover .info-label {
   color: var(--text-muted);
@@ -115,7 +115,7 @@
 }
 .session-info-popover .info-value {
   font-family: "Roboto Mono", monospace;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text);
   word-break: break-all;
 }
@@ -125,8 +125,8 @@
   background: transparent;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
+  padding: var(--space-1);
+  border-radius: var(--radius-2);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -137,12 +137,12 @@
 
 .header-rename-input {
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   color: var(--text);
   background: var(--input-bg);
   border: 1px solid var(--accent);
-  border-radius: 6px;
-  padding: 2px 8px;
+  border-radius: var(--radius-3);
+  padding: var(--space-1) var(--space-4);
   font-family: inherit;
   outline: none;
   min-width: 0;
@@ -152,8 +152,8 @@
 .status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -166,10 +166,10 @@
   justify-content: center;
   background: none;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 4px;
+  padding: var(--space-2);
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 #footer-status .lucide,
@@ -183,15 +183,15 @@
   right: -4px;
   background: var(--success);
   color: var(--on-success);
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   min-width: 14px;
   height: 14px;
-  border-radius: 7px;
+  border-radius: var(--radius-4);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 3px;
+  padding: 0 var(--space-2);
   font-family: "Roboto Mono", monospace;
 }
 #terminal-count.hidden { display: none; }
@@ -203,10 +203,10 @@
   justify-content: center;
   background: none;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 4px;
+  padding: var(--space-2);
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 #qr-btn .lucide { width: 15px; height: 15px; }
@@ -219,7 +219,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-7);
   /* The dialog is as wide as the code. */
   width: auto;
 }
@@ -231,15 +231,15 @@
 #qr-canvas td { width: 4px; height: 4px; padding: 0; }
 
 #qr-url {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   word-break: break-all;
   text-align: center;
   max-width: 260px;
   font-family: system-ui, sans-serif;
   cursor: pointer;
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-3);
   transition: background 0.15s, color 0.15s;
 }
 #qr-url:hover { background: var(--bg-hover); color: var(--text); }
@@ -247,23 +247,23 @@
 #qr-url.copied { color: var(--success); font-weight: 600; }
 .qr-hint {
   display: block;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
-  margin-top: 2px;
+  margin-top: var(--space-1);
   font-weight: 400;
 }
 .qr-share-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 8px 16px;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding: var(--space-4) var(--space-8);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   background: var(--bg);
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
@@ -283,10 +283,10 @@
   justify-content: center;
   background: none;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 4px;
+  padding: var(--space-2);
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
@@ -295,7 +295,7 @@
 #notif-btn.active { color: var(--text); background: rgba(var(--overlay-rgb),0.06); border-color: var(--border); }
 
 #notif-menu {
-  padding: 8px 0;
+  padding: var(--space-4) 0;
   min-width: 200px;
 }
 
@@ -303,8 +303,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: var(--space-4) var(--space-7);
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s;
@@ -313,7 +313,7 @@
 .notif-option > span:first-child {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .notif-option > span:first-child .lucide {
@@ -326,8 +326,8 @@
 .notif-option input { display: none; }
 
 #notif-blocked-hint {
-  padding: 6px 14px;
-  font-size: 11px;
+  padding: var(--space-3) var(--space-7);
+  font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--warning);
 }
@@ -341,7 +341,7 @@
   height: 20px;
   background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   position: relative;
   transition: background 0.2s, border-color 0.2s;
   flex-shrink: 0;
@@ -372,7 +372,7 @@
 .notif-divider {
   height: 1px;
   background: var(--border-subtle);
-  margin: 4px 0;
+  margin: var(--space-2) 0;
 }
 
 #notif-push-row {
@@ -386,7 +386,7 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 2px;
+  padding: var(--space-1);
   display: flex;
   align-items: center;
   transition: color 0.15s;
@@ -394,8 +394,8 @@
 .notif-ios-info-btn:hover { color: var(--text-secondary); }
 
 #notif-ios-hint {
-  padding: 6px 14px;
-  font-size: 11px;
+  padding: var(--space-3) var(--space-7);
+  font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -406,10 +406,10 @@
 .notif-action {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: var(--space-4) var(--space-7);
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   background: none;
   border: none;
@@ -425,7 +425,7 @@
 
 #client-count {
   cursor: default;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .client-avatar {
@@ -455,15 +455,15 @@
 #config-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   height: 36px;
-  padding: 0 8px;
-  border-radius: 10px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-5);
   border: none;
   background: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
@@ -477,7 +477,7 @@
   #config-chip .config-chip-icon { display: inline-flex; width: 16px; height: 16px; }
   #config-chip-label { display: none; }
   #config-chip .lucide:last-child { display: none; }
-  #config-chip { padding: 0 6px; }
+  #config-chip { padding: 0 var(--space-3); }
 }
 #config-chip:hover { color: var(--text-secondary); background: rgba(var(--overlay-rgb),0.06); }
 #config-chip.active { color: var(--text-secondary); background: rgba(var(--overlay-rgb),0.06); }
@@ -488,8 +488,8 @@
   right: 0;
   background: var(--bg-alt);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 4px 0;
+  border-radius: var(--radius-6);
+  padding: var(--space-2) 0;
   min-width: 220px;
   max-width: calc(100vw - 16px);
   max-height: min(600px, calc(100vh - 120px));
@@ -501,7 +501,7 @@
 #config-popover.hidden { display: none; }
 
 .config-section {
-  padding: 6px 0 2px;
+  padding: var(--space-3) 0 var(--space-1);
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -510,12 +510,12 @@
 }
 
 .config-section-label {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 4px 14px 4px;
+  padding: var(--space-2) var(--space-7) var(--space-2);
 }
 
 /* lr-db0437: states which scope a model/mode picker applies to — "This
@@ -525,9 +525,9 @@
    (some of those render inside .settings-card, not .config-section, hence
    the standalone rule rather than nesting under .config-section-label). */
 .config-scope-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
-  padding: 0 14px 6px;
+  padding: 0 var(--space-7) var(--space-3);
   font-style: italic;
 }
 
@@ -538,8 +538,8 @@
 
 /* A setting the current agent cannot support: kept in view, dimmed, with the reason. */
 .config-unavailable-note {
-  padding: 8px 14px;
-  font-size: 12px;
+  padding: var(--space-4) var(--space-7);
+  font-size: var(--font-size-sm);
   font-style: italic;
   color: var(--text-dimmer);
   opacity: 0.7;
@@ -549,14 +549,14 @@
 .config-radio-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 8px 14px;
+  padding: var(--space-4) var(--space-7);
   border: none;
   background: none;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
@@ -571,11 +571,11 @@
 .config-mode-item {
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--space-1);
   max-width: 280px;
 }
 .config-mode-hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
   color: var(--text-dimmer);
   white-space: normal;
@@ -585,7 +585,7 @@
 /* lr-f22787: same catalog-sourced marker as .settings-model-catalog-badge
    (server-settings.css), for the session-chip model picker surface. */
 .config-model-catalog-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -596,7 +596,7 @@
    entries are filtered out of the picker entirely, never rendered): a
    deprecated (still-runnable) entry keeps a marker only. */
 .config-model-deprecated-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -612,12 +612,12 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 8px 14px;
+  padding: var(--space-4) var(--space-7);
   border: none;
   background: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -639,27 +639,27 @@
 /* Segmented control for effort */
 .config-segmented {
   display: flex;
-  gap: 2px;
-  padding: 4px 14px 8px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-7) var(--space-4);
 }
 
 .config-segment-btn {
   flex: 1;
-  padding: 6px 4px;
+  padding: var(--space-3) var(--space-2);
   border: 1px solid var(--border);
   background: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   text-transform: capitalize;
 }
 
-.config-segment-btn:first-child { border-radius: 6px 0 0 6px; }
-.config-segment-btn:last-child { border-radius: 0 6px 6px 0; }
-.config-segment-btn:only-child { border-radius: 6px; }
+.config-segment-btn:first-child { border-radius: var(--radius-3) 0 0 var(--radius-3); }
+.config-segment-btn:last-child { border-radius: 0 var(--radius-3) var(--radius-3) 0; }
+.config-segment-btn:only-child { border-radius: var(--radius-3); }
 
 .config-segment-btn:hover {
   color: var(--text-secondary);
@@ -678,11 +678,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 14px 8px;
+  padding: var(--space-3) var(--space-7) var(--space-4);
 }
 
 .config-toggle-label {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
 }
 
@@ -690,7 +690,7 @@
   position: relative;
   width: 36px;
   height: 20px;
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   border: 1px solid var(--border);
   background: var(--bg-alt);
   cursor: pointer;
@@ -721,26 +721,26 @@
 }
 
 .config-budget-row {
-  padding: 4px 14px 8px;
+  padding: var(--space-2) var(--space-7) var(--space-4);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .config-budget-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .config-budget-input {
   width: 80px;
-  padding: 4px 6px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-2);
   background: var(--bg);
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 /* --- Info panels container --- */
@@ -757,7 +757,7 @@
   z-index: var(--z-base);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-4);
   pointer-events: none;
 }
 
@@ -767,7 +767,7 @@
 #context-panel {
   background: var(--bg-alt);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
 }
 
@@ -778,7 +778,7 @@
 
 /* --- Usage panel --- */
 #usage-panel, #status-panel, #context-panel, #diagnostics-panel {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   pointer-events: auto;
 }
 
@@ -788,10 +788,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--border-subtle);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
 }
 
@@ -802,7 +802,7 @@
 
 .usage-panel-actions {
   display: flex;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .usage-panel-header button {
@@ -813,15 +813,15 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
+  padding: var(--space-1);
+  border-radius: var(--radius-2);
 }
 
 .usage-panel-header button:hover { color: var(--text); background: rgba(var(--overlay-rgb),0.06); }
 .usage-panel-header button .lucide { width: 14px; height: 14px; }
 
 .usage-panel-body {
-  padding: 8px 14px 12px;
+  padding: var(--space-4) var(--space-7) var(--space-6);
 }
 
 /* --- Plan usage link --- */
@@ -829,13 +829,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 6px;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-3);
   border: 1px solid var(--border-subtle);
   background: var(--input-bg);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   text-decoration: none;
   transition: background 0.15s, color 0.15s;
 }
@@ -852,22 +852,22 @@
 .usage-divider {
   height: 1px;
   background: var(--border-subtle);
-  margin: 8px 0;
+  margin: var(--space-4) 0;
 }
 
 .usage-section-label {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 
 .usage-row {
   display: flex;
   justify-content: space-between;
-  padding: 3px 0;
+  padding: var(--space-2) 0;
   color: var(--text-secondary);
 }
 
@@ -884,28 +884,28 @@
 .context-bar-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 6px 0 8px;
+  gap: var(--space-4);
+  margin: var(--space-3) 0 var(--space-4);
 }
 .context-bar {
   flex: 1;
   height: 6px;
   background: var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-2);
   overflow: hidden;
 }
 .context-bar-fill {
   height: 100%;
   width: 0%;
   background: var(--success);
-  border-radius: 3px;
+  border-radius: var(--radius-2);
   transition: width 0.3s ease, background 0.3s ease;
 }
 .context-bar-fill.warn { background: var(--warning); }
 .context-bar-fill.danger { background: var(--error); }
 .context-bar-pct {
   font-family: "Roboto Mono", monospace;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-secondary);
   min-width: 32px;
@@ -916,8 +916,8 @@
 #context-mini {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px 2px;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-7) var(--space-1);
   cursor: pointer;
   transition: opacity 0.15s;
 }
@@ -927,13 +927,13 @@
   flex: 1;
   height: 4px;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-1);
   overflow: hidden;
 }
 .context-mini-fill {
   height: 100%;
   width: 0%;
-  border-radius: 2px;
+  border-radius: var(--radius-1);
   background: var(--success);
   transition: width 0.3s ease, background 0.3s ease;
 }
@@ -941,7 +941,7 @@
 .context-mini-fill.danger { background: var(--error); }
 .context-mini-label {
   font-family: "Roboto Mono", monospace;
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-dimmer);
   min-width: 24px;

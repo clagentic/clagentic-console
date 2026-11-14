@@ -21,26 +21,26 @@
   align-items: center;
   justify-content: space-between;
   /* The right side clears the shared close control. */
-  padding: 16px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 0 20px;
+  padding: var(--space-8) calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 0 var(--space-10);
   flex-shrink: 0;
 }
 
 .skills-title {
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 700;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .skills-title .lucide { width: 16px; height: 16px; color: var(--accent); }
 
 .skills-powered-by {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
   color: var(--text-dimmer);
-  margin-left: 4px;
+  margin-left: var(--space-2);
 }
 
 .skills-powered-by a {
@@ -55,8 +55,8 @@
 /* --- Tabs --- */
 .skills-tabs {
   display: flex;
-  gap: 2px;
-  padding: 12px 20px 0;
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-10) 0;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -66,12 +66,12 @@
   border: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
-  padding: 8px 14px;
+  padding: var(--space-4) var(--space-7);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  margin-bottom: calc(-1 * var(--space-1));
   transition: color 0.15s, border-color 0.15s;
 }
 
@@ -86,8 +86,8 @@
 .skills-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px 0;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-10) 0;
   flex-shrink: 0;
 }
 
@@ -105,7 +105,7 @@
   outline: none;
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
 }
 
 .skills-search input::placeholder {
@@ -114,12 +114,12 @@
 
 .skills-search-hint {
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
   background: var(--sidebar-hover);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 1px 6px;
+  border-radius: var(--radius-2);
+  padding: var(--space-1) var(--space-3);
   line-height: 1.4;
   flex-shrink: 0;
 }
@@ -129,11 +129,11 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 2px;
+  padding: var(--space-1);
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-2);
   transition: color 0.15s;
 }
 
@@ -154,9 +154,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 48px 20px;
-  font-size: 13px;
+  gap: var(--space-5);
+  padding: 48px var(--space-10);
+  font-size: var(--font-size-md);
   color: var(--text-muted);
 }
 
@@ -178,8 +178,8 @@
 .skills-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-10);
   cursor: pointer;
   transition: background 0.12s;
   border-bottom: 1px solid var(--border-subtle);
@@ -189,7 +189,7 @@
 .skills-item:hover { background: rgba(var(--overlay-rgb), 0.04); }
 
 .skills-item-rank {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-dimmer);
   min-width: 28px;
@@ -204,7 +204,7 @@
 }
 
 .skills-item-name {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -213,9 +213,9 @@
 }
 
 .skills-item-source {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: var(--space-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -226,18 +226,18 @@
   flex-direction: column;
   align-items: flex-end;
   flex-shrink: 0;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .skills-item-installs {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
   font-family: "Roboto Mono", monospace;
 }
 
 .skills-item-change {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--success);
   font-family: "Roboto Mono", monospace;
@@ -257,7 +257,7 @@
 .skills-header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .skills-back-btn {
@@ -265,10 +265,10 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 4px;
+  padding: var(--space-2);
   display: flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   transition: color 0.15s, background 0.15s;
 }
 
@@ -290,46 +290,46 @@
 .skills-detail-main > .skills-detail-desc,
 .skills-detail-main > .skills-detail-cmd {
   flex-shrink: 0;
-  margin-left: 20px;
-  margin-right: 20px;
+  margin-left: var(--space-10);
+  margin-right: var(--space-10);
 }
 
 .skills-detail-main > .skills-detail-name {
-  padding-top: 20px;
+  padding-top: var(--space-10);
 }
 
 .skills-detail-main > .skills-detail-md-wrap {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 20px 20px;
+  padding: 0 var(--space-10) var(--space-10);
 }
 
 .skills-detail-name {
-  font-size: 18px;
+  font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--text);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 
 .skills-detail-desc {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-8);
   line-height: 1.5;
 }
 
 .skills-detail-cmd {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   background: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 16px;
+  border-radius: var(--radius-4);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-8);
   font-family: "Roboto Mono", monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text);
   overflow-x: auto;
 }
@@ -344,10 +344,10 @@
 .skills-detail-cmd .skills-copy-btn {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 6px;
+  padding: var(--space-2) var(--space-3);
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -359,50 +359,50 @@
 .skills-detail-cmd .skills-copy-btn.copied { color: var(--success); border-color: var(--success); }
 
 .skills-detail-section-title {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--text-dimmer);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .skills-detail-md {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   line-height: 1.7;
 }
 
 .skills-detail-md h1, .skills-detail-md h2, .skills-detail-md h3 {
   color: var(--text);
-  margin: 16px 0 8px;
+  margin: var(--space-8) 0 var(--space-4);
 }
 
-.skills-detail-md h1 { font-size: 17px; }
-.skills-detail-md h2 { font-size: 15px; }
-.skills-detail-md h3 { font-size: 14px; }
+.skills-detail-md h1 { font-size: var(--font-size-2xl); }
+.skills-detail-md h2 { font-size: var(--font-size-lg); }
+.skills-detail-md h3 { font-size: var(--font-size-base); }
 
-.skills-detail-md p { margin: 0 0 10px; }
-.skills-detail-md ul, .skills-detail-md ol { margin: 0 0 10px; padding-left: 20px; }
-.skills-detail-md li { margin-bottom: 4px; }
+.skills-detail-md p { margin: 0 0 var(--space-5); }
+.skills-detail-md ul, .skills-detail-md ol { margin: 0 0 var(--space-5); padding-left: var(--space-10); }
+.skills-detail-md li { margin-bottom: var(--space-2); }
 
 .skills-detail-md code {
   font-family: "Roboto Mono", monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   background: rgba(var(--overlay-rgb), 0.06);
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
 }
 
 .skills-detail-md pre {
   background: var(--code-bg);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: var(--radius-4);
+  padding: var(--space-6);
   overflow-x: auto;
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-6);
 }
 
 .skills-detail-md pre code {
@@ -418,8 +418,8 @@
 
 .skills-detail-md img {
   max-width: 100%;
-  border-radius: 8px;
-  margin: 8px 0;
+  border-radius: var(--radius-4);
+  margin: var(--space-4) 0;
 }
 
 /* --- Detail Sidebar (right) --- */
@@ -427,38 +427,38 @@
   width: 240px;
   flex-shrink: 0;
   overflow: hidden;
-  padding: 20px 16px;
+  padding: var(--space-10) var(--space-8);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-10);
 }
 
 .skills-meta-block {}
 
 .skills-meta-label {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   color: var(--text-dimmer);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 
 .skills-meta-value {
-  font-size: 20px;
+  font-size: var(--font-size-3xl);
   font-weight: 700;
   color: var(--text);
 }
 
 .skills-meta-value.small {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
 }
 
 .skills-meta-value a {
   color: var(--accent);
   text-decoration: none;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
 }
 
@@ -467,7 +467,7 @@
 .skills-meta-repo {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .skills-meta-repo .lucide { width: 14px; height: 14px; color: var(--text-muted); }
@@ -476,23 +476,23 @@
 .skills-audit-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .skills-audit-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
 .skills-audit-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-2);
 }
 
 .skills-audit-badge.pass {
@@ -514,20 +514,20 @@
 .skills-platform-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .skills-platform-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
 .skills-platform-count {
   font-family: "Roboto Mono", monospace;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
 
@@ -535,26 +535,26 @@
 .skills-install-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 /* Install button */
 .skills-install-btn {
   width: 100%;
-  padding: 10px 16px;
-  border-radius: 10px;
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-5);
   border: none;
   background: var(--accent);
   color: var(--on-accent);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s, background 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .skills-install-btn:hover { opacity: 0.85; }
@@ -599,14 +599,14 @@
 .skills-installed-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10px;
+  gap: var(--space-2);
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--success);
   background: var(--success-12);
-  padding: 1px 7px 1px 5px;
-  border-radius: 4px;
-  margin-left: 8px;
+  padding: var(--space-1) var(--space-4) var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
+  margin-left: var(--space-4);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -616,33 +616,33 @@
 /* Installed status (detail sidebar) */
 .skills-installed-status {
   width: 100%;
-  padding: 10px 16px;
-  border-radius: 10px;
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-5);
   border: 1px solid var(--success);
   background: var(--success-12);
   color: var(--success);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .skills-installed-status .lucide { width: 15px; height: 15px; }
 
 .skills-installed-status.compact {
-  padding: 8px 12px;
-  font-size: 12px;
-  border-radius: 8px;
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-4);
 }
 
 /* Installed row: status + uninstall button side by side */
 .skills-installed-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .skills-installed-row .skills-installed-status.compact {
@@ -658,7 +658,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   background: none;
   color: var(--text-dimmer);
   cursor: pointer;
@@ -688,8 +688,8 @@
 .skills-installed-item {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px 20px;
+  gap: var(--space-6);
+  padding: var(--space-7) var(--space-10);
   border-bottom: 1px solid var(--border-subtle);
   transition: background 0.15s;
 }
@@ -710,18 +710,18 @@
 .skills-installed-item-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
 }
 
 .skills-installed-item-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text-primary);
 }
 
 .skills-installed-item-desc {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: 1.4;
   display: -webkit-box;
@@ -732,15 +732,15 @@
 
 .skills-installed-item-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-2);
   flex-shrink: 0;
   align-items: center;
 }
 
 .skills-empty-hint {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  margin-top: 8px;
+  margin-top: var(--space-4);
 }
 
 /* --- Mobile --- */
@@ -767,8 +767,8 @@
     width: 100%;
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 16px;
-    padding: 16px;
+    gap: var(--space-8);
+    padding: var(--space-8);
   }
 
   .skills-meta-block { min-width: 100px; }

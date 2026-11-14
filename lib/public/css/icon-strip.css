@@ -36,7 +36,7 @@
   position: absolute;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--bg-alt);
   transition: background 0.2s ease;
   z-index: -1;
@@ -71,7 +71,7 @@
   left: -12px;
   width: 4px;
   background: var(--text);
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--radius-2) var(--radius-2) 0;
   transition: height 0.2s ease, opacity 0.2s ease;
   opacity: 0;
   height: 0;
@@ -105,9 +105,9 @@
 .icon-strip-separator {
   width: 32px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-1);
   background: var(--border);
-  margin: 4px 0;
+  margin: var(--space-2) 0;
   flex-shrink: 0;
 }
 
@@ -120,15 +120,15 @@
   align-items: center;
   justify-content: center;
   min-width: 28px;
-  padding: 2px 4px;
-  margin: 2px 0;
+  padding: var(--space-1) var(--space-2);
+  margin: var(--space-1) 0;
   border: 1px solid var(--border-subtle);
   background: var(--bg-alt);
   color: var(--text-dimmer);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   font-family: inherit;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   cursor: pointer;
   opacity: 0.7;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
@@ -173,7 +173,7 @@
   cursor: pointer;
   flex-shrink: 0;
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   text-decoration: none;
   user-select: none;
@@ -184,7 +184,7 @@
   position: absolute;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--bg-alt);
   transition: background 0.2s ease;
   z-index: -1;
@@ -310,7 +310,7 @@
   position: absolute;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--bg-alt);
   transition: background 0.2s ease;
   z-index: -1;
@@ -335,10 +335,10 @@
   left: 76px;
   background: var(--code-bg);
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-3);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
@@ -378,7 +378,7 @@
   transform: translateX(-50%);
   width: 32px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-1);
   background: var(--accent);
   z-index: 10;
 }
@@ -391,7 +391,7 @@
   transform: translateX(-50%);
   width: 32px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-1);
   background: var(--accent);
   z-index: 10;
 }
@@ -417,7 +417,7 @@
   position: absolute;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--bg-alt);
   transition: background 0.2s ease, transform 0.2s ease;
   z-index: -1;
@@ -515,10 +515,10 @@
 }
 
 .emoji-picker-slug-confirm {
-  padding: 6px 0 8px;
+  padding: var(--space-3) 0 var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .emoji-picker-slug-confirm.hidden {
@@ -526,7 +526,7 @@
 }
 
 .emoji-picker-slug-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -538,11 +538,11 @@
   box-sizing: border-box;
   background: var(--input-bg, var(--bg-secondary));
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
-  padding: 5px 8px;
+  font-size: var(--font-size-md);
+  padding: var(--space-3) var(--space-4);
   outline: none;
   transition: border-color 0.15s;
 }
@@ -553,14 +553,14 @@
 
 .emoji-picker-slug-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
   justify-content: flex-end;
 }
 
 .emoji-picker-slug-actions button {
-  padding: 4px 12px;
-  border-radius: 5px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-sm);
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -587,11 +587,11 @@
 
 /* Upload tile in the custom emoji grid */
 .emoji-picker-upload-tile {
-  font-size: 22px;
+  font-size: var(--font-size-4xl);
   font-weight: 300;
   color: var(--text-dimmer);
   border: 1.5px dashed var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: transparent;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
@@ -608,7 +608,7 @@
   position: relative;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   cursor: pointer;
 }
 
@@ -620,7 +620,7 @@
   width: 32px;
   height: 32px;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: var(--radius-2);
   display: block;
 }
 
@@ -633,7 +633,7 @@
   border-radius: 50%;
   background: var(--error);
   color: var(--on-error);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1;
   border: none;
   cursor: pointer;
@@ -649,9 +649,9 @@
 }
 
 .emoji-picker-custom-empty {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary, var(--text-dimmer));
-  padding: 8px 4px;
+  padding: var(--space-4) var(--space-2);
   text-align: center;
 }
 
@@ -697,7 +697,7 @@
 
 /* --- Project context menu --- */
 .project-ctx-menu {
-  padding: 4px 0;
+  padding: var(--space-2) 0;
   min-width: 180px;
   animation: ctxMenuAppear 0.12s ease-out;
 }
@@ -710,10 +710,10 @@
 .project-ctx-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-5);
   width: 100%;
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: var(--space-4) var(--space-7);
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   background: none;
   border: none;
@@ -724,13 +724,13 @@
 
 .project-ctx-item .lucide { width: 15px; height: 15px; flex-shrink: 0; }
 .project-ctx-item:hover { background: rgba(var(--overlay-rgb), 0.06); color: var(--text); }
-.project-ctx-item:first-child { border-radius: 6px 6px 0 0; }
-.project-ctx-item:last-child { border-radius: 0 0 6px 6px; }
+.project-ctx-item:first-child { border-radius: var(--radius-3) var(--radius-3) 0 0; }
+.project-ctx-item:last-child { border-radius: 0 0 var(--radius-3) var(--radius-3); }
 
 .project-ctx-separator {
   height: 1px;
   background: var(--border);
-  margin: 4px 0;
+  margin: var(--space-2) 0;
 }
 
 .project-ctx-item.project-ctx-delete { color: var(--error); }
@@ -748,43 +748,43 @@
   align-items: center;
   justify-content: space-between;
   /* Right side leaves room for the shared close control (css/overlay.css). */
-  padding: 12px calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) 8px 14px;
+  padding: var(--space-6) calc(var(--overlay-close-size) + 2 * var(--overlay-close-inset)) var(--space-4) var(--space-7);
   border-bottom: 1px solid var(--border);
 }
 .project-access-title {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--text);
 }
 .project-access-section {
-  padding: 10px 14px;
+  padding: var(--space-5) var(--space-7);
 }
 .project-access-label {
   display: block;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 .project-access-vis-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .project-access-vis-btn {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 7px 0;
-  font-size: 12px;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  font-size: var(--font-size-sm);
   font-family: inherit;
   color: var(--text-secondary);
   background: rgba(var(--overlay-rgb), 0.04);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -803,9 +803,9 @@
 .project-access-user-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-  font-size: 13px;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  font-size: var(--font-size-md);
   color: var(--text);
   cursor: pointer;
 }
@@ -817,20 +817,20 @@
 }
 .project-access-user-item:hover { color: var(--text); }
 .project-access-empty {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  padding: 8px 0;
+  padding: var(--space-4) 0;
 }
 .project-access-loading {
-  padding: 20px 14px;
+  padding: var(--space-10) var(--space-7);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
 /* --- Emoji picker popover --- */
 .emoji-picker {
-  padding: 10px 10px 6px;
+  padding: var(--space-5) var(--space-5) var(--space-3);
   width: 292px;
   animation: ctxMenuAppear 0.15s ease-out;
   display: flex;
@@ -841,8 +841,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px 6px;
-  font-size: 12px;
+  padding: 0 var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -851,14 +851,14 @@
 }
 
 .emoji-picker-remove {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--error);
   background: none;
   border: none;
   cursor: pointer;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-2);
   font-family: inherit;
   text-transform: none;
   letter-spacing: 0;
@@ -870,7 +870,7 @@
 
 /* Search */
 .emoji-picker-search-wrap {
-  padding: 0 0 6px;
+  padding: 0 0 var(--space-3);
   flex-shrink: 0;
 }
 
@@ -879,11 +879,11 @@
   box-sizing: border-box;
   background: var(--input-bg, var(--bg-secondary));
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
-  padding: 5px 8px;
+  font-size: var(--font-size-md);
+  padding: var(--space-3) var(--space-4);
   outline: none;
   transition: border-color 0.15s;
 }
@@ -897,19 +897,19 @@
 }
 
 .emoji-picker-no-results {
-  padding: 16px 0;
+  padding: var(--space-8) 0;
   text-align: center;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-md);
 }
 
 /* Category tab bar */
 .emoji-picker-tabs {
   display: flex;
-  gap: 1px;
-  padding: 0 0 6px;
+  gap: var(--space-1);
+  padding: 0 0 var(--space-3);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
   flex-shrink: 0;
 }
 
@@ -921,9 +921,9 @@
   height: 30px;
   border: none;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--font-size-xl);
   padding: 0;
   opacity: 0.5;
   transition: opacity 0.15s, background 0.15s;
@@ -963,13 +963,13 @@
 
 .emoji-picker-scroll::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-1);
 }
 
 .emoji-picker-grid {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .emoji-picker-item {
@@ -980,9 +980,9 @@
   justify-content: center;
   border: none;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   cursor: pointer;
-  font-size: 20px;
+  font-size: var(--font-size-3xl);
   transition: background 0.1s, transform 0.1s;
   padding: 0;
 }
@@ -1018,7 +1018,7 @@
   position: absolute;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--bg-alt);
   transition: background 0.2s ease;
   z-index: -1;
@@ -1055,16 +1055,16 @@
   right: 1px;
   min-width: 18px;
   height: 18px;
-  border-radius: 9px;
+  border-radius: var(--radius-5);
   background: var(--danger);
   color: var(--on-error);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 0 5px;
-  line-height: 18px;
+  padding: 0 var(--space-3);
+  line-height: var(--line-height-sm);
   text-align: center;
   box-shadow: 0 0 0 2px var(--bg);
   z-index: 2;
@@ -1102,8 +1102,8 @@
   position: fixed;
   background: var(--sidebar-bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 8px;
+  border-radius: var(--radius-6);
+  padding: var(--space-4);
   width: 300px;
   max-height: 70vh;
   overflow-y: auto;
@@ -1112,19 +1112,19 @@
   animation: ctxMenuAppear 0.15s ease-out;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 
 .dm-user-picker-search {
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   background: var(--bg-alt);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-family: inherit;
   outline: none;
   box-sizing: border-box;
@@ -1172,15 +1172,15 @@
 
 .dm-user-picker-list::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-1);
 }
 
 .dm-user-picker-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-4);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -1198,8 +1198,8 @@
 }
 
 .dm-user-picker-section {
-  padding: 6px 10px 2px;
-  font-size: 10px;
+  padding: var(--space-3) var(--space-5) var(--space-1);
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1207,7 +1207,7 @@
 }
 
 .dm-user-picker-name {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -1216,8 +1216,8 @@
 }
 
 .dm-user-picker-empty {
-  padding: 12px 8px;
-  font-size: 13px;
+  padding: var(--space-6) var(--space-4);
+  font-size: var(--font-size-md);
   color: var(--text-dimmer);
   text-align: center;
 }
@@ -1228,8 +1228,8 @@
   border: none;
   background: none;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-2);
+  border-radius: var(--radius-2);
   display: flex;
   align-items: center;
   opacity: 0.5;
@@ -1338,7 +1338,7 @@
   position: absolute;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   background: var(--bg-alt);
   opacity: 0.7;
   transition: opacity 0.15s, background 0.15s;
@@ -1358,7 +1358,7 @@
 }
 
 .icon-strip-wt-item .wt-branch-abbrev {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: -0.5px;
   pointer-events: none;
@@ -1375,7 +1375,7 @@
 .icon-strip-wt-item.wt-disabled::after {
   content: "\1F6AB";
   position: absolute;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   z-index: 3;
   filter: grayscale(0.3);
 }
@@ -1384,17 +1384,17 @@
 .icon-strip-group-add {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   border: 1.5px dashed var(--border);
   background: transparent;
   color: var(--text-dimmer);
-  font-size: 16px;
+  font-size: var(--font-size-xl);
   font-weight: 400;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 2px 0 4px 0;
+  margin: var(--space-1) 0 var(--space-2) 0;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
@@ -1412,18 +1412,18 @@
 }
 
 .wt-modal-title {
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-8);
 }
 
 .wt-modal-label {
   display: block;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
-  margin: 10px 0 4px 0;
+  margin: var(--space-5) 0 var(--space-2) 0;
 }
 
 .wt-modal-label:first-of-type {
@@ -1432,12 +1432,12 @@
 
 .wt-modal-input {
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg-alt);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-family: inherit;
   outline: none;
   box-sizing: border-box;
@@ -1454,8 +1454,8 @@ select.wt-modal-input {
 
 .wt-modal-error {
   color: var(--error);
-  font-size: 12px;
-  margin-top: 8px;
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-4);
   display: none;
 }
 
@@ -1466,14 +1466,14 @@ select.wt-modal-input {
 .wt-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
 }
 
 .wt-modal-btn {
-  padding: 7px 16px;
-  border-radius: 6px;
-  font-size: 13px;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-md);
   font-weight: 500;
   cursor: pointer;
   border: 1px solid var(--border);
@@ -1509,7 +1509,7 @@ select.wt-modal-input {
 }
 
 .mobile-project-item.wt-item {
-  padding-left: 28px;
+  padding-left: var(--space-14);
   opacity: 0.85;
 }
 
@@ -1519,12 +1519,12 @@ select.wt-modal-input {
 }
 
 .mobile-folder-chevron {
-  font-size: 8px;
+  font-size: var(--font-size-2xs);
   color: var(--text-dimmer);
   margin-left: auto;
   cursor: pointer;
   transition: transform 0.15s ease;
-  padding: 4px;
+  padding: var(--space-2);
 }
 
 .mobile-project-folder.collapsed .mobile-folder-chevron {
@@ -1552,9 +1552,9 @@ select.wt-modal-input {
 .skeleton-icon-strip-item {
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--text-muted);
-  margin: 5px auto;
+  margin: var(--space-3) auto;
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
@@ -1571,7 +1571,7 @@ select.wt-modal-input {
 .icon-strip-item.drag-over-merge {
   transform: scale(1.1);
   box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(var(--accent-rgb), 0.4);
-  border-radius: 14px;
+  border-radius: var(--radius-7);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   z-index: 5;
 }
@@ -1600,7 +1600,7 @@ select.wt-modal-input {
   border-radius: 0;
   -webkit-tap-highlight-color: transparent;
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
 }
 
@@ -1611,7 +1611,7 @@ select.wt-modal-input {
   left: -12px;
   width: 4px;
   background: var(--text);
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--radius-2) var(--radius-2) 0;
   transition: height 0.2s ease, opacity 0.2s ease;
   opacity: 0;
   height: 0;
@@ -1642,7 +1642,7 @@ select.wt-modal-input {
   position: relative;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   background: var(--bg-alt);
   display: flex;
   align-items: center;
@@ -1654,7 +1654,7 @@ select.wt-modal-input {
 
 /* When open (not collapsed): box has slightly rounded corners to signal state */
 .icon-strip-folder:not(.collapsed) .icon-strip-folder-icon-box {
-  border-radius: 8px;
+  border-radius: var(--radius-4);
 }
 
 /* Folder SVG icon (fallback, no emoji set) */
@@ -1667,7 +1667,7 @@ select.wt-modal-input {
 
 /* Emoji fills the box — rendered as plain text at a readable size */
 .icon-strip-folder-emoji-main {
-  font-size: 22px;
+  font-size: var(--font-size-4xl);
   line-height: 1;
   pointer-events: none;
   user-select: none;
@@ -1676,7 +1676,7 @@ select.wt-modal-input {
 /* Folders hover with accent2 (blue) to distinguish from project icons (cyan) */
 .icon-strip-folder-header:hover .icon-strip-folder-icon-box {
   background: var(--accent2);
-  border-radius: 14px;
+  border-radius: var(--radius-7);
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--on-accent2) 25%, transparent);
 }
 
@@ -1686,14 +1686,14 @@ select.wt-modal-input {
 
 .icon-strip-folder-header.active .icon-strip-folder-icon-box {
   background: var(--accent2);
-  border-radius: 14px;
+  border-radius: var(--radius-7);
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--on-accent2) 25%, transparent);
 }
 
 /* Drag-over state: folder header highlights when a project is dragged over it */
 .icon-strip-folder-header.drag-over-folder .icon-strip-folder-icon-box {
   background: var(--accent2);
-  border-radius: 14px;
+  border-radius: var(--radius-7);
   box-shadow: 0 0 0 2px var(--accent2), 0 0 12px color-mix(in srgb, var(--accent2) 40%, transparent);
 }
 
@@ -1706,7 +1706,7 @@ select.wt-modal-input {
   transform: translateX(-50%);
   width: 32px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-1);
   background: var(--accent);
   z-index: 10;
 }
@@ -1719,7 +1719,7 @@ select.wt-modal-input {
   transform: translateX(-50%);
   width: 32px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-1);
   background: var(--accent);
   z-index: 10;
 }
@@ -1731,7 +1731,7 @@ select.wt-modal-input {
 
 /* Folder label — shown below icon box, truncated */
 .icon-strip-folder-label {
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-dimmer);
   max-width: 44px;
@@ -1740,10 +1740,10 @@ select.wt-modal-input {
   white-space: nowrap;
   text-align: center;
   line-height: 1.2;
-  margin-top: 2px;
+  margin-top: var(--space-1);
   cursor: inherit;
-  border-radius: 3px;
-  padding: 0 2px;
+  border-radius: var(--radius-2);
+  padding: 0 var(--space-1);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -1752,7 +1752,7 @@ select.wt-modal-input {
   outline: 1px solid var(--accent);
   background: var(--bg-alt);
   color: var(--text);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   cursor: text;
 }
 
@@ -1822,7 +1822,7 @@ select.wt-modal-input {
   transform: translateY(-50%);
   width: 3px;
   height: 20px;
-  border-radius: 2px;
+  border-radius: var(--radius-1);
   background: var(--accent);
   opacity: 0;
   transition: opacity 0.15s;
@@ -1843,7 +1843,7 @@ select.wt-modal-input {
   transform: translateX(-50%);
   width: 32px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-1);
   opacity: 1;
   z-index: 10;
 }
@@ -1854,7 +1854,7 @@ select.wt-modal-input {
   transform: translateX(-50%);
   width: 32px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-1);
   opacity: 1;
   z-index: 10;
 }
