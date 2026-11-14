@@ -25,7 +25,7 @@
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(var(--overlay-rgb),0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(var(--overlay-rgb),0.15); border-radius: var(--radius-2); }
 ::-webkit-scrollbar-thumb:hover { background: rgba(var(--overlay-rgb),0.25); }
 
 /* --- Global Twemoji baseline --- */
@@ -33,7 +33,7 @@ img.emoji {
   height: 1.2em;
   width: 1.2em;
   vertical-align: -0.2em;
-  margin: 0 1px;
+  margin: 0 var(--space-1);
   display: inline;
   pointer-events: none;
 }
@@ -125,6 +125,64 @@ img.emoji {
      competes with message content (at most 10). It is outside the global order. */
   --z-cursor: 90;
 
+  /* Type, spacing and radius scales. Like the colours they are declared here once
+     and are the same in Clagentic Dark and Clagentic Light; a component stylesheet
+     names a step and never writes a pixel value for font-size, line-height,
+     margin, padding, gap or border-radius (test/pixel-literal-guard.test.js).
+     A value between two steps takes the nearer one, a tie the larger. */
+
+  /* Type scale, by size. */
+  --font-size-2xs: 10px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 15px;
+  --font-size-xl: 16px;
+  --font-size-2xl: 18px;
+  --font-size-3xl: 20px;
+  --font-size-4xl: 22px;
+  --font-size-5xl: 24px;
+  --font-size-6xl: 28px;
+
+  /* Line heights in pixels, for a line that must fit a fixed-height box. A line
+     height that scales with its text is a unitless ratio and is not a pixel literal. */
+  --line-height-xs: 16px;
+  --line-height-sm: 18px;
+  --line-height-md: 20px;
+
+  /* Spacing scale for margin, padding and gap: --space-N is N x 2px, in steps of
+     one up to 12 (24px), then 14 (28px), 16 (32px) and 20 (40px). */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 18px;
+  --space-10: 20px;
+  --space-11: 22px;
+  --space-12: 24px;
+  --space-14: 28px;
+  --space-16: 32px;
+  --space-20: 40px;
+
+  /* Radius scale: --radius-N is N x 2px, up to 10 (20px). A circle is 50% and a
+     pill is --radius-pill; neither is a size. */
+  --radius-1: 2px;
+  --radius-2: 4px;
+  --radius-3: 6px;
+  --radius-4: 8px;
+  --radius-5: 10px;
+  --radius-6: 12px;
+  --radius-7: 14px;
+  --radius-8: 16px;
+  --radius-9: 18px;
+  --radius-10: 20px;
+  --radius-pill: 999px;
+
   /* Toast and banner stack (css/overlay.css). One column, top-right on a wide
      viewport and full width on a phone; the card chrome shared by every toast
      and banner reads these. */
@@ -187,7 +245,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: "DM Sans", "Twemoji", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   line-height: 1.6;
   overflow: hidden;
   overscroll-behavior: none;
@@ -247,7 +305,7 @@ html, body {
   overflow: hidden;
   position: relative;
   background: var(--bg);
-  border-top-left-radius: 8px;
+  border-top-left-radius: var(--radius-4);
   border-top: 1px solid var(--border-subtle);
   border-left: 1px solid var(--border-subtle);
 }
@@ -278,16 +336,16 @@ html, body {
 .sw-update-banner-text {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
 }
 .sw-update-banner-btn {
   background: var(--accent);
   color: var(--on-accent);
   border: none;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
+  border-radius: var(--radius-3);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   cursor: pointer;
 }

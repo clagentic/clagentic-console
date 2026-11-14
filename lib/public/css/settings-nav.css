@@ -16,9 +16,9 @@
   .settings-back-bar {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
     min-height: 44px;
-    padding-right: 16px;
+    padding-right: var(--space-8);
     background: var(--sidebar-bg);
     border-bottom: 1px solid var(--border-subtle);
   }
@@ -55,7 +55,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 16px;
+    font-size: var(--font-size-xl);
     font-weight: 600;
     color: var(--text);
   }
@@ -126,14 +126,14 @@
   .settings-hub-body {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding-bottom: calc(var(--safe-bottom) + 16px);
+    padding-bottom: calc(var(--safe-bottom) + var(--space-8));
     -webkit-overflow-scrolling: touch;
   }
 
   .settings-nav-area-title {
     margin: 0;
-    padding: 20px 16px 6px;
-    font-size: 12px;
+    padding: var(--space-10) var(--space-8) var(--space-3);
+    font-size: var(--font-size-sm);
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -141,7 +141,7 @@
   }
 
   .settings-nav-area-subtitle {
-    margin-left: 8px;
+    margin-left: var(--space-4);
     font-weight: 500;
     letter-spacing: 0;
     text-transform: none;
@@ -150,8 +150,8 @@
 
   .settings-nav-group-title {
     margin: 0;
-    padding: 10px 16px 4px;
-    font-size: 11px;
+    padding: var(--space-5) var(--space-8) var(--space-2);
+    font-size: var(--font-size-xs);
     font-weight: 600;
     color: var(--text-dimmer);
   }
@@ -159,16 +159,16 @@
   .settings-nav-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-6);
     width: 100%;
     min-height: 44px;
-    padding: 0 16px;
+    padding: 0 var(--space-8);
     background: none;
     border: none;
     border-bottom: 1px solid var(--border-subtle);
     color: var(--text);
     font-family: inherit;
-    font-size: 15px;
+    font-size: var(--font-size-lg);
     text-align: left;
     cursor: pointer;
     touch-action: manipulation;

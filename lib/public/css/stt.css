@@ -18,7 +18,7 @@
   touch-action: manipulation;
   position: relative;
   overflow: hidden;
-  gap: 6px;
+  gap: var(--space-3);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -29,8 +29,8 @@
 /* Recording active — pill shape */
 #stt-btn.stt-active {
   width: auto;
-  padding: 0 14px 0 10px;
-  border-radius: 18px;
+  padding: 0 var(--space-7) 0 var(--space-5);
+  border-radius: var(--radius-9);
   color: var(--on-error);
   background: var(--error);
 }
@@ -43,14 +43,14 @@
 .stt-wave {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
   height: 18px;
   flex-shrink: 0;
 }
 
 .stt-wave-bar {
   width: 3px;
-  border-radius: 1.5px;
+  border-radius: var(--radius-1);
   background: color-mix(in srgb, var(--on-error) 85%, transparent);
   animation: stt-wave-bounce 1.2s ease-in-out infinite;
 }
@@ -68,7 +68,7 @@
 
 /* Stop label */
 .stt-stop-label {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -97,8 +97,8 @@
 }
 
 .stt-lang-title {
-  padding: 12px 16px 8px;
-  font-size: 11px;
+  padding: var(--space-6) var(--space-8) var(--space-4);
+  font-size: var(--font-size-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -110,16 +110,16 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 10px 16px;
+  padding: var(--space-5) var(--space-8);
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-family: inherit;
   cursor: pointer;
   text-align: left;
   transition: background 0.12s;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .stt-lang-option:hover {
@@ -136,12 +136,12 @@
 }
 
 .stt-lang-hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
   flex-shrink: 0;
 }
 
 .stt-lang-option:last-child {
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 var(--radius-7) var(--radius-7);
 }
 

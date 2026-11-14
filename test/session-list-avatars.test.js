@@ -75,9 +75,10 @@ test("a named agent's avatar is 20 px, round, and named by the agent for assisti
   assert.match(rule, /width: 20px;/);
   assert.match(rule, /height: 20px;/);
   assert.match(rule, /border-radius: 50%;/);
-  assert.match(rule, /margin-right: 8px;/, "8 px gap");
+  // The stylesheet names the scale steps; --space-4 is 8px and --font-size-sm is 12px (css/base.css).
+  assert.match(rule, /margin-right: var\(--space-4\);/, "8 px gap");
   var initial = css.slice(css.indexOf(".agent-avatar-initial {"));
-  assert.match(initial, /font-size: 12px;/);
+  assert.match(initial, /font-size: var\(--font-size-sm\);/);
   assert.match(initial, /font-weight: 700;/);
   assert.match(initial, /color: var\(--on-av\);/);
   for (var t = 0; t < 4; t++) assert.match(css, new RegExp("\\.agent-avatar-tint-" + t + " \\{ background: var\\(--av" + t + "\\); \\}"));
