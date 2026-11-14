@@ -20,6 +20,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { createTreeHasher } = require('../lib/build-identity');
 const { BUILD_SOURCE_ENV } = require('../lib/build-changes');
+const { installGlobalAtomically } = require('../lib/atomic-install');
 
 // Extracts the packed tarball filename from `npm pack --json`'s raw stdout.
 // Exported (not just used internally) so tests can exercise the parsing
@@ -127,10 +128,19 @@ function shouldSkipInstall(read) {
   }
 }
 
-function main() {
-  if (!process.argv.includes('--force') && shouldSkipInstall()) {
+// `deps` is injectable for tests: { argv, shouldSkip, install }. `install` swaps
+// the packed build in through the shared staging-and-swap helper, so the
+// clagentic-console command stays on PATH for the whole install.
+async function main(deps) {
+  const d = Object.assign({
+    argv: process.argv,
+    shouldSkip: shouldSkipInstall,
+    install: (tarballPath) => installGlobalAtomically({ spec: path.resolve(tarballPath), inherit: true }),
+  }, deps);
+
+  if (!d.argv.includes('--force') && d.shouldSkip()) {
     console.log('[install-local-test] ok: this build is already installed with identical files; nothing to do (--force reinstalls)');
-    return;
+    return 'skipped';
   }
 
   const sourceRepo = resolveLastingCheckout(path.join(__dirname, '..'));
@@ -149,7 +159,7 @@ function main() {
   console.log(`[install-local-test] packed ${tarball}`);
 
   try {
-    execFileSync('npm', ['install', '-g', tarball], { stdio: 'inherit' });
+    await d.install(tarball);
   } finally {
     try {
       execFileSync('rm', ['-f', tarball]);
@@ -159,10 +169,14 @@ function main() {
   }
 
   console.log('[install-local-test] ok: installed');
+  return 'installed';
 }
 
-module.exports = { extractTarballFilename, installedMatchesTree, shouldSkipInstall, resolveLastingCheckout };
+module.exports = { extractTarballFilename, installedMatchesTree, shouldSkipInstall, resolveLastingCheckout, main };
 
 if (require.main === module) {
-  main();
+  main().catch((err) => {
+    console.error(`[install-local-test] ERROR: ${err.message}`);
+    process.exit(1);
+  });
 }
