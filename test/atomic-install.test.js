@@ -145,11 +145,39 @@ test("the package's postinstall runs at the final location and a failure restore
   } finally { cleanup(prefix); }
 });
 
+test("a failure inside the postinstall undo swap keeps the previous build on disk and the bin runnable", async function () {
+  var prefix = makeLive("old");
+  try {
+    var scripts = { scripts: { postinstall: "node scripts/postinstall.js" } };
+    var failing = Object.assign({}, fs, {
+      // Fails the undo swap's move of the failed new build out of the way.
+      renameSync: function (from, to) {
+        if (String(to).indexOf(".retired-") !== -1 && String(to).endsWith("-undo")) throw new Error("injected rename failure");
+        return fs.renameSync(from, to);
+      },
+    });
+    await assert.rejects(installGlobalAtomically({
+      spec: "x", prefix: prefix, fs: failing, runNpm: fakeNpm("new", scripts),
+      runScript: async function () { throw new Error("script exited with status 1"); },
+    }), /restoring the previous build failed/);
+    assert.ok(runningBuild(prefix).length > 0, "the bin resolves to a runnable entry");
+    var scopeDir = path.join(prefix, "lib", "node_modules", "@clagentic");
+    var survivors = fs.readdirSync(scopeDir).filter(function (n) {
+      return fs.existsSync(path.join(scopeDir, n, "bin", "cli.js")) && fs.readFileSync(path.join(scopeDir, n, "bin", "cli.js"), "utf8") === "old";
+    });
+    assert.equal(survivors.length, 1, "the previous build is still on disk");
+  } finally { cleanup(prefix); }
+});
+
 test("install:local-test: a build already installed with identical files still skips the install", async function () {
   var installs = 0;
   var outcome = await installLocalTest.main({
     argv: ["node", "install-local-test.js"],
-    shouldSkip: function () { return true; },
+    shouldSkip: function () {
+      return installLocalTest.shouldSkipInstall(function () {
+        return { headSha: "abc", installedSha: "abc", repoHash: "h1", installedHash: "h1" };
+      });
+    },
     install: async function () { installs++; },
   });
   assert.equal(outcome, "skipped");
