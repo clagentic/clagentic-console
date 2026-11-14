@@ -13,10 +13,9 @@
 // guard fails on a row whose file no longer holds a literal, so the list only
 // shrinks.
 
-var BATCH_B4 = "lr-b182d8";
 var BATCH_B5 = "lr-d3e1ea";
 
-var BATCHES = [BATCH_B4, BATCH_B5];
+var BATCHES = [BATCH_B5];
 
 function unswept(batch, files) {
   return files.map(function (name) {
@@ -69,8 +68,62 @@ var ALLOWLIST = [
     keys: ["64px"],
     reason: "The strip's 64px bottom padding clears the user island that sits over it, past the largest spacing step (40px); rounding would move it 24px.",
   },
+  {
+    file: "lib/public/css/sidebar.css",
+    keys: ["58px"],
+    reason: "The sidebar column's 58px bottom padding is a clearance at the foot of the column, past the largest spacing step (40px); rounding would move it 18px.",
+  },
+  {
+    file: "lib/public/css/sidebar.css",
+    keys: ["54px"],
+    reason: "A session row's 54px right padding (the row with a presence marker) is a clearance at its trailing edge, past the largest spacing step (40px); rounding would move it 14px.",
+  },
+  {
+    file: "lib/public/css/sidebar.css",
+    keys: ["36px"],
+    reason: "A loop group's 36px right padding is a clearance at its trailing edge and sits between the 32px and 40px spacing steps; rounding would move it 4px.",
+  },
+  {
+    file: "lib/public/css/sidebar.css",
+    keys: ["margin-left: -1px"],
+    reason: "The resize handle's -1px margin is half of its 2px indicator line, which centres the line on the handle edge; it is sized to the line width, not a spacing step, and rounding to 2px would push the line a full 1px off centre.",
+  },
+  {
+    file: "lib/public/css/server-settings.css",
+    keys: ["60px"],
+    reason: "The nav's and content's 60px top and bottom clearance beside the safe-area inset is past the largest spacing step (40px); rounding would move it 20px.",
+  },
+  {
+    file: "lib/public/css/server-settings.css",
+    keys: ["56px"],
+    reason: "The settings palette's 56px top padding clears the shared close control above it, past the largest spacing step (40px); rounding would move it 16px.",
+  },
+  {
+    file: "lib/public/css/server-settings.css",
+    keys: ["48px"],
+    reason: "The mobile nav header's 48px right padding clears the 36px close button, past the largest spacing step (40px); rounding would move it 8px.",
+  },
+  {
+    file: "lib/public/css/server-settings.css",
+    keys: ["var(--space-5) 36px"],
+    reason: "A card's 36px right padding is a clearance at its trailing edge and sits between the 32px and 40px spacing steps; rounding would move it 4px.",
+  },
+  {
+    file: "lib/public/css/server-settings.css",
+    keys: ["line-height: 36px"],
+    reason: "The mobile nav header's 36px line height matches the 36px close button height so the title centres on it, past the largest line-height step (20px); rounding would move it 16px.",
+  },
+  {
+    file: "lib/public/css/scheduler.css",
+    keys: ["48px"],
+    reason: "The empty state's 48px top and bottom padding is past the largest spacing step (40px); rounding would move it 8px.",
+  },
+  {
+    file: "lib/public/css/scheduler.css",
+    keys: ["font-size: 40px"],
+    reason: "The empty state's 40px icon size is past the largest type step (28px); rounding would move it 12px.",
+  },
 ]
-  .concat(unswept(BATCH_B4, ["mobile-nav", "sidebar", "server-settings", "scheduler"]))
   .concat(unswept(BATCH_B5, ["scheduler-modal", "loop", "overlays", "messages", "filebrowser"]));
 
 // Whether the declaration `decl` in the file `file` (a path relative to the

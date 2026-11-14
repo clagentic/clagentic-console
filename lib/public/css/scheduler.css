@@ -19,16 +19,16 @@
   display: flex;
   align-items: center;
   height: 48px;
-  padding: 0 16px;
+  padding: 0 var(--space-8);
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
 }
 .scheduler-top-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   color: var(--text);
   flex: 1;
 }
@@ -43,13 +43,13 @@
 .scheduler-scope-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   cursor: pointer;
-  margin-right: 8px;
+  margin-right: var(--space-4);
   user-select: none;
 }
 .scheduler-scope-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   transition: color 0.15s;
 }
@@ -69,7 +69,7 @@
   position: relative;
   width: 32px;
   height: 18px;
-  border-radius: 9px;
+  border-radius: var(--radius-5);
   background: var(--border);
   transition: background 0.2s;
   flex-shrink: 0;
@@ -97,8 +97,8 @@
   flex: 1;
   display: flex;
   flex-direction: row;
-  gap: 10px;
-  padding: 12px 10px 10px;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5) var(--space-5);
   min-height: 0;
   overflow: hidden;
 }
@@ -112,45 +112,45 @@
   display: flex;
   flex-direction: column;
   background: var(--sidebar-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   overflow: hidden;
 }
 .scheduler-sidebar-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 16px;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-8);
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
 .scheduler-sidebar-title {
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   color: var(--text);
   flex: 1;
 }
 .scheduler-sidebar-count {
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
-  padding: 1px 7px;
-  border-radius: 10px;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-5);
   min-width: 18px;
   text-align: center;
 }
 .scheduler-ralph-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   height: 24px;
-  padding: 0 8px;
+  padding: 0 var(--space-4);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: transparent;
   color: var(--text-dimmer);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   font-family: inherit;
   white-space: nowrap;
@@ -166,14 +166,14 @@
 .scheduler-sidebar-list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 8px;
+  padding: var(--space-3) var(--space-4);
 }
 .scheduler-task-item {
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-4);
   cursor: pointer;
   transition: background 0.12s;
-  margin-bottom: 2px;
+  margin-bottom: var(--space-1);
   border-left: 3px solid transparent;
 }
 .scheduler-task-item:hover { background: rgba(var(--overlay-rgb), 0.04); }
@@ -181,13 +181,13 @@
 .scheduler-task-name-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 3px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
   min-width: 0;
 }
 .scheduler-task-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -203,7 +203,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0 var(--space-1);
   opacity: 0;
   transition: opacity 0.15s;
   color: var(--text-secondary);
@@ -226,8 +226,8 @@
   color: var(--text-muted, var(--text-secondary));
   cursor: grab;
   flex-shrink: 0;
-  margin-left: -4px;
-  margin-right: 2px;
+  margin-left: calc(-1 * var(--space-2));
+  margin-right: var(--space-1);
 }
 .scheduler-task-drag-handle .lucide {
   width: 14px;
@@ -240,11 +240,11 @@
 .scheduler-drag-hint {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: var(--space-3);
+  font-size: var(--font-size-xs);
   color: var(--text-muted, var(--text-secondary));
   opacity: 0.5;
-  padding: 8px 12px 4px;
+  padding: var(--space-4) var(--space-6) var(--space-2);
 }
 .scheduler-drag-hint .lucide {
   width: 12px;
@@ -288,12 +288,12 @@
 
 .scheduler-task-name-input {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--accent);
-  border-radius: 4px;
-  padding: 1px 4px;
+  border-radius: var(--radius-2);
+  padding: var(--space-1) var(--space-2);
   width: 100%;
   outline: none;
   flex: 1;
@@ -302,20 +302,20 @@
 .scheduler-task-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .scheduler-task-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-2);
 }
 .scheduler-task-badge.scheduled { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 .scheduler-task-badge.paused { background: rgba(var(--overlay-rgb), 0.06); color: var(--text-muted); }
 .scheduler-task-badge.oneoff { background: rgba(var(--overlay-rgb), 0.06); color: var(--text-secondary); }
 .scheduler-task-badge.crafting { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); animation: sched-pulse 1.5s ease-in-out infinite; }
-.scheduler-task-badge.ralph { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-size: 9px; }
-.scheduler-task-badge.project { background: rgba(var(--overlay-rgb), 0.08); color: var(--text-secondary); font-size: 9px; }
+.scheduler-task-badge.ralph { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-size: var(--font-size-2xs); }
+.scheduler-task-badge.project { background: rgba(var(--overlay-rgb), 0.08); color: var(--text-secondary); font-size: var(--font-size-2xs); }
 /* Foreign tasks (from other projects) — dimmed, no drag */
 .scheduler-task-item.foreign { opacity: 0.7; }
 .scheduler-task-item.foreign:hover { opacity: 0.85; }
@@ -329,35 +329,35 @@
 
 /* --- Inline add task row (top of sidebar) --- */
 .scheduler-add-row {
-  padding: 8px 10px;
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
 .scheduler-add-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 8px;
-  border-radius: 8px;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4);
+  border-radius: var(--radius-4);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 .scheduler-add-trigger .lucide { width: 16px; height: 16px; }
 .scheduler-add-trigger:hover { background: rgba(var(--overlay-rgb), 0.05); color: var(--text); }
 .scheduler-add-trigger.hidden { display: none; }
-.scheduler-add-form { display: flex; flex-direction: column; gap: 6px; }
+.scheduler-add-form { display: flex; flex-direction: column; gap: var(--space-3); }
 .scheduler-add-form.hidden { display: none; }
 .scheduler-add-form textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   background: var(--bg);
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   resize: none;
   outline: none;
   transition: border-color 0.12s;
@@ -366,17 +366,17 @@
 .sched-create-run-mode {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 .sched-run-mode-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  font-size: 11px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--font-size-xs);
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-secondary);
@@ -394,14 +394,14 @@
 .sched-create-iter-label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
 }
 .sched-create-iter-label.hidden { display: none; }
 .sched-create-iter-input {
   width: 44px;
-  padding: 4px 6px;
-  font-size: 12px;
-  border-radius: 4px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-2);
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -409,22 +409,22 @@
 }
 .sched-create-iter-input:focus { border-color: var(--accent); outline: none; }
 .sched-create-iter-hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   white-space: nowrap;
 }
 .scheduler-add-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
   justify-content: flex-end;
 }
 .scheduler-add-submit {
-  padding: 4px 14px;
-  border-radius: 6px;
+  padding: var(--space-2) var(--space-7);
+  border-radius: var(--radius-3);
   border: none;
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -432,12 +432,12 @@
 }
 .scheduler-add-submit:hover { opacity: 0.85; }
 .scheduler-add-cancel {
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-3);
   border: 1px solid var(--border);
   background: none;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -455,7 +455,7 @@
   position: relative;
   overflow: hidden;
   background: var(--bg);
-  border-radius: 12px;
+  border-radius: var(--radius-6);
   border: 1px solid var(--border-subtle, var(--border));
 }
 .scheduler-content-calendar,
@@ -476,8 +476,8 @@
 .scheduler-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-12);
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
@@ -485,7 +485,7 @@
 .scheduler-nav {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .scheduler-nav-btn {
@@ -493,9 +493,9 @@
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 16px;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-xl);
   line-height: 1;
   display: flex;
   align-items: center;
@@ -508,7 +508,7 @@
 
 .scheduler-month-label {
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--font-size-lg);
   color: var(--text);
   min-width: 140px;
   text-align: center;
@@ -520,9 +520,9 @@
   border: 1px solid var(--border);
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 3px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-sm);
   font-weight: 600;
 }
 
@@ -535,7 +535,7 @@
   display: flex;
   margin-left: auto;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   overflow: hidden;
 }
 
@@ -544,8 +544,8 @@
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px 12px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--font-size-sm);
   font-weight: 600;
 }
 
@@ -566,7 +566,7 @@
   width: 30px;
   height: 30px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: none;
   color: var(--text-muted);
   cursor: pointer;
@@ -605,8 +605,8 @@
 
 .scheduler-weekday {
   text-align: center;
-  padding: 6px 0;
-  font-size: 11px;
+  padding: var(--space-3) 0;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -625,8 +625,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 6px;
-  font-size: 10px;
+  padding-top: var(--space-3);
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-muted);
   opacity: 0.5;
@@ -636,7 +636,7 @@
 .scheduler-cell {
   border-right: 1px solid var(--border-subtle, var(--border));
   border-bottom: 1px solid var(--border-subtle, var(--border));
-  padding: 4px;
+  padding: var(--space-2);
   cursor: default;
   position: relative;
   overflow: hidden;
@@ -669,11 +669,11 @@
 }
 
 .scheduler-day-num {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 2px;
-  padding: 0 2px;
+  margin-bottom: var(--space-1);
+  padding: 0 var(--space-1);
 }
 
 .scheduler-cell.today .scheduler-day-num {
@@ -686,10 +686,10 @@
    ============================ */
 .scheduler-event {
   display: block;
-  padding: 2px 6px;
-  margin-bottom: 2px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius-2);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -728,7 +728,7 @@
 .scheduler-event-time {
   font-weight: 400;
   opacity: 0.85;
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
 }
 
 /* ============================
@@ -762,7 +762,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   color: var(--text-dimmer);
   text-transform: uppercase;
@@ -771,8 +771,8 @@
 
 .scheduler-week-header-cell {
   text-align: center;
-  padding: 8px 0;
-  font-size: 13px;
+  padding: var(--space-4) 0;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
   border-left: 1px solid var(--border-subtle, var(--border));
 }
@@ -804,7 +804,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: var(--font-size-md);
 }
 
 .scheduler-week-time-col {
@@ -816,8 +816,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
-  padding: 0 6px;
-  font-size: 10px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-2xs);
   color: var(--text-muted);
   font-weight: 600;
   transform: translateY(-6px);
@@ -854,9 +854,9 @@
   position: absolute;
   left: 0;
   width: 84%;
-  padding: 3px 6px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-2);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   cursor: pointer;
   overflow: hidden;
@@ -881,15 +881,15 @@
 .scheduler-week-event-title {
   display: block;
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .scheduler-week-event-time {
   display: block;
   font-weight: 400;
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   opacity: 0.75;
-  margin-top: 1px;
+  margin-top: var(--space-1);
 }
 
 /* --- Current time indicator --- */
@@ -910,8 +910,8 @@
   top: -8px;
   width: 48px;
   text-align: right;
-  padding-right: 6px;
-  font-size: 10px;
+  padding-right: var(--space-3);
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   color: var(--accent);
   box-sizing: border-box;
@@ -949,9 +949,9 @@
   position: absolute;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
+  border-radius: var(--radius-3);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text);
   pointer-events: none;
@@ -981,18 +981,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 0;
+  padding: var(--space-3) 0;
   border-left: 1px solid var(--border-subtle, var(--border));
 }
 
 .scheduler-week-task-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--text-muted);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 8px;
+  border-radius: var(--radius-2);
+  padding: var(--space-1) var(--space-4);
 }
 
 /* ============================
@@ -1001,29 +1001,29 @@
 .scheduler-detail-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 24px;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-12);
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
 .scheduler-detail-name {
   font-weight: 700;
-  font-size: 16px;
+  font-size: var(--font-size-xl);
   color: var(--text);
   flex: 1;
 }
 .scheduler-detail-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .scheduler-detail-btn {
   background: var(--bg-alt);
   border: 1px solid var(--border);
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   font-family: inherit;
   transition: background 0.12s, color 0.12s;
@@ -1040,7 +1040,7 @@
   width: 30px;
   height: 30px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: none;
   color: var(--text-muted);
   cursor: pointer;
@@ -1052,20 +1052,20 @@
 /* --- Session bar (between header and tabs) --- */
 .scheduler-detail-session-bar {
   display: flex;
-  padding: 8px 24px;
+  padding: var(--space-4) var(--space-12);
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
 .scheduler-session-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 8px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-7);
+  border-radius: var(--radius-4);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -1080,17 +1080,17 @@
 .scheduler-detail-tabs {
   display: flex;
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
-  padding: 0 24px;
+  padding: 0 var(--space-12);
   flex-shrink: 0;
 }
 .scheduler-detail-tab {
-  padding: 10px 16px;
+  padding: var(--space-5) var(--space-8);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   font-family: inherit;
   transition: color 0.12s, border-color 0.12s;
@@ -1101,7 +1101,7 @@
 .scheduler-detail-body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: var(--space-10) var(--space-12);
 }
 
 .scheduler-detail-body:has(.scheduler-file-editor) {
@@ -1110,13 +1110,13 @@
   overflow: hidden;
 }
 .scheduler-detail-loading {
-  padding: 32px;
+  padding: var(--space-16);
   text-align: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-md);
 }
 .scheduler-detail-body .md-content {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 1.6;
   color: var(--text);
 }
@@ -1124,8 +1124,8 @@
 .scheduler-file-toolbar {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }
 
 .scheduler-file-edit-btn,
@@ -1133,10 +1133,10 @@
 .scheduler-file-cancel-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 6px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-3);
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -1171,14 +1171,14 @@
   width: 100%;
   flex: 1;
   min-height: 0;
-  padding: 12px;
+  padding: var(--space-6);
   font-family: "SF Mono", "Fira Code", "Consolas", monospace;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 1.6;
   color: var(--text);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   resize: none;
   outline: none;
 }
@@ -1193,19 +1193,19 @@
 }
 
 .scheduler-model-settings .settings-card {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-8);
 }
 .scheduler-detail-meta {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 8px 16px;
-  font-size: 13px;
-  padding: 16px 0;
+  gap: var(--space-4) var(--space-8);
+  font-size: var(--font-size-md);
+  padding: var(--space-8) 0;
 }
 .scheduler-detail-meta-label {
   color: var(--text-muted);
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -1220,17 +1220,17 @@
 .scheduler-crafting-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-8);
   border-bottom: 1px solid rgba(var(--overlay-rgb), 0.06);
   flex-shrink: 0;
 }
 .scheduler-crafting-label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   flex: 1;
 }
@@ -1238,14 +1238,14 @@
 .scheduler-crafting-back {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   font-family: inherit;
   transition: background 0.12s, color 0.12s;
@@ -1264,7 +1264,7 @@
    Popover
    ============================ */
 .schedule-popover {
-  padding: 12px 14px;
+  padding: var(--space-6) var(--space-7);
   min-width: 220px;
   max-width: 300px;
 }
@@ -1272,15 +1272,15 @@
 
 .schedule-popover-name {
   font-weight: 700;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 
 .schedule-popover-meta {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 
 .schedule-popover-meta strong {
@@ -1288,11 +1288,11 @@
 }
 
 .schedule-popover-result {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-size: var(--font-size-xs);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-2);
   display: inline-block;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-4);
   font-weight: 600;
 }
 
@@ -1308,9 +1308,9 @@
 
 .schedule-popover-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
 
@@ -1319,9 +1319,9 @@
   border: 1px solid var(--border);
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 11px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-xs);
   font-weight: 600;
 }
 
@@ -1352,25 +1352,25 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 24px;
+  padding: 48px var(--space-12);
   color: var(--text-muted);
   text-align: center;
 }
 
 .scheduler-empty-icon {
   font-size: 40px;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-6);
   opacity: 0.5;
 }
 
 .scheduler-empty-text {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 
 .scheduler-empty-hint {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   opacity: 0.7;
 }
 
@@ -1382,7 +1382,7 @@
 }
 
 @media (max-width: 600px) {
-  .scheduler-body-row { flex-direction: column; padding: 0 6px 6px; gap: 6px; }
+  .scheduler-body-row { flex-direction: column; padding: 0 var(--space-3) var(--space-3); gap: var(--space-3); }
   .scheduler-sidebar {
     width: 100%;
     max-height: 35vh;
@@ -1390,25 +1390,25 @@
 
   .scheduler-header {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   .scheduler-month-label {
     min-width: 100px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
   }
 
   .scheduler-cell {
     min-height: 60px;
-    padding: 2px;
+    padding: var(--space-1);
   }
 
   .scheduler-day-num {
-    font-size: 10px;
+    font-size: var(--font-size-2xs);
   }
 
   .scheduler-event {
-    font-size: 10px;
-    padding: 1px 4px;
+    font-size: var(--font-size-2xs);
+    padding: var(--space-1) var(--space-2);
   }
 }

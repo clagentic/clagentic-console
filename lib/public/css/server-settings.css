@@ -69,18 +69,18 @@
 .server-settings-nav-inner {
   width: 200px;
   flex-shrink: 0;
-  padding: calc(var(--safe-top) + 60px) 6px 40px 0;
+  padding: calc(var(--safe-top) + 60px) var(--space-3) var(--space-20) 0;
 }
 
 /* --- Nav header --- */
 .server-settings-nav-header {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--text-muted);
   letter-spacing: 0.02em;
-  padding: 0 10px 10px;
+  padding: 0 var(--space-5) var(--space-5);
   border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -95,17 +95,17 @@
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-4) var(--space-5);
   border: none;
   background: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   transition: background 0.15s, color 0.15s;
   text-align: left;
 }
@@ -121,18 +121,18 @@
 }
 
 .settings-nav-category {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--text-dimmer);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 8px 10px 4px;
+  padding: var(--space-4) var(--space-5) var(--space-2);
 }
 
 .settings-nav-separator {
   height: 1px;
   background: var(--border-subtle);
-  margin: 6px 10px;
+  margin: var(--space-3) var(--space-5);
 }
 
 /* ==========  CONTENT  ========== */
@@ -146,7 +146,7 @@
 }
 
 .server-settings-content-inner {
-  padding: calc(var(--safe-top) + 60px) 40px calc(var(--safe-bottom) + 60px) 40px;
+  padding: calc(var(--safe-top) + 60px) var(--space-20) calc(var(--safe-bottom) + 60px) var(--space-20);
 }
 
 /* ==========  CLOSE BUTTON (project settings' own; server settings uses the shared one)  ========== */
@@ -173,7 +173,7 @@
 }
 
 .server-settings-close-btn span {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   letter-spacing: 0.5px;
   position: absolute;
@@ -196,35 +196,35 @@
 }
 
 .server-settings-section h2 {
-  font-size: 20px;
+  font-size: var(--font-size-3xl);
   font-weight: 700;
   color: var(--text);
-  margin-bottom: 20px;
+  margin-bottom: var(--space-10);
 }
 
 .server-settings-section h3 {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin: 28px 0 12px;
+  margin: var(--space-14) 0 var(--space-6);
 }
 
 /* ==========  SETTINGS CARDS  ========== */
 .settings-card {
   background: var(--bg-alt);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 4px 0;
-  margin-bottom: 16px;
+  border-radius: var(--radius-6);
+  padding: var(--space-2) 0;
+  margin-bottom: var(--space-8);
 }
 .settings-card:has(.layout-switcher) {
-  padding: 14px 16px;
+  padding: var(--space-7) var(--space-8);
 }
 
 .settings-field {
-  padding: 12px 16px;
+  padding: var(--space-6) var(--space-8);
 }
 
 .settings-field + .settings-field {
@@ -232,22 +232,22 @@
 }
 
 .settings-label {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--text-secondary);
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 
 .settings-value {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
   word-break: break-all;
 }
 
 .settings-value.settings-mono {
   font-family: "Roboto Mono", monospace;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
 }
 
@@ -255,8 +255,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  gap: 12px;
+  padding: var(--space-5) var(--space-8);
+  gap: var(--space-6);
 }
 
 .settings-field-row + .settings-field-row {
@@ -277,8 +277,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  gap: 16px;
+  padding: var(--space-6) var(--space-8);
+  gap: var(--space-8);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -310,33 +310,33 @@
 }
 
 .settings-hint {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-dimmer);
   line-height: 1.5;
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .settings-copyable-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   flex-wrap: wrap;
-  margin-top: 6px;
+  margin-top: var(--space-3);
 }
 
 .settings-copyable {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  padding: 3px 6px 3px 10px;
+  border-radius: var(--radius-3);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
   cursor: pointer;
 }
 
 .settings-copyable code {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text);
   user-select: all;
 }
@@ -346,9 +346,9 @@
   background: transparent;
   color: var(--text-dimmer);
   cursor: pointer;
-  font-size: 14px;
-  padding: 2px 4px;
-  border-radius: 4px;
+  font-size: var(--font-size-base);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-2);
   line-height: 1;
   transition: color 0.15s, background 0.15s;
 }
@@ -359,10 +359,10 @@
 }
 
 .settings-badge {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 6px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-3);
   background: rgba(var(--overlay-rgb), 0.06);
 }
 
@@ -375,20 +375,20 @@
 .settings-model-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 
 .settings-model-item {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--space-1);
   position: relative;
-  padding: 10px 36px 10px 12px;
-  border-radius: 8px;
+  padding: var(--space-5) 36px var(--space-5) var(--space-6);
+  border-radius: var(--radius-4);
   background: rgba(var(--overlay-rgb), 0.03);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
   cursor: pointer;
@@ -420,39 +420,39 @@
    vendor's live enumeration — shown, never hidden, just visually
    distinguished (PR body point (c)). */
 .settings-model-catalog-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dimmer);
   background: rgba(var(--overlay-rgb), 0.08);
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 6px;
+  border-radius: var(--radius-2);
+  padding: var(--space-1) var(--space-3);
+  margin-left: var(--space-3);
 }
 
 /* lr-f22787 (retired-disabled variant removed by lr-d3817f — retired
    entries are filtered out of the picker entirely, never rendered): a
    deprecated (still-runnable) entry keeps a marker only. */
 .settings-model-deprecated-badge {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--warning);
   background: rgba(var(--warning-rgb), 0.1);
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 6px;
+  border-radius: var(--radius-2);
+  padding: var(--space-1) var(--space-3);
+  margin-left: var(--space-3);
 }
 
 .settings-model-name {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
 }
 
 .settings-model-desc {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-dimmer);
   line-height: 1.4;
   font-weight: 400;
@@ -472,16 +472,16 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  margin-top: 4px;
-  padding: 8px 12px;
+  margin-top: var(--space-2);
+  padding: var(--space-4) var(--space-6);
   border: none;
   background: none;
   color: var(--text-dimmer);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   text-align: left;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
 }
 
 .settings-older-models-toggle:hover {
@@ -499,8 +499,8 @@
 .settings-older-models-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 /* --- Button group --- */
@@ -508,19 +508,19 @@
   display: flex;
   gap: 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   overflow: hidden;
-  margin-top: 8px;
+  margin-top: var(--space-4);
   width: fit-content;
 }
 
 .settings-btn-option {
-  padding: 6px 16px;
+  padding: var(--space-3) var(--space-8);
   border: none;
   background: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -543,24 +543,24 @@
 .settings-budget-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 12px;
+  gap: var(--space-5);
+  margin-top: var(--space-6);
 }
 
 .settings-budget-label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .settings-budget-input {
   width: 90px;
-  padding: 5px 8px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-family: inherit;
 }
 
@@ -573,19 +573,19 @@
 .settings-pin-input-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
 }
 
 #settings-pin-input {
   width: 120px;
-  padding: 6px 10px;
+  padding: var(--space-3) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg);
   color: var(--text);
   font-family: "Roboto Mono", monospace;
-  font-size: 16px;
+  font-size: var(--font-size-xl);
   letter-spacing: 0.15em;
   text-align: center;
   outline: none;
@@ -603,24 +603,24 @@
 
 .settings-pin-error {
   color: var(--error) !important;
-  margin-top: 6px;
+  margin-top: var(--space-3);
 }
 
 .settings-pin-btns {
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
   flex-shrink: 0;
 }
 
 /* --- Small buttons --- */
 .settings-btn-sm {
-  padding: 5px 14px;
+  padding: var(--space-3) var(--space-7);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg);
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
@@ -634,10 +634,10 @@
 }
 
 .settings-btn-update {
-  margin-top: 8px;
+  margin-top: var(--space-4);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-3);
 }
 
 .settings-btn-update .lucide {
@@ -715,18 +715,18 @@
 .settings-danger-zone {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding: 16px 18px;
-  border-radius: 12px;
+  gap: var(--space-7);
+  padding: var(--space-8) var(--space-9);
+  border-radius: var(--radius-6);
   background: var(--error-12);
   border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
-  margin-bottom: 20px;
+  margin-bottom: var(--space-10);
 }
 
 .settings-danger-icon {
   flex-shrink: 0;
   color: var(--error);
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .settings-danger-icon .lucide {
@@ -739,16 +739,16 @@
 }
 
 .settings-danger-title {
-  font-size: 15px !important;
+  font-size: var(--font-size-lg) !important;
   font-weight: 600 !important;
   color: var(--error) !important;
   text-transform: none !important;
   letter-spacing: 0 !important;
-  margin: 0 0 4px !important;
+  margin: 0 0 var(--space-2) !important;
 }
 
 .settings-danger-desc {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
@@ -763,20 +763,20 @@
 .settings-shutdown-input-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: var(--space-5);
+  margin-top: var(--space-5);
 }
 
 #settings-shutdown-input {
   flex: 1;
   max-width: 260px;
-  padding: 8px 12px;
+  padding: var(--space-4) var(--space-6);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg);
   color: var(--text);
   font-family: "Roboto Mono", monospace;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   outline: none;
   transition: border-color 0.15s;
 }
@@ -792,7 +792,7 @@
 
 /* --- Shutdown button --- */
 .settings-btn-shutdown {
-  padding: 8px 20px !important;
+  padding: var(--space-4) var(--space-10) !important;
   border-color: var(--error) !important;
   background: transparent !important;
   color: var(--error) !important;
@@ -812,7 +812,7 @@
 
 .settings-shutdown-error {
   color: var(--error) !important;
-  margin-top: 8px;
+  margin-top: var(--space-4);
 }
 
 /* ==========  RESPONSIVE  ========== */
@@ -843,7 +843,7 @@
   }
 
   .server-settings-nav-header {
-    padding: 10px 48px 8px 16px;
+    padding: var(--space-5) 48px var(--space-4) var(--space-8);
     line-height: 36px;  /* match close btn height for vertical align */
   }
 
@@ -853,7 +853,7 @@
   }
 
   .server-settings-content-inner {
-    padding: 24px 16px calc(var(--safe-bottom) + 24px);
+    padding: var(--space-12) var(--space-8) calc(var(--safe-bottom) + var(--space-12));
   }
 
   .server-settings-close-btn {
@@ -877,7 +877,7 @@
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
-  padding: 56px 14px 14px;
+  padding: 56px var(--space-7) var(--space-7);
 }
 
 .settings-palette.hidden {
@@ -897,7 +897,7 @@
   z-index: 1;
   background: var(--bg-alt);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-8);
   overflow: hidden;
   box-shadow: 0 24px 64px rgba(var(--shadow-rgb), 0.5);
   max-height: calc(100% - 70px);
@@ -908,8 +908,8 @@
 .settings-palette-input-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-7);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -928,7 +928,7 @@
   outline: none;
   color: var(--text);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-base);
 }
 
 .settings-palette-input::placeholder {
@@ -936,39 +936,39 @@
 }
 
 .settings-palette-esc-hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-family: monospace;
   color: var(--text-dimmer);
-  padding: 2px 6px;
+  padding: var(--space-1) var(--space-3);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-2);
 }
 
 .settings-palette-results {
   overflow-y: auto;
-  padding: 6px 0;
+  padding: var(--space-3) 0;
 }
 
 .settings-palette-group-header {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dimmer);
-  padding: 10px 14px 4px;
+  padding: var(--space-5) var(--space-7) var(--space-2);
 }
 
 .settings-palette-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-5);
   width: 100%;
-  padding: 10px 14px;
+  padding: var(--space-5) var(--space-7);
   background: transparent;
   border: none;
   color: var(--text);
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
   text-align: left;
@@ -1006,10 +1006,10 @@
 }
 
 .settings-palette-empty {
-  padding: 18px 14px;
+  padding: var(--space-9) var(--space-7);
   text-align: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-md);
 }
 
 .settings-palette-item.danger {
@@ -1027,12 +1027,12 @@
 /* --- Select inside toggle rows --- */
 .settings-select {
   flex-shrink: 0;
-  padding: 6px 10px;
+  padding: var(--space-3) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   outline: none;
   cursor: pointer;
 }
@@ -1041,18 +1041,18 @@
 .layout-switcher {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 4px 0;
+  gap: var(--space-6);
+  padding: var(--space-2) 0;
 }
 .layout-option {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 22px 16px;
+  gap: var(--space-4);
+  padding: var(--space-11) var(--space-8);
   background: var(--bg);
   border: 2px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-5);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, transform 0.1s;
   color: var(--text);
@@ -1071,28 +1071,28 @@
   background: var(--accent-8);
 }
 .layout-option-icon {
-  font-size: 28px;
+  font-size: var(--font-size-6xl);
   line-height: 1;
-  margin-bottom: 2px;
+  margin-bottom: var(--space-1);
 }
 .layout-option-label {
   font-weight: 700;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
 }
 .layout-option-desc {
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
   line-height: 1.45;
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 /* ===== Custom Icons settings section (lr-d1d9) ===== */
 .custom-icons-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-7);
 }
 /* lr-0847: slug filter box — grows to fill the row, Upload stays fixed width */
 .custom-icons-filter-input {
@@ -1109,15 +1109,15 @@
 .custom-icons-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .custom-icons-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-6);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   background: var(--bg-alt);
 }
 .custom-icons-thumb {
@@ -1131,7 +1131,7 @@
 .custom-icons-thumb .project-emoji-img {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   border: 1px solid rgba(var(--overlay-rgb), 0.1);
   object-fit: cover;
   background: var(--bg);
@@ -1142,19 +1142,19 @@
 }
 .custom-icons-slug {
   font-family: "Roboto Mono", monospace;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .custom-icons-detail {
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 .custom-icons-actions {
   flex-shrink: 0;
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .custom-icons-actions .settings-btn-sm .lucide {
   width: 14px;
@@ -1163,20 +1163,20 @@
 .custom-icons-rename-form {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   flex: 1;
   min-width: 0;
 }
 .custom-icons-rename-input {
   flex: 1;
   min-width: 0;
-  padding: 6px 10px;
+  padding: var(--space-3) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-3);
   background: var(--bg);
   color: var(--text);
   font-family: "Roboto Mono", monospace;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   outline: none;
 }
 .custom-icons-rename-input:focus {
@@ -1184,26 +1184,26 @@
 }
 .custom-icons-rename-error {
   color: var(--error);
-  margin-top: 4px;
+  margin-top: var(--space-2);
 }
 
 
 /* Per-type notification preferences (modules/notification-prefs.js) */
 .settings-subheading {
-  margin: 16px 0 8px;
-  font-size: 14px;
+  margin: var(--space-8) 0 var(--space-4);
+  font-size: var(--font-size-base);
   font-weight: 600;
 }
 
 .notif-prefs-grid {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 8px;
+  margin-top: var(--space-4);
 }
 
 .notif-prefs-grid th,
 .notif-prefs-grid td {
-  padding: 6px 8px;
+  padding: var(--space-3) var(--space-4);
   text-align: center;
 }
 
