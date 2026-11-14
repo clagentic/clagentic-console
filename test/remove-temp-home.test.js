@@ -48,6 +48,15 @@ function makeHome() {
   return home;
 }
 
+// Polls until the condition holds or the bound passes; resolves its last value.
+async function waitFor(condition, ms) {
+  var end = Date.now() + ms;
+  while (!condition() && Date.now() < end) {
+    await new Promise(function (resolve) { setTimeout(resolve, 20); });
+  }
+  return condition();
+}
+
 function lateWriter(home) {
   return spawn(process.execPath, ["-e", LATE_WRITER, home], { stdio: "ignore" });
 }
@@ -123,14 +132,19 @@ test("removeTempHome stops an orphaned writer that carries the harness token", {
   await new Promise(function (resolve) { launcher.once("exit", resolve); });
   var orphan = Number(out);
   assert.ok(orphan > 1, "the launcher reported the writer's pid: " + out);
+  // Wait for the writer's first write instead of a fixed delay: under load a
+  // node process can take longer than any fixed delay to boot, and a bare
+  // removal made before it runs wins, so the "loses to the writer" premise
+  // below would not hold.
+  assert.equal(await waitFor(function () { return fs.existsSync(path.join(home, "console", "state.json")); }, 15000), true,
+    "the orphaned writer started writing");
   try {
-    await new Promise(function (resolve) { setTimeout(resolve, 100); });
     fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch (e) {
     assert.equal(e.code, "ENOTEMPTY");
   }
-  await new Promise(function (resolve) { setTimeout(resolve, 100); });
-  assert.equal(fs.existsSync(home), true, "a bare removal loses to the live writer");
+  // The writer rewrites every 10 ms when scheduled; a starved one needs time.
+  assert.equal(await waitFor(function () { return fs.existsSync(home); }, 15000), true, "a bare removal loses to the live writer");
 
   await removeTempHome(home, { token: token });
   assert.equal(pidAlive(orphan), false, "the orphaned writer was stopped");
