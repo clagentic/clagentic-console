@@ -169,7 +169,42 @@ test("a failure inside the postinstall undo swap keeps the previous build on dis
   } finally { cleanup(prefix); }
 });
 
-test("install:local-test: a build already installed with identical files still skips the install", async function () {
+test("a bin repoint that fails twice during the undo names where the previous build really is and carries the rollback failure", async function () {
+  var prefix = makeLive("old");
+  try {
+    var scripts = { scripts: { postinstall: "node scripts/postinstall.js" } };
+    var undoBinRenames = 0;
+    var failing = Object.assign({}, fs, {
+      // The first undo repoint passes; the repoint after the failed step and the
+      // rollback's repoint both fail, as an unwritable bin directory would.
+      renameSync: function (from, to) {
+        if (String(from).endsWith("-undo.tmp")) {
+          undoBinRenames++;
+          if (undoBinRenames > 1) throw new Error("injected bin failure " + undoBinRenames);
+        }
+        return fs.renameSync(from, to);
+      },
+    });
+    var thrown = null;
+    try {
+      await installGlobalAtomically({
+        spec: "x", prefix: prefix, fs: failing, runNpm: fakeNpm("new", scripts),
+        runScript: async function () { throw new Error("script exited with status 1"); },
+      });
+    } catch (err) { thrown = err; }
+    assert.ok(thrown, "the install fails");
+    var scopeDir = path.join(prefix, "lib", "node_modules", "@clagentic");
+    var keptAt = /the previous build is kept at (\S+)$/.exec(thrown.message);
+    assert.ok(keptAt, "the error names where the previous build is kept");
+    assert.equal(fs.readFileSync(path.join(keptAt[1], "bin", "cli.js"), "utf8"), "old", "that path holds the previous build");
+    assert.equal(path.dirname(keptAt[1]), scopeDir);
+    assert.match(thrown.message, /rollback also failed \(injected bin failure 3\)/);
+    assert.equal(thrown.cause.message, "injected bin failure 3");
+    assert.equal(runningBuild(prefix).length > 0, true, "the bin still resolves");
+  } finally { cleanup(prefix); }
+});
+
+test("install:local-test: a build already installed with identical files still skips the install",async function () {
   var installs = 0;
   var outcome = await installLocalTest.main({
     argv: ["node", "install-local-test.js"],
