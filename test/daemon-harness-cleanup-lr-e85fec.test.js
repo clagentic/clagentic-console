@@ -28,12 +28,32 @@ test("a partial daemon.json fails cleanup, naming the path", { timeout: 60000 },
 
 var HOLD = "setTimeout(function () {}, 60000)";
 
+// spawn() returns once the child is forked, not once it has exec'd. Until the
+// exec, /proc/<pid>/environ still shows the parent's environment, so under load
+// a read right after spawn sees no token. Wait for the child's own entry.
+async function waitForEnvEntry(proc, entry) {
+  var deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    try {
+      var env = fs.readFileSync("/proc/" + proc.pid + "/environ", "utf8").split("\0");
+      if (env.indexOf(entry) !== -1) return;
+    } catch (e) {
+      if (e.code !== "EACCES" && e.code !== "ENOENT") throw e;
+    }
+    await new Promise(function (r) { setTimeout(r, 20); });
+  }
+  throw new Error("child " + proc.pid + " never exposed " + entry.split("=")[0]);
+}
+
 test("ownership is the exact token: a near-miss or absent token is not owned", { timeout: 30000 }, async function () {
   var token = newHarnessToken();
   var near = spawn(process.execPath, ["-e", HOLD], { stdio: "ignore", env: Object.assign({}, process.env, { [TOKEN_ENV]: token + "0" }) });
   var prefix = spawn(process.execPath, ["-e", HOLD], { stdio: "ignore", env: Object.assign({}, process.env, { [TOKEN_ENV]: token.slice(0, -1) }) });
   var owned = spawn(process.execPath, ["-e", HOLD], { stdio: "ignore", env: Object.assign({}, process.env, { [TOKEN_ENV]: token }) });
   try {
+    await waitForEnvEntry(near, TOKEN_ENV + "=" + token + "0");
+    await waitForEnvEntry(prefix, TOKEN_ENV + "=" + token.slice(0, -1));
+    await waitForEnvEntry(owned, TOKEN_ENV + "=" + token);
     assert.equal(verifyOwnedPid(owned.pid, token).ok, true);
     assert.equal(verifyOwnedPid(near.pid, token).ok, false, "a longer token is not the token");
     assert.equal(verifyOwnedPid(prefix.pid, token).ok, false, "a shorter token is not the token");
