@@ -625,8 +625,10 @@ test("stylesheet: the menu chrome is one rule shared with the cards, from tokens
   assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "border-radius", DESKTOP), "var(--overlay-radius)");
 });
 
-// sticky-notes.js layers the notes themselves by an inline z-index; only its
-// colour picker is a menu, so that module is checked for hand placement alone.
+// sticky-notes.js layers the notes themselves through --note-order (a note's own
+// counter, clamped by note-order.js), and reads the server's zIndex counter, so it
+// is not checked for the word; only its colour picker is a menu, so that module is
+// checked for hand placement alone.
 var B1_MODULES = [
   { file: "app-header.js", layer: true }, { file: "sidebar-projects.js", layer: true },
   { file: "sidebar-sessions.js", layer: true }, { file: "terminal.js", layer: true },
@@ -1211,52 +1213,119 @@ test("nav sheet: sidebar-mobile.js routes every nav button, its close and its ac
 });
 
 // ---------------------------------------------------------------------------
-// C1 guard: no overlay-band literal z-index in the files C1 touches
+// Repo-wide z-index guard: every stylesheet, script and page under lib/public
+// (this folds in the C1 modal-file guard and the C3a panel-file guard)
 // ---------------------------------------------------------------------------
 
-// A z-index from 100 up is an overlay layer and comes from the scale in base.css;
-// -1 to 99 is local stacking inside a component and stays a literal. What is left
-// below belongs to surfaces C1 and C2 did not move: the panels, menus and other
-// layers (C3). That task removes its rows; the guard fails on a new literal and on
-// a row whose literal is gone. The files the C2 modals and the C3a panels lived in
-// are listed with no rows left.
-// TODO(lr-b5d2de): the other rows go with the repo-wide sweep.
-var OVERLAY_BAND_MIN = 100;
-var UNMOVED_LITERALS = {
-  "overlays.css": ["#connect-overlay|999"],
-  "messages.css": [".remote-cursor|9999", "#todo-sticky .todo-sticky-items|200"],
-  "input.css": ["#context-sources-picker|200", "#sidebar|1000", "#sidebar-overlay|999"],
-  "mobile-nav.css": [], "overlay.css": [], "base.css": [],
-  "admin.css": [], "profile.css": [], "skills.css": [],
-  // C3a: the panels, the ralph and scheduler dialogs and the literals they owned.
-  "command-palette.css": [], "agent-picker.css": [], "playbook.css": [], "scheduler-modal.css": [], "loop.css": [],
-  "server-settings.css": [], "user-settings.css": [], "settings-nav.css": [],
-};
-var UNMOVED_JS_LITERALS = {};
-var C1_MODULES = ["overlay.js", "overlay-modal.js", "overlay-registry.js", "app-modals.js", "mobile-nav-sheet.js", "mobile-action-sheet.js", "sidebar-mobile.js", "app-misc.js"];
-var C2_MODULES = [
-  "admin.js", "sidebar-projects.js", "app-projects.js", "app-loop-ui.js", "qrcode.js", "profile.js", "notifications.js", "rewind.js",
-  "sidebar-sessions.js", "app-skills-install.js", "session-grants.js", "skills.js", "mcp-ui.js", "markdown.js", "input.js", "context-sources.js",
+// A z-index from 100 up is a layer and comes from the scale in base.css (var(--z-*)).
+// Only these sub-100 bands may stay as a literal, each named by what it is for; no
+// file is exempt. A value that is a token, or a calc over tokens, may add or take
+// an offset inside the same bands (the panel order, the note order, the sidebar
+// scrim at one below the sidebar).
+var LOCAL_Z_BANDS = [
+  { name: "behind: -1, a decorative label that must sit under its own row", min: -1, max: -1 },
+  { name: "local: 0 to 99, stacking between siblings inside one component", min: 0, max: 99 },
 ];
-var C3A_MODULES = [
-  "user-settings.js", "server-settings.js", "command-palette.js", "agent-picker.js", "app-loop-wizard.js", "scheduler-config.js",
-  "overlay-history.js",
-];
+var LOCAL_Z_KEYWORDS = ["auto", "inherit", "initial", "unset"];
+var ZSCAN_EXT = /\.(css|js|html)$/;
 
-test("guard: the files C1 touches hold no overlay-band literal z-index but the named unmoved ones", function () {
-  Object.keys(UNMOVED_LITERALS).forEach(function (file) {
-    var found = [];
-    cssRules.rules(css(file)).forEach(function (r) {
-      var m = /(?:^|[;\s])z-index\s*:\s*(-?\d+)\s*(?:;|$)/.exec(r.body);
-      if (m && Number(m[1]) >= OVERLAY_BAND_MIN) found.push(r.selector + "|" + m[1]);
+function publicFilesUnder(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).reduce(function (all, e) {
+    var full = path.join(dir, e.name);
+    if (e.isDirectory()) return all.concat(publicFilesUnder(full));
+    return ZSCAN_EXT.test(e.name) ? all.concat(full) : all;
+  }, []);
+}
+
+// Why a z-index value is not allowed, or "" when it is: a token, a keyword, a
+// literal in a named band, or a calc whose bare numbers are all offsets under 100.
+function zValueProblem(value) {
+  var v = String(value).trim().replace(/\s*!important$/, "");
+  if (LOCAL_Z_KEYWORDS.indexOf(v) !== -1) return "";
+  // A var() fallback is a value the browser can use, so it is read like any other:
+  // 100 or more is a layer and has to be a token; a fallback under 100 is an offset.
+  var fallbacks = v.match(/var\(--[a-z-]+\s*,[^)]*\)/g) || [];
+  var bigFallback = fallbacks.some(function (f) {
+    var fb = f.replace(/^var\(--[a-z-]+\s*,/, "").replace(/var\(--z-[a-z]+\)/g, "");
+    return (fb.match(/\d+/g) || []).some(function (d) { return Number(d) >= 100; });
+  });
+  if (bigFallback) return "a var() fallback of 100 or more: " + v;
+  var bare = v.replace(/var\(--z-[a-z]+\)/g, "").replace(/var\(--[a-z-]+(?:,[^)]*)?\)/g, "");
+  if (/^-?\d+$/.test(v)) {
+    var n = Number(v);
+    return LOCAL_Z_BANDS.some(function (b) { return n >= b.min && n <= b.max; }) ? "" : "literal " + v + " is in no named band";
+  }
+  if (!/var\(--z-[a-z]+\)/.test(v)) return "not a layer token: " + v;
+  var nums = bare.match(/\d+/g) || [];
+  return nums.every(function (d) { return Number(d) < 100; }) ? "" : "an offset of 100 or more: " + v;
+}
+
+// Every z-index declaration in a source: CSS, a cssText string, an inline style
+// attribute, a style.zIndex assignment, an object-literal zIndex, a
+// setProperty("z-index", v) call, or a string built as "z-index:" + v (its first
+// operand is the value). Comments are not read.
+var Z_DECLARATION = new RegExp([
+  "z-index\\s*:\\s*([^;}\"'`\\n]+)",
+  "\\bzIndex\\s*=(?!=)\\s*([^;\\n]+)",
+  // Only a literal value: a plain data field such as { el: el, zIndex: zIndex } is not a style.
+  "\\bzIndex\\s*:\\s*(\"[^\"]*\"|'[^']*'|`[^`]*`|-?\\d[^,;}\\n]*)",
+  "setProperty\\(\\s*[\"']z-index[\"']\\s*,\\s*(\"[^\"]*\"|'[^']*'|`[^`]*`|[^,)\\n]+)",
+  "z-index\\s*:\\s*[\"'`]\\s*\\+\\s*(\"[^\"]*\"|'[^']*'|[^\\s+;,)]+)",
+].join("|"), "g");
+
+function zDeclarations(src, file) {
+  var text = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
+  var found = [];
+  var re = new RegExp(Z_DECLARATION.source, "g");
+  var m;
+  while ((m = re.exec(text))) {
+    var raw = m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4] !== undefined ? m[4] : m[5];
+    var value = raw.trim().replace(/^["'`]|["'`]$/g, "");
+    found.push({ file: file, value: value, where: text.slice(0, m.index).split("\n").length });
+  }
+  return found;
+}
+
+test("guard: no z-index in lib/public is a literal at or above 100, with no exempt file; each allowed literal sits in a named band", function () {
+  var files = publicFilesUnder(PUBLIC_DIR);
+  assert.ok(files.some(function (f) { return /base\.css$/.test(f); }) && files.some(function (f) { return /sticky-notes\.js$/.test(f); }), "the scan reaches the stylesheets and the modules");
+  var declared = Object.create(null);
+  (BASE.match(/--z-[a-z]+(?=:)/g) || []).forEach(function (n) { declared[n] = true; });
+  var bad = [];
+  var used = 0;
+  files.forEach(function (file) {
+    var src = fs.readFileSync(file, "utf8");
+    zDeclarations(src, path.relative(PUBLIC_DIR, file)).forEach(function (d) {
+      used++;
+      var why = zValueProblem(d.value);
+      if (why) bad.push(d.file + ":" + d.where + " " + why);
+      (d.value.match(/var\((--z-[a-z]+)\)/g) || []).forEach(function (ref) {
+        var name = /var\((--z-[a-z]+)\)/.exec(ref)[1];
+        if (!declared[name]) bad.push(d.file + ":" + d.where + " uses " + name + ", which base.css does not declare");
+      });
     });
-    assert.deepEqual(found.sort(), UNMOVED_LITERALS[file].slice().sort(), file + ": overlay-band literal z-index values");
   });
-  C1_MODULES.concat(C2_MODULES, C3A_MODULES).forEach(function (file) {
-    var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", file), "utf8");
-    var hits = src.match(/z-index\s*:\s*\d{3,}|zIndex\s*=\s*["']?\d{3,}/g) || [];
-    assert.equal(hits.length, UNMOVED_JS_LITERALS[file] || 0, file + ": overlay-band literal z-index in script");
-  });
+  assert.ok(used > 50, "the guard reads the declarations (" + used + ")");
+  assert.deepEqual(bad, [], "z-index values outside the scale and the named bands");
+
+  // The guard fails on a new overlay-band literal, in a stylesheet and in a script.
+  ["z-index: 100;", "z-index: 9999 !important;", "z-index: calc(var(--z-panel) + 100);", "el.style.zIndex = 100 + order;", 'el.style.zIndex = "10000";', "a{z-index:1000}",
+    "Object.assign(el.style, { zIndex: 9999 });", 'Object.assign(el.style, { zIndex: "9999", top: 0 });',
+    'el.style.setProperty("z-index", 9999);', 'el.style.setProperty("z-index", "500", "important");',
+    'el.style.cssText = "z-index:" + 9999;', 'el.style.cssText = "z-index:" + n + ";";', "el.style.cssText = `top: 0; z-index: 9999;`;",
+    "a{z-index: var(--x, 9999)}", "a{z-index: calc(var(--z-panel) + var(--x, 100))}"]
+    .forEach(function (src) {
+      var hits = zDeclarations(src, "x").filter(function (d) { return zValueProblem(d.value); });
+      assert.equal(hits.length, 1, src + " is refused");
+    });
+  ["z-index: 99;", "z-index: -1;", "z-index: var(--z-menu);", "z-index: calc(var(--z-modal) + var(--overlay-order, 0));", "z-index: calc(var(--z-sidebar) - 1);", "z-index: auto;",
+    'el.style.zIndex = "var(--z-tooltip)";', "/* z-index: 5000 */",
+    "Object.assign(el.style, { zIndex: 5, top: 0 });", 'el.style.setProperty("z-index", "var(--z-menu)");',
+    'el.style.cssText = "z-index:" + "var(--z-menu)";', "a{z-index: calc(var(--z-note) + var(--note-order, 0))}", "a{z-index: var(--x, var(--z-menu))}"]
+    .forEach(function (src) {
+      var hits = zDeclarations(src, "x").filter(function (d) { return zValueProblem(d.value); });
+      assert.equal(hits.length, 0, src + " is allowed");
+    });
   // The moved surfaces' own scrim, card and close rules are gone from their stylesheets.
   var html = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "index.html"), "utf8");
   ["paste-modal", "image-modal", "confirm-modal", "mobile-sheet-backdrop", "mobile-sheet-close"].forEach(function (name) {
@@ -1674,11 +1743,13 @@ test("C3a panel: one back closes the topmost overlay in open order and keeps the
       m.historyMod.pushOverlayState(); // an entry for the back to pop, held by neither dialog
       return { handles: [below, top] };
     }, first: "blocking", open: [true, true] },
-    { name: "a panel over a dialog", build: function (m) {
+    // C3b: a panel opened over a dialog is refused, so it holds no history entry and
+    // there is nothing for a back to reach but the dialog's own routing (no entry: "none").
+    { name: "a panel refused over a dialog", build: function (m) {
       var below = m.overlay.showOverlay({ kind: "modal", content: "d" });
       var top = m.overlay.showOverlay({ kind: "modal", panel: true, content: "p" });
       return { handles: [below, top] };
-    }, first: "panel", open: [true, false] },
+    }, first: "none", open: [true, false] },
   ];
   for (var k = 0; k < TOP_ROWS.length; k++) {
     var tr = TOP_ROWS[k];
@@ -1746,14 +1817,14 @@ test("C3a panel: a dialog opened from a panel sits over it and takes Escape firs
   assert.equal(panel.isOpen(), false, "the next Escape closes the panel");
 
   // A panel opened while a dialog is up (the palette over a confirmation) is
-  // under it on the page, so the dialog still takes the key.
+  // refused (C3b), so the dialog is the only thing there and takes the key. The
+  // row that held a panel under a dialog is replaced: that order no longer exists.
   var dialog = m.overlay.showOverlay({ kind: "modal", content: "d" });
   var later = m.overlay.showOverlay({ kind: "modal", panel: true, content: "later" });
+  assert.equal(later.isOpen(), false, "the later panel was refused");
   m.escape();
-  assert.equal(dialog.isOpen(), false, "the dialog closed first");
-  assert.equal(later.isOpen(), true, "the later panel stays");
-  m.escape();
-  assert.equal(later.isOpen(), false);
+  assert.equal(dialog.isOpen(), false, "the dialog closed");
+  assert.equal(m.registry.getTopModal(), null, "and no hidden panel is left to close");
 
   WIDTHS.forEach(function (width) {
     var at = " at " + width + "px";
@@ -1901,4 +1972,261 @@ test("C3a tokens: each literal the C3a surfaces owned is a layer token, and its 
   fs.readdirSync(CSS_DIR).filter(function (f) { return /\.css$/.test(f); }).forEach(function (f) {
     assert.doesNotMatch(css(f), /sched-create-interval-dropdown/, f);
   });
+});
+
+// ---------------------------------------------------------------------------
+// C3b: the remaining literals take tokens, two new layers, and a panel is never
+// opened over a dialog
+// ---------------------------------------------------------------------------
+
+// The literal each C3b surface owned and the token it took. `width` is where the
+// rule applies (a phone-only rule); `desktop: null` asserts it sets none above it.
+var C3B_TOKENS = [
+  { file: "tooltip.css", selector: ".tooltip", was: 10000, want: "var(--z-tooltip)" },
+  { file: "icon-strip.css", selector: ".icon-strip-tooltip", was: 1000, want: "var(--z-tooltip)" },
+  { file: "icon-strip.css", selector: ".dust-particle", was: 10000, want: "var(--z-tooltip)" },
+  { file: "icon-strip.css", selector: ".dm-user-picker", was: 10001, want: "var(--z-menu)" },
+  { file: "title-bar.css", selector: ".context-usage-popover", was: 200, want: "var(--z-menu)" },
+  { file: "menus.css", selector: "#config-popover", was: 200, want: "var(--z-float)" },
+  { file: "input.css", selector: "#context-sources-picker", was: 200, want: "var(--z-float)" },
+  { file: "messages.css", selector: "#todo-sticky .todo-sticky-items", was: 200, want: "var(--z-float)" },
+  { file: "sticky-notes.css", selector: ".sn-format-toolbar", was: 300, want: "var(--z-float)" },
+  { file: "sticky-notes.css", selector: ".sticky-note", was: "100 + order", want: "calc(var(--z-note) + var(--note-order, 0))" },
+  { file: "home-hub.css", selector: "#home-hub", was: 200, want: "var(--z-nav)" },
+  { file: "filebrowser.css", selector: "#file-viewer", was: 300, want: "var(--z-screen)", width: PHONE, desktop: null },
+  { file: "filebrowser.css", selector: "#terminal-container", was: 300, want: "var(--z-screen)", width: PHONE, desktop: null },
+  { file: "input.css", selector: "#sidebar", was: 1000, want: "var(--z-sidebar)", width: PHONE, desktop: null },
+  { file: "input.css", selector: "#sidebar-overlay", was: 999, want: "calc(var(--z-sidebar) - 1)", width: PHONE, desktop: null },
+  { file: "overlays.css", selector: "#connect-overlay", was: 999, want: "var(--z-connect)" },
+  { file: "messages.css", selector: ".remote-cursor", was: 9999, want: "var(--z-cursor)" },
+];
+
+test("C3b tokens: each remaining literal is a layer token at the width it applies, and a phone-only rule sets nothing above it", function () {
+  C3B_TOKENS.forEach(function (row) {
+    var at = row.file + ": " + row.selector + " (was " + row.was + ")";
+    assert.equal(cssRules.valueAt(css(row.file), row.selector, "z-index", row.width || DESKTOP), row.want, at);
+    if (row.desktop === null) assert.equal(cssRules.valueAt(css(row.file), row.selector, "z-index", DESKTOP), null, at + " sets none at desktop width");
+  });
+});
+
+test("C3b scale: the layers are in order, each new one sits where it is named, at each width", function () {
+  // base < note band < nav < float < full-screen views < sidebar < panels < dialogs < connect < menus < toasts < tooltips
+  var names = ["base", "note", "nav", "float", "screen", "sidebar", "panel", "modal", "connect", "menu", "toast", "tooltip"];
+  for (var i = 1; i < names.length; i++) {
+    assert.ok(layer(names[i - 1]) < layer(names[i]), "--z-" + names[i - 1] + " (" + layer(names[i - 1]) + ") < --z-" + names[i] + " (" + layer(names[i]) + ")");
+  }
+  assert.ok(layer("note") >= 100 && layer("note") + NOTE_ORDER_MAX_FOR_TEST < layer("nav"), "the whole note band is under the nav");
+  assert.ok(layer("screen") < layer("sidebar") - 1, "the sidebar's scrim (one below it) is over the full-screen views");
+  assert.ok(layer("sidebar") < layer("panel"), "a panel opened from the sidebar shows over it");
+  assert.ok(layer("panel") + 2 + 40 < layer("modal") && layer("modal") + 99 < layer("connect"), "panels < dialogs < the connection cover");
+  assert.ok(layer("cursor") < 100, "the cursor layer is local to #messages and outside the global order");
+  // The new layers against the nav and the layers above, as the sheets draw them.
+  WIDTHS.forEach(function (width) {
+    var at = " at " + width + "px";
+    var phone = width === PHONE;
+    assert.equal(cssRules.valueAt(MOBILE_NAV, "#mobile-tab-bar", "z-index", width), phone ? "var(--z-nav)" : null, "the nav is on its layer on a phone only" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal.overlay-panel", "z-index", width), "calc(var(--z-panel) + 2 + var(--overlay-order, 0))", "panels" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-modal", "z-index", width), "calc(var(--z-modal) + var(--overlay-order, 0))", "dialogs" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-menu", "z-index", width), "var(--z-menu)", "menus" + at);
+    assert.equal(cssRules.valueAt(OVERLAY, ".overlay-stack", "z-index", width), "var(--z-toast)", "toasts" + at);
+    assert.equal(cssRules.valueAt(css("tooltip.css"), ".tooltip", "z-index", width), "var(--z-tooltip)", "tooltips" + at);
+    assert.equal(cssRules.valueAt(css("sticky-notes.css"), ".sticky-note", "z-index", width), "calc(var(--z-note) + var(--note-order, 0))", "notes" + at);
+  });
+});
+
+var NOTE_ORDER_MAX_FOR_TEST = 99;
+
+var NOTE_ORDERS = [
+  { name: "a fresh note", zIndex: 1, order: 1 },
+  { name: "no counter", zIndex: undefined, order: 0 },
+  { name: "a negative counter", zIndex: -5, order: 0 },
+  { name: "a counter past the band", zIndex: 10001, order: 99 },
+  { name: "the last order inside the band", zIndex: 99, order: 99 },
+  { name: "not a number", zIndex: "x", order: 0 },
+  { name: "a numeric string", zIndex: "7", order: 7 },
+  { name: "a fraction", zIndex: 3.9, order: 3 },
+];
+
+test("C3b notes: a note's order is a whole number from 0 to 99, so the band stays under the nav", async function () {
+  var mod = await import(dom.moduleUrl("note-order.js"));
+  assert.equal(mod.NOTE_ORDER_MAX, NOTE_ORDER_MAX_FOR_TEST);
+  NOTE_ORDERS.forEach(function (row) {
+    assert.equal(mod.noteLayerOrder(row.zIndex), row.order, row.name);
+  });
+  var src = publicFile(path.join("modules", "sticky-notes.js"));
+  assert.match(src, /setNoteOrder\(el, data\.zIndex\)/, "a new note takes its order through the clamp");
+  assert.match(src, /setNoteOrder\(entry\.el, msg\.note\.zIndex\)/, "an updated note does too");
+});
+
+// Each row is a run of bring-to-front clicks (the server raises the clicked note's
+// counter to one past the highest) over some notes.
+var NOTE_CLICK_RUNS = [
+  { name: "120 clicks across 4 notes", notes: 4, clicks: 120 },
+  { name: "150 clicks across 101 notes", notes: 101, clicks: 150 },
+];
+
+test("C3b notes: past 99 clicks the last-clicked note is strictly on top and every order stays 0 to 99", async function () {
+  var mod = await import(dom.moduleUrl("note-order.js"));
+  NOTE_CLICK_RUNS.forEach(function (row) {
+    var counters = [];
+    for (var i = 0; i < row.notes; i++) counters.push(i + 1);
+    var last = 0;
+    for (var c = 0; c < row.clicks; c++) {
+      last = (c * 7) % row.notes;
+      counters[last] = counters.reduce(function (a, b) { return Math.max(a, b); }, 0) + 1;
+    }
+    var orders = mod.noteLayerOrders(counters);
+    orders.forEach(function (o) { assert.ok(Number.isInteger(o) && o >= 0 && o <= 99, row.name + ": " + o + " is in 0..99"); });
+    orders.forEach(function (o, i) {
+      if (i !== last) assert.ok(o < orders[last], row.name + ": note " + i + " (" + o + ") is under the last-clicked (" + orders[last] + ")");
+    });
+  });
+});
+
+// A page with one dialog open, the way a surface opens it, and the panels' openers.
+async function dialogOverPage(t) {
+  var m = await panelBrowser(t, false);
+  // The registry's Escape listener is already collected by modalBrowser; this adds
+  // the page's own (the palette's Ctrl+K) beside it and lets a row press a key.
+  var listeners = {};
+  var collect = global.document.addEventListener;
+  global.document.addEventListener = function (type, fn) {
+    collect(type, fn);
+    (listeners[type] = listeners[type] || []).push(fn);
+  };
+  m.key = function (init) {
+    (listeners.keydown || []).slice().forEach(function (fn) { fn(Object.assign({ preventDefault: function () {}, target: { tagName: "BODY" } }, init)); });
+  };
+  return m;
+}
+
+// The palette builds its markup through innerHTML, which the fake DOM keeps as
+// text; the one node it builds is handed the parts the palette looks up.
+function teachPaletteMarkup() {
+  var create = global.document.createElement;
+  global.document.createElement = function (tag) {
+    var el = create(tag);
+    Object.defineProperty(el, "innerHTML", {
+      configurable: true,
+      get: function () { return this._text; },
+      set: function (v) {
+        this._children = [];
+        this._text = "";
+        if (String(v).indexOf("cmd-palette-input") === -1) { this._text = String(v); return; }
+        var part = function (cls, parent) { var n = create("div"); n.className = cls; parent.appendChild(n); return n; };
+        part("overlay-modal-backdrop", this);
+        var dialog = part("overlay-modal-dialog cmd-palette-dialog", this);
+        var row = part("cmd-palette-input-row", dialog);
+        var input = create("input");
+        input.className = "cmd-palette-input";
+        row.appendChild(input);
+        part("cmd-palette-results", dialog);
+        part("cmd-palette-footer", dialog);
+      },
+    });
+    return el;
+  };
+}
+
+test("C3b panel over a dialog: Ctrl+K with a dialog open opens nothing, and with none open opens the palette; back and Escape reach only the dialog", async function (t) {
+  var m = await dialogOverPage(t);
+  global.fetch = function () { return Promise.reject(new Error("offline")); };
+  teachPaletteMarkup();
+  var palette = await import(dom.moduleUrl("command-palette.js") + "?c3b=" + (++instance));
+  palette.initCommandPalette({ currentSlug: function () { return "proj-a"; } });
+  var ctrlK = { key: "k", ctrlKey: true };
+
+  m.modals.showConfirm("Sure?", function () {});
+  var dialog = m.top();
+  m.key(ctrlK);
+  assert.equal(palette.isCommandPaletteOpen(), false, "Ctrl+K opens no palette over a dialog");
+  assert.equal(m.top(), dialog, "the dialog is still the top, and the only, modal");
+  assert.equal(m.history.push, 0, "the refused palette holds no history entry for a back to find");
+  assert.equal(m.historyMod.hasOverlayState(), false, "nothing is left for a back swipe to close behind the dialog");
+  m.escape();
+  assert.equal(m.registry.isModalOpen(dialog), false, "Escape closes the dialog, the thing on top");
+  assert.equal(m.registry.getTopModal(), null, "and no hidden palette is left under it");
+
+  m.key(ctrlK);
+  assert.equal(palette.isCommandPaletteOpen(), true, "with no dialog open, Ctrl+K opens the palette");
+  assert.equal(m.history.push, 1, "and it holds its entry");
+  m.modals.showConfirm("Sure?", function () {});
+  var over = m.top();
+  assert.notEqual(over, undefined);
+  assert.equal(backGesture(m), "blocking", "a dialog opened over the palette is what back closes first");
+  assert.equal(palette.isCommandPaletteOpen(), true, "the palette stays");
+  assert.equal(backGesture(m), "panel", "then back closes the palette");
+});
+
+test("C3b panel over a dialog: the update_available route, by banner click or push, opens nothing over a dialog, and opens server settings with none", async function (t) {
+  var m = await dialogOverPage(t);
+  var page = { me: true };
+  global.fetch = function (url) {
+    return Promise.resolve({ ok: true, json: function () { return Promise.resolve(url === "/api/me" ? { user: { role: page.me ? "admin" : "user" } } : {}); } });
+  };
+  var root = new dom.FakeElement("div");
+  root.id = "server-settings";
+  root.className = "hidden";
+  var dlg = new dom.FakeElement("div");
+  dlg.className = "overlay-modal-dialog";
+  root.appendChild(dlg);
+  var gear = new dom.FakeElement("button");
+  gear.id = "server-settings-btn";
+  global.document.body.appendChild(root);
+  global.document.body.appendChild(gear);
+  var settings = await import(dom.moduleUrl("server-settings.js") + "?c3b=" + (++instance));
+  settings.initServerSettings({ ws: null });
+  var notifyClient = await import(dom.moduleUrl("notify-client.js"));
+
+  m.modals.showConfirm("Sure?", function () {});
+  var dialog = m.top();
+  assert.equal(await settings.openServerSettings(), false, "the one way into server settings resolves false over a dialog");
+  m.b.notif.handleNotificationCreated(banner("u1", { type: "update_available", persistent: true, meta: { version: "9.9.9" } }));
+  var card = m.b.stack().querySelector('.notif-banner[data-notif-id="u1"]');
+  (card._listeners.click || []).forEach(function (fn) { fn({ target: { closest: function () { return null; } } }); });
+  notifyClient.routeTo({ slug: null, sessionId: null }, "update_available");
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  assert.equal(settings.isSettingsOpen(), false, "a click on the banner and a push tap open no panel under the scrim");
+  assert.equal(root.classList.contains("hidden"), true, "its node stays hidden");
+  assert.equal(m.top(), dialog, "the dialog is the only modal");
+  assert.equal(gear.classList.contains("active"), false, "the gear does not show it open");
+  assert.equal(m.history.push, 0, "and it holds no history entry");
+  m.escape();
+  assert.equal(m.registry.getTopModal(), null, "Escape closes the dialog and finds no hidden panel after it");
+});
+
+test("C3b panel over a dialog: a page opener reached by keyboard focus opens nothing over a dialog; the rule is the registry's, for each panel and for a sheet", async function (t) {
+  global.fetch = function () { return Promise.reject(new Error("offline")); };
+  var rows = [
+    { name: "a dialog", open: function (m) { m.modals.showConfirm("Sure?", function () {}); } },
+    { name: "a sheet", open: function (m) { m.actionSheet.showActionSheet({ actions: [{ icon: "settings", label: "x", handler: function () {} }] }); } },
+    { name: "a dialog that cannot be dismissed", open: function (m) { m.overlay.showOverlay({ kind: "modal", content: "pin", dismissible: false }); } },
+  ];
+  for (var i = 0; i < rows.length; i++) {
+    var m = await panelBrowser(t, true);
+    var page = userSettingsPage();
+    var mod = await import(dom.moduleUrl("user-settings.js") + "?c3b=" + (++instance));
+    mod.initUserSettings({});
+    rows[i].open(m);
+    var below = m.top();
+    page.btn.click();
+    assert.equal(mod.isUserSettingsOpen(), false, rows[i].name + ": the gear opens nothing over it");
+    assert.equal(page.btn.classList.contains("active"), false, rows[i].name + ": and does not show itself open");
+    assert.equal(page.root.classList.contains("hidden"), true, rows[i].name + ": the panel stays hidden");
+    assert.equal(m.history.push, 0, rows[i].name + ": a phone holds no entry for it");
+    assert.equal(m.top(), below, rows[i].name + ": the dialog is still on top");
+    var refused = m.overlay.showOverlay({ kind: "modal", panel: true, content: "p" });
+    assert.equal(refused.refused, true, rows[i].name + ": the primitive says it refused");
+    assert.equal(refused.isOpen(), false);
+    assert.doesNotThrow(function () { refused.close(); });
+    // A panel already open is not refused: opened again it is refreshed in place.
+    m.registry.closeModal(below, { immediate: true });
+    var panel = m.overlay.showOverlay({ kind: "modal", panel: true, content: "p" });
+    assert.equal(panel.isOpen(), true, rows[i].name + ": with the dialog gone a panel opens");
+    m.overlay.showOverlay({ kind: "modal", panel: true, el: panel.el });
+    assert.equal(panel.isOpen(), true, rows[i].name + ": an open panel re-opened stays open");
+    panel.close();
+    while (m.historyMod.hasOverlayState()) m.historyMod.popOverlayState();
+    while (m.historyMod.consumeOwnPopstate()) { /* delivered */ }
+  }
 });

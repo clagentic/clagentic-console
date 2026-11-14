@@ -990,7 +990,7 @@
     position: fixed;
     inset: 0;
     background: var(--bg);
-    z-index: 300;
+    z-index: var(--z-screen);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1385,7 +1385,7 @@
     padding-top: var(--safe-top);
     padding-bottom: var(--safe-bottom);
     background: var(--bg);
-    z-index: 300;
+    z-index: var(--z-screen);
     display: flex;
     flex-direction: column;
     overflow: hidden;

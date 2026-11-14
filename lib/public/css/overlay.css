@@ -118,7 +118,9 @@
    numbers the open panels in --overlay-order (clamped, so the band stays under the
    modal layer) and a later one sits over an earlier one. The phone Settings list
    (#settings-hub) is on --z-panel itself and project settings one above it, so a
-   registry panel (the +2 here) opened from either shows over it. */
+   registry panel (the +2 here) opened from either shows over it. A panel is never
+   opened while a dialog is open (the registry refuses it), so a panel is never
+   under a dialog that came before it. */
 .overlay-modal.overlay-panel {
   z-index: calc(var(--z-panel) + 2 + var(--overlay-order, 0));
 }
