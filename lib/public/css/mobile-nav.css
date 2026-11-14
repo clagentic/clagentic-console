@@ -739,6 +739,40 @@
   }
 
   /* --- Session items inside sheet --- */
+  /* A row: the session button, then its actions control. */
+  .mobile-session-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .mobile-session-row + .mobile-session-row {
+    margin-top: var(--space-2);
+  }
+
+  .mobile-session-row .mobile-session-item {
+    flex: 1;
+    min-width: 0;
+    margin-top: 0;
+  }
+
+  .mobile-session-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    border-radius: var(--radius-5);
+    color: var(--text-dimmer);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-session-actions:active { background: rgba(var(--overlay-rgb), 0.08); }
+  .mobile-session-actions .lucide { width: 18px; height: 18px; }
+
   .mobile-session-item {
     display: flex;
     align-items: center;
@@ -756,10 +790,6 @@
     text-align: left;
     -webkit-tap-highlight-color: transparent;
     transition: background 0.15s;
-  }
-
-  .mobile-session-item + .mobile-session-item {
-    margin-top: 4px;
   }
 
   .mobile-session-item:active {

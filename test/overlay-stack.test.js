@@ -402,6 +402,10 @@ var MENU_SURFACES = [
   { name: "project access popover", kind: "popover", node: "new", closeButton: true, place: { placement: "right", gap: 8 }, at: { left: "148px", top: "100px" } },
   { name: "emoji picker", kind: "popover", node: "built", place: { placement: "right" }, at: { left: "146px", top: "100px" } },
   { name: "session context menu", kind: "menu", node: "built", place: { placement: "below-right-aligned", gap: 2 }, at: { left: "90px", top: "122px" } },
+  // The phone row's actions control opens the same session menu from its own button
+  // (its opener); below 768px popover-position.js centres the card, inside the margin.
+  { name: "phone session actions menu", kind: "menu", node: "built", opener: true, place: { placement: "below-right-aligned", gap: 2 }, at: { left: "90px", top: "122px" },
+    phone: { innerWidth: 390, innerHeight: 844, at: { left: "170px", top: "407px" } } },
   { name: "terminal context menu", kind: "menu", node: "built", point: { x: 300, y: 200 }, at: { left: "300px", top: "200px" } },
   { name: "sticky-note colour picker", kind: "popover", node: "built", place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
   { name: "schedule popover", kind: "popover", node: "page", place: { placement: "below" }, at: { left: "100px", top: "126px" } },
@@ -1404,6 +1408,53 @@ test("nav sheet: sidebar-mobile.js routes every nav button, its close and its ac
   assert.doesNotMatch(src, /mobile-action-sheet-overlay|mobile-sheet-close|mobile-sheet-backdrop/, "no surface-owned scrim or close control");
   assert.doesNotMatch(src, /mobile-sheet"\)[^;]*classList\.add\("hidden"\)|sheet\.classList\.add\("hidden"\)/, "nothing hides the sheet by hand");
   assert.match(src, /mobileHomeBtn\.addEventListener\("click", function \(\) \{\s*\/\/[^\n]*\n\s*closeMobileSheet\(\);/, "the middle button closes an open nav sheet before its full-screen view");
+});
+
+// Phone session and project actions, pinned by source (sidebar-mobile.js cannot be
+// imported under node:test). Each row is one acceptance criterion.
+var PHONE_ACTION_ROWS = [
+  { name: "AC1 the row's actions control opens the shared desktop session menu through the shared overlay",
+    file: "sidebar-mobile.js",
+    has: [/className = "mobile-session-actions"/, /aria-label", "Session actions"/,
+      /showSessionCtxMenu\(actionsBtn, s\.id, s\.title, s\.cliSessionId, s, \{\s*onRename: promptMobileSessionRename,\s*opener: actionsBtn/,
+      /showSessionCtxMenu,/],
+    gone: [/session-ctx-item/] },
+  { name: "AC1 the desktop menu is exported once and its rename is replaceable",
+    file: "sidebar-sessions.js",
+    has: [/export function showSessionCtxMenu\(/, /opts\.onRename\) opts\.onRename\(sessionId, title\);\s*else startInlineRename\(sessionId, title\)/, /placement: "below-right-aligned", gap: 2, opener: opener/],
+    gone: [] },
+  { name: "AC2 Manage Access opens the access popover for the owner or admin, not a missing button",
+    file: "sidebar-mobile.js",
+    has: [/store\.get\('isMultiUser'\) && canManageProjectAccess\(proj\.slug\)/, /showProjectAccessPopover\(anchorEl, proj\.slug\)/],
+    gone: [/manage-access-btn/] },
+  { name: "AC2 the desktop project menu uses the same access gate",
+    file: "sidebar-projects.js",
+    has: [/if \(canManageProjectAccess\(slug\)\) \{/, /export function canManageProjectAccess\(slug\)/],
+    gone: [/var isProjectOwner = store\.get\('myUserId'\) && store\.get\('currentProjectOwnerId'\) && store\.get\('myUserId'\) === store\.get\('currentProjectOwnerId'\);\s*\n\s*var isAdmin[^\n]*\n\s*if \(isProjectOwner/] },
+  { name: "AC3 Set Icon opens the picker at the visible control and saves through it",
+    file: "sidebar-mobile.js",
+    has: [/showEmojiPicker\(proj\.slug, anchorEl\)/, /showChatProjectActionSheet\(currentProject, moreBtn\)/],
+    gone: [/dispatchEvent\(ctxEvt\)|MouseEvent\("contextmenu"/, /querySelector\('\[data-slug=/] },
+  { name: "AC3 the picker saves the chosen icon with set_project_icon",
+    file: "sidebar-projects.js",
+    has: [/export function showEmojiPicker\(slug, anchorEl\)/, /type: "set_project_icon", slug: slug, icon: emoji/],
+    gone: [] },
+  { name: "AC4 the phone row draws the desktop compacting and private indicators",
+    file: "sidebar-mobile.js",
+    has: [/compactingBadgeHtml\(s\) \+ privateIndicatorHtml\(s\)/],
+    gone: [/session-private-icon/] },
+  { name: "AC4 the desktop row draws them through the same two helpers",
+    file: "sidebar-sessions.js",
+    has: [/textHtml \+= compactingBadgeHtml\(s\);\s*textHtml \+= privateIndicatorHtml\(s\);/, /export function privateIndicatorHtml\(s\)/, /export function compactingBadgeHtml\(s\)/],
+    gone: [] },
+];
+
+test("phone actions: the session row's actions control, the project sheet and the row indicators reuse the desktop builders", function () {
+  PHONE_ACTION_ROWS.forEach(function (row) {
+    var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", row.file), "utf8");
+    row.has.forEach(function (re) { assert.match(src, re, row.name + ": " + String(re)); });
+    row.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + ": " + String(re) + " is gone"); });
+  });
 });
 
 // ---------------------------------------------------------------------------
