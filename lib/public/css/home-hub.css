@@ -12,8 +12,8 @@
   overflow-y: auto;
   background: var(--bg);
   z-index: var(--z-nav);
-  padding: 48px 24px 40px;
-  border-top-left-radius: 8px;
+  padding: 48px var(--space-12) var(--space-20);
+  border-top-left-radius: var(--radius-4);
   animation: hubFadeIn 0.35s ease;
 }
 /* Close button (X / ESC) */
@@ -41,7 +41,7 @@
   height: 18px;
 }
 .home-hub-close-btn span {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   letter-spacing: 0.5px;
   position: absolute;
@@ -75,7 +75,7 @@
   max-width: 720px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-7);
 }
 
 
@@ -83,11 +83,11 @@
 .hub-search-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-5);
   background: var(--bg-alt);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 10px 14px;
+  border-radius: var(--radius-5);
+  padding: var(--space-5) var(--space-7);
   cursor: text;
   animation: hubCardIn 0.35s ease;
 }
@@ -106,7 +106,7 @@
   border: none;
   outline: none;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text);
   cursor: text;
 }
@@ -118,19 +118,19 @@
 /* --- Greeting --- */
 .hub-greeting {
   text-align: center;
-  padding: 8px 0 4px;
+  padding: var(--space-4) 0 var(--space-2);
 }
 .hub-greeting h1 {
-  font-size: 28px;
+  font-size: var(--font-size-6xl);
   font-weight: 700;
   color: var(--text);
   margin: 0;
   letter-spacing: -0.5px;
 }
 .hub-greeting p {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text-muted);
-  margin: 6px 0 0;
+  margin: var(--space-3) 0 0;
   font-weight: 400;
 }
 /* Twemoji sizing inherited from global img.emoji in base.css */
@@ -139,36 +139,36 @@
 .hub-card {
   background: var(--bg-alt);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: var(--radius-6);
+  padding: var(--space-8);
 }
 .hub-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-6);
 }
 .hub-card-title {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--text-muted);
 }
 .hub-card-count {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--accent);
   background: var(--accent-12);
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-5);
 }
 
 /* --- Two-column layout --- */
 .hub-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--space-6);
   animation: hubCardIn 0.4s ease 0.08s both;
 }
 
@@ -176,14 +176,14 @@
 .hub-upcoming-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 .hub-upcoming-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-4);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -198,7 +198,7 @@
   background: var(--accent);
 }
 .hub-upcoming-time {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-muted);
   min-width: 56px;
@@ -206,7 +206,7 @@
   font-variant-numeric: tabular-nums;
 }
 .hub-upcoming-name {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   flex: 1;
   min-width: 0;
@@ -215,7 +215,7 @@
   white-space: nowrap;
 }
 .hub-upcoming-project {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
   flex-shrink: 0;
   max-width: 80px;
@@ -224,36 +224,36 @@
   white-space: nowrap;
 }
 .hub-upcoming-more {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-dimmer);
   text-align: center;
-  padding: 4px 0;
+  padding: var(--space-2) 0;
 }
 /* Empty state */
 .hub-upcoming-empty {
   text-align: center;
-  padding: 16px 8px;
+  padding: var(--space-8) var(--space-4);
 }
 .hub-upcoming-empty-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
+  font-size: var(--font-size-5xl);
+  margin-bottom: var(--space-4);
   opacity: 0.5;
 }
 .hub-upcoming-empty-text {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-dimmer);
-  margin-bottom: 12px;
+  margin-bottom: var(--space-6);
 }
 .hub-upcoming-cta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 8px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-7);
+  border-radius: var(--radius-4);
   border: 1px solid var(--border-subtle);
   background: none;
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -271,14 +271,14 @@
 .hub-projects-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 .hub-project-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-4);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -311,13 +311,13 @@
   border: 1.5px dashed var(--warning);
 }
 .hub-project-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   width: 20px;
   text-align: center;
   flex-shrink: 0;
 }
 .hub-project-name {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   flex: 1;
   min-width: 0;
@@ -326,11 +326,11 @@
   white-space: nowrap;
 }
 .hub-project-sessions {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
   background: rgba(var(--overlay-rgb), 0.06);
-  padding: 2px 7px;
-  border-radius: 8px;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-4);
   flex-shrink: 0;
 }
 
@@ -341,16 +341,16 @@
 .hub-week-strip {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: var(--space-2);
   text-align: center;
 }
 .hub-week-day {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border-radius: 10px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-2);
+  border-radius: var(--radius-5);
   cursor: default;
   transition: background 0.15s ease;
 }
@@ -371,14 +371,14 @@
   justify-content: center;
 }
 .hub-week-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-dimmer);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 .hub-week-num {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text);
   width: 28px;
@@ -389,7 +389,7 @@
 }
 .hub-week-dots {
   display: flex;
-  gap: 3px;
+  gap: var(--space-2);
   justify-content: center;
   min-height: 6px;
 }
@@ -404,45 +404,45 @@
 .hub-tip {
   background: var(--bg-alt);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 16px 18px;
+  border-radius: var(--radius-6);
+  padding: var(--space-8) var(--space-9);
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-6);
   animation: hubCardIn 0.4s ease 0.24s both;
 }
 .hub-tip-icon {
   flex-shrink: 0;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
   background: var(--accent-12);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: var(--font-size-xl);
 }
 .hub-tip-body {
   flex: 1;
   min-width: 0;
 }
 .hub-tip-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--accent);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 .hub-tip-text {
-  font-size: 13.5px;
+  font-size: var(--font-size-base);
   line-height: 1.5;
   color: var(--text-secondary);
 }
 .hub-tip-nav {
   flex-shrink: 0;
   display: flex;
-  gap: 2px;
+  gap: var(--space-1);
   align-items: center;
 }
 .hub-tip-prev,
@@ -451,8 +451,8 @@
   border: none;
   color: var(--text-dimmer);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+  padding: var(--space-2);
+  border-radius: var(--radius-3);
   transition: color 0.15s, background 0.15s;
   display: flex;
   align-items: center;
@@ -476,14 +476,14 @@
 .hub-recent-sessions-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 .hub-recent-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-4);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -536,7 +536,7 @@
   border: 1.5px dashed var(--warning);
 }
 .hub-recent-project-icon {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   width: 20px;
   text-align: center;
   flex-shrink: 0;
@@ -548,19 +548,19 @@
 .hub-recent-project-icon--abbrev {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-2);
   background: rgba(var(--overlay-rgb), 0.08);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
   letter-spacing: -0.2px;
   color: var(--text-secondary);
   vertical-align: middle;
 }
 .hub-recent-title {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text);
   flex: 1;
   min-width: 0;
@@ -569,12 +569,12 @@
   white-space: nowrap;
 }
 .hub-recent-agent {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: 600;
   color: var(--accent);
   background: var(--accent-12);
-  padding: 1px 6px;
-  border-radius: 6px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-3);
   flex-shrink: 0;
   max-width: 70px;
   overflow: hidden;
@@ -582,7 +582,7 @@
   white-space: nowrap;
 }
 .hub-recent-time {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-dimmer);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -590,10 +590,10 @@
   text-align: right;
 }
 .hub-recent-empty {
-  font-size: 13px;
+  font-size: var(--font-size-md);
   color: var(--text-dimmer);
   text-align: center;
-  padding: 16px 8px;
+  padding: var(--space-8) var(--space-4);
 }
 
 /* Hide user island when hub is visible */
@@ -607,7 +607,7 @@
 /* --- Mobile --- */
 @media (max-width: 768px) {
   #home-hub {
-    padding: 32px 16px calc(80px + var(--safe-bottom, 0px));
+    padding: var(--space-16) var(--space-8) calc(80px + var(--safe-bottom, 0px));
   }
   /* Close button (top:16px, 40px circle, right:20px) occupies the top-right
      corner of #home-hub's padding box. Push the inner content down so the
@@ -618,16 +618,16 @@
     margin-top: 44px;
   }
   .hub-greeting h1 {
-    font-size: 22px;
+    font-size: var(--font-size-4xl);
   }
   .hub-columns {
     grid-template-columns: 1fr;
   }
   .hub-week-label {
-    font-size: 10px;
+    font-size: var(--font-size-2xs);
   }
   .hub-week-num {
-    font-size: 13px;
+    font-size: var(--font-size-md);
   }
 }
 
@@ -637,8 +637,8 @@
 
 .home-hub-mates {
   display: flex;
-  gap: 16px;
-  padding: 0 4px 16px;
+  gap: var(--space-8);
+  padding: 0 var(--space-2) var(--space-8);
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
@@ -657,7 +657,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   min-width: 64px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -699,7 +699,7 @@
 }
 
 .home-hub-mate-name {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
   max-width: 64px;
   white-space: nowrap;
@@ -716,8 +716,8 @@
 }
 .home-hub-mate-primary-star {
   color: var(--success);
-  font-size: 8px;
-  margin-left: 2px;
+  font-size: var(--font-size-2xs);
+  margin-left: var(--space-1);
   vertical-align: super;
 }
 
