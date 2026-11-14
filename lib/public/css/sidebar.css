@@ -1959,7 +1959,8 @@
 }
 
 /* Vendor-reported compaction in progress, shown beside the session title. */
-.session-item .session-compacting {
+.session-item .session-compacting,
+.mobile-session-item .session-compacting {
   font-size: 10px;
   margin-right: 6px;
   padding: 0 5px;
