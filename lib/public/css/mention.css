@@ -15,7 +15,7 @@
   border-radius: 10px;
   margin-bottom: 8px;
   box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.15);
-  z-index: 10;
+  z-index: var(--z-base);
 }
 
 #mention-menu.visible { display: block; }
