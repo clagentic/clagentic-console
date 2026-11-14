@@ -409,7 +409,12 @@ var MENU_SURFACES = [
   // detached control (empty rect) would put it in the top-left corner, clamped to the margin.
   { name: "schedule move popover", kind: "popover", node: "page", place: { placement: "below" }, at: { left: "100px", top: "126px" },
     detachedAt: { left: "8px", top: "8px" },
-    callSite: { file: "scheduler.js", has: /showMovePopover\(id, anchorEl\)/, gone: /showMovePopover\(id, btn\)/ } },
+    // Below the 768px breakpoint popover-position.js centres the card in the viewport
+    // for any anchor (live or detached); the row proves it lands there and inside the margin.
+    phone: { innerWidth: 390, innerHeight: 844, at: { left: "170px", top: "407px" } },
+    callSite: { file: "scheduler.js",
+      has: [/showMovePopover\(id, anchorEl\)/, /openCreateModalWithRecord\(rec, anchorEl\)/],
+      gone: [/showMovePopover\(id, btn\)/, /openCreateModalWithRecord\(rec, btn\)/] } },
   { name: "schedule end-type list", kind: "menu", node: "page", opener: true, place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
   { name: "loop pending popover", kind: "popover", node: "new", opener: true, id: "loop-pending-popover", place: { placement: "below-right-aligned" }, at: { left: "90px", top: "126px" } },
   // B2: the static and bespoke panels and popovers. An `inline` panel stays in
@@ -431,7 +436,11 @@ var MENU_SURFACES = [
 
 function rowNamed(name) { return MENU_SURFACES.filter(function (s) { return s.name === name; })[0]; }
 
-function openSurface(m, row, detached) {
+function openSurface(m, row, detached, viewport) {
+  if (viewport) {
+    global.window.innerWidth = viewport.innerWidth;
+    global.window.innerHeight = viewport.innerHeight;
+  }
   // The control the surface hangs from, or is opened by; a point has none. A
   // detached control is one removed from the page: it measures as an empty rect.
   var control = row.point ? null : anchorEl(m);
@@ -485,8 +494,17 @@ test("menu: each B1 surface opens as the shared menu, placed by popover-position
       assert.deepEqual({ left: stale.style.left, top: stale.style.top }, row.detachedAt, row.name + ": a detached anchor places it in the corner");
       assert.notDeepEqual(row.detachedAt, row.at, row.name + ": the live anchor places it elsewhere");
       var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", row.callSite.file), "utf8");
-      assert.match(src, row.callSite.has, row.name + ": opened from the live anchor");
-      assert.doesNotMatch(src, row.callSite.gone, row.name + ": not from the popover's own button");
+      row.callSite.has.forEach(function (re) { assert.match(src, re, row.name + ": opened from the live anchor"); });
+      row.callSite.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + ": not from the popover's own button"); });
+    }
+    if (row.phone) {
+      [false, true].forEach(function (detached) {
+        var st = openSurface(m, row, detached, row.phone).handle.el.style;
+        assert.deepEqual({ left: st.left, top: st.top }, row.phone.at, row.name + ": centred at the phone width (" + (detached ? "detached" : "live") + " anchor)");
+        var left = parseFloat(st.left);
+        var top = parseFloat(st.top);
+        assert.ok(left >= 8 && left + 50 <= row.phone.innerWidth - 8 && top >= 8 && top + 30 <= row.phone.innerHeight - 8, row.name + ": inside the viewport margin at the phone width");
+      });
     }
   }
 });
