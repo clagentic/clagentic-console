@@ -405,6 +405,11 @@ var MENU_SURFACES = [
   { name: "terminal context menu", kind: "menu", node: "built", point: { x: 300, y: 200 }, at: { left: "300px", top: "200px" } },
   { name: "sticky-note colour picker", kind: "popover", node: "built", place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
   { name: "schedule popover", kind: "popover", node: "page", place: { placement: "below" }, at: { left: "100px", top: "126px" } },
+  // The move list hangs from the control still in the page, so it lands beside it; a
+  // detached control (empty rect) would put it in the top-left corner, clamped to the margin.
+  { name: "schedule move popover", kind: "popover", node: "page", place: { placement: "below" }, at: { left: "100px", top: "126px" },
+    detachedAt: { left: "8px", top: "8px" },
+    callSite: { file: "scheduler.js", has: /showMovePopover\(id, anchorEl\)/, gone: /showMovePopover\(id, btn\)/ } },
   { name: "schedule end-type list", kind: "menu", node: "page", opener: true, place: { placement: "below", gap: 4 }, at: { left: "100px", top: "124px" } },
   { name: "loop pending popover", kind: "popover", node: "new", opener: true, id: "loop-pending-popover", place: { placement: "below-right-aligned" }, at: { left: "90px", top: "126px" } },
   // B2: the static and bespoke panels and popovers. An `inline` panel stays in
@@ -426,9 +431,14 @@ var MENU_SURFACES = [
 
 function rowNamed(name) { return MENU_SURFACES.filter(function (s) { return s.name === name; })[0]; }
 
-function openSurface(m, row) {
-  // The control the surface hangs from, or is opened by; a point has none.
+function openSurface(m, row, detached) {
+  // The control the surface hangs from, or is opened by; a point has none. A
+  // detached control is one removed from the page: it measures as an empty rect.
   var control = row.point ? null : anchorEl(m);
+  if (detached) {
+    control = m.doc.createElement("button");
+    control.getBoundingClientRect = function () { return { top: 0, left: 0, width: 0, height: 0, right: 0, bottom: 0 }; };
+  }
   var anchor = row.point || control;
   var opts = Object.assign({ kind: row.kind, doc: m.doc, id: row.id, closeButton: row.closeButton }, row.place);
   if (row.inline) opts.inline = true;
@@ -470,6 +480,14 @@ test("menu: each B1 surface opens as the shared menu, placed by popover-position
     assert.equal(el.classList.contains("overlay-menu-inline"), !!row.inline, row.name + ": the inline option is a class");
     assert.equal(open.handle.isOpen(), true, row.name + ": tracked by the registry");
     assert.equal(el.querySelectorAll(".overlay-close").length, row.closeButton ? 1 : 0, row.name + ": the close control only where asked");
+    if (row.detachedAt) {
+      var stale = openSurface(m, row, true).handle.el;
+      assert.deepEqual({ left: stale.style.left, top: stale.style.top }, row.detachedAt, row.name + ": a detached anchor places it in the corner");
+      assert.notDeepEqual(row.detachedAt, row.at, row.name + ": the live anchor places it elsewhere");
+      var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", row.callSite.file), "utf8");
+      assert.match(src, row.callSite.has, row.name + ": opened from the live anchor");
+      assert.doesNotMatch(src, row.callSite.gone, row.name + ": not from the popover's own button");
+    }
   }
 });
 
