@@ -72,7 +72,7 @@ var PAGE_ROWS = [
 // Server: page boundaries
 // ---------------------------------------------------------------------------
 
-function makeSessionManager(tmpHome, captured) {
+function makeSessionManager(tmpHome, captured, extraOpts) {
   ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) {
     delete require.cache[require.resolve(m)];
   });
@@ -85,12 +85,12 @@ function makeSessionManager(tmpHome, captured) {
     if (origHome === undefined) delete process.env.CLAGENTIC_HOME;
     else process.env.CLAGENTIC_HOME = origHome;
   }
-  return sessions.createSessionManager({
+  return sessions.createSessionManager(Object.assign({
     cwd: tmpHome,
     send: function (obj) { captured.push(obj); },
     sendTo: function (ws, obj) { captured.push(obj); },
     sendEach: function () {},
-  });
+  }, extraOpts || {}));
 }
 
 function sessionWithHistory(sm, history) {
@@ -102,12 +102,25 @@ function sessionWithHistory(sm, history) {
 }
 
 // What the load_more_history handler (lib/project-sessions.js) computes for a
-// page ending at `before`, served from the heap.
-function olderPageFrom(sm, sess, before) {
+// page ending at `before` (absolute index): from the heap when the window
+// lies inside it, from the full on-disk history when it reaches below the
+// trimmed head.
+function olderPage(sm, sess, before) {
+  var base = sess._historyBaseIndex || 0;
   var target = Math.max(0, before - sm.HISTORY_PAGE_SIZE);
-  var from = sm.findTurnBoundary(sess.history, target);
-  return sm.extendWindowForVisibility(sess.history, from, before);
+  if (target >= base) {
+    var heapFrom = sm.extendWindowForVisibility(sess.history, sm.findTurnBoundary(sess.history, target - base), before - base);
+    var lead = sm.leadingRunFromDisk(sess, heapFrom);
+    var view = lead.length ? lead.concat(sess.history) : sess.history;
+    var viewFrom = lead.length ? 0 : heapFrom;
+    return { from: base + heapFrom - lead.length, items: view.slice(viewFrom, before - base + lead.length) };
+  }
+  var disk = sm.readSessionHistoryFromDisk(sess);
+  var diskFrom = sm.extendWindowForVisibility(disk, sm.findTurnBoundary(disk, target), before);
+  return { from: diskFrom, items: disk.slice(diskFrom, before) };
 }
+
+function olderPageFrom(sm, sess, before) { return olderPage(sm, sess, before).from; }
 
 function pageStarts(sm, sess, captured) {
   captured.length = 0;
@@ -190,9 +203,9 @@ function replayAndPrepend(sm, sess, captured) {
   initial.forEach(function (m) { h.processMessage(m); });
   var from = initial[0].from;
   while (from > 0) {
-    var pageFrom = olderPageFrom(sm, sess, from);
-    mods.header.prependOlderHistory(sess.history.slice(pageFrom, from), { from: pageFrom, to: from, hasMore: pageFrom > 0 });
-    from = pageFrom;
+    var page = olderPage(sm, sess, from);
+    mods.header.prependOlderHistory(page.items, { from: page.from, to: from, hasMore: page.from > 0 });
+    from = page.from;
   }
 }
 
@@ -215,6 +228,40 @@ test("a 150-delta reply replayed then prepended renders one message with the fen
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
+});
+
+// The in-heap history is trimmed to a tail (historyInMemMax), both while a
+// session records and when it is loaded from disk. A trim point inside a delta
+// run leaves the reply's head on disk only; reads must still hand the client
+// the whole run, or the older-page path renders a second message with its own
+// header.
+var TRIM_ROWS = [
+  { name: "live trim inside a 400-delta reply", history: [user("q")].concat(deltas(replyPieces(400))), reload: false, replies: 1 },
+  { name: "tail load from disk inside a 400-delta reply", history: [user("q")].concat(deltas(replyPieces(400))), reload: true, replies: 1 },
+  { name: "live trim inside the second of two replies", history: [user("q")].concat(deltas(replyPieces(30)), [user("next")], deltas(replyPieces(300))), reload: false, replies: 2 },
+  { name: "tail load from disk inside the second of two replies", history: [user("q")].concat(deltas(replyPieces(30)), [user("next")], deltas(replyPieces(300))), reload: true, replies: 2 },
+];
+
+TRIM_ROWS.forEach(function (row) {
+  test("heap trim: " + row.name, async function () {
+    var tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-deltarun-"));
+    try {
+      var captured = [];
+      var sm = makeSessionManager(tmpHome, captured, { historyInMemMax: 150 });
+      var sess = sessionWithHistory(sm, row.history);
+      if (row.reload) {
+        sess._historyLoaded = false;
+        sm.loadSessionHistory(sess);
+      }
+      assert.ok(sess._historyBaseIndex > 0, "the heap was trimmed");
+      resetClient(false);
+      replayAndPrepend(sm, sess, captured);
+      await tick(20);
+      assert.equal(assistantEls().length, row.replies, "one assistant message element per reply");
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
 });
 
 // Initial replay of an unfinished reply, then live deltas of the same reply.
