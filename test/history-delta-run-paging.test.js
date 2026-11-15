@@ -110,10 +110,7 @@ function olderPage(sm, sess, before) {
   var target = Math.max(0, before - sm.HISTORY_PAGE_SIZE);
   if (target >= base) {
     var heapFrom = sm.extendWindowForVisibility(sess.history, sm.findTurnBoundary(sess.history, target - base), before - base);
-    var lead = sm.leadingRunFromDisk(sess, heapFrom);
-    var view = lead.length ? lead.concat(sess.history) : sess.history;
-    var viewFrom = lead.length ? 0 : heapFrom;
-    return { from: base + heapFrom - lead.length, items: view.slice(viewFrom, before - base + lead.length) };
+    return { from: base + heapFrom, items: sess.history.slice(heapFrom, before - base) };
   }
   var disk = sm.readSessionHistoryFromDisk(sess);
   var diskFrom = sm.extendWindowForVisibility(disk, sm.findTurnBoundary(disk, target), before);
@@ -156,7 +153,42 @@ PAGE_ROWS.forEach(function (row) {
 var sockets = [];
 var parsed = [];
 var created = [];
+var messagesEl;
 var mods;
+
+function makeMessagesEl(base) {
+  var list = Object.create(base);
+  var kids = [];
+  function link(c) {
+    Object.defineProperty(c, "parentNode", { configurable: true, get: function () { return kids.indexOf(c) === -1 ? null : list; } });
+    Object.defineProperty(c, "isConnected", { configurable: true, get: function () { return kids.indexOf(c) !== -1; } });
+    Object.defineProperty(c, "previousSibling", { configurable: true, get: function () { return kids[kids.indexOf(c) - 1] || null; } });
+    Object.defineProperty(c, "nextSibling", { configurable: true, get: function () { return kids[kids.indexOf(c) + 1] || null; } });
+    Object.defineProperty(c, "nextElementSibling", { configurable: true, get: function () { return kids[kids.indexOf(c) + 1] || null; } });
+    c.remove = function () { detach(c); };
+  }
+  function detach(c) { var at = kids.indexOf(c); if (at !== -1) kids.splice(at, 1); }
+  list.children = kids;
+  list.appendChild = function (c) { detach(c); kids.push(c); link(c); return c; };
+  list.insertBefore = function (c, ref) {
+    detach(c);
+    var at = ref ? kids.indexOf(ref) : -1;
+    kids.splice(at === -1 ? kids.length : at, 0, c);
+    link(c);
+    return c;
+  };
+  // The history sentinel is the only #messages child the code looks up by class.
+  list.querySelector = function (sel) {
+    var cls = sel.charAt(0) === "." ? sel.slice(1) : null;
+    return kids.filter(function (k) { return String(k.className || "").split(/\s+/).indexOf(cls) !== -1; })[0] || null;
+  };
+  Object.defineProperty(list, "firstChild", { get: function () { return kids[0] || null; } });
+  Object.defineProperty(list, "firstElementChild", { get: function () { return kids[0] || null; } });
+  Object.defineProperty(list, "lastChild", { get: function () { return kids[kids.length - 1] || null; } });
+  Object.defineProperty(list, "lastElementChild", { get: function () { return kids[kids.length - 1] || null; } });
+  Object.defineProperty(list, "innerHTML", { get: function () { return ""; }, set: function () { kids.length = 0; } });
+  return list;
+}
 
 test.before(async function () {
   installBrowserGlobals({
@@ -168,9 +200,15 @@ test.before(async function () {
   var realCreate = global.document.createElement;
   global.document.createElement = function (tag) {
     var el = realCreate(tag);
+    el.classList.contains = function (c) { return String(el.className || "").split(/\s+/).indexOf(c) !== -1; };
     created.push(el);
     return el;
   };
+  // The shared fake DOM is inert; stitching needs a #messages list that keeps
+  // its children in order.
+  var realGetById = global.document.getElementById;
+  messagesEl = makeMessagesEl(realGetById("messages"));
+  global.document.getElementById = function (id) { return id === "messages" ? messagesEl : realGetById(id); };
   await import(APP_JS_URL);
   mods = {
     handlers: await import(modUrl("app-messages.js")),
@@ -184,7 +222,7 @@ test.before(async function () {
 function tick(ms) { return new Promise(function (r) { setTimeout(r, ms || 0); }); }
 
 function assistantEls() {
-  return created.filter(function (el) { return el.className === "msg-assistant"; });
+  return messagesEl.children.filter(function (el) { return el.className === "msg-assistant"; });
 }
 
 function resetClient(processing) {
@@ -232,14 +270,15 @@ test("a 150-delta reply replayed then prepended renders one message with the fen
 
 // The in-heap history is trimmed to a tail (historyInMemMax), both while a
 // session records and when it is loaded from disk. A trim point inside a delta
-// run leaves the reply's head on disk only; reads must still hand the client
-// the whole run, or the older-page path renders a second message with its own
-// header.
+// run leaves the reply's head on disk only; the server serves pages as they
+// are, and client replay stitches the older page's trailing deltas into the
+// message already at the top, or the older-page path renders a second message
+// with its own header.
 var TRIM_ROWS = [
-  { name: "live trim inside a 400-delta reply", history: [user("q")].concat(deltas(replyPieces(400))), reload: false, replies: 1 },
-  { name: "tail load from disk inside a 400-delta reply", history: [user("q")].concat(deltas(replyPieces(400))), reload: true, replies: 1 },
-  { name: "live trim inside the second of two replies", history: [user("q")].concat(deltas(replyPieces(30)), [user("next")], deltas(replyPieces(300))), reload: false, replies: 2 },
-  { name: "tail load from disk inside the second of two replies", history: [user("q")].concat(deltas(replyPieces(30)), [user("next")], deltas(replyPieces(300))), reload: true, replies: 2 },
+  { name: "live trim inside a 400-delta reply", history: [user("q")].concat(deltas(replyPieces(400))), reload: false, texts: [replyPieces(400).join("")] },
+  { name: "tail load from disk inside a 400-delta reply", history: [user("q")].concat(deltas(replyPieces(400))), reload: true, texts: [replyPieces(400).join("")] },
+  { name: "live trim inside the second of two replies", history: [user("q")].concat(deltas(replyPieces(30)), [user("next")], deltas(replyPieces(300))), reload: false, texts: [replyPieces(30).join(""), replyPieces(300).join("")] },
+  { name: "tail load from disk inside the second of two replies", history: [user("q")].concat(deltas(replyPieces(30)), [user("next")], deltas(replyPieces(300))), reload: true, texts: [replyPieces(30).join(""), replyPieces(300).join("")] },
 ];
 
 TRIM_ROWS.forEach(function (row) {
@@ -257,7 +296,8 @@ TRIM_ROWS.forEach(function (row) {
       resetClient(false);
       replayAndPrepend(sm, sess, captured);
       await tick(20);
-      assert.equal(assistantEls().length, row.replies, "one assistant message element per reply");
+      assert.equal(assistantEls().length, row.texts.length, "one assistant message element per reply");
+      assert.deepEqual(assistantEls().map(mods.rendering.getFinalizedText), row.texts, "each reply's text is whole and in order");
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
