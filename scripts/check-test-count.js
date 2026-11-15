@@ -405,7 +405,12 @@ if (require.main === module) {
   // needs its own tighter bound sets the `timeout` option on itself.
   var testTimeoutMs = Number(process.env.CHECK_TEST_COUNT_TEST_TIMEOUT_MS) || 300000;
 
+  // Gives each test process its own temp root, removed on exit (see the
+  // helper's header); without it every os.tmpdir()-based test dir is left behind.
+  var TMPDIR_PRELOAD = path.join(__dirname, "..", "test", "helpers", "per-process-tmpdir.js");
+
   var result = spawnSync(process.execPath, [
+    "--require", TMPDIR_PRELOAD,
     "--test",
     "--test-timeout=" + testTimeoutMs,
     "--test-reporter=tap", "--test-reporter-destination=stdout",
