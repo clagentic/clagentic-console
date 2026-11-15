@@ -429,7 +429,9 @@ var MENU_SURFACES = [
   { name: "notification menu", b2: true, kind: "menu", node: "page", opener: true, place: { placement: "below-right-aligned", gap: 6 }, at: { left: "90px", top: "126px" } },
   { name: "update popover", b2: true, kind: "popover", node: "page", opener: true, place: { placement: "below-right-aligned", gap: 6 }, at: { left: "90px", top: "126px" } },
   { name: "extension popover", b2: true, kind: "popover", node: "page", opener: true, place: { placement: "below", gap: 8 }, at: { left: "100px", top: "128px" } },
-  { name: "rate-limit popover", b2: true, passive: true, kind: "popover", node: "new", place: { placement: "below-center", gap: 8 }, at: { left: "95px", top: "128px" } },
+  { name: "rate-limit popover", b2: true, passive: true, kind: "popover", node: "new", place: { placement: "below-center", gap: 8, mobile: false }, at: { left: "95px", top: "128px" },
+    // The notice opts out of phone centring: it stays under its header pill.
+    phone: { innerWidth: 390, innerHeight: 844, liveOnly: true, at: { left: "95px", top: "128px" } } },
   { name: "tool-palette menu", b2: true, kind: "menu", node: "new", point: { x: 300, y: 200 }, at: { left: "300px", top: "200px" } },
   { name: "profile popover", b2: true, kind: "popover", node: "built", opener: true, closeButton: true, place: { placement: "above", gap: 8 }, at: { left: "100px", top: "62px" } },
   { name: "speech-to-text language popover", b2: true, kind: "popover", node: "new", opener: true, place: { placement: "above", gap: 8 }, at: { left: "100px", top: "62px" } },
@@ -502,9 +504,9 @@ test("menu: each B1 surface opens as the shared menu, placed by popover-position
       row.callSite.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + ": not from the popover's own button"); });
     }
     if (row.phone) {
-      [false, true].forEach(function (detached) {
+      (row.phone.liveOnly ? [false] : [false, true]).forEach(function (detached) {
         var st = openSurface(m, row, detached, row.phone).handle.el.style;
-        assert.deepEqual({ left: st.left, top: st.top }, row.phone.at, row.name + ": centred at the phone width (" + (detached ? "detached" : "live") + " anchor)");
+        assert.deepEqual({ left: st.left, top: st.top }, row.phone.at, row.name + ": placed at the phone width (" + (detached ? "detached" : "live") + " anchor)");
         var left = parseFloat(st.left);
         var top = parseFloat(st.top);
         assert.ok(left >= 8 && left + 50 <= row.phone.innerWidth - 8 && top >= 8 && top + 30 <= row.phone.innerHeight - 8, row.name + ": inside the viewport margin at the phone width");
@@ -1415,10 +1417,18 @@ test("nav sheet: sidebar-mobile.js routes every nav button, its close and its ac
 var PHONE_ACTION_ROWS = [
   { name: "AC1 the row's actions control opens the shared desktop session menu through the shared overlay",
     file: "sidebar-mobile.js",
-    has: [/className = "mobile-session-actions"/, /aria-label", "Session actions"/,
+    has: [/className = "mobile-session-row-actions"/, /aria-label", "Session actions"/,
       /showSessionCtxMenu\(actionsBtn, s\.id, s\.title, s\.cliSessionId, s, \{\s*onRename: promptMobileSessionRename,\s*opener: actionsBtn/,
       /showSessionCtxMenu,/],
     gone: [/session-ctx-item/] },
+  { name: "the new-chat control group keeps its own class, which the row button does not share",
+    file: "sidebar-mobile.js",
+    has: [/actionGrid\.className = "mobile-session-actions"/],
+    gone: [/actionsBtn\.className = "mobile-session-actions"/] },
+  { name: "the rate-limit notice opts out of phone centring",
+    file: "app-rate-limit.js",
+    has: [/placement: "below-center",\s*gap: 8,[^}]*\bmobile: false/],
+    gone: [] },
   { name: "AC1 the desktop menu is exported once and its rename is replaceable",
     file: "sidebar-sessions.js",
     has: [/export function showSessionCtxMenu\(/, /opts\.onRename\) opts\.onRename\(sessionId, title\);\s*else startInlineRename\(sessionId, title\)/, /placement: "below-right-aligned", gap: 2, opener: opener/],
@@ -1454,6 +1464,20 @@ test("phone actions: the session row's actions control, the project sheet and th
     var src = fs.readFileSync(path.join(__dirname, "..", "lib", "public", "modules", row.file), "utf8");
     row.has.forEach(function (re) { assert.match(src, re, row.name + ": " + String(re)); });
     row.gone.forEach(function (re) { assert.doesNotMatch(src, re, row.name + ": " + String(re) + " is gone"); });
+  });
+});
+
+// The phone stylesheet: the new-chat control group and the row's 44px actions button
+// are different elements, so a rule for one must never size the other.
+var PHONE_BOX_ROWS = [
+  { selector: ".mobile-session-actions", width: null, height: null, why: "the new-chat group spans the list; it is not a 44px box" },
+  { selector: ".mobile-session-row-actions", width: "44px", height: "44px", why: "the row button keeps its 44px tap target" },
+];
+
+test("phone css: the new-chat group is not sized as the row actions button, which keeps its tap target", function () {
+  PHONE_BOX_ROWS.forEach(function (row) {
+    assert.equal(cssRules.valueAt(MOBILE_NAV, row.selector, "width", PHONE), row.width, row.selector + " width: " + row.why);
+    assert.equal(cssRules.valueAt(MOBILE_NAV, row.selector, "height", PHONE), row.height, row.selector + " height: " + row.why);
   });
 });
 
