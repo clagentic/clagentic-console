@@ -16,6 +16,7 @@ var crypto = require("crypto");
 var http = require("http");
 var WebSocket = require("ws");
 var { removeTempHome } = require("./helpers/remove-temp-home");
+var { TOKEN_ENV, newHarnessToken } = require("./fixtures/process-ownership");
 
 var COOKIE_NAME = "relay_auth_user";
 var TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -50,6 +51,11 @@ function userRecord(spec) {
 async function start(spec) {
   var home = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-access-"));
   process.env.CLAGENTIC_CONSOLE_HOME = home;
+  // Every process the server starts (a claude CLI child included) inherits the
+  // token, so stop() can wait for one it holds no handle to: such a child writes
+  // userhome/.claude.json as it exits, after the home was removed.
+  var token = newHarnessToken();
+  process.env[TOKEN_ENV] = token;
   // The daemon user's own ~/.claude (global CLAUDE.md) lives under HOME: keep it inside the sandbox.
   process.env.HOME = path.join(home, "userhome");
   fs.mkdirSync(path.join(process.env.HOME, ".claude"), { recursive: true });
@@ -206,10 +212,11 @@ async function start(spec) {
     // An adapter may still be writing under HOME as the server shuts down: the
     // helper lets its in-flight writes finish before it removes the home.
     try {
-      await removeTempHome(home);
+      await removeTempHome(home, { token: token });
     } catch (e) {
       failures.push(e);
     }
+    delete process.env[TOKEN_ENV];
     if (failures.length) throw failures[0];
   }
 
