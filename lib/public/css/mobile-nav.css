@@ -756,7 +756,7 @@
     margin-top: 0;
   }
 
-  .mobile-session-actions {
+  .mobile-session-row-actions {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -770,8 +770,8 @@
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
-  .mobile-session-actions:active { background: rgba(var(--overlay-rgb), 0.08); }
-  .mobile-session-actions .lucide { width: 18px; height: 18px; }
+  .mobile-session-row-actions:active { background: rgba(var(--overlay-rgb), 0.08); }
+  .mobile-session-row-actions .lucide { width: 18px; height: 18px; }
 
   .mobile-session-item {
     display: flex;
