@@ -21,6 +21,7 @@ test("the harness world gives the session handlers the sockets connect() adds, i
     assert.equal(handed.size, 1);
     server.disconnect(ws);
     assert.equal(handed.has(ws), false, "and gone once it disconnects");
+    assert.ok(process.env.CLAUDE_CONFIG_DIR.startsWith(server.home), "the title lookup searches the harness home, never the host's ~/.claude");
   } finally {
     server.shutdown();
     world.removeHome(server.home);

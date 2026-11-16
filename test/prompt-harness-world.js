@@ -99,6 +99,11 @@ async function createServer(opts) {
   // Older lib/ checkouts (CLAGENTIC_CONSOLE_PROMPT_HARNESS_LIB) read the un-scoped name.
   process.env.CLAGENTIC_HOME = home;
   process.env.CLAGENTIC_CONSOLE_HOME = home;
+  // A turn result starts a detached title lookup that searches every directory
+  // under <claude config dir>/projects. Left at the host's real ~/.claude, its
+  // cost grows with the host's session history and keeps the process alive for
+  // minutes after the test ends; inside the harness home it finds nothing at once.
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, ".claude");
   // The stored mode lib/push-audience.js reads; an absent file reads as multi-user.
   fs.mkdirSync(path.join(home, "console"), { recursive: true });
   fs.writeFileSync(path.join(home, "console", "users.json"), JSON.stringify({ multiUser: opts.multiUser === true, users: opts.users || [], invites: [] }));
