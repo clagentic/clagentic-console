@@ -15,7 +15,12 @@
 var test = require('node:test');
 var assert = require('node:assert');
 
-var { createDrain, DEFAULT_DRAIN_TIMEOUT_MS } = require('../lib/drain');
+var {
+  createDrain,
+  DEFAULT_DRAIN_TIMEOUT_MS,
+  DEFAULT_SIGTERM_DRAIN_TIMEOUT_MS,
+  MAX_SIGTERM_DRAIN_TIMEOUT_MS,
+} = require('../lib/drain');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -342,4 +347,99 @@ test('immediate exit when activeCount is 0 at enterDrain time', function (t, don
     assert.strictEqual(h.shutdownCalled.count, 1, 'should exit immediately when no active sessions');
     done();
   }, 50);
+});
+
+// ---------------------------------------------------------------------------
+// 12. SIGTERM/SIGINT drain with the short stop-timeout bound
+// ---------------------------------------------------------------------------
+
+var sessionReclaim = require('../lib/session-reclaim');
+
+// A session whose foreground query is running, with no background agent.
+function runningSession() {
+  var saved = [];
+  var session = { localId: 1, queryInstance: {}, isProcessing: true };
+  var sm = { saveSessionFile: function (s) { saved.push(s); } };
+  return { session: session, sm: sm, saved: saved };
+}
+
+var TERM_ROWS = [
+  {
+    name: 'SIGTERM with an active query exits at count zero, inside the bound',
+    active: 1, sigtermMs: 3000, finishAfterMs: 100, checkAfterMs: 1300,
+    expectExits: 1, expectReason: 'active_count_zero', expectNotice: false,
+  },
+  {
+    name: 'SIGTERM with an active query exits at the bound and records the in-flight notice',
+    active: 1, sigtermMs: 120, finishAfterMs: null, checkAfterMs: 300,
+    expectExits: 1, expectReason: 'timeout_forced', expectNotice: true,
+  },
+  {
+    name: 'SIGTERM with no active query exits promptly',
+    active: 0, sigtermMs: 3000, finishAfterMs: null, checkAfterMs: 50,
+    expectExits: 1, expectReason: 'active_count_zero', expectNotice: false,
+  },
+];
+
+TERM_ROWS.forEach(function (row) {
+  test('term drain: ' + row.name, function (t, done) {
+    var logs = [];
+    var work = runningSession();
+    var activeCount = row.active;
+    var exits = 0;
+    var drain = createDrain({
+      gracefulShutdown: function () {
+        exits++;
+        // The real shutdown runs the reclaim announcer per session before it
+        // aborts the query; a finished query is no longer processing.
+        if (activeCount > 0) sessionReclaim.announceShutdownReclaim(work.session, work.sm);
+      },
+      getActiveCount: function () { return activeCount; },
+      sigtermDrainTimeoutMs: row.sigtermMs,
+      log: function (e) { logs.push(e); },
+    });
+    drain.enterTermDrain('signal_term');
+    assert.strictEqual(drain.isRefusingNewWork(), true, 'new work is refused during the drain');
+    drain.enterTermDrain('signal_term'); // a second signal is idempotent
+    if (row.finishAfterMs != null) setTimeout(function () { activeCount = 0; }, row.finishAfterMs);
+
+    setTimeout(function () {
+      assert.strictEqual(exits, row.expectExits);
+      var exitLog = logs.find(function (l) { return l.event === 'drain_exit'; });
+      assert.strictEqual(exitLog.reason, row.expectReason);
+      assert.strictEqual(logs.filter(function (l) { return l.event === 'drain_enter'; }).length, 1);
+      assert.strictEqual(!!work.session.pendingAutoResume, row.expectNotice);
+      if (row.expectNotice) {
+        assert.strictEqual(work.session.pendingAutoResumeReason, sessionReclaim.RESTART_REASON);
+        assert.deepStrictEqual(work.session.pendingAutoResumeAgents, ['foreground query']);
+        assert.strictEqual(work.saved.length, 1, 'the marker is persisted synchronously');
+      }
+      done();
+    }, row.checkAfterMs);
+  });
+});
+
+test('term drain: the configured bound is clamped to the stop-timeout budget', function () {
+  var logs = [];
+  var drain = createDrain({
+    gracefulShutdown: function () {},
+    getActiveCount: function () { return 1; },
+    sigtermDrainTimeoutMs: 600000,
+    log: function (e) { logs.push(e); },
+  });
+  drain.enterTermDrain('signal_term');
+  var enterLog = logs.find(function (l) { return l.event === 'drain_enter'; });
+  assert.strictEqual(enterLog.drainTimeoutMs, MAX_SIGTERM_DRAIN_TIMEOUT_MS);
+  assert.ok(MAX_SIGTERM_DRAIN_TIMEOUT_MS + 10000 < 20000, 'bound plus the 10 s forced exit fits TimeoutStopSec=20');
+  assert.ok(DEFAULT_SIGTERM_DRAIN_TIMEOUT_MS <= MAX_SIGTERM_DRAIN_TIMEOUT_MS);
+});
+
+test('term drain: SIGTERM during an operator drain shortens the wait to its bound', function (t, done) {
+  var h = makeDrain({ activeCount: 1, drainTimeoutMs: 60000 });
+  h.drain.enterDrain('signal_usr1');
+  h.drain.enterDrain('signal_term', undefined, 100);
+  setTimeout(function () {
+    assert.strictEqual(h.shutdownCalled.count, 1, 'exits at the SIGTERM bound, not the 60 s drain bound');
+    done();
+  }, 250);
 });
