@@ -6,6 +6,10 @@ Feature PRs require an issue first: https://github.com/clagentic/clagentic-conso
 
 Large refactors and new dependencies need prior discussion before any code is written.
 
+## Stands alone
+
+Clagentic: Console requires no other tool. Integrations are optional and detected at runtime. Nothing specific to one deployment or one consumer goes in the product. The README lists the requirements.
+
 ## Pull request checklist
 
 - [ ] If this change adds or changes an agent-facing feature (a verb, flag, address form, result code, sender field or session behaviour that agents can see), it updates [docs/guides/AGENT-GUIDE.md](docs/guides/AGENT-GUIDE.md), the canonical place where agent-facing features are documented.
