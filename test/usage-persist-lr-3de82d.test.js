@@ -76,6 +76,23 @@ test("a record persisted in the host state reads as last known hours later, neve
   assert.equal(x.utilizationObservedAt, "2026-11-12T11:56:06.000Z");
 });
 
+test("a confirmed record persisted in the host state reads as a closed window's last known after resetsAt", function () {
+  var t = tmpFile();
+  fs.writeFileSync(t.file, JSON.stringify({ version: 1, vendors: { claude: { seven_day: {
+    utilization: 0.98, utilizationObservedAt: "2026-11-16T22:38:20.000Z", resetsAt: "2026-11-17T00:00:00.000Z",
+    status: "allowed", observedAt: "2026-11-16T22:38:20.000Z", confirmedAt: "2026-11-16T22:50:00.000Z", source: "s", sessionLocalId: null,
+  } } } }));
+  var s = createUsageStore({ file: t.file, log: function () {} });
+  s.load();
+  var x = snap(s, Date.parse("2026-11-17T00:05:00Z")).vendors.claude.buckets.seven_day;
+  assert.equal(x.utilization, null);
+  assert.equal(x.lastKnownUtilization, 0.98);
+  assert.equal(x.lastKnownObservedAt, "2026-11-16T22:38:20.000Z");
+  assert.equal(x.lastKnownPreReset, true);
+  assert.equal(x.lastKnownStale, false);
+  assert.equal(x.state, "expired");
+});
+
 test("reloaded old record reads stale, then expired, never re-stamped fresh", function () {
   var t = tmpFile();
   var a = createUsageStore({ file: t.file, log: function () {} });
