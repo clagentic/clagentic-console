@@ -234,6 +234,50 @@ test("setAvatar validates the reference, reports an unseen agent, and null clear
   assert.equal((await m.roster.setAvatar(CALLER, "agent-a", null)).agent.avatar, null);
 });
 
+test("a failed avatar write is rolled back on disk too when a sighting persist started during it lands", async function () {
+  var calls = [];
+  var m = makeRoster(tmpFile(), {
+    writeJson: function (f, v) {
+      var call = { body: JSON.parse(JSON.stringify(v)) };
+      call.done = new Promise(function (resolve, reject) { call.resolve = resolve; call.reject = reject; });
+      calls.push(call);
+      return call.done;
+    },
+  });
+  var avatarOf = function (body) { return body.agents[0].avatar; };
+  var previous = { style: "bottts", seed: "s" };
+  m.roster.observe({ key: "agent-a", source: "session" });
+  var first = m.roster.flush();
+  calls[0].resolve();
+  await first;
+  var kept = m.roster.setAvatar(CALLER, "agent-a", previous);
+  calls[1].resolve();
+  assert.equal((await kept).ok, true);
+
+  var err = console.error;
+  console.error = function () {};
+  try {
+    var failing = m.roster.setAvatar(CALLER, "agent-a", { custom: "team-icon" });
+    var changesBefore = m.changes.n;
+    m.roster.observe({ key: "agent-a", source: "subagent" });
+    var sighting = m.roster.flush();
+    assert.deepEqual(avatarOf(calls[3].body), { custom: "team-icon" }, "the sighting write snapshotted the rejected choice");
+    calls[2].reject(new Error("disk full"));
+    var out = await failing;
+    assert.equal(out.ok, false);
+    assert.equal(out.error, roster.SAVE_FAILED);
+    calls[3].resolve();
+    calls[4].resolve();
+    await sighting;
+    await m.roster.flush();
+  } finally {
+    console.error = err;
+  }
+  assert.deepEqual(m.roster.list()[0].avatar, previous, "memory holds the previous choice");
+  assert.deepEqual(avatarOf(calls[calls.length - 1].body), previous, "the last write received holds the previous choice");
+  assert.equal(m.changes.n, changesBefore + 1, "only the sighting nudged; the rolled-back change did not");
+});
+
 test("renaming a custom icon moves the choices that named it, and only those", async function () {
   var file = tmpFile();
   var m = makeRoster(file);
