@@ -9,7 +9,8 @@ var fs = require("fs");
 var os = require("os");
 var path = require("path");
 
-var { readLatestAiTitle, findTranscript } = require("../lib/cli-transcript-title");
+var transcriptTitle = require("../lib/cli-transcript-title");
+var { readLatestAiTitle, findTranscript } = transcriptTitle;
 var { createAiTitleRefresher } = require("../lib/session-ai-title");
 var { attachMessageProcessor } = require("../lib/sdk-message-processor");
 var utils = require("../lib/utils");
@@ -273,3 +274,137 @@ test("with no runtime CLAUDE_CONFIG_DIR the owner home is used, then the daemon 
     if (saved !== undefined) process.env.CLAUDE_CONFIG_DIR = saved;
   }
 });
+
+test("a refresher with no claudeDir reads the title under CLAUDE_CONFIG_DIR", async function () {
+  var configDir = claudeDir();
+  var daemonHome = claudeDir();
+  writeTitle(configDir, "From CLAUDE_CONFIG_DIR");
+  writeTitle(path.join(daemonHome, ".claude"), "From the daemon home");
+  var saved = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = configDir;
+  try {
+    var refresh = overlayRefresher({ daemonHome: daemonHome });
+    var s = makeSession();
+    assert.equal(await refresh(s), true);
+    assert.equal(s.title, "From CLAUDE_CONFIG_DIR");
+  } finally {
+    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = saved;
+  }
+});
+
+// Bounded fallback scan. Each case builds its own temp claudeDir (never the
+// host's), counts the fs calls findTranscript makes, and restores the memo,
+// bounds, clock and fs on the way out so nothing leaks between cases.
+var PROJECT_DIRS = 250;
+
+function withScanCase(fn) {
+  return async function (t) {
+    var limits = transcriptTitle.limits;
+    var savedLimits = Object.assign({}, limits);
+    var realReaddir = fs.promises.readdir;
+    var realStat = fs.promises.stat;
+    var counts = { readdir: 0, stat: 0 };
+    transcriptTitle.resetMemo();
+    // Listed in reverse name order so the transcript's "-other-..." dir comes
+    // after the "-project-..." ones whatever order the filesystem returns.
+    fs.promises.readdir = function () {
+      counts.readdir++;
+      return realReaddir.apply(this, arguments).then(function (names) { return names.sort().reverse(); });
+    };
+    fs.promises.stat = function () { counts.stat++; return realStat.apply(this, arguments); };
+    try {
+      await fn(t, counts);
+    } finally {
+      fs.promises.readdir = realReaddir;
+      fs.promises.stat = realStat;
+      Object.assign(limits, savedLimits);
+      transcriptTitle.resetMemo();
+    }
+  };
+}
+
+// Adds PROJECT_DIRS empty project dirs.
+function crowd(dir) {
+  for (var i = 0; i < PROJECT_DIRS; i++) fs.mkdirSync(path.join(dir, "projects", "-project-" + i), { recursive: true });
+  return dir;
+}
+
+function reset(counts) { counts.readdir = 0; counts.stat = 0; }
+
+test("repeated lookups of a transcript outside the cwd dir sweep the projects dir once", withScanCase(async function (t, counts) {
+  var dir = claudeDir();
+  var file = transcriptFile(dir, "/other/place", SID);
+  fs.writeFileSync(file, aiTitle("x"));
+  crowd(dir);
+
+  // Without the memo every lookup repeats the sweep.
+  for (var i = 0; i < 10; i++) {
+    transcriptTitle.resetMemo();
+    assert.equal(await findTranscript(dir, [CWD], SID), file);
+  }
+  t.diagnostic("before: 10 lookups = " + counts.readdir + " readdir, " + counts.stat + " stat");
+  var beforeStat = counts.stat;
+  reset(counts);
+  transcriptTitle.resetMemo();
+
+  for (var j = 0; j < 10; j++) assert.equal(await findTranscript(dir, [CWD], SID), file);
+  t.diagnostic("after: 10 lookups = " + counts.readdir + " readdir, " + counts.stat + " stat");
+  assert.equal(counts.readdir, 1);
+  // One sweep (at most one stat per project dir), then the cwd dir and the
+  // memo re-check for each lookup.
+  assert.ok(counts.stat <= PROJECT_DIRS + 1 + 10 * 2, "stat calls: " + counts.stat);
+  assert.ok(counts.stat < beforeStat, "after " + counts.stat + " vs before " + beforeStat);
+}));
+
+test("a memoized path whose file is gone is dropped and the new location found", withScanCase(async function (t, counts) {
+  var dir = crowd(claudeDir());
+  var first = transcriptFile(dir, "/other/place", SID);
+  fs.writeFileSync(first, aiTitle("x"));
+  assert.equal(await findTranscript(dir, [CWD], SID), first);
+
+  fs.unlinkSync(first);
+  var second = transcriptFile(dir, "/another/place", SID);
+  fs.writeFileSync(second, aiTitle("y"));
+  reset(counts);
+  assert.equal(await findTranscript(dir, [CWD], SID), second);
+  assert.equal(counts.readdir, 1, "one normal lookup after the stale entry");
+
+  reset(counts);
+  assert.equal(await findTranscript(dir, [CWD], SID), second);
+  assert.equal(counts.readdir, 0);
+}));
+
+test("a miss is not swept again inside the retry interval, and is after it", withScanCase(async function (t, counts) {
+  var dir = crowd(claudeDir());
+  var clock = 1000;
+  transcriptTitle.limits.now = function () { return clock; };
+
+  for (var i = 0; i < 5; i++) assert.equal(await findTranscript(dir, [CWD], SID), null);
+  assert.equal(counts.readdir, 1);
+
+  clock += transcriptTitle.limits.retryMs - 1;
+  assert.equal(await findTranscript(dir, [CWD], SID), null);
+  assert.equal(counts.readdir, 1, "still inside the interval");
+
+  var late = transcriptFile(dir, "/other/place", SID);
+  fs.writeFileSync(late, aiTitle("x"));
+  clock += 1;
+  assert.equal(await findTranscript(dir, [CWD], SID), late, "a transcript written later is found after the interval");
+  assert.equal(counts.readdir, 2);
+}));
+
+test("the memos never exceed their bound and evict the oldest entry", withScanCase(async function () {
+  var dir = crowd(claudeDir());
+  transcriptTitle.limits.maxEntries = 5;
+  var ids = [];
+  for (var i = 0; i < 12; i++) {
+    var id = "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
+    ids.push(id);
+    if (i % 2 === 0) fs.writeFileSync(transcriptFile(dir, "/other/place", id), aiTitle("x", id));
+    await findTranscript(dir, [CWD], id);
+    var sizes = transcriptTitle.memoSizes();
+    assert.ok(sizes.hits <= 5 && sizes.misses <= 5, JSON.stringify(sizes));
+  }
+  assert.deepEqual(transcriptTitle.memoSizes(), { hits: 5, misses: 5 });
+}));
