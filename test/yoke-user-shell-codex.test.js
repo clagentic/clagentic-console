@@ -375,21 +375,134 @@ test("a command is refused, without being sent, while a model turn is running", 
   await finish(h);
 });
 
-test("turn-id table Y7: a turn that starts after a run gave up is never bound by timing and is delivered", async function () {
+// A command the watchdog gave up on before its turn started: the runner stays
+// busy until that run's own turn starts and ends. Chat is held meanwhile, and the
+// turn is bound as the first turn/started after the request, never by a timer or
+// by what the turn runs.
+async function turnlessSettle(h, command) {
+  var pending = h.handle.runUserShellCommand(command, null, 60000, 1024);
+  await tick();
+  test.mock.timers.tick(80000);
+  return pending;
+}
+
+test("turn-id table AC1: after the watchdog gave up, the run's own late turn stays out of the stream and the runner stays busy until it ends", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
   test.mock.timers.enable({ apis: ["setTimeout"] });
   try {
-    var pending = h.handle.runUserShellCommand("sleep 999", null, 60000, 1024);
+    var result = await turnlessSettle(h, "sleep 999");
+    assert.equal(result.timedOut, true);
+    assert.match(result.output, /Chat waits until that turn ends or you press Stop/);
+
+    h.handle.pushMessage("second", null, "human", "m2");
+    for (var i = 0; i < 20; i++) await tick();
+    assert.equal(fake.callsTo("turn/start").length, 1, "chat is held while the run's turn is still to come");
+
+    var before = h.events.length;
+    startShellTurn(fake, "turn-late");
+    fake.dispatch("item/started", { turnId: "turn-late", item: cmdItem({ status: "inProgress" }) });
+    for (i = 0; i < 20; i++) await tick();
+    assert.equal(fake.callsTo("turn/start").length, 1, "chat is still held while the late turn runs");
+    completeShellItem(fake, { aggregatedOutput: "", status: "failed" }, "turn-late");
+    endShellTurn(fake, "interrupted", "turn-late");
+    await tick();
+    assert.equal(h.events.length, before, "none of the late turn's notifications reached the stream");
+
+    for (i = 0; i < 100 && fake.callsTo("turn/start").length < 2; i++) await tick();
+    assert.equal(fake.callsTo("turn/start").length, 2, "chat proceeds once the late turn has ended, none dropped");
+  } finally {
+    test.mock.timers.reset();
+  }
+  await finish(h);
+});
+
+test("turn-id table AC3: a new command during the wait is refused with a reason and not sent", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  test.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    await turnlessSettle(h, "sleep 999");
+    var refused = await h.handle.runUserShellCommand("ls", null, 1000, 1024);
+    assert.equal(refused.exitCode, null);
+    assert.match(refused.output, /previous command's turn has not ended/);
+    assert.equal(fake.callsTo("thread/shellCommand").length, 1, "only the first command was sent");
+
+    startShellTurn(fake, "turn-late");
+    endShellTurn(fake, "interrupted", "turn-late");
+    await tick();
+    var next = h.handle.runUserShellCommand("ls", null, 1000, 1024);
+    await tick();
+    assert.equal(fake.callsTo("thread/shellCommand").length, 2, "a command is accepted again once the late turn ended");
+    commandTurn(fake, { command: "ls", aggregatedOutput: "x", exitCode: 0, durationMs: 1, status: "completed" });
+    assert.equal((await next).output, "x");
+  } finally {
+    test.mock.timers.reset();
+  }
+  await finish(h);
+});
+
+test("turn-id table AC3: Stop clears the wait and releases held chat; a turn that was never bound is not taken", async function () {
+  var runner = require("../lib/yoke/adapters/codex-user-shell").createUserShellRunner({
+    send: function () { return Promise.resolve({}); },
+    isReady: function () { return true; },
+    threadId: function () { return "thread-1"; },
+    activeTurnId: function () { return null; },
+  });
+  test.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    var pending = runner.run("sleep 999", 60000, 1024, null);
     await tick();
     test.mock.timers.tick(80000);
     assert.equal((await pending).timedOut, true);
 
-    var before = h.events.length;
-    assert.equal(await modelTurnEnded(h, fake, "turn-after"), true, "a turn after the run settled is delivered, not captured");
-    assert.ok(h.events.length > before);
+    var released = false;
+    runner.whenIdle().then(function () { released = true; });
+    await tick();
+    assert.equal(released, false, "held while the run's turn is to come");
+    runner.interruptRunning();
+    await tick();
+    assert.equal(released, true, "Stop released the held chat");
+    assert.equal(runner.consume("turn/started", { turn: { id: "turn-later" } }), false, "a turn after Stop is not taken as the command's");
   } finally {
     test.mock.timers.reset();
   }
+});
+
+test("turn-id table AC3: ending the query during the wait releases the held chat, in order", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  test.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    await turnlessSettle(h, "sleep 999");
+    h.handle.pushMessage("second", null, "human", "m2");
+    for (var i = 0; i < 20; i++) await tick();
+    assert.equal(fake.callsTo("turn/start").length, 1, "held while the run's turn is to come");
+    h.handle.close();
+    for (i = 0; i < 100 && fake.callsTo("turn/start").length < 2; i++) await tick();
+    assert.equal(fake.callsTo("turn/start").length, 2, "the query ending stopped the wait and the chat went out");
+  } finally {
+    test.mock.timers.reset();
+  }
+  await h.reader;
+});
+
+test("turn-id table AC2: chat sent while a command runs is held, never bound as the command's turn, and runs after it settles", async function () {
+  var fake = fakeAppServer();
+  var h = await idleHandle(fake);
+  var pending = h.handle.runUserShellCommand("ls", null, 1000, 1024);
+  await tick();
+  h.handle.pushMessage("second", null, "human", "m2");
+  for (var i = 0; i < 20; i++) await tick();
+  assert.equal(fake.callsTo("turn/start").length, 1, "the chat's turn/start is not sent while the command runs");
+
+  commandTurn(fake, { command: "ls", aggregatedOutput: "listing", exitCode: 0, durationMs: 1, status: "completed" });
+  var result = await pending;
+  assert.equal(result.output, "listing", "the result is the command's own");
+  var before = h.events.length;
+  for (i = 0; i < 100 && fake.callsTo("turn/start").length < 2; i++) await tick();
+  for (i = 0; i < 10; i++) await tick();
+  assert.equal(fake.callsTo("turn/start").length, 2, "the chat is sent once the command has settled");
+  assert.ok(h.events.slice(before).some(function (e) { return e.yokeType === "turn_start"; }), "its turn reached the stream");
   await finish(h);
 });
