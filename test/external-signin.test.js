@@ -606,7 +606,23 @@ row("the pending store is single-use and bounded", async function () {
   assert.ok(store.size() <= 200, "bounded");
 });
 
-test("external sign-in caller shapes", async function (t) {
+row("a flood from one address does not evict another address's pending sign-in", async function (jose) {
+  var ctx = await setup(jose, { app: { trustedProxy: true } });
+  try {
+    var B = { "X-Forwarded-For": "203.0.113.2" };
+    var startedB = await ctx.start(B);
+    assert.equal(startedB.status, 302, startedB.text);
+    var issued = ctx.provider.issueCode(startedB.headers.location, SUBJECT);
+    for (var i = 0; i < 300; i++) {
+      ctx.app.core.provider.pending.put("flood-" + i, { nonce: "n" }, "203.0.113.1");
+    }
+    var done = await ctx.callback(issued.code, issued.state, cookieHeader(startedB.cookies), B);
+    assert.equal(done.status, 302, done.text);
+    assert.ok(sessionCookie(done), "address B still signs in");
+  } finally { ctx.close(); }
+});
+
+test("external sign-in caller shapes",async function (t) {
   var jose = await import("jose");
   for (var i = 0; i < ROWS.length; i++) {
     await t.test(ROWS[i].name, ROWS[i].fn.bind(null, jose));
