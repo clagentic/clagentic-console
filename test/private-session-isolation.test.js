@@ -1,0 +1,326 @@
+// A private session is private: only its owner can see it, type into it, learn
+// that it exists, or change its visibility. A real server, real users and real
+// WebSocket clients; only the project-access lookup is a table.
+//
+// The caller shapes: the owner (two connections), a project member who is not
+// the owner, an admin who is not the owner, a session with no owner (admin and
+// non-admin), and a connection that already has the session open when its
+// visibility changes.
+
+"use strict";
+
+var test = require("node:test");
+var assert = require("node:assert/strict");
+var fs = require("fs");
+var path = require("path");
+var harness = require("./access-harness");
+
+var H = null;
+var SM = null;
+var CTX = null;
+
+test.before(async function () {
+  H = await harness.start({
+    users: [
+      { key: "alice", username: "alice" },
+      { key: "bob", username: "bob" },
+      { key: "carol", username: "carol", role: "admin" },
+    ],
+    projects: [{ slug: "team", visibility: "public" }],
+  });
+  H.relay.forEachProject(function (ctx, slug) { if (slug === "team") CTX = ctx; });
+  SM = CTX.sm;
+});
+
+test.after(async function () {
+  if (H) await H.stop();
+});
+
+function makeSession(ownerKey, visibility) {
+  return SM.createSessionRaw({ ownerId: ownerKey ? H.people[ownerKey].id : null, sessionVisibility: visibility });
+}
+
+async function connect(userKey) {
+  var c = await H.connect("team", userKey);
+  assert.ok(c.ok, "connect " + userKey);
+  await c.waitFor(function (m) { return m.type === "session_list"; });
+  return c;
+}
+
+async function view(client, session) {
+  client.inbox.length = 0;
+  client.send({ type: "switch_session", id: session.localId });
+  await client.waitFor(function (m) { return m.type === "session_switched" && m.id === session.localId; });
+}
+
+// How many of the user's connections are bound to the session on the server.
+function boundTo(userKey, session) {
+  var n = 0;
+  CTX.forEachClient(function (ws) {
+    if (ws._clagenticUser && ws._clagenticUser.id === H.people[userKey].id && ws._clagenticActiveSession === session.localId) n++;
+  });
+  return n;
+}
+
+function got(client, pred) {
+  return client.inbox.filter(pred);
+}
+
+function userMessages(session, userKey) {
+  return session.history.filter(function (e) {
+    return e.type === "user_message" && e.from === H.people[userKey].id;
+  });
+}
+
+var NOT_AVAILABLE = /not available/i;
+
+// --- who may change a session's visibility ----------------------------------------
+
+var VISIBILITY_ROWS = [
+  { name: "owner, shared to private", actor: "alice", owner: "alice", from: "shared", set: "private", applied: true },
+  { name: "owner, private to shared", actor: "alice", owner: "alice", from: "private", set: "shared", applied: true },
+  { name: "member who is not the owner, shared to private", actor: "bob", owner: "alice", from: "shared", set: "private", applied: false, told: true },
+  { name: "admin who is not the owner, shared to private", actor: "carol", owner: "alice", from: "shared", set: "private", applied: false, told: true },
+  { name: "admin who is not the owner, private to shared", actor: "carol", owner: "alice", from: "private", set: "shared", applied: false },
+  { name: "member who is not the owner, private to shared", actor: "bob", owner: "alice", from: "private", set: "shared", applied: false },
+  { name: "ownerless session, admin", actor: "carol", owner: null, from: "shared", set: "private", applied: true },
+  { name: "ownerless session, non-admin", actor: "bob", owner: null, from: "shared", set: "private", applied: false },
+];
+
+VISIBILITY_ROWS.forEach(function (row) {
+  test("visibility: " + row.name, async function () {
+    var session = makeSession(row.owner, row.from);
+    var watcher = await connect("alice");
+    var actor = await connect(row.actor);
+    watcher.inbox.length = 0;
+    actor.inbox.length = 0;
+    actor.send({ type: "set_session_visibility", sessionId: session.localId, visibility: row.set });
+    await harness.settle(250);
+    assert.equal(session.sessionVisibility, row.applied ? row.set : row.from);
+    var lists = got(watcher, function (m) { return m.type === "session_list"; });
+    if (!row.applied) assert.equal(lists.length, 0, "a refused change broadcasts nothing");
+    var told = got(actor, function (m) { return m.type === "error" && /owner/i.test(m.text || ""); });
+    assert.equal(told.length, row.told ? 1 : 0, "the refusal is said to a caller who can read the session");
+  });
+});
+
+// --- a viewer when the session turns private --------------------------------------
+
+test("private: a viewer is unbound, refused and sent nothing; the owner's connections carry on", async function () {
+  var session = makeSession("alice", "shared");
+  var a1 = await connect("alice");
+  var a2 = await connect("alice");
+  var b1 = await connect("bob");
+  var c1 = await connect("carol");
+  await view(a1, session);
+  await view(a2, session);
+  await view(b1, session);
+  await view(c1, session);
+
+  a1.inbox.length = 0; a2.inbox.length = 0; b1.inbox.length = 0; c1.inbox.length = 0;
+  a1.send({ type: "set_session_visibility", sessionId: session.localId, visibility: "private" });
+  await b1.waitFor(function (m) { return m.type === "error" && NOT_AVAILABLE.test(m.text || ""); });
+  await c1.waitFor(function (m) { return m.type === "error" && NOT_AVAILABLE.test(m.text || ""); });
+  assert.equal(session.sessionVisibility, "private");
+  assert.equal(boundTo("bob", session), 0, "the member is no longer bound to it");
+  assert.equal(boundTo("carol", session), 0, "nor an admin who does not own it");
+  assert.equal(boundTo("alice", session), 2, "both of the owner's connections stay bound");
+
+  // stream, status and done frames
+  b1.inbox.length = 0; c1.inbox.length = 0; a1.inbox.length = 0; a2.inbox.length = 0;
+  SM.sendAndRecord(session, { type: "delta", text: "private-stream" });
+  SM.sendToSession(session, { type: "status", status: "processing" });
+  SM.sendAndRecord(session, { type: "done" });
+  await a1.waitFor(function (m) { return m.type === "done"; });
+  await a2.waitFor(function (m) { return m.type === "done"; });
+  await harness.settle(200);
+  [b1, c1].forEach(function (c) {
+    assert.deepEqual(got(c, function (m) { return m.type === "delta" || m.type === "status" || m.type === "done"; }), []);
+  });
+  assert.equal(got(a1, function (m) { return m.type === "delta"; }).length, 1);
+  assert.equal(got(a2, function (m) { return m.type === "delta"; }).length, 1);
+
+  // a message, and separately a user mention, on the connection that had it open
+  session.isProcessing = true;
+  var before = session.history.length;
+  b1.inbox.length = 0;
+  b1.send({ type: "message", text: "member-typing" });
+  b1.send({ type: "user_mention", targetUserId: H.people.carol.id, text: "member-mention" });
+  await harness.settle(300);
+  assert.equal(session.history.length, before, "nothing was recorded");
+  assert.equal(session.pendingMessages ? session.pendingMessages.length : 0, 0, "nothing reached the agent");
+  assert.equal(got(b1, function (m) { return m.type === "user_mention_error" && NOT_AVAILABLE.test(m.error || ""); }).length, 1, "the mention is refused and said so");
+
+  // the owner is unaffected: set it back to shared and type into it
+  a2.send({ type: "set_session_visibility", sessionId: session.localId, visibility: "shared" });
+  await harness.settle(200);
+  assert.equal(session.sessionVisibility, "shared");
+  a2.send({ type: "message", text: "owner-typing" });
+  await harness.settle(300);
+  assert.equal(userMessages(session, "alice").length, 1, "the owner's message is recorded");
+  session.isProcessing = false;
+});
+
+// --- a bound session the user can no longer read, at each caller ---------------------
+
+function contextFile(session) {
+  return path.join(require("../lib/config").CONFIG_DIR, "context-sources", "team--" + session.localId + ".json");
+}
+
+// A file that was never written reads as no sources; any other read or parse
+// failure is a failure of the test, not "nothing there".
+function contextSources(session) {
+  var text;
+  try {
+    text = fs.readFileSync(contextFile(session), "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") return [];
+    throw e;
+  }
+  return JSON.parse(text).active;
+}
+
+// Each row: the member (b1) has the owner's shared session open, with the
+// owner's two connections (a1, a2) on it too; the session then turns private
+// without the visibility handler, so the shared primitive alone must refuse.
+//   seed(session)    state written before the change
+//   act(w)           what the member (or the owner) sends; may be async
+//   verify(w)        what must hold afterwards, beyond the common checks
+//   unbinds          the row's handler goes through getSessionForWs (default true)
+var BOUND_ROWS = [
+  {
+    name: "load_more_history (a caller other than the message handler)",
+    act: function (w) { w.b1.send({ type: "load_more_history", before: 1 }); },
+    verify: function (w) { assert.deepEqual(got(w.b1, function (m) { return m.type === "history_prepend"; }), [], "nothing of the session is served"); },
+  },
+  {
+    name: "message",
+    act: function (w) { w.b1.send({ type: "message", text: "late-typing" }); },
+  },
+  {
+    name: "context_sources_save writes nothing to it",
+    act: function (w) { w.b1.send({ type: "context_sources_save", active: ["tab:7"] }); },
+    verify: function (w) { assert.deepEqual(contextSources(w.session), [], "the owner's context sources are untouched"); },
+  },
+  {
+    name: "term_close changes nothing of it and tells no one of it",
+    seed: function (session) {
+      fs.mkdirSync(path.dirname(contextFile(session)), { recursive: true });
+      fs.writeFileSync(contextFile(session), JSON.stringify({ active: ["term:5"] }));
+    },
+    act: function (w) { w.b1.send({ type: "term_close", id: 5 }); },
+    verify: function (w) {
+      assert.deepEqual(contextSources(w.session), ["term:5"], "the session's sources are untouched");
+      assert.deepEqual(got(w.a1, function (m) { return m.type === "context_sources_state"; }), [], "nothing is sent to the session's readers");
+    },
+  },
+  {
+    name: "per-session delivery to the connection",
+    unbinds: false,
+    act: async function (w) {
+      w.a1.send({ type: "input_sync", text: "owner-draft" });
+      await w.a2.waitFor(function (m) { return m.type === "input_sync"; });
+    },
+    verify: function (w) { assert.deepEqual(got(w.b1, function (m) { return m.type === "input_sync"; }), [], "not delivered to a connection that cannot read it"); },
+  },
+  {
+    name: "per-session delivery from the connection",
+    unbinds: false,
+    act: function (w) { w.b1.send({ type: "input_sync", text: "member-draft" }); },
+    verify: function (w) { assert.deepEqual(got(w.a2, function (m) { return m.type === "input_sync"; }), [], "not delivered to the owner's other connection"); },
+  },
+];
+
+BOUND_ROWS.forEach(function (row) {
+  test("bound session turned unreadable: " + row.name, async function () {
+    var session = makeSession("alice", "shared");
+    session.isProcessing = true;
+    if (row.seed) row.seed(session);
+    var w = { session: session, a1: await connect("alice"), a2: await connect("alice"), b1: await connect("bob") };
+    await view(w.a1, session);
+    await view(w.a2, session);
+    await view(w.b1, session);
+    session.sessionVisibility = "private";
+    var before = session.history.length;
+    [w.a1, w.a2, w.b1].forEach(function (c) { c.inbox.length = 0; });
+    await row.act(w);
+    await harness.settle(300);
+    if (row.verify) row.verify(w);
+    assert.equal(session.history.length, before, "nothing is recorded");
+    assert.equal(session.pendingMessages ? session.pendingMessages.length : 0, 0, "nothing reaches the agent");
+    if (row.unbinds !== false) assert.equal(boundTo("bob", session), 0, "the member is unbound");
+    session.isProcessing = false;
+  });
+});
+
+// --- deletion and the per-session context sources -----------------------------------------
+
+var DELETE_ROWS = [
+  { name: "deleteSession", remove: function (s) { SM.deleteSession(s.localId, null); } },
+  { name: "deleteSessionsBulk", remove: function (s) { SM.deleteSessionsBulk([s.localId], null); } },
+];
+
+DELETE_ROWS.forEach(function (row) {
+  test("deleted private session: " + row.name + " tells only clients that could read it", async function () {
+    var priv = makeSession("alice", "private");
+    var shared = makeSession("alice", "shared");
+    var a1 = await connect("alice");
+    var b1 = await connect("bob");
+    a1.inbox.length = 0; b1.inbox.length = 0;
+    row.remove(priv);
+    row.remove(shared);
+    await a1.waitFor(function (m) { return m.type === "session_deleted" && m.ids.indexOf(priv.localId) !== -1; });
+    await b1.waitFor(function (m) { return m.type === "session_deleted" && m.ids.indexOf(shared.localId) !== -1; });
+    await harness.settle(150);
+    var seenByBob = [];
+    got(b1, function (m) { return m.type === "session_deleted"; }).forEach(function (m) { seenByBob = seenByBob.concat(m.ids); });
+    assert.equal(seenByBob.indexOf(priv.localId), -1, "the member is not told a private session's id");
+    assert.ok(seenByBob.indexOf(shared.localId) !== -1, "a shared session's deletion is told to every member");
+  });
+});
+
+// --- presence -------------------------------------------------------------------------
+
+test("presence: a member gets no entry for a private session; the owner and shared sessions are as before", async function () {
+  var priv = makeSession("alice", "private");
+  var shared = makeSession("alice", "shared");
+  var a1 = await connect("alice");
+  var b1 = await connect("bob");
+  var c1 = await connect("carol");
+  await view(a1, priv);
+  await view(c1, shared);
+  await view(b1, shared);
+  await harness.settle(250);
+  function lastPresence(c) {
+    var all = got(c, function (m) { return m.type === "session_presence"; });
+    return all.length ? all[all.length - 1].presence : null;
+  }
+  var mine = lastPresence(a1);
+  var theirs = lastPresence(b1);
+  var admins = lastPresence(c1);
+  assert.ok(mine && theirs && admins, "presence reached every client");
+  assert.ok(mine[priv.localId], "the owner sees who has the private session open");
+  assert.equal(theirs[priv.localId], undefined, "a member does not");
+  assert.equal(admins[priv.localId], undefined, "nor an admin who does not own it");
+  [mine, theirs, admins].forEach(function (p) {
+    assert.deepEqual((p[shared.localId] || []).map(function (u) { return u.username; }).sort(), ["bob", "carol"], "the shared session's entry is as before");
+  });
+});
+
+// --- other broadcasts that carry a session id -------------------------------------------
+
+test("a running private session's activity is not announced to members who cannot read it", async function () {
+  var priv = makeSession("alice", "private");
+  var shared = makeSession("alice", "shared");
+  priv.isProcessing = true;
+  var a1 = await connect("alice");
+  var b1 = await connect("bob");
+  await view(a1, priv);
+  await view(b1, shared);
+  b1.inbox.length = 0;
+  SM.sendAndRecord(priv, { type: "delta", text: "working" });
+  await a1.waitFor(function (m) { return m.type === "delta"; });
+  await harness.settle(200);
+  assert.deepEqual(got(b1, function (m) { return m.type === "session_io" && m.id === priv.localId; }), []);
+  priv.isProcessing = false;
+});
