@@ -550,6 +550,32 @@ test("an image attachment of a queued message is named in the restored text, not
   assert.match(back.value, /^see\n\npasted\n\[an image attachment of this message was not restored/);
 });
 
+// Reload with a ! line parked: chat that had an image is offered back in the
+// composer and never sent; text-only chat is queued again and sent as before.
+[
+  { name: "image chat", chat: { text: "see", images: [{ mediaType: "image/png", data: "AAAA" }], pastes: [], steerNow: false },
+    composer: /^see\n\[an image attachment of this message was not restored/, queued: ["!sleep 30"] },
+  { name: "text-only chat", chat: { text: "plain", images: [], pastes: [], steerNow: false },
+    composer: /^$/, queued: ["!sleep 30", "plain"] },
+].forEach(function (row) {
+  test("a reload with a ! line parked: " + row.name + " is restored without an automatic image-less send", async function () {
+    var env = await setup();
+    env.store.set({ processing: true });
+    type(env, "!sleep 30");
+    env.us.queueChatMessage(row.chat);
+    els.messages._children = [];
+    reloads += 1;
+    var fresh = await import(dom.moduleUrl("user-shell.js") + "?reload=" + reloads);
+    var composerEl = new FakeElement("textarea");
+    fresh.handleSessionShown(composerEl);
+    assert.match(composerEl.value, row.composer);
+    fresh.handleHistoryReplayed();
+    assert.deepEqual(queuedTexts(), row.queued);
+    env.store.set({ processing: false });
+    assert.deepEqual(chatSent(env), [], "no chat goes out on its own");
+  });
+});
+
 // ---------------------------------------------------------------- queued ! controls, keys
 
 function press(env, evt) {
