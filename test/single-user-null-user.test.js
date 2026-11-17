@@ -141,6 +141,24 @@ test("single-user: sessions of every owner can be renamed, searched and deleted 
   assert.equal(sm.sessions.has(theirs.localId), false);
 });
 
+test("single-user: the owner sets any session's visibility and keeps it open when it turns private", async function () {
+  mode.multiUser = false;
+  var sm = projectCtx("mine").sm;
+  var theirs = sm.createSessionRaw({ ownerId: "a-former-user", sessionVisibility: "shared" });
+  var c = await H.connect("mine", null);
+  c.send({ type: "switch_session", id: theirs.localId });
+  await c.waitFor(function (m) { return m.type === "session_switched" && m.id === theirs.localId; });
+  c.send({ type: "set_session_visibility", sessionId: theirs.localId, visibility: "private" });
+  await harness.settle(200);
+  assert.equal(sm.sessions.get(theirs.localId).sessionVisibility, "private");
+  c.inbox.length = 0;
+  sm.sendAndRecord(theirs, { type: "delta", text: "still-served" });
+  await c.waitFor(function (m) { return m.type === "delta"; });
+  var history = await ask(c, { type: "load_more_history", before: 1 }, "history_prepend");
+  assert.ok(history, "the bound session still answers");
+  assert.equal(c.inbox.filter(function (m) { return m.type === "error" && /not available/.test(m.text); }).length, 0);
+});
+
 test("single-user: the project routes, root redirect, image route and palette serve the owner", async function () {
   mode.multiUser = false;
   assert.equal((await H.request("GET", "/p/mine/", null)).status, 200);

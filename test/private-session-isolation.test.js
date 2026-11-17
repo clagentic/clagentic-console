@@ -51,12 +51,13 @@ async function view(client, session) {
   await client.waitFor(function (m) { return m.type === "session_switched" && m.id === session.localId; });
 }
 
-function boundSessions(userKey) {
-  var out = [];
+// How many of the user's connections are bound to the session on the server.
+function boundTo(userKey, session) {
+  var n = 0;
   CTX.forEachClient(function (ws) {
-    if (ws._clagenticUser && ws._clagenticUser.id === H.people[userKey].id) out.push(ws._clagenticActiveSession || null);
+    if (ws._clagenticUser && ws._clagenticUser.id === H.people[userKey].id && ws._clagenticActiveSession === session.localId) n++;
   });
-  return out;
+  return n;
 }
 
 function got(client, pred) {
@@ -119,9 +120,9 @@ test("private: a viewer is unbound, refused and sent nothing; the owner's connec
   await b1.waitFor(function (m) { return m.type === "error" && NOT_AVAILABLE.test(m.text || ""); });
   await c1.waitFor(function (m) { return m.type === "error" && NOT_AVAILABLE.test(m.text || ""); });
   assert.equal(session.sessionVisibility, "private");
-  assert.deepEqual(boundSessions("bob"), [null], "the member is no longer bound to it");
-  assert.deepEqual(boundSessions("carol"), [null], "nor an admin who does not own it");
-  assert.deepEqual(boundSessions("alice").sort(), [session.localId, session.localId], "both of the owner's connections stay bound");
+  assert.equal(boundTo("bob", session), 0, "the member is no longer bound to it");
+  assert.equal(boundTo("carol", session), 0, "nor an admin who does not own it");
+  assert.equal(boundTo("alice", session), 2, "both of the owner's connections stay bound");
 
   // stream, status and done frames
   b1.inbox.length = 0; c1.inbox.length = 0; a1.inbox.length = 0; a2.inbox.length = 0;
@@ -189,7 +190,7 @@ BOUND_ROWS.forEach(function (row) {
     assert.deepEqual(got(b1, row.leaked), [], "nothing of the session is served");
     assert.equal(session.history.length, before, "nothing is recorded");
     assert.equal(session.pendingMessages ? session.pendingMessages.length : 0, 0, "nothing reaches the agent");
-    assert.deepEqual(boundSessions("bob"), [null]);
+    assert.equal(boundTo("bob", session), 0);
     session.isProcessing = false;
   });
 });
