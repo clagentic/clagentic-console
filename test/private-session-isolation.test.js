@@ -163,17 +163,71 @@ test("private: a viewer is unbound, refused and sent nothing; the owner's connec
 
 // --- a bound session the user can no longer read, at each caller ---------------------
 
+function contextFile(session) {
+  return path.join(require("../lib/config").CONFIG_DIR, "context-sources", "team--" + session.localId + ".json");
+}
+
+// A file that was never written reads as no sources; any other read or parse
+// failure is a failure of the test, not "nothing there".
+function contextSources(session) {
+  var text;
+  try {
+    text = fs.readFileSync(contextFile(session), "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") return [];
+    throw e;
+  }
+  return JSON.parse(text).active;
+}
+
+// Each row: the member (b1) has the owner's shared session open, with the
+// owner's two connections (a1, a2) on it too; the session then turns private
+// without the visibility handler, so the shared primitive alone must refuse.
+//   seed(session)    state written before the change
+//   act(w)           what the member (or the owner) sends; may be async
+//   verify(w)        what must hold afterwards, beyond the common checks
+//   unbinds          the row's handler goes through getSessionForWs (default true)
 var BOUND_ROWS = [
   {
     name: "load_more_history (a caller other than the message handler)",
-    act: function (b) { b.send({ type: "load_more_history", before: 1 }); },
-    leaked: function (m) { return m.type === "history_prepend"; },
+    act: function (w) { w.b1.send({ type: "load_more_history", before: 1 }); },
+    verify: function (w) { assert.deepEqual(got(w.b1, function (m) { return m.type === "history_prepend"; }), [], "nothing of the session is served"); },
   },
   {
     name: "message",
-    act: function (b) { b.send({ type: "message", text: "late-typing" }); },
-    leaked: function () { return false; },
-    recorded: true,
+    act: function (w) { w.b1.send({ type: "message", text: "late-typing" }); },
+  },
+  {
+    name: "context_sources_save writes nothing to it",
+    act: function (w) { w.b1.send({ type: "context_sources_save", active: ["tab:7"] }); },
+    verify: function (w) { assert.deepEqual(contextSources(w.session), [], "the owner's context sources are untouched"); },
+  },
+  {
+    name: "term_close changes nothing of it and tells no one of it",
+    seed: function (session) {
+      fs.mkdirSync(path.dirname(contextFile(session)), { recursive: true });
+      fs.writeFileSync(contextFile(session), JSON.stringify({ active: ["term:5"] }));
+    },
+    act: function (w) { w.b1.send({ type: "term_close", id: 5 }); },
+    verify: function (w) {
+      assert.deepEqual(contextSources(w.session), ["term:5"], "the session's sources are untouched");
+      assert.deepEqual(got(w.a1, function (m) { return m.type === "context_sources_state"; }), [], "nothing is sent to the session's readers");
+    },
+  },
+  {
+    name: "per-session delivery to the connection",
+    unbinds: false,
+    act: async function (w) {
+      w.a1.send({ type: "input_sync", text: "owner-draft" });
+      await w.a2.waitFor(function (m) { return m.type === "input_sync"; });
+    },
+    verify: function (w) { assert.deepEqual(got(w.b1, function (m) { return m.type === "input_sync"; }), [], "not delivered to a connection that cannot read it"); },
+  },
+  {
+    name: "per-session delivery from the connection",
+    unbinds: false,
+    act: function (w) { w.b1.send({ type: "input_sync", text: "member-draft" }); },
+    verify: function (w) { assert.deepEqual(got(w.a2, function (m) { return m.type === "input_sync"; }), [], "not delivered to the owner's other connection"); },
   },
 ];
 
@@ -181,42 +235,22 @@ BOUND_ROWS.forEach(function (row) {
   test("bound session turned unreadable: " + row.name, async function () {
     var session = makeSession("alice", "shared");
     session.isProcessing = true;
-    var b1 = await connect("bob");
-    await view(b1, session);
-    // Changed without the visibility handler, so the shared primitive alone must refuse.
+    if (row.seed) row.seed(session);
+    var w = { session: session, a1: await connect("alice"), a2: await connect("alice"), b1: await connect("bob") };
+    await view(w.a1, session);
+    await view(w.a2, session);
+    await view(w.b1, session);
     session.sessionVisibility = "private";
     var before = session.history.length;
-    b1.inbox.length = 0;
-    row.act(b1);
+    [w.a1, w.a2, w.b1].forEach(function (c) { c.inbox.length = 0; });
+    await row.act(w);
     await harness.settle(300);
-    assert.deepEqual(got(b1, row.leaked), [], "nothing of the session is served");
+    if (row.verify) row.verify(w);
     assert.equal(session.history.length, before, "nothing is recorded");
     assert.equal(session.pendingMessages ? session.pendingMessages.length : 0, 0, "nothing reaches the agent");
-    assert.equal(boundTo("bob", session), 0);
+    if (row.unbinds !== false) assert.equal(boundTo("bob", session), 0, "the member is unbound");
     session.isProcessing = false;
   });
-});
-
-test("bound session turned unreadable: per-session delivery from and to the connection", async function () {
-  var session = makeSession("alice", "shared");
-  var a1 = await connect("alice");
-  var a2 = await connect("alice");
-  var b1 = await connect("bob");
-  await view(a1, session);
-  await view(a2, session);
-  await view(b1, session);
-  session.sessionVisibility = "private";
-  a1.inbox.length = 0; a2.inbox.length = 0; b1.inbox.length = 0;
-  // to the member: a frame the owner's connection sends to the others on the session
-  a1.send({ type: "input_sync", text: "owner-draft" });
-  await a2.waitFor(function (m) { return m.type === "input_sync"; });
-  await harness.settle(200);
-  assert.deepEqual(got(b1, function (m) { return m.type === "input_sync"; }), [], "not delivered to a connection that cannot read it");
-  // from the member: its frame is not delivered to the owner's other connection
-  a2.inbox.length = 0;
-  b1.send({ type: "input_sync", text: "member-draft" });
-  await harness.settle(250);
-  assert.deepEqual(got(a2, function (m) { return m.type === "input_sync"; }), []);
 });
 
 // --- deletion and the per-session context sources -----------------------------------------
@@ -243,40 +277,6 @@ DELETE_ROWS.forEach(function (row) {
     assert.equal(seenByBob.indexOf(priv.localId), -1, "the member is not told a private session's id");
     assert.ok(seenByBob.indexOf(shared.localId) !== -1, "a shared session's deletion is told to every member");
   });
-});
-
-function contextFile(session) {
-  return path.join(require("../lib/config").CONFIG_DIR, "context-sources", "team--" + session.localId + ".json");
-}
-
-function contextSources(session) {
-  try { return JSON.parse(fs.readFileSync(contextFile(session), "utf8")).active; } catch (e) { return []; }
-}
-
-test("bound session turned unreadable: context_sources_save writes nothing to it", async function () {
-  var session = makeSession("alice", "shared");
-  var b1 = await connect("bob");
-  await view(b1, session);
-  session.sessionVisibility = "private";
-  b1.send({ type: "context_sources_save", active: ["tab:7"] });
-  await harness.settle(250);
-  assert.deepEqual(contextSources(session), [], "the owner's context sources are untouched");
-});
-
-test("bound session turned unreadable: term_close changes nothing of it and tells no one of it", async function () {
-  var session = makeSession("alice", "shared");
-  fs.mkdirSync(path.dirname(contextFile(session)), { recursive: true });
-  fs.writeFileSync(contextFile(session), JSON.stringify({ active: ["term:5"] }));
-  var a1 = await connect("alice");
-  var b1 = await connect("bob");
-  await view(a1, session);
-  await view(b1, session);
-  session.sessionVisibility = "private";
-  a1.inbox.length = 0;
-  b1.send({ type: "term_close", id: 5 });
-  await harness.settle(300);
-  assert.deepEqual(contextSources(session), ["term:5"], "the session's sources are untouched");
-  assert.deepEqual(got(a1, function (m) { return m.type === "context_sources_state"; }), [], "nothing is sent to the session's readers");
 });
 
 // --- presence -------------------------------------------------------------------------
