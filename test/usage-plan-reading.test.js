@@ -123,3 +123,14 @@ test("a reading keeps the status a rate-limit event reported for the same window
   assert.equal(b.utilization, 0.81);
   assert.equal(b.status, "allowed_warning");
 });
+
+test("a fractional resets_at in the same window keeps the event status and is no reset", function () {
+  var s = quiet();
+  var sec = Date.parse(FUTURE_ISO) / 1000;
+  s.record("claude", { rateLimitType: "seven_day", utilization: 0.8, resetsAt: sec, status: "allowed_warning" }, { now: NOW - 1000 });
+  s.record("claude", { rateLimitType: "seven_day", utilization: null, resetsAt: sec + 0.4 }, { now: NOW, keepStatus: true });
+  var b = bucket(s, "seven_day", NOW);
+  assert.equal(b.status, "allowed_warning");
+  assert.equal(b.utilization, 0.8);
+  assert.equal(b.resetsAt, new Date(FUTURE_ISO).toISOString());
+});
