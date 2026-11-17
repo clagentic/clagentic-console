@@ -11,6 +11,8 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var fs = require("fs");
+var path = require("path");
 var harness = require("./access-harness");
 
 var H = null;
@@ -215,6 +217,66 @@ test("bound session turned unreadable: per-session delivery from and to the conn
   b1.send({ type: "input_sync", text: "member-draft" });
   await harness.settle(250);
   assert.deepEqual(got(a2, function (m) { return m.type === "input_sync"; }), []);
+});
+
+// --- deletion and the per-session context sources -----------------------------------------
+
+var DELETE_ROWS = [
+  { name: "deleteSession", remove: function (s) { SM.deleteSession(s.localId, null); } },
+  { name: "deleteSessionsBulk", remove: function (s) { SM.deleteSessionsBulk([s.localId], null); } },
+];
+
+DELETE_ROWS.forEach(function (row) {
+  test("deleted private session: " + row.name + " tells only clients that could read it", async function () {
+    var priv = makeSession("alice", "private");
+    var shared = makeSession("alice", "shared");
+    var a1 = await connect("alice");
+    var b1 = await connect("bob");
+    a1.inbox.length = 0; b1.inbox.length = 0;
+    row.remove(priv);
+    row.remove(shared);
+    await a1.waitFor(function (m) { return m.type === "session_deleted" && m.ids.indexOf(priv.localId) !== -1; });
+    await b1.waitFor(function (m) { return m.type === "session_deleted" && m.ids.indexOf(shared.localId) !== -1; });
+    await harness.settle(150);
+    var seenByBob = [];
+    got(b1, function (m) { return m.type === "session_deleted"; }).forEach(function (m) { seenByBob = seenByBob.concat(m.ids); });
+    assert.equal(seenByBob.indexOf(priv.localId), -1, "the member is not told a private session's id");
+    assert.ok(seenByBob.indexOf(shared.localId) !== -1, "a shared session's deletion is told to every member");
+  });
+});
+
+function contextFile(session) {
+  return path.join(require("../lib/config").CONFIG_DIR, "context-sources", "team--" + session.localId + ".json");
+}
+
+function contextSources(session) {
+  try { return JSON.parse(fs.readFileSync(contextFile(session), "utf8")).active; } catch (e) { return []; }
+}
+
+test("bound session turned unreadable: context_sources_save writes nothing to it", async function () {
+  var session = makeSession("alice", "shared");
+  var b1 = await connect("bob");
+  await view(b1, session);
+  session.sessionVisibility = "private";
+  b1.send({ type: "context_sources_save", active: ["tab:7"] });
+  await harness.settle(250);
+  assert.deepEqual(contextSources(session), [], "the owner's context sources are untouched");
+});
+
+test("bound session turned unreadable: term_close changes nothing of it and tells no one of it", async function () {
+  var session = makeSession("alice", "shared");
+  fs.mkdirSync(path.dirname(contextFile(session)), { recursive: true });
+  fs.writeFileSync(contextFile(session), JSON.stringify({ active: ["term:5"] }));
+  var a1 = await connect("alice");
+  var b1 = await connect("bob");
+  await view(a1, session);
+  await view(b1, session);
+  session.sessionVisibility = "private";
+  a1.inbox.length = 0;
+  b1.send({ type: "term_close", id: 5 });
+  await harness.settle(300);
+  assert.deepEqual(contextSources(session), ["term:5"], "the session's sources are untouched");
+  assert.deepEqual(got(a1, function (m) { return m.type === "context_sources_state"; }), [], "nothing is sent to the session's readers");
 });
 
 // --- presence -------------------------------------------------------------------------
