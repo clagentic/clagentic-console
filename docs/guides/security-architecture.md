@@ -107,15 +107,15 @@ Each limit is stated as it is now.
 |---|---|
 | OS-level mode: the Codex app-server would run as the daemon account with the full daemon environment, so Codex is refused in this mode. Spawns under another account also drop supplementary groups. | lr-8212d6 |
 | OS-level mode: identity delivered to a session that runs as another account is not available, because the delivery directory is inside the owner-only config directory. | lr-fced5f |
-| New sessions default to shared; any member of a project can type into a shared session, and in OS-level mode the turn runs as the owner's account and Claude login. | not yet tracked |
-| Sessions with no owner run as the daemon account and are visible only to admins. | not yet tracked |
-| One owner-only directory holds every user's sessions, direct messages, tokens, push subscriptions, logs and MCP configuration. | not yet tracked |
-| Direct messages and the user list are open to every signed-in user. | not yet tracked |
-| Shared environment variables reach every user's runtime. | not yet tracked |
-| The Claude worker's socket in the temp directory is world-accessible by mode. | not yet tracked |
-| The file browser's plan-file preview path check admits the daemon account's Claude directory in both modes; in shared-account mode the read is made by the daemon account. | not yet tracked |
-| A username lockout has no timeout and no unlock route; it ends when the daemon restarts. Setup and register are not rate limited. | not yet tracked |
-| `mustChangePin` is advisory: it is shown to the client and not enforced by the server. | not yet tracked |
+| New sessions default to shared; any member of a project can type into a shared session, and in OS-level mode the turn runs as the owner's account and Claude login. | awaits the isolation design decision |
+| Sessions with no owner run as the daemon account and are visible only to admins. | awaits the isolation design decision |
+| One owner-only directory holds every user's sessions, direct messages, tokens, push subscriptions, logs and MCP configuration. | awaits the isolation design decision |
+| Direct messages and the user list are open to every signed-in user. | awaits the isolation design decision |
+| Shared environment variables reach every user's runtime. | awaits the isolation design decision |
+| The Claude worker's socket in the temp directory is world-accessible by mode. | awaits the isolation design decision |
+| The file browser's plan-file preview path check admits the daemon account's Claude directory in both modes; in shared-account mode the read is made by the daemon account. | awaits the isolation design decision |
+| A username lockout has no timeout and no unlock route; it ends when the daemon restarts. Setup and register are not rate limited. | lr-7b658d |
+| `mustChangePin` is advisory: it is shown to the client and not enforced by the server. | lr-f59a7c |
 | Neither mode separates users from the daemon account or the host admin. | design limit |
 
 ## 8. Not covered yet
