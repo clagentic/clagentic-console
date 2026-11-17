@@ -161,6 +161,8 @@ For architecture details, sequence diagrams, and key design decisions, see [docs
 
 ## Security
 
+For what each mode protects, who can read what, and the sign-on paths, see [Security architecture and mode matrix](docs/guides/security-architecture.md).
+
 These are implementation-level properties, not configuration options — they apply to every installation.
 
 - **Token TTL.** Multi-user auth tokens expire after 30 days (`TOKEN_TTL_MS`). Tokens issued before TTL support was added are migrated on first use to a fresh 30-day window, avoiding forced logouts on upgrade.
@@ -169,7 +171,7 @@ These are implementation-level properties, not configuration options — they ap
 
 - **Append-only audit log.** Privileged actions — user creation, lockouts, token revocation, multi-user enable/disable — are written as newline-delimited JSON to `~/.clagentic/console/audit.log` (mode 0o600, opened with `O_APPEND`).
 
-- **Progressive lockout.** Failed login attempts trigger escalating per-username backoff: 1s, 5s, 30s, 5 min. Reaching the threshold results in permanent lockout until an admin explicitly unlocks the account. Per-IP rate limiting runs in parallel.
+- **Progressive lockout.** Failed login attempts trigger escalating per-username backoff: 1s, 5s, 30s, 5 min. Reaching the threshold locks the username with no timeout; the lockout is held in memory, so it ends when the daemon restarts, and no route unlocks it earlier. Per-IP rate limiting runs in parallel.
 
 - **OS-level isolation (Linux, multi-user mode).** Each app user maps to a real system account. File ACLs are set via `setfacl`; processes spawn under the correct UID/GID.
 

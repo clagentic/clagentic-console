@@ -569,10 +569,14 @@ The result is stored in the session's one `title` field, so every surface that s
 
 ## Multi-User and OS-Level Isolation
 
-Clagentic:Console supports two modes:
+Clagentic:Console has one account system, multi-user. Every user has an account, optional invites, an emailed one-time code, RBAC permissions, and (on Linux) an OS-level Linux account. A running daemon is always multi-user: startup migrates an install from before multi-user mode and forces it (`migrateSingleUserToMultiUser`, `lib/daemon.js`). A console with one user is the same system with one entry in the user list; while external sign-in is on, the user list is limited to one user (see "Access Control and Input Trust").
 
-- **Single-user.** PIN auth, all sessions run as the daemon's UID.
-- **Multi-user.** Each user has an account, optional invites, OTP, RBAC permissions, and (on Linux) an OS-level Linux account.
+The isolation mode is a separate choice, set by whether OS-level isolation is on:
+
+- **Shared-account.** The default. Every user's sessions, terminals and file reads run as the daemon's account; users are separated by the console's own access rules only.
+- **OS-level.** Linux only. Each user is mapped to a Linux account and their agent, terminal and file access run as it.
+
+[Security architecture and mode matrix](./security-architecture.md) states, for each of these, what is protected and who can read what.
 
 When OS-level isolation is enabled on Linux:
 
@@ -604,7 +608,9 @@ Authorization is not opt-in per handler. One resolver (`lib/project-access.js`) 
 
 **Authentication precedes, and is separate from, principal resolution.** `principalFor(user, { authenticated })` (and `canAccess`, `isAdmin`, `filterProjectList`, `canReadSession`, which take the same last argument) yields the implicit owner for a missing user only when the caller proved the login: `isRequestAuthed(req)` for an HTTP route, the WebSocket upgrade's cookie/ticket/login check (recorded on the connection as `_clagenticAuthenticated` and read back with `authOf(ws)`), or the local MCP bridge. Without the proof a missing user is nobody in every mode, so a route that forgets its login check refuses instead of serving the owner's data. A route that resolves a principal passes the proof it has; it never assumes one.
 
-**Given the proof, "no user" is decided by the daemon's mode (`users.isMultiUser()`), never by absence alone.** In single-user mode a connection that got past the login gate carries no user record (`_clagenticUser === null`): the connection is the implicit owner, with admin rights and access to every project. In multi-user mode no user means unauthenticated and is refused. Every gate, filter and route asks the resolver instead of dereferencing the user, so a missing user never throws. A project context built without a resolver (unit harnesses) is single-user.
+**External sign-in** (`lib/external-signin/`) is an optional way to sign in, off by default. Its rules are provider-neutral (`policy.js`, `settings.js`): while it is on, the user list is limited to one user bound to one provider identity (provider kind, issuer, subject; never an email), every writer that adds a user or an invite refuses through one shared check (`users.userCreationRefusal`), turning it on over more than one user is refused, and the local sign-in of the one user stays available unless the admin switches it off. Its settings, including the client secret, are in their own owner-only file, not `daemon.json`. The OpenID Connect step (`oidc.js`) is the first provider: authorization code with PKCE, state and nonce, discovery, and ID token validation with `jose` through `lib/identity/jose.js`. A successful sign-in ends in `createMultiUserSession`, so the session cookie, the phone app and the WebSocket ticket path are the ones a local sign-in uses.
+
+**Given the proof, "no user" is decided by the daemon's mode (`users.isMultiUser()`), never by absence alone.** The single-user branch below is for a users file that explicitly says `multiUser: false`, which the daemon rewrites at startup before it serves a request; a running daemon takes the multi-user branch. In single-user mode a connection that got past the login gate carries no user record (`_clagenticUser === null`): the connection is the implicit owner, with admin rights and access to every project. In multi-user mode no user means unauthenticated and is refused. Every gate, filter and route asks the resolver instead of dereferencing the user, so a missing user never throws. A project context built without a resolver (unit harnesses) is single-user.
 
 | Where | What it does |
 |---|---|
