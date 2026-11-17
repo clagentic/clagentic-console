@@ -448,6 +448,23 @@ test("a roster that changes only sighting times does not redraw an open picker",
   assert.notEqual(body.querySelector(".ar-picker"), picker, "a changed choice redraws it");
 });
 
+test("a roster that gains or loses a place redraws an open picker", async function () {
+  var m = await loadTeam();
+  m.view.openTeamView();
+  var body = m.els["team-view-body"];
+  body.querySelectorAll(".team-view-tab").filter(function (t) { return t.dataset.sectionId === "agent-roster"; })[0].click();
+  var here = { source: "session", project: "proj-1", lastSeen: 1 };
+  var there = { source: "subagent", project: "proj-2", lastSeen: 1 };
+  m.roster.handleAgentRoster({ type: "agent_roster", agents: [agent("agent-a", { places: [here] })] });
+  body.querySelector(".ar-change").click();
+  var picker = body.querySelector(".ar-picker");
+  m.roster.handleAgentRoster({ type: "agent_roster", agents: [agent("agent-a", { places: [here, there] })] });
+  var afterGain = body.querySelector(".ar-picker");
+  assert.notEqual(afterGain, picker, "a gained place redraws it");
+  m.roster.handleAgentRoster({ type: "agent_roster", agents: [agent("agent-a", { places: [here] })] });
+  assert.notEqual(body.querySelector(".ar-picker"), afterGain, "a lost place redraws it");
+});
+
 test("a choice reaches every consumer at once: Agent messages, an injected sender and the resolver", async function () {
   var m = await loadTeam();
   var identity = await mod("injected-identity.js");

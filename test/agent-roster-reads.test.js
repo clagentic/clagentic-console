@@ -18,29 +18,39 @@ var { createOutboundAccess } = require("../lib/outbound-access");
 
 // Two users; each may read only their own project. The implicit single-user
 // owner (no user record, authenticated) reads everything.
-var PROJECT_OF = { "user-a": "proj-a", "user-b": "proj-b" };
+var PROJECTS_OF = { "user-a": ["proj-a"], "user-b": ["proj-b"], "user-ab": ["proj-a", "proj-b"] };
 var projectAccess = {
   principalFor: function (user, opts) {
     if (user && user.id) return { id: user.id, user: user, admin: false, implicit: false };
     if (user || !opts || opts.authenticated !== true) return null;
     return { id: null, user: null, admin: true, implicit: true };
   },
-  canAccess: function (userId, slug) { return PROJECT_OF[userId] === slug; },
+  canAccess: function (userId, slug) { return (PROJECTS_OF[userId] || []).indexOf(slug) !== -1; },
 };
 var access = createOutboundAccess({ projectAccess: projectAccess, getProject: function () { return null; } });
 
-function makeRoster(file) {
-  var r = roster.createAgentRoster({
+// over: extra roster deps (writeJson, onChange, clock). The sightings below
+// happen before the caller's own onChange is counted: see changeCount.
+function makeRoster(file, over) {
+  var r = roster.createAgentRoster(Object.assign({
     file: file,
     writeJson: function () { return Promise.resolve(); },
     mayReadProject: function (slug, caller) { return access.canReadProject(slug, caller); },
-  });
+  }, over || {}));
   // sessionId is offered with every sighting; the roster must not keep it.
   r.observe({ key: "only-a", source: "session", project: "proj-a", sessionId: "sess-a-1" });
   r.observe({ key: "both", source: "session", project: "proj-a", sessionId: "sess-a-2" });
   r.observe({ key: "both", source: "subagent", project: "proj-b", sessionId: "sess-b-1" });
   r.observe({ key: "only-b", source: "sender", project: "proj-b", sessionId: "sess-b-2" });
   return r;
+}
+
+// A roster that counts change nudges from now on.
+function countedRoster(over) {
+  var counter = { n: 0 };
+  var r = makeRoster(missing, Object.assign({ onChange: function () { counter.n++; } }, over || {}));
+  counter.n = 0;
+  return { roster: r, counter: counter };
 }
 
 var missing = path.join(__dirname, "no-such-agent-roster-file.json");
@@ -56,11 +66,12 @@ function requestRoster(service, ws) {
   return sent[0];
 }
 
+// The reply is sent once the write settles, so wait for it.
 function setAvatarReply(service, ws, key, avatar) {
-  var sent = [];
-  rosterWs.createWsHandlers({ service: service, sendTo: function (_ws, obj) { sent.push(obj); } })
-    .handle(ws, { type: "agent_avatar_set", key: key, avatar: avatar });
-  return sent[0];
+  return new Promise(function (resolve) {
+    rosterWs.createWsHandlers({ service: service, sendTo: function (_ws, obj) { resolve(obj); } })
+      .handle(ws, { type: "agent_avatar_set", key: key, avatar: avatar });
+  });
 }
 
 function avatarOf(service, key) {
@@ -148,35 +159,98 @@ test("reading copies: the stored roster keeps every place", function () {
   assert.equal(JSON.stringify(service.list()), before);
 });
 
+// refused: the caller may not read every place of the target, so the reply is
+// that of an unknown key, nothing changes and no nudge goes out.
 var WRITE_TABLE = [
-  { who: "user-b", target: "only-a", note: "an agent seen only in another user's project" },
-  { who: "user-a", target: "only-b", note: "an agent seen only in another user's project, other direction" },
+  { who: "user-b", target: "only-a", refused: true, note: "an agent seen only in another user's project" },
+  { who: "user-a", target: "only-b", refused: true, note: "an agent seen only in another user's project, other direction" },
+  { who: "user-a", target: "both", refused: true, note: "an agent seen in a project the caller reads and one it does not" },
+  { who: "user-b", target: "both", refused: true, note: "the same agent, other direction" },
+  { who: "user-ab", target: "both", refused: false, note: "an agent seen only in projects the caller reads" },
+  { who: null, target: "both", refused: false, note: "an agent, as the implicit single-user owner" },
 ];
 
 WRITE_TABLE.forEach(function (row) {
-  test("setting an avatar: " + row.who + " on " + row.note + " changes nothing and is answered as an unknown key", function () {
-    var service = makeRoster(missing);
+  test("setting an avatar: " + (row.who || "the implicit owner") + " on " + row.note + (row.refused ? " changes nothing and is answered as an unknown key" : " succeeds and answers with the caller's own view"), async function () {
+    var counted = countedRoster();
+    var service = counted.roster;
     var before = avatarOf(service, row.target);
     var ws = socket(row.who);
 
-    var hidden = setAvatarReply(service, ws, row.target, { custom: "intruder" });
-    var unknown = setAvatarReply(service, ws, "never-seen", { custom: "intruder" });
-
-    assert.equal(avatarOf(service, row.target), before, "the avatar stays unchanged");
-    assert.equal(hidden.ok, false);
-    assert.equal(hidden.error, roster.NOT_SEEN);
-    // Byte for byte, apart from the key the caller itself sent.
-    assert.equal(JSON.stringify(hidden).replace(row.target, "K"), JSON.stringify(unknown).replace("never-seen", "K"));
+    var reply = await setAvatarReply(service, ws, row.target, { custom: "chosen" });
+    if (row.refused) {
+      var unknown = await setAvatarReply(service, ws, "never-seen", { custom: "chosen" });
+      assert.equal(avatarOf(service, row.target), before, "the avatar stays unchanged");
+      assert.equal(reply.ok, false);
+      assert.equal(reply.error, roster.NOT_SEEN);
+      // Byte for byte, apart from the key the caller itself sent.
+      assert.equal(JSON.stringify(reply).replace(row.target, "K"), JSON.stringify(unknown).replace("never-seen", "K"));
+      assert.equal(counted.counter.n, 0, "no change nudge is sent");
+    } else {
+      assert.deepEqual(reply, { type: "agent_avatar_set_result", key: row.target, ok: true });
+      assert.deepEqual(avatarOf(service, row.target), { custom: "chosen" });
+      assert.equal(counted.counter.n, 1);
+      var own = service.setAvatar({ user: row.who ? { id: row.who } : null, authenticated: true }, row.target, null);
+      assert.deepEqual((await own).agent.places.map(function (p) { return p.project; }).sort(), ["proj-a", "proj-b"]);
+    }
   });
 });
 
-test("setting an avatar on an agent the caller can see works; an invalid choice for a hidden key is still answered as unknown", function () {
+test("an invalid choice or a non-string key for a hidden or unknown agent is still answered as unknown", async function () {
   var service = makeRoster(missing);
-  assert.deepEqual(setAvatarReply(service, socket("user-a"), "both", { custom: "team-icon" }), { type: "agent_avatar_set_result", key: "both", ok: true });
-  assert.deepEqual(avatarOf(service, "both"), { custom: "team-icon" });
-  var hiddenInvalid = service.setAvatar({ user: { id: "user-b" }, authenticated: true }, "only-a", "not an object");
-  assert.deepEqual(hiddenInvalid, { ok: false, error: roster.NOT_SEEN });
-  assert.deepEqual(service.setAvatar({ user: { id: "user-a" }, authenticated: true }, 5, null), { ok: false, error: roster.NOT_SEEN });
+  assert.deepEqual(await service.setAvatar({ user: { id: "user-b" }, authenticated: true }, "only-a", "not an object"), { ok: false, error: roster.NOT_SEEN });
+  assert.deepEqual(await service.setAvatar({ user: { id: "user-a" }, authenticated: true }, 5, null), { ok: false, error: roster.NOT_SEEN });
+});
+
+test("a failed save answers a fixed error naming no project, restores the previous avatar and sends no nudge", async function () {
+  var failing = false;
+  var counted = countedRoster({
+    writeJson: function () { return failing ? Promise.reject(new Error("disk full at /data/proj-a")) : Promise.resolve(); },
+  });
+  var owner = { user: null, authenticated: true };
+  assert.equal((await counted.roster.setAvatar(owner, "both", { custom: "kept" })).ok, true);
+  counted.counter.n = 0;
+  failing = true;
+
+  var err = console.error;
+  console.error = function () {};
+  var out;
+  try {
+    out = await counted.roster.setAvatar(owner, "both", { custom: "lost" });
+  } finally {
+    console.error = err;
+  }
+  assert.deepEqual(out, { ok: false, error: roster.SAVE_FAILED });
+  assert.equal(/proj-|\/data/.test(JSON.stringify(out)), false, "the error names no project");
+  assert.deepEqual(avatarOf(counted.roster, "both"), { custom: "kept" });
+  assert.equal(counted.counter.n, 0, "no change nudge is sent");
+});
+
+test("agents are listed by the latest sighting in a place the caller may read", function () {
+  var now = 0;
+  var r = roster.createAgentRoster({
+    file: missing,
+    writeJson: function () { return Promise.resolve(); },
+    clock: function () { return now; },
+    mayReadProject: function (slug, caller) { return access.canReadProject(slug, caller); },
+  });
+  now = 100; r.observe({ key: "x", source: "session", project: "proj-a" });
+  now = 200; r.observe({ key: "y", source: "session", project: "proj-a" });
+  now = 300; r.observe({ key: "x", source: "session", project: "proj-b" });
+  var viewA = r.listFor({ user: { id: "user-a" }, authenticated: true });
+  assert.deepEqual(viewA.map(function (a) { return [a.key, a.lastSeen]; }), [["y", 200], ["x", 100]]);
+  var viewAB = r.listFor({ user: { id: "user-ab" }, authenticated: true });
+  assert.deepEqual(viewAB.map(function (a) { return [a.key, a.lastSeen]; }), [["x", 300], ["y", 200]]);
+});
+
+test("what is persisted holds no session id", async function () {
+  var written = [];
+  var service = makeRoster(missing, { writeJson: function (_file, value) { written.push(value); return Promise.resolve(); } });
+  await service.flush();
+  assert.equal(written.length, 1);
+  var wire = JSON.stringify(written[0]);
+  assert.equal(/sess-|sessionId|"session":/.test(wire), false, "the written JSON carries no session id");
+  assert.ok(wire.indexOf("proj-a") !== -1, "the capture holds the roster");
 });
 
 test("the roster asks canReadProject in one place only", function () {
@@ -188,10 +262,22 @@ test("the roster asks canReadProject in one place only", function () {
   assert.equal(/filterForReader/.test(serverSrc), false);
 });
 
-test("a change is broadcast as a nudge with no roster content, and the server does not broadcast the roster", function () {
+test("a sighting and an avatar change are each broadcast as exactly the content-free nudge", async function () {
   assert.equal(rosterWs.CHANGED, "agent_roster_changed");
-  var src = fs.readFileSync(path.join(__dirname, "..", "lib", "server.js"), "utf8");
-  assert.ok(src.indexOf("{ type: require(\"./agent-roster-ws\").CHANGED }") !== -1, "the notifier builds the content-free nudge");
-  assert.equal(/broadcastAll\([^)]*rosterMessage/.test(src), false);
-  assert.equal(/build:[^\n]*rosterMessage/.test(src), false, "no roster snapshot is built for a broadcast");
+  var broadcasts = [];
+  // The notifier is built by the factory server.js uses.
+  var notifier = rosterWs.createRosterNotifier({ broadcast: function (msg) { broadcasts.push(msg); }, delayMs: 0 });
+  var tick = function () { return new Promise(function (resolve) { setTimeout(resolve, 20); }); };
+  var r = makeRoster(missing, { onChange: notifier.notify });
+  await tick();
+  broadcasts.length = 0;
+
+  r.observe({ key: "fresh", source: "session", project: "proj-a" });
+  await tick();
+  assert.deepEqual(broadcasts, [{ type: "agent_roster_changed" }]);
+
+  assert.equal((await r.setAvatar({ user: null, authenticated: true }, "fresh", { custom: "chosen" })).ok, true);
+  await tick();
+  assert.deepEqual(broadcasts, [{ type: "agent_roster_changed" }, { type: "agent_roster_changed" }]);
+  notifier.stop();
 });

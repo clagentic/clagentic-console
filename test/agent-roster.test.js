@@ -147,8 +147,8 @@ test("the roster and each avatar choice are restored unchanged after a restart",
   first.roster.observe({ key: "agent-a", source: "session", project: "proj-1", sessionId: "3" });
   first.setNow(2000);
   first.roster.observe({ key: "helper-x", source: "subagent", project: "proj-1", sessionId: "3" });
-  assert.equal(first.roster.setAvatar(CALLER, "agent-a", { style: "pixel-art", seed: "seed-1" }).ok, true);
-  assert.equal(first.roster.setAvatar(CALLER, "helper-x", { custom: "team-icon" }).ok, true);
+  assert.equal((await first.roster.setAvatar(CALLER, "agent-a", { style: "pixel-art", seed: "seed-1" })).ok, true);
+  assert.equal((await first.roster.setAvatar(CALLER, "helper-x", { custom: "team-icon" })).ok, true);
   await first.roster.flush();
 
   var second = makeRoster(file);
@@ -213,24 +213,111 @@ test("a write that fails is logged and does not throw into the caller", async fu
   assert.ok(logged.some(function (l) { return /could not write/.test(l); }));
 });
 
-test("setAvatar validates the reference, reports an unseen agent, and null clears the choice", function () {
+test("setAvatar validates the reference, reports an unseen agent, and null clears the choice", async function () {
   var m = makeRoster(tmpFile());
   m.roster.observe({ key: "agent-a", source: "session" });
 
-  assert.equal(m.roster.setAvatar(CALLER, "never-seen", { style: "bottts", seed: "s" }).ok, false);
+  assert.equal((await m.roster.setAvatar(CALLER, "never-seen", { style: "bottts", seed: "s" })).ok, false);
   assert.equal(m.roster.list().length, 1, "an unseen agent is not created");
 
-  [{ style: "Bad Style", seed: "s" }, { style: "bottts" }, { style: "bottts", seed: "" }, { style: "bottts", seed: "a\nb" },
-    { custom: "Has Space" }, { custom: 5 }, "robot", [], { custom: "x".repeat(65) }].forEach(function (bad) {
-    var out = m.roster.setAvatar(CALLER, "agent-a", bad);
-    assert.equal(out.ok, false, JSON.stringify(bad));
+  var bads = [{ style: "Bad Style", seed: "s" }, { style: "bottts" }, { style: "bottts", seed: "" }, { style: "bottts", seed: "a\nb" },
+    { custom: "Has Space" }, { custom: 5 }, "robot", [], { custom: "x".repeat(65) }];
+  for (var i = 0; i < bads.length; i++) {
+    var out = await m.roster.setAvatar(CALLER, "agent-a", bads[i]);
+    assert.equal(out.ok, false, JSON.stringify(bads[i]));
     assert.equal(typeof out.error, "string");
-  });
+  }
   assert.equal(m.roster.list()[0].avatar, null, "a refused choice changes nothing");
 
-  assert.deepEqual(m.roster.setAvatar(CALLER, "agent-a", { style: "bottts", seed: "s" }).agent.avatar, { style: "bottts", seed: "s" });
-  assert.deepEqual(m.roster.setAvatar(CALLER, "agent-a", { custom: "team-icon", extra: "ignored" }).agent.avatar, { custom: "team-icon" });
-  assert.equal(m.roster.setAvatar(CALLER, "agent-a", null).agent.avatar, null);
+  assert.deepEqual((await m.roster.setAvatar(CALLER, "agent-a", { style: "bottts", seed: "s" })).agent.avatar, { style: "bottts", seed: "s" });
+  assert.deepEqual((await m.roster.setAvatar(CALLER, "agent-a", { custom: "team-icon", extra: "ignored" })).agent.avatar, { custom: "team-icon" });
+  assert.equal((await m.roster.setAvatar(CALLER, "agent-a", null)).agent.avatar, null);
+});
+
+test("a failed avatar write is rolled back on disk too when a sighting persist started during it lands", async function () {
+  var calls = [];
+  var m = makeRoster(tmpFile(), {
+    writeJson: function (f, v) {
+      var call = { body: JSON.parse(JSON.stringify(v)) };
+      call.done = new Promise(function (resolve, reject) { call.resolve = resolve; call.reject = reject; });
+      calls.push(call);
+      return call.done;
+    },
+  });
+  var avatarOf = function (body) { return body.agents[0].avatar; };
+  var previous = { style: "bottts", seed: "s" };
+  m.roster.observe({ key: "agent-a", source: "session" });
+  var first = m.roster.flush();
+  calls[0].resolve();
+  await first;
+  var kept = m.roster.setAvatar(CALLER, "agent-a", previous);
+  calls[1].resolve();
+  assert.equal((await kept).ok, true);
+
+  var err = console.error;
+  console.error = function () {};
+  try {
+    var failing = m.roster.setAvatar(CALLER, "agent-a", { custom: "team-icon" });
+    var changesBefore = m.changes.n;
+    m.roster.observe({ key: "agent-a", source: "subagent" });
+    var sighting = m.roster.flush();
+    assert.deepEqual(avatarOf(calls[3].body), { custom: "team-icon" }, "the sighting write snapshotted the rejected choice");
+    calls[2].reject(new Error("disk full"));
+    var out = await failing;
+    assert.equal(out.ok, false);
+    assert.equal(out.error, roster.SAVE_FAILED);
+    calls[3].resolve();
+    calls[4].resolve();
+    await sighting;
+    await m.roster.flush();
+  } finally {
+    console.error = err;
+  }
+  assert.deepEqual(m.roster.list()[0].avatar, previous, "memory holds the previous choice");
+  assert.deepEqual(avatarOf(calls[calls.length - 1].body), previous, "the last write received holds the previous choice");
+  assert.equal(m.changes.n, changesBefore + 1, "only the sighting nudged; the rolled-back change did not");
+});
+
+test("two overlapping avatar changes that both fail leave the original choice in memory and on disk", async function () {
+  var calls = [];
+  var m = makeRoster(tmpFile(), {
+    writeJson: function (f, v) {
+      var call = { body: JSON.parse(JSON.stringify(v)) };
+      call.done = new Promise(function (resolve, reject) { call.resolve = resolve; call.reject = reject; });
+      calls.push(call);
+      return call.done;
+    },
+  });
+  var original = { style: "bottts", seed: "s" };
+  m.roster.observe({ key: "agent-a", source: "session" });
+  var first = m.roster.flush();
+  calls[0].resolve();
+  await first;
+  var kept = m.roster.setAvatar(CALLER, "agent-a", original);
+  calls[1].resolve();
+  assert.equal((await kept).ok, true);
+
+  var err = console.error;
+  console.error = function () {};
+  try {
+    var a = m.roster.setAvatar(CALLER, "agent-a", { custom: "icon-a" });
+    var b = m.roster.setAvatar(CALLER, "agent-a", { custom: "icon-b" });
+    assert.equal(calls.length, 3, "the second change waits for the first to settle");
+    calls[2].reject(new Error("disk full"));
+    assert.equal((await a).ok, false);
+    // The restore persist of the first failure, then the second change's write.
+    while (calls.length < 5) await new Promise(function (r) { setImmediate(r); });
+    calls[3].resolve();
+    calls[4].reject(new Error("disk full"));
+    assert.equal((await b).ok, false);
+    while (calls.length < 6) await new Promise(function (r) { setImmediate(r); });
+    calls[5].resolve();
+    await m.roster.flush();
+  } finally {
+    console.error = err;
+  }
+  assert.deepEqual(m.roster.list()[0].avatar, original, "memory holds the original choice");
+  assert.deepEqual(calls[calls.length - 1].body.agents[0].avatar, original, "the last write received holds the original choice");
 });
 
 test("renaming a custom icon moves the choices that named it, and only those", async function () {
@@ -239,9 +326,9 @@ test("renaming a custom icon moves the choices that named it, and only those", a
   m.roster.observe({ key: "agent-a", source: "session" });
   m.roster.observe({ key: "agent-b", source: "session" });
   m.roster.observe({ key: "agent-c", source: "session" });
-  m.roster.setAvatar(CALLER, "agent-a", { custom: "old-icon" });
-  m.roster.setAvatar(CALLER, "agent-b", { custom: "other-icon" });
-  m.roster.setAvatar(CALLER, "agent-c", { style: "bottts", seed: "s" });
+  await m.roster.setAvatar(CALLER, "agent-a", { custom: "old-icon" });
+  await m.roster.setAvatar(CALLER, "agent-b", { custom: "other-icon" });
+  await m.roster.setAvatar(CALLER, "agent-c", { style: "bottts", seed: "s" });
 
   assert.equal(m.roster.renameCustomIcon("old-icon", "new-icon"), 1);
   await m.roster.flush();
@@ -272,7 +359,14 @@ test("the roster's sender key matches the browser's for every sender kind", asyn
 
 // --- WebSocket handlers ---
 
-test("the ws handlers answer a request, set an avatar, and report a refusal to the asker", function () {
+// The set-avatar reply is sent once the write settles: wait for the roster's
+// last write, then one turn for the reply that follows it.
+async function settle(service) {
+  await service.flush();
+  await new Promise(function (resolve) { setImmediate(resolve); });
+}
+
+test("the ws handlers answer a request, set an avatar, and report a refusal to the asker", async function () {
   var m = makeRoster(tmpFile());
   m.roster.observe({ key: "agent-a", source: "session" });
   var sent = [];
@@ -284,18 +378,22 @@ test("the ws handlers answer a request, set an avatar, and report a refusal to t
   assert.deepEqual(sent[0].agents.map(function (a) { return a.key; }), ["agent-a"]);
 
   assert.equal(h.handle({}, { type: "agent_avatar_set", key: "agent-a", avatar: { style: "bottts", seed: "s" } }), true);
+  await settle(m.roster);
   assert.deepEqual(sent[1], { type: "agent_avatar_set_result", key: "agent-a", ok: true });
   assert.deepEqual(m.roster.list()[0].avatar, { style: "bottts", seed: "s" });
 
   h.handle({}, { type: "agent_avatar_set", key: "agent-a", avatar: { style: "no way" } });
+  await settle(m.roster);
   assert.equal(sent[2].ok, false);
   assert.equal(typeof sent[2].error, "string");
   h.handle({}, { type: "agent_avatar_set", key: "never-seen", avatar: null });
+  await settle(m.roster);
   assert.equal(sent[3].ok, false);
   assert.deepEqual(m.roster.list()[0].avatar, { style: "bottts", seed: "s" }, "refusals change nothing");
 });
 
 test("with no roster the ws handlers say so instead of failing", function () {
+  // service is null here, so the set-avatar refusal is sent synchronously.
   var sent = [];
   var h = rosterWs.createWsHandlers({ service: null, sendTo: function (ws, obj) { sent.push(obj); } });
   h.handle({}, { type: "agent_roster_request" });
