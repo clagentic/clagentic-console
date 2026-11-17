@@ -469,19 +469,22 @@ test("turn-id table AC3: Stop clears the wait and releases held chat; a turn tha
   }
 });
 
-test("turn-id table AC3: ending the query during the wait releases it, and held chat is not sent", async function () {
+test("turn-id table AC3: ending the query during the wait releases the held chat, in order", async function () {
   var fake = fakeAppServer();
   var h = await idleHandle(fake);
   test.mock.timers.enable({ apis: ["setTimeout"] });
   try {
     await turnlessSettle(h, "sleep 999");
     h.handle.pushMessage("second", null, "human", "m2");
-    for (var i = 0; i < 10; i++) await tick();
+    for (var i = 0; i < 20; i++) await tick();
+    assert.equal(fake.callsTo("turn/start").length, 1, "held while the run's turn is to come");
+    h.handle.close();
+    for (i = 0; i < 100 && fake.callsTo("turn/start").length < 2; i++) await tick();
+    assert.equal(fake.callsTo("turn/start").length, 2, "the query ending stopped the wait and the chat went out");
   } finally {
     test.mock.timers.reset();
   }
-  await finish(h);
-  assert.equal(fake.callsTo("turn/start").length, 1, "the held chat was not sent after the query ended");
+  await h.reader;
 });
 
 test("turn-id table AC2: chat sent while a command runs is held, never bound as the command's turn, and runs after it settles", async function () {
