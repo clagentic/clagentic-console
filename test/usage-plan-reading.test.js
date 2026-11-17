@@ -95,6 +95,24 @@ test("AC4: a reading whose resets_at is past reads as a closed window, never zer
   assert.equal(b.state, "expired");
 });
 
+test("a reading is stamped when the reply lands, after an event recorded while the read was pending", async function () {
+  var s = quiet();
+  var t = NOW;
+  var release;
+  var raw = {};
+  raw[METHOD] = function () { return new Promise(function (res) { release = function () { res(reply(null, win(50, FUTURE_ISO))); }; }); };
+  var reader = createPlanUsageReader({ store: s, now: function () { return t; } });
+  var done = reader.maybeRead(handleOver(raw), "claude");
+  t = NOW + 500;
+  s.record("claude", { rateLimitType: "seven_day", utilization: 0.9, resetsAt: Date.parse(FUTURE_ISO) / 1000, status: "allowed_warning" }, { now: t, source: "claude-cli:rate_limit_event" });
+  t = NOW + 1000;
+  release();
+  await done;
+  var b = bucket(s, "seven_day", t);
+  assert.equal(b.utilizationObservedAt, new Date(NOW + 1000).toISOString());
+  assert.equal(b.utilization, 0.5);
+});
+
 test("a reading keeps the status a rate-limit event reported for the same window", async function () {
   var s = quiet();
   s.record("claude", { rateLimitType: "seven_day", utilization: 0.8, resetsAt: Date.parse(FUTURE_ISO) / 1000, status: "allowed_warning" }, { now: NOW - 1000 });
