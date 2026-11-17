@@ -132,6 +132,22 @@ var U0 = function (ago) { return new Date(NOW - ago * 1000).toISOString(); };
   { name: "the horizon setting moves the cutoff",
     first: { utilization: 0.4, resetsAt: FUTURE, status: "allowed" }, firstAgo: 600, staleSeconds: 300,
     want: { utilization: null, lastKnownUtilization: 0.4, lastKnownStale: true, lastKnownAgeSeconds: 600 } },
+  { name: "confirmed value past resetsAt is a closed window's last known, state expired",
+    first: { utilization: 0.98, resetsAt: PAST, status: "allowed" }, firstAgo: 600, confirm: true,
+    want: { utilization: null, lastKnownUtilization: 0.98, lastKnownObservedAt: U0(600), lastKnownPreReset: true, lastKnownStale: false, lastKnownAgeSeconds: null, state: "expired" } },
+  { name: "unconfirmed value past resetsAt and past the horizon: expired rule wins over stale",
+    first: { utilization: 0.98, resetsAt: PAST, status: "allowed" }, firstAgo: 7200,
+    want: { utilization: null, lastKnownUtilization: 0.98, lastKnownObservedAt: U0(7200), lastKnownPreReset: true, lastKnownStale: false, lastKnownAgeSeconds: null, state: "expired" } },
+  { name: "value with resetsAt in the future is unchanged",
+    first: { utilization: 0.98, resetsAt: FUTURE, status: "allowed" }, firstAgo: 600, confirm: true,
+    want: { utilization: 0.98, lastKnownUtilization: null, lastKnownPreReset: false, lastKnownStale: false, state: "fresh" } },
+  { name: "stored pre-reset pair is shown unchanged after resetsAt passes",
+    first: { utilization: 0.9, resetsAt: PAST - 100, status: "allowed_warning" }, firstAgo: 7200,
+    second: { resetsAt: PAST, status: "allowed" }, secondAgo: 600,
+    want: { utilization: null, lastKnownUtilization: 0.9, lastKnownObservedAt: U0(7200), lastKnownPreReset: true, lastKnownStale: false } },
+  { name: "no resetsAt is no evidence of a closed window",
+    first: { utilization: 0.6, status: "allowed" }, firstAgo: 600, confirm: true,
+    want: { utilization: 0.6, lastKnownUtilization: null, lastKnownPreReset: false, state: "fresh" } },
 ].forEach(function (row) {
   test("stale utilization: " + row.name, function () {
     var s = createUsageStore();
@@ -166,7 +182,9 @@ test("resetsAt in the past is expired and not zeroed", function () {
   s.record("claude", { rateLimitType: "five_hour", utilization: 0.9, resetsAt: PAST }, { now: NOW - 5000 });
   var b = snap(s).vendors.claude.buckets.five_hour;
   assert.equal(b.state, "expired");
-  assert.equal(b.utilization, 0.9);
+  assert.equal(b.utilization, null);
+  assert.equal(b.lastKnownUtilization, 0.9);
+  assert.equal(b.lastKnownPreReset, true);
 });
 
 test("observedAt older than the threshold is stale", function () {
