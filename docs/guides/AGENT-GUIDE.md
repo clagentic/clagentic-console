@@ -8,12 +8,13 @@ Agents are first-class users of Clagentic: Console. A script, a CI job or an AI 
 - `clagentic-console answer-prompt` answers one pending prompt of a live session by request id, the way a person answers it in the browser, and records who answered.
 - `clagentic-console list-sessions` lists the console's live and idle sessions (`--state any` for every session) with their state and any prompts they are waiting on.
 - `clagentic-console list-outbound` lists what one session sent out with `send-input` and `open-session`: the target, the prompt, the time and the initiator. It only reads.
+- `clagentic-console turn-origin` tells a hook how the turn that fired it was started: typed, scheduled, a loop iteration or sent by another session. It only reads.
 - `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
 - `clagentic-console settings` reads and changes server-wide settings by key (`get`, `set`, `list`), starting with the prompt expiry, and prints JSON.
 
 This guide is the canonical reference for these verbs. [architecture.md](./architecture.md) describes how they are built; where the two ever differ, fix the difference in the same change. Writers who cannot run the CLI can use the file drop, covered in [EXTERNAL-TRIGGERS.md](./EXTERNAL-TRIGGERS.md) and not repeated here.
 
-Every verb talks to the running daemon over its Unix socket (`~/.clagentic/console/daemon.sock`, mode 0700), so the caller must be the daemon's own OS user and the daemon must be running. Each verb prints its result as JSON on stdout. Without a running daemon the result is `{ "ok": false, "result": "error", "reason": "no running daemon" }`.
+Every verb talks to the running daemon over its Unix socket (`~/.clagentic/console/daemon.sock`, mode 0700), so the caller must be the daemon's own OS user and the daemon must be running. Each verb prints its result as JSON on stdout, except `turn-origin`, which prints one word (see [turn-origin](#turn-origin)). Without a running daemon the result is `{ "ok": false, "result": "error", "reason": "no running daemon" }`.
 
 Every verb, and each `schedule-input` subcommand, answers `-h` and `--help` with its usage on stdout and exit 0. The exact call shape of each verb is on one page, [AGENT-CALL-SHAPES.md](./AGENT-CALL-SHAPES.md): each is one literal command, so an agent never needs a pipe, a filter or a shell variable to use them.
 
@@ -29,6 +30,7 @@ Examples use the generic project `my-project` and the generic agents `reviewer` 
 - [answer-prompt](#answer-prompt)
 - [list-sessions](#list-sessions)
 - [list-outbound](#list-outbound)
+- [turn-origin](#turn-origin)
 - [Scheduled input](#scheduled-input)
 - [settings](#settings)
 - [Delivery semantics](#delivery-semantics)
@@ -510,6 +512,45 @@ The ledger is written by the daemon, one JSON line per request, when `send-input
 - **How long.** 30 days by default. Older entries are deleted when the daemon starts and every six hours, and are never returned by `list-outbound` once expired.
 - **Configuration.** Set `outboundRetentionDays` in `~/.clagentic/console/daemon.json` to a whole number of days from 1 to 3650. `0` turns the ledger off: it stops recording and deletes the existing entries at the next prune, so the history already kept is lost. An invalid value is ignored (30 days apply) and a warning is logged. The value is read each time it is used, so a change needs no restart.
 - **Who may read it.** The files, by the daemon's OS user. `list-outbound`, over the daemon's owner-only socket, under the rule above: prompt text goes to a caller who can already read the stored text.
+
+## turn-origin
+
+An optional aid for hook authors. Read-only. A hook that runs in a console session can ask how the turn that fired it was started: typed by a person, fired by scheduled input, a loop iteration, or sent by another session. The vendor CLI reports every console turn to its hooks as an SDK turn, whoever started it, so a hook cannot tell them apart from its own input. The console can, because each turn is handed over with its initiator.
+
+```
+clagentic-console turn-origin
+```
+
+The verb takes no options. It reads the hook's own input, the JSON the hook receives on stdin, from its own stdin. A hook that has not read its stdin yet runs the verb as is; one that has read it passes it on:
+
+```bash
+origin=$(clagentic-console turn-origin)
+origin=$(printf '%s' "$hook_input" | clagentic-console turn-origin)
+```
+
+It asks the running console and prints one word on stdout:
+
+| Answer | The turn was |
+|---|---|
+| `user` | typed by a person in the console. |
+| `schedule_wakeup` | fired by scheduled input, at its time or sent early with Send now. |
+| `loop_wakeup` | one iteration of a loop. |
+| `system` | sent by another session or a writer with `send-input` or `open-session`, or delivered by an external trigger. |
+| `unknown` | one the console has no record of: the prompt text matches no turn it holds for the session, the turn carried no initiator, the session is not one this console hosts, or the console was restarted since the turn. |
+
+**The session** is named by `CLAGENTIC_CONSOLE_PROJECT` and `CLAGENTIC_CONSOLE_SESSION_ID` in the verb's own environment when they are set, which the console does for every Claude process it starts. When they are not, the input's `session_id` is matched to the vendor session id of a session the console hosts. **The turn** is found by the input's `prompt` text, among the turns recorded for that session, the most recent one with that text first. The input's `prompt_id` is not used.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| `0` | An answer was printed. `unknown` is an answer. |
+| `1` | The input on stdin is not usable (not JSON, or not a JSON object), or an option was given. |
+| `69` | Not available: the console is not running, or did not answer. A message on stderr says which. |
+
+The code `69` is distinct from the codes of the other verbs (0, 1, 3 and 4). A hook that treats `unknown` and `69` alike loses nothing by it.
+
+**The record.** The console keeps, for each session, the initiator of the newest 64 turns it delivered to the agent, in memory only, as a digest of each turn's text and not the text. The oldest turn is dropped when a 65th arrives, and the whole record is dropped when the session is deleted. A console restart forgets it: after one, an earlier turn answers `unknown`. Nothing writes the record but the console's own delivery of a turn: the verb and its IPC command only read it, and the same question from any process of the session gets the same answer. The answer does not change what a session may do or how a turn is delivered.
 
 ## Scheduled input
 
