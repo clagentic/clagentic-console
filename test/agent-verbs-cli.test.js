@@ -15,7 +15,6 @@ var directory = require("../lib/session-directory");
 var { createSessionInput } = require("../lib/session-input");
 var cli = require("../lib/cli/session-subcommands");
 var scheduleCli = require("../lib/cli/schedule-input-subcommands");
-var turnOriginCli = require("../lib/cli/turn-origin-subcommand");
 var agentUsage = require("../lib/cli/agent-usage");
 var compact = require("../lib/cli/compact-output");
 var { exitFlushed } = require("../lib/cli/output");
@@ -395,7 +394,6 @@ function runVerbInProcess(args) {
   var code;
   try {
     if (args[0] === "schedule-input") scheduleCli.runScheduleInput(args.slice(1));
-    else if (args[0] === "turn-origin") turnOriginCli.runTurnOrigin(args.slice(1));
     else cli.runSessionVerb(args[0], args.slice(1));
     code = process.exitCode;
   } finally {
