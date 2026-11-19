@@ -116,14 +116,6 @@ clagentic-console list-outbound --session 4f1c9d2e-7a3b-4c55-9e0a-1b2c3d4e5f60 -
 
 Compact row fields: `ts`, `kind`, `result`, `reason`, `initiator`, `prompt`, `promptWithheld` and a `target` of `project`, `sessionId`, `agent`, `name`, `address`.
 
-## See how a turn was started
-
-For a hook: reads the hook's input JSON on stdin and prints `user`, `schedule_wakeup`, `loop_wakeup`, `system` or `unknown`. Exit 0 for every answer, 69 when the console is not running.
-
-```bash
-clagentic-console turn-origin
-```
-
 ## Schedule input
 
 Once, after a delay or at a local time:

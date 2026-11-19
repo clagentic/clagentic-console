@@ -97,12 +97,6 @@ if (SESSION_VERBS.indexOf(args[0]) !== -1) {
   return;
 }
 
-// --- `turn-origin`: a hook asks how the turn that fired it was started ---
-if (args[0] === "turn-origin") {
-  require("../lib/cli/turn-origin-subcommand").runTurnOrigin(args.slice(1));
-  return;
-}
-
 if (args[0] === "schedule-input") {
   require("../lib/cli/schedule-input-subcommands").runScheduleInput(args.slice(1));
   return;
