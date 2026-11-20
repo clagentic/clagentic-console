@@ -480,16 +480,20 @@ function twoProjects() {
       { type: "set_project_default_thinking", thinking: "disabled" },
       { type: "set_project_default_thinking", thinking: null },
     ],
-    field: "thinking", expect: "budget",
+    field: "thinking", expect: "budget", project: "b",
   },
 ].forEach(function (row) {
   test(row.name, function () {
     var w = twoProjects();
-    row.steps.forEach(function (step) { w.handlersA.handleSessionsMessage(makeWs(), step); });
-    w.handlersA.handleSessionsMessage(makeWs(), { type: "new_session" });
-    var created = Array.from(w.a.sm.sessions.values()).pop();
+    // Project "b" holds a real session manager, which seeds a new session's
+    // effort, betas and thinking from its saved defaults; "a" is a stub.
+    var handlers = row.project === "b" ? w.handlersB : w.handlersA;
+    var sm = row.project === "b" ? w.smB : w.a.sm;
+    row.steps.forEach(function (step) { handlers.handleSessionsMessage(makeWs(), step); });
+    handlers.handleSessionsMessage(makeWs(), { type: "new_session" });
+    var created = Array.from(sm.sessions.values()).pop();
     assert.strictEqual(created[row.field], row.expect);
-    if (row.currentModel) assert.strictEqual(w.a.sm.currentModel, row.currentModel, "the fallback the bridge reads is still the project's default");
+    if (row.currentModel) assert.strictEqual(sm.currentModel, row.currentModel, "the fallback the bridge reads is still the project's default");
   });
 });
 
