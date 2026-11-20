@@ -660,21 +660,50 @@ test("a dropped hand-back is acknowledged after it is restored, and restored at 
       composer: "", acks: 1, notes: 1,
     },
     {
-      name: "the requesting page's cancelled reply is not a hand-back: no ack",
+      name: "the requesting page lost its item and gets the cancelled reply with text: restored and acked",
       run: function (env, id) { answer(env, id, "cancelled", { text: "withdrawn", pastes: [], imageCount: 0 }); },
-      composer: "withdrawn", acks: 0, notes: 1,
+      composer: "withdrawn", acks: 1, notes: 1,
+    },
+    {
+      name: "Edit: the cancelled reply restores the text and acks; the later cancelled-cause hand-back is acked, not restored again",
+      queued: true, action: "edit",
+      run: function (env, id) {
+        assert.equal(frames(env, "cancel_queued_message")[0].wantsText, true, "Edit asks for the text back");
+        answer(env, id, "cancelled", { text: "queued here", pastes: [], imageCount: 0 });
+        env.ctx.inputEl.value = "";
+        answer(env, id, "dropped", { text: "queued here", pastes: [], imageCount: 0, cause: "cancelled" });
+      },
+      composer: "", acks: 2, notes: 0,
+    },
+    {
+      name: "plain Cancel asks for no text and sends no ack",
+      queued: true, action: "cancel",
+      run: function (env, id) {
+        assert.equal(frames(env, "cancel_queued_message")[0].wantsText, undefined, "a plain Cancel leaves the flag out");
+        answer(env, id, "cancelled", { text: "queued here", pastes: [], imageCount: 0 });
+      },
+      composer: "", acks: 0, notes: 0,
+    },
+    {
+      name: "a cancelled-cause hand-back on a page with no item says it was withdrawn",
+      run: function (env, id) { answer(env, id, "dropped", { text: "withdrawn earlier", pastes: [], imageCount: 0, cause: "cancelled" }); },
+      composer: "withdrawn earlier", acks: 1, notes: 1, noted: /withdrawn/,
     },
   ];
   for (var i = 0; i < rows.length; i++) {
     var env = await setup(CAN_CANCEL);
     var id;
-    if (rows[i].queued) { type(env, "queued here"); id = chat(env)[0].messageId; } else { id = freshId(); }
+    if (rows[i].queued) {
+      type(env, "queued here"); id = chat(env)[0].messageId;
+      if (rows[i].action) btn(queuedEls()[0], "shell-queued-" + rows[i].action).click();
+    } else { id = freshId(); }
     var before = chat(env).length;
     rows[i].run(env, id);
     assert.equal(env.ctx.inputEl.value, rows[i].composer, rows[i].name + ": composer");
     assert.deepEqual(acks(env), Array.from({ length: rows[i].acks }, function () { return { type: "queued_message_ack", messageIds: [id] }; }), rows[i].name + ": acks");
     assert.equal(sysText().filter(function (t) { return /not delivered|not sent|back in your composer/.test(t); }).length, rows[i].notes, rows[i].name + ": notices");
     assert.equal(chat(env).length, before, rows[i].name + ": the text is never sent to the agent");
+    if (rows[i].noted) assert.ok(sysText().some(function (t) { return rows[i].noted.test(t); }), rows[i].name + ": notice wording");
   }
 });
 

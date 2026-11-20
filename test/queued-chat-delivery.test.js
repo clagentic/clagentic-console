@@ -1306,10 +1306,34 @@ test("a dropped hand-back is kept until a page acknowledges it", async function 
         assert.deepEqual(handedBack(second.shown, later).map(function (m) { return [m.messageId, m.text, m.cause]; }), [[ID_A, "across restarts", "restart"]]);
       },
     },
+    {
+      name: "withdrawn for Edit or take-back, the socket closes before the reply or its ack: the next show hands the text back; a plain Cancel keeps nothing",
+      run: async function (h) {
+        h.send({ type: "message", text: "edit me", messageId: ID_A });
+        h.send({ type: "message", text: "discard me", messageId: ID_B });
+        h.send({ type: "cancel_queued_message", messageId: ID_A, wantsText: true });
+        h.send({ type: "cancel_queued_message", messageId: ID_B });
+        await tick(); await tick();
+        assert.deepEqual(h.replies().map(function (r) { return [r.messageId, r.result]; }), [[ID_A, "cancelled"], [ID_B, "cancelled"]]);
+        var next = { id: "next" };
+        showAll(h, [next]);
+        assert.deepEqual(handedBack(h.out.toWs, next).map(function (m) { return [m.messageId, m.cause, m.text]; }), [[ID_A, "cancelled", "edit me"]]);
+        h.send(ackFrame([ID_A]));
+        var after = { id: "after the ack" };
+        showAll(h, [after]);
+        assert.deepEqual(handedBack(h.out.toWs, after), [], "acked: gone");
+        h.send({ type: "message", text: "flag is a boolean only", messageId: ID_C });
+        h.send({ type: "cancel_queued_message", messageId: ID_C, wantsText: "yes" });
+        await tick(); await tick();
+        var last = { id: "last" };
+        showAll(h, [last]);
+        assert.deepEqual(handedBack(h.out.toWs, last), [], "a non-boolean flag parks nothing");
+      },
+    },
   ];
   for (var i = 0; i < rows.length; i++) {
     var h = await harness();
-    try { rows[i].run(h); } catch (err) { err.message = rows[i].name + ": " + err.message; throw err; } finally { h.done(); }
+    try { await rows[i].run(h); } catch (err) { err.message = rows[i].name + ": " + err.message; throw err; } finally { h.done(); }
   }
 });
 
