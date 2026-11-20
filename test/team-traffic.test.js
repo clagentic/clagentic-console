@@ -434,6 +434,18 @@ test("automation entries follow the ledger's rules: another OS user's session an
   assert.equal(multi.traffic.snapshot({ user: USERS.bob, authenticated: true }).messages.length, 1);
 });
 
+test("an automation turn whose target session the caller may not read is not listed and carries the access reason", function () {
+  var multi = build({ multiUser: true });
+  var si = sessionInputFor(multi);
+  multi.held.work.sm.sessions.get(102).queryInstance = {};
+  assert.equal(si.input.fireScheduled({ projectSlug: "work", sessionId: "cli-bob-private", prompt: "tick", note: "scheduled message" }).ok, true);
+  var snap = multi.traffic.snapshot({ user: USERS.alice, authenticated: true });
+  assert.equal(snap.messages.length, 0);
+  assert.equal(snap.pairs.length, 0);
+  assert.equal(snap.withheld.count, 1);
+  assert.deepEqual(snap.withheld.reasons, ["the caller cannot read the target session"]);
+});
+
 test("an automation entry older than the retention is not listed", function () {
   var t = build({ retentionDays: 1 });
   t.ledger.record(automationEntry({ ts: new Date(NOW - 3 * 24 * HOUR).toISOString() }));
