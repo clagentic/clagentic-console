@@ -416,10 +416,12 @@
                   </div>
                   <div id="config-effort-section" class="config-section">
                     <div class="config-section-label">EFFORT</div>
+                    <div id="config-effort-scope" class="config-scope-label">This session only</div>
                     <div id="config-effort-bar" class="config-segmented"></div>
                   </div>
                   <div id="config-thinking-section" class="config-section">
                     <div class="config-section-label">THINKING</div>
+                    <div id="config-thinking-scope" class="config-scope-label">This session only</div>
                     <div id="config-thinking-bar" class="config-segmented"></div>
                     <div id="config-thinking-budget-row" class="config-budget-row" style="display:none">
                       <label class="config-budget-label">Budget tokens</label>
@@ -429,6 +431,7 @@
                   </div>
                   <div id="config-beta-section" class="config-section" style="display:none">
                     <div class="config-section-label">BETA</div>
+                    <div id="config-beta-scope" class="config-scope-label">This session only</div>
                     <div class="config-toggle-row">
                       <span class="config-toggle-label">1M Context</span>
                       <button id="config-beta-1m" class="config-toggle-btn" role="switch" aria-checked="false">
@@ -641,6 +644,7 @@
               <div class="settings-field">
                 <label class="settings-label">Extended Context (Beta)</label>
                 <div class="settings-hint">Enable 1M token context window for Sonnet models. Allows processing much larger codebases and files, but may increase latency.</div>
+                <div id="ps-beta-scope" class="config-scope-label"></div>
                 <label class="settings-toggle-row ps-beta-toggle-row">
                   <div>
                     <span class="settings-label">1M Context</span>
@@ -669,6 +673,7 @@
               <div class="settings-field">
                 <label class="settings-label">Effort</label>
                 <div class="settings-hint">Controls how much thinking effort Claude puts into responses. Higher effort means longer, more thorough responses.</div>
+                <div id="ps-effort-scope" class="config-scope-label"></div>
                 <div class="settings-btn-group" id="ps-effort-bar"></div>
               </div>
             </div>
@@ -676,6 +681,7 @@
               <div class="settings-field">
                 <label class="settings-label">Thinking</label>
                 <div class="settings-hint">Controls whether Claude shows its reasoning process. Budget mode lets you set a token limit.</div>
+                <div id="ps-thinking-scope" class="config-scope-label"></div>
                 <div class="settings-btn-group" id="ps-thinking-bar"></div>
                 <div id="ps-thinking-budget-row" class="settings-budget-row" style="display:none">
                   <label class="settings-budget-label">Budget tokens</label>
@@ -1123,6 +1129,7 @@
             <div class="settings-field">
               <label class="settings-label">Extended Context (Beta)</label>
               <div class="settings-hint">Enable 1M token context window for Sonnet models. Allows processing much larger codebases and files, but may increase latency.</div>
+              <div id="ss-beta-scope" class="config-scope-label"></div>
               <label class="settings-toggle-row ss-beta-toggle-row">
                 <div>
                   <span class="settings-label">1M Context</span>
@@ -1151,6 +1158,7 @@
             <div class="settings-field">
               <label class="settings-label">Effort</label>
               <div class="settings-hint">Controls how much thinking effort Claude puts into responses. Higher effort means longer, more thorough responses.</div>
+              <div id="ss-effort-scope" class="config-scope-label"></div>
               <div class="settings-btn-group" id="ss-effort-bar"></div>
             </div>
           </div>
@@ -1158,6 +1166,7 @@
             <div class="settings-field">
               <label class="settings-label">Thinking</label>
               <div class="settings-hint">Controls whether Claude shows its reasoning process. Budget mode lets you set a token limit.</div>
+              <div id="ss-thinking-scope" class="config-scope-label"></div>
               <div class="settings-btn-group" id="ss-thinking-bar"></div>
               <div id="ss-thinking-budget-row" class="settings-budget-row" style="display:none">
                 <label class="settings-budget-label">Budget tokens</label>
