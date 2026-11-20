@@ -614,6 +614,118 @@ test("Send now: each path draws the item as sending or queued, and the text is n
   }
 });
 
+// ------------------------------------------------------------ handed back at least once
+// The server keeps a dropped hand-back until a page acknowledges it, so the same
+// reply can arrive more than once. The page restores an id at most once, puts the
+// text only in the composer (never sends it), and acknowledges every time.
+
+function freshId() { return require("crypto").randomUUID(); }
+function acks(env) { return frames(env, "queued_message_ack"); }
+
+test("a dropped hand-back is acknowledged after it is restored, and restored at most once per page", async function () {
+  var rows = [
+    {
+      name: "no queued item (a switch back): restored, then acked",
+      run: function (env, id) { answer(env, id, "dropped", { text: "from the server", pastes: [], imageCount: 0, cause: "restart" }); },
+      composer: "from the server", acks: 1, notes: 1,
+    },
+    {
+      name: "a queued item on the page: its text is restored and the id acked",
+      queued: true,
+      run: function (env, id) { answer(env, id, "dropped", { text: "queued here", cause: "closed" }); },
+      composer: "queued here", acks: 1, notes: 1,
+    },
+    {
+      name: "the same reply twice (a re-show before the ack landed): one restore, one notice, an ack each time, nothing sent",
+      run: function (env, id) {
+        var back = { text: "twice", pastes: [], imageCount: 0, cause: "restart" };
+        answer(env, id, "dropped", back);
+        env.ctx.inputEl.value = "";
+        env.us.handleSessionShown(env.ctx.inputEl);
+        answer(env, id, "dropped", back);
+      },
+      composer: "", acks: 2, notes: 1,
+    },
+    {
+      name: "the socket was down at the first ack: the next reply is not restored again and is acked once connected",
+      run: function (env, id) {
+        var back = { text: "offline ack", pastes: [], imageCount: 0, cause: "restart" };
+        env.ctx.ws.readyState = 3;
+        answer(env, id, "dropped", back);
+        assert.equal(env.ctx.inputEl.value, "offline ack", "restored even though the ack could not go");
+        env.ctx.inputEl.value = "";
+        env.ctx.ws.readyState = 1;
+        answer(env, id, "dropped", back);
+      },
+      composer: "", acks: 1, notes: 1,
+    },
+    {
+      name: "the requesting page lost its item and gets the cancelled reply with text: restored and acked",
+      run: function (env, id) { answer(env, id, "cancelled", { text: "withdrawn", pastes: [], imageCount: 0 }); },
+      composer: "withdrawn", acks: 1, notes: 1,
+    },
+    {
+      name: "Edit: the cancelled reply restores the text and acks; the later cancelled-cause hand-back is acked, not restored again",
+      queued: true, action: "edit",
+      run: function (env, id) {
+        assert.equal(frames(env, "cancel_queued_message")[0].wantsText, true, "Edit asks for the text back");
+        answer(env, id, "cancelled", { text: "queued here", pastes: [], imageCount: 0 });
+        env.ctx.inputEl.value = "";
+        answer(env, id, "dropped", { text: "queued here", pastes: [], imageCount: 0, cause: "cancelled" });
+      },
+      composer: "", acks: 2, notes: 0,
+    },
+    {
+      name: "a frame for another session is ignored (no restore, no ack, not remembered), then restored once when its own session is shown",
+      run: function (env, id) {
+        var back = { text: "belongs to A", pastes: [], imageCount: 0, cause: "closed" };
+        answer(env, id, "dropped", Object.assign({ sessionId: env.sid + 1000 }, back));
+        assert.equal(env.ctx.inputEl.value, "", "not in this session's composer");
+        assert.deepEqual(acks(env), [], "not acked");
+        answer(env, id, "dropped", Object.assign({ sessionId: env.sid }, back));
+        assert.equal(env.ctx.inputEl.value, "belongs to A", "restored on its own session's show");
+        env.ctx.inputEl.value = "";
+        answer(env, id, "dropped", Object.assign({ sessionId: env.sid }, back));
+      },
+      composer: "", acks: 2, notes: 1,
+    },
+    {
+      name: "a page without the item that gets a text-less cancelled reply restores nothing",
+      run: function (env, id) { answer(env, id, "cancelled", { sessionId: env.sid }); },
+      composer: "", acks: 0, notes: 0,
+    },
+    {
+      name: "plain Cancel asks for no text and sends no ack",
+      queued: true, action: "cancel",
+      run: function (env, id) {
+        assert.equal(frames(env, "cancel_queued_message")[0].wantsText, undefined, "a plain Cancel leaves the flag out");
+        answer(env, id, "cancelled", { text: "queued here", pastes: [], imageCount: 0 });
+      },
+      composer: "", acks: 0, notes: 0,
+    },
+    {
+      name: "a cancelled-cause hand-back on a page with no item says it was withdrawn",
+      run: function (env, id) { answer(env, id, "dropped", { text: "withdrawn earlier", pastes: [], imageCount: 0, cause: "cancelled" }); },
+      composer: "withdrawn earlier", acks: 1, notes: 1, noted: /withdrawn/,
+    },
+  ];
+  for (var i = 0; i < rows.length; i++) {
+    var env = await setup(CAN_CANCEL);
+    var id;
+    if (rows[i].queued) {
+      type(env, "queued here"); id = chat(env)[0].messageId;
+      if (rows[i].action) btn(queuedEls()[0], "shell-queued-" + rows[i].action).click();
+    } else { id = freshId(); }
+    var before = chat(env).length;
+    rows[i].run(env, id);
+    assert.equal(env.ctx.inputEl.value, rows[i].composer, rows[i].name + ": composer");
+    assert.deepEqual(acks(env), Array.from({ length: rows[i].acks }, function () { return { type: "queued_message_ack", messageIds: [id] }; }), rows[i].name + ": acks");
+    assert.equal(sysText().filter(function (t) { return /not delivered|not sent|back in your composer/.test(t); }).length, rows[i].notes, rows[i].name + ": notices");
+    assert.equal(chat(env).length, before, rows[i].name + ": the text is never sent to the agent");
+    if (rows[i].noted) assert.ok(sysText().some(function (t) { return rows[i].noted.test(t); }), rows[i].name + ": notice wording");
+  }
+});
+
 test("Send now: a tracked frame with sendNow (a reload, a switch back, a second tab) draws the item as sending, never queued", async function () {
   var env = await setup(CAN_CANCEL);
   env.us.handleSessionShown(new FakeElement("textarea"));
@@ -630,4 +742,11 @@ test("Send now: a tracked frame with sendNow (a reload, a switch back, a second 
   assert.deepEqual(sendNowItem(), { tag: "Queued", actionsShown: true });
   sendNowAnswer(second, TRACKED_ID, "requested");
   assert.deepEqual(sendNowItem(), { tag: "Sending", actionsShown: false }, "another page's press reaches this page");
+
+  var reloaded = await setup(CAN_CANCEL);
+  var midFlight = "5e1f5e1f-0000-4000-8000-000000000003";
+  tracked(reloaded, { messageId: midFlight, sendNow: true });
+  assert.deepEqual(sendNowItem(), { tag: "Sending", actionsShown: false }, "a page reloaded mid-flight draws it as sending");
+  sendNowAnswer(reloaded, midFlight, "error", { message: "worker gone" });
+  assert.deepEqual(sendNowItem(), { tag: "Queued", actionsShown: true }, "the error the interrupt's rejection sends to every page gives the controls back");
 });

@@ -396,10 +396,10 @@ test("cancel before delivery withdraws the message at the agent and it is never 
   var h = await harness();
   try {
     h.send({ type: "message", text: "take me back", messageId: ID_A });
-    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    h.send({ type: "cancel_queued_message", messageId: ID_A, wantsText: true });
     await tick();
     assert.deepEqual(h.out.cancelled, [ID_A]);
-    assert.deepEqual(h.replies(), [{ type: "queued_message_cancelled", messageId: ID_A, result: "cancelled", text: "take me back", pastes: [], imageCount: 0 }]);
+    assert.deepEqual(h.replies(), [{ type: "queued_message_cancelled", messageId: ID_A, result: "cancelled", sessionId: h.session.localId, text: "take me back", pastes: [], imageCount: 0 }]);
     queuedChat.consume(h.session, [ID_A]);
     assert.equal(h.records().length, 0);
     assert.equal(h.delivered().length, 0);
@@ -499,7 +499,7 @@ test("a query that closes with the message never taken drops it: not recorded, a
     queuedChat.dropAll(h.session);
     assert.equal(h.records().length, 0);
     assert.deepEqual(h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled"; }),
-      [{ type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "closed", text: "orphan", pastes: [], imageCount: 0 }]);
+      [{ type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "closed", sessionId: h.session.localId, text: "orphan", pastes: [], imageCount: 0 }]);
   } finally { h.done(); }
 });
 
@@ -533,7 +533,7 @@ test("a cancelled reply carries the message text; other answers do not", async f
   var t = await harness();
   try {
     t.send({ type: "message", text: "take it back", messageId: ID_A });
-    t.send({ type: "cancel_queued_message", messageId: ID_A });
+    t.send({ type: "cancel_queued_message", messageId: ID_A, wantsText: true });
     await tick(); await tick();
     var r = t.replies();
     assert.equal(r.length, 1);
@@ -669,7 +669,7 @@ test("the grace timer after a false cancel settles an idle session", async funct
   } finally { timers.reset(); h.done(); }
 });
 
-test("N pending cancels on one session arm exactly one idle-settle timer, and the settlement happens once", async function () {
+test("each unconfirmed message arms exactly one idle-settle timer however often it is cancelled, and the settlement happens once", async function () {
   var timers = require("node:test").mock.timers;
   var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
   var realSet = null;
@@ -695,10 +695,10 @@ test("N pending cancels on one session arm exactly one idle-settle timer, and th
       return handle;
     };
     globalThis.clearTimeout = function (handle) { live.delete(handle); return realClear.apply(this, arguments); };
-    [ID_A, ID_B, ID_C].forEach(function (id) { h.send({ type: "cancel_queued_message", messageId: id }); });
+    [ID_A, ID_B, ID_C, ID_A, ID_B, ID_C].forEach(function (id) { h.send({ type: "cancel_queued_message", messageId: id }); });
     await tick(); await tick();
-    assert.deepEqual(answers(h), ["pending", "pending", "pending"]);
-    assert.equal(live.size, 1, "one idle-settle timer for the session, not one per cancel");
+    assert.deepEqual(answers(h), ["pending", "pending", "pending", "pending", "pending", "pending"]);
+    assert.equal(live.size, 3, "one idle-settle timer per unconfirmed message, not one per cancel");
     h.session.isProcessing = false;
     timers.tick(10000);
     assert.deepEqual(droppedReplies(h).map(function (m) { return m.messageId; }), [ID_A, ID_B, ID_C], "each message is settled once");
@@ -738,7 +738,7 @@ test("a cancel of one message that puts a waiting sibling in doubt tells the sib
     await tick(); await tick();
     var told = h.out.toSession.filter(function (m) { return m.type === "queued_message_cancelled" && m.result === "pending"; });
     assert.deepEqual(told.map(function (m) { return m.messageId; }), [ID_B], "the sibling's page is told it is in doubt");
-    h.send({ type: "cancel_queued_message", messageId: ID_B });
+    h.send({ type: "cancel_queued_message", messageId: ID_B, wantsText: true });
     await tick(); await tick();
     assert.deepEqual(asked, [ID_A, ID_B], "the sibling's cancel reached the agent");
     assert.deepEqual(h.replies().map(function (r) { return [r.messageId, r.result]; }), [[ID_A, "pending"], [ID_B, "cancelled"]]);
@@ -876,16 +876,12 @@ test("(a) the daemon restarts with chat queued: the next time the session is sho
     var tab = { id: "tab" };
     r.sm.switchSession(r.session.localId, tab);
     assert.deepEqual(framesTo(r.shown, tab, "queued_message_cancelled"), [
-      { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "restart", text: "queued at restart", pastes: ["a paste"], imageCount: 1 },
+      { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "restart", sessionId: r.session.localId, text: "queued at restart", pastes: ["a paste"], imageCount: 1 },
     ]);
     assert.deepEqual(framesTo(r.shown, tab, "queued_message_tracked"), [], "it is not drawn as queued: nothing in this daemon holds it");
     var other = { id: "other tab" };
     r.sm.switchSession(r.session.localId, other);
-    assert.deepEqual(framesTo(r.shown, other, "queued_message_cancelled"), [], "handed back once");
-    var again = h.restart();
-    var third = { id: "after another restart" };
-    again.sm.switchSession(again.session.localId, third);
-    assert.deepEqual(framesTo(again.shown, third, "queued_message_cancelled"), [], "and not again after the next restart");
+    assert.equal(framesTo(r.shown, other, "queued_message_cancelled").length, 1, "handed back again until a page acknowledges it");
   } finally { h.done(); }
 });
 
@@ -924,7 +920,7 @@ test("(a) a query that closes with nobody viewing the session keeps the text for
     assert.deepEqual(framesTo(h.out.toWs, tab, "queued_message_cancelled").map(function (m) { return [m.messageId, m.result, m.cause, m.text]; }),
       [[ID_A, "dropped", "closed", "nobody watched"]]);
     h.sm.switchSession(h.session.localId, { id: "another" });
-    assert.equal(h.out.toWs.filter(function (m) { return m.obj.type === "queued_message_cancelled"; }).length, 1, "once");
+    assert.equal(h.out.toWs.filter(function (m) { return m.obj.type === "queued_message_cancelled"; }).length, 2, "again, until a page acknowledges it");
   } finally { h.done(); }
 });
 
@@ -969,7 +965,7 @@ test("(c) a cancel from the second page replies to it with the text and tells th
     h.send({ type: "message", text: "withdraw me", messageId: ID_A });
     var tab = { id: "second tab" };
     h.clients.add(tab);
-    h.sendFrom(tab, { type: "cancel_queued_message", messageId: ID_A });
+    h.sendFrom(tab, { type: "cancel_queued_message", messageId: ID_A, wantsText: true });
     await tick(); await tick();
     assert.deepEqual(h.out.toSender.filter(function (m) { return m.type === "queued_message_cancelled"; }).map(function (m) { return [m.result, m.text]; }), [["cancelled", "withdraw me"]]);
     assert.deepEqual(h.out.toOthers.filter(function (m) { return m.type === "queued_message_cancelled"; }),
@@ -1037,7 +1033,7 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
     {
       name: "failed interrupt: error, left queued and unmarked, and can be asked again",
       interrupt: function (n) { return n === 1 ? Promise.reject(new Error("worker gone")) : Promise.resolve({ stillQueued: [ID_A] }); },
-      result: "error", interrupts: 1, tracked: true, unmarked: true,
+      result: "error", interrupts: 1, tracked: true, unmarked: true, othersError: "worker gone",
       again: { result: "requested", interrupts: 2 },
     },
   ];
@@ -1072,12 +1068,19 @@ test("Send now on a queued message: one interrupt per path, the receipt decides,
       assert.equal(queuedChat.has(h.session, ID_A), row.tracked, row.name + ": tracked");
       assert.equal(droppedReplies(h).length, row.dropped ? 1 : 0, row.name + ": dropped replies");
       if (row.dropped) {
-        assert.deepEqual(droppedReplies(h)[0], { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "send_now_missed", text: "row " + i, pastes: [], imageCount: 0 });
+        assert.deepEqual(droppedReplies(h)[0], { type: "queued_message_cancelled", messageId: ID_A, result: "dropped", cause: "send_now_missed", sessionId: h.session.localId, text: "row " + i, pastes: [], imageCount: 0 });
       }
       if (row.told) {
         var told = h.out.toOthers.filter(function (m) { return m.type === "queued_message_send_now"; });
         assert.ok(told.length >= 1, row.name + ": the other pages are told");
         told.forEach(function (m) { assert.deepEqual(m, { type: "queued_message_send_now", messageId: ID_A, result: "requested" }, row.name + ": the same idempotent frame each time"); });
+      }
+      var toOthersSendNow = h.out.toOthers.filter(function (m) { return m.type === "queued_message_send_now"; });
+      if (row.othersError) {
+        assert.deepEqual(toOthersSendNow, [{ type: "queued_message_send_now", messageId: ID_A, result: "error", message: row.othersError }],
+          row.name + ": every other page showing the session is told the mark is cleared");
+      } else if (row.result !== "requested") {
+        assert.deepEqual(toOthersSendNow, [], row.name + ": the other pages hear nothing");
       }
       if (row.unmarked) {
         assert.equal(queuedChat.pending(h.session)[0].sendNow, undefined, row.name + ": not marked");
@@ -1215,6 +1218,218 @@ test("two tabs on one session and a dropped reply: the text is sent to the sessi
     var restarted = h.restart();
     var viewer = { id: "after" };
     restarted.sm.switchSession(restarted.session.localId, viewer);
-    assert.deepEqual(framesTo(restarted.shown, viewer, "queued_message_cancelled"), [], "a viewer saw the reply, so nothing is kept to hand back later");
+    assert.equal(framesTo(restarted.shown, viewer, "queued_message_cancelled").length, 1, "no page acknowledged the reply, so it is kept and handed back on the next show");
   } finally { h.done(); }
+});
+
+// ------------------------------------------------------------ handed back at least once
+// A dropped hand-back is kept by the server until a page acknowledges it with
+// queued_message_ack, so a page whose socket closes before the frame arrives (or
+// before it acks) does not lose the text. Every row goes through the real entry
+// points: the ws handler for sending, dropping and acking, switchSession for showing.
+
+function ackFrame(ids) { return { type: "queued_message_ack", messageIds: ids }; }
+function idN(n) { return "aaaaaaaa-aaaa-4aaa-8aaa-" + String(n).padStart(12, "0"); }
+function handedBack(shown, who) { return framesTo(shown, who, "queued_message_cancelled").filter(function (m) { return m.result === "dropped"; }); }
+function showAll(h, tabs) { tabs.forEach(function (t) { h.sm.switchSession(h.session.localId, t); }); }
+
+test("a dropped hand-back is kept until a page acknowledges it", async function () {
+  var rows = [
+    {
+      name: "AC1: a page whose socket closes before it acks does not use the text up; the next page gets it",
+      run: function (h) {
+        h.send({ type: "message", text: "keep until acked", messageId: ID_A });
+        queuedChat.dropAll(h.session);
+        var first = { id: "first" };
+        var second = { id: "second" };
+        showAll(h, [first, second]);
+        assert.deepEqual(handedBack(h.out.toWs, first).map(function (m) { return m.text; }), ["keep until acked"]);
+        assert.deepEqual(handedBack(h.out.toWs, second).map(function (m) { return m.text; }), ["keep until acked"], "the second page gets it too");
+      },
+    },
+    {
+      name: "AC2: an acked id is not sent again, and leaves the session file",
+      run: function (h) {
+        h.send({ type: "message", text: "acked", messageId: ID_A });
+        queuedChat.dropAll(h.session);
+        var tab = { id: "tab" };
+        showAll(h, [tab]);
+        h.send(ackFrame([ID_A]));
+        var again = { id: "again" };
+        showAll(h, [again]);
+        assert.deepEqual(handedBack(h.out.toWs, again), [], "nothing is re-sent after the ack");
+        var r = h.restart();
+        var viewer = { id: "after restart" };
+        r.sm.switchSession(r.session.localId, viewer);
+        assert.deepEqual(handedBack(r.shown, viewer), [], "the record is gone from the session file");
+      },
+    },
+    {
+      name: "AC3: the live reply and a later show reach a page more than once, and the agent is never pushed the text again",
+      run: function (h) {
+        var tab = { id: "second tab" };
+        h.ws._clagenticActiveSession = h.session.localId;
+        tab._clagenticActiveSession = h.session.localId;
+        h.clients.add(tab);
+        h.send({ type: "message", text: "two composers", messageId: ID_A });
+        queuedChat.dropAll(h.session);
+        showAll(h, [tab, h.ws]);
+        assert.equal(handedBack(h.out.toWs, tab).length, 1, "kept for a later show on either page");
+        assert.equal(handedBack(h.out.toWs, h.ws).length, 1);
+        assert.equal(h.out.pushed.length, 1, "pushMessage was called once, for the original send only");
+      },
+    },
+    {
+      name: "AC4: a viewer was showing the session when the message dropped live and never acked; the next show hands the text back",
+      run: function (h) {
+        h.ws._clagenticActiveSession = h.session.localId;
+        h.send({ type: "message", text: "viewer vanished", messageId: ID_A });
+        queuedChat.dropAll(h.session);
+        assert.equal(droppedReplies(h).length, 1, "sent live to the viewer");
+        var next = { id: "next" };
+        showAll(h, [next]);
+        assert.deepEqual(handedBack(h.out.toWs, next).map(function (m) { return m.text; }), ["viewer vanished"]);
+      },
+    },
+    {
+      name: "AC5: records that were not acked are parked again after a daemon restart",
+      run: function (h) {
+        h.send({ type: "message", text: "across restarts", messageId: ID_A });
+        queuedChat.dropAll(h.session);
+        var first = h.restart();
+        var tab = { id: "tab" };
+        first.sm.switchSession(first.session.localId, tab);
+        assert.equal(handedBack(first.shown, tab).length, 1);
+        var second = h.restart();
+        var later = { id: "later" };
+        second.sm.switchSession(second.session.localId, later);
+        assert.deepEqual(handedBack(second.shown, later).map(function (m) { return [m.messageId, m.text, m.cause]; }), [[ID_A, "across restarts", "restart"]]);
+      },
+    },
+    {
+      name: "every frame that carries text names its session, live and on a show, so a page can tell which session it belongs to",
+      run: async function (h) {
+        h.send({ type: "message", text: "which session", messageId: ID_A });
+        h.send({ type: "message", text: "edit text", messageId: ID_B });
+        h.send({ type: "cancel_queued_message", messageId: ID_B, wantsText: true });
+        await tick(); await tick();
+        queuedChat.dropAll(h.session);
+        assert.equal(droppedReplies(h)[0].sessionId, h.session.localId, "live dropped reply");
+        assert.equal(h.replies()[0].sessionId, h.session.localId, "the cancelled reply with text");
+        var tab = { id: "tab" };
+        showAll(h, [tab]);
+        var back = handedBack(h.out.toWs, tab);
+        assert.equal(back.length, 2);
+        back.forEach(function (m) { assert.equal(m.sessionId, h.session.localId, "replay on show"); });
+      },
+    },
+    {
+      name: "a plain Cancel's cancelled reply carries no text; only a withdrawal that wants the text back does",
+      run: async function (h) {
+        h.send({ type: "message", text: "discard me", messageId: ID_A });
+        h.send({ type: "message", text: "give it back", messageId: ID_B });
+        h.send({ type: "cancel_queued_message", messageId: ID_A });
+        h.send({ type: "cancel_queued_message", messageId: ID_B, wantsText: true });
+        await tick(); await tick();
+        var byId = {};
+        h.replies().forEach(function (r) { byId[r.messageId] = r; });
+        assert.deepEqual(byId[ID_A], { type: "queued_message_cancelled", messageId: ID_A, result: "cancelled" });
+        assert.equal(byId[ID_B].text, "give it back");
+      },
+    },
+    {
+      name: "withdrawn for Edit or take-back, the socket closes before the reply or its ack: the next show hands the text back; a plain Cancel keeps nothing",
+      run: async function (h) {
+        h.send({ type: "message", text: "edit me", messageId: ID_A });
+        h.send({ type: "message", text: "discard me", messageId: ID_B });
+        h.send({ type: "cancel_queued_message", messageId: ID_A, wantsText: true });
+        h.send({ type: "cancel_queued_message", messageId: ID_B });
+        await tick(); await tick();
+        assert.deepEqual(h.replies().map(function (r) { return [r.messageId, r.result]; }), [[ID_A, "cancelled"], [ID_B, "cancelled"]]);
+        var next = { id: "next" };
+        showAll(h, [next]);
+        assert.deepEqual(handedBack(h.out.toWs, next).map(function (m) { return [m.messageId, m.cause, m.text]; }), [[ID_A, "cancelled", "edit me"]]);
+        h.send(ackFrame([ID_A]));
+        var after = { id: "after the ack" };
+        showAll(h, [after]);
+        assert.deepEqual(handedBack(h.out.toWs, after), [], "acked: gone");
+        h.send({ type: "message", text: "flag is a boolean only", messageId: ID_C });
+        h.send({ type: "cancel_queued_message", messageId: ID_C, wantsText: "yes" });
+        await tick(); await tick();
+        var last = { id: "last" };
+        showAll(h, [last]);
+        assert.deepEqual(handedBack(h.out.toWs, last), [], "a non-boolean flag parks nothing");
+      },
+    },
+  ];
+  for (var i = 0; i < rows.length; i++) {
+    var h = await harness();
+    try { await rows[i].run(h); } catch (err) { err.message = rows[i].name + ": " + err.message; throw err; } finally { h.done(); }
+  }
+});
+
+test("AC6: an ack with a malformed id, an unknown id or too many ids changes only what it names and throws nothing", async function () {
+  var cap = queuedChat.ACK_MAX_IDS;
+  assert.equal(Number.isInteger(cap) && cap > 0, true, "the cap is a named constant");
+  var h = await harness();
+  try {
+    var ids = [];
+    for (var i = 0; i < cap + 2; i++) { ids.push(idN(i + 1)); h.send({ type: "message", text: "m" + i, messageId: ids[i] }); }
+    queuedChat.dropAll(h.session);
+    function remaining() { var t = { id: "probe " + Math.random() }; showAll(h, [t]); return handedBack(h.out.toWs, t).map(function (m) { return m.messageId; }); }
+    assert.equal(remaining().length, cap + 2);
+
+    [{ messageIds: "nope" }, { messageIds: [null, 5, {}, "not-a-uuid", idN(9999)] }, {}].forEach(function (bad) {
+      h.send(Object.assign({ type: "queued_message_ack" }, bad));
+    });
+    assert.equal(remaining().length, cap + 2, "malformed and unknown ids change nothing");
+
+    h.send(ackFrame(["not-a-uuid", ids[0], idN(9999)]));
+    assert.deepEqual(remaining().indexOf(ids[0]), -1, "a valid known id is removed beside bad ones");
+    assert.equal(remaining().length, cap + 1);
+
+    h.send(ackFrame(ids.slice(1)));
+    var left = remaining();
+    assert.equal(left.length, 1, "the list beyond the cap is ignored");
+    assert.equal(left[0], ids[ids.length - 1]);
+  } finally { h.done(); }
+});
+
+test("a message that ran after its send-now miss is no longer parked, so a later show does not hand its text back", async function () {
+  var h = await harness({ interruptKeepingQueued: function () { return Promise.resolve({ stillQueued: [] }); } });
+  try {
+    h.send({ type: "message", text: "ran after all", messageId: ID_A });
+    h.send({ type: "send_now_queued_message", messageId: ID_A });
+    await settle();
+    assert.equal(droppedReplies(h).length, 1, "the miss handed it back");
+    queuedChat.consume(h.session, [ID_A]);
+    var tab = { id: "tab" };
+    showAll(h, [tab]);
+    assert.deepEqual(handedBack(h.out.toWs, tab), [], "it ran, so there is nothing to restore");
+  } finally { h.done(); }
+});
+
+test("AC7: a repeated cancel does not move an unconfirmed message's idle deadline; each message has its own", async function () {
+  var timers = require("node:test").mock.timers;
+  var h = await harness({ cancelQueuedMessage: function () { return Promise.resolve(false); } });
+  try {
+    h.send({ type: "message", text: "first", messageId: ID_A });
+    h.send({ type: "message", text: "second", messageId: ID_B });
+    timers.enable({ apis: ["setTimeout"] });
+    h.session.isProcessing = false;
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    timers.tick(6000);
+    h.send({ type: "cancel_queued_message", messageId: ID_A });
+    await tick(); await tick();
+    timers.tick(2000);
+    h.send({ type: "cancel_queued_message", messageId: ID_B });
+    await tick(); await tick();
+    timers.tick(2000);
+    assert.deepEqual(droppedReplies(h).map(function (m) { return [m.messageId, m.cause]; }), [[ID_A, "not_taken"]], "dropped at the deadline the first answer armed");
+    timers.tick(7000);
+    assert.equal(droppedReplies(h).length, 1, "the second message is not cut short");
+    timers.tick(1000);
+    assert.deepEqual(droppedReplies(h).map(function (m) { return m.messageId; }), [ID_A, ID_B]);
+  } finally { timers.reset(); h.done(); }
 });
