@@ -676,6 +676,25 @@ test("a dropped hand-back is acknowledged after it is restored, and restored at 
       composer: "", acks: 2, notes: 0,
     },
     {
+      name: "a frame for another session is ignored (no restore, no ack, not remembered), then restored once when its own session is shown",
+      run: function (env, id) {
+        var back = { text: "belongs to A", pastes: [], imageCount: 0, cause: "closed" };
+        answer(env, id, "dropped", Object.assign({ sessionId: env.sid + 1000 }, back));
+        assert.equal(env.ctx.inputEl.value, "", "not in this session's composer");
+        assert.deepEqual(acks(env), [], "not acked");
+        answer(env, id, "dropped", Object.assign({ sessionId: env.sid }, back));
+        assert.equal(env.ctx.inputEl.value, "belongs to A", "restored on its own session's show");
+        env.ctx.inputEl.value = "";
+        answer(env, id, "dropped", Object.assign({ sessionId: env.sid }, back));
+      },
+      composer: "", acks: 2, notes: 1,
+    },
+    {
+      name: "a page without the item that gets a text-less cancelled reply restores nothing",
+      run: function (env, id) { answer(env, id, "cancelled", { sessionId: env.sid }); },
+      composer: "", acks: 0, notes: 0,
+    },
+    {
       name: "plain Cancel asks for no text and sends no ack",
       queued: true, action: "cancel",
       run: function (env, id) {
