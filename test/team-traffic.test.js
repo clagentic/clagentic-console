@@ -181,6 +181,12 @@ var SENDER_KEY_ROWS = [
       return { kind: kind, attribution: kind === "extracted" ? "extracted" : "unverified", name: "worker-a@side", agent: "worker-a" };
     },
   },
+  {
+    name: "a sender name holding a lone surrogate still lists its pair and does not fail the snapshot",
+    variants: ["worker-\ud800", "worker-b"],
+    field: "fromName",
+    sender: function (name) { return { kind: "undeclared", attribution: "unverified", name: name }; },
+  },
 ];
 
 SENDER_KEY_ROWS.forEach(function (row) {
