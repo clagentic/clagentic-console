@@ -316,7 +316,7 @@ test("the card omits Allow for session for a suppressed ask, in a live request a
   assert.equal(dom.cardFor(env, "c3").querySelector(".perm-always"), null, "pending snapshot");
 
   // The older recorded shape.
-  env.tools.applyPromptMessage({ type: "permission_request", requestId: "c4", toolName: "Bash", toolInput: TOOL_INPUT, suppressAlwaysAllowRule: true, noSessionGrant: true });
+  env.tools.applyPromptMessage({ type: "permission_request", requestId: "c4", toolName: "Bash", toolInput: TOOL_INPUT, suppressAlwaysAllowRule: true });
   assert.equal(dom.cardFor(env, "c4").querySelector(".perm-always"), null, "older permission_request shape");
 });
 
