@@ -614,6 +614,70 @@ test("Send now: each path draws the item as sending or queued, and the text is n
   }
 });
 
+// ------------------------------------------------------------ handed back at least once
+// The server keeps a dropped hand-back until a page acknowledges it, so the same
+// reply can arrive more than once. The page restores an id at most once, puts the
+// text only in the composer (never sends it), and acknowledges every time.
+
+function freshId() { return require("crypto").randomUUID(); }
+function acks(env) { return frames(env, "queued_message_ack"); }
+
+test("a dropped hand-back is acknowledged after it is restored, and restored at most once per page", async function () {
+  var rows = [
+    {
+      name: "no queued item (a switch back): restored, then acked",
+      run: function (env, id) { answer(env, id, "dropped", { text: "from the server", pastes: [], imageCount: 0, cause: "restart" }); },
+      composer: "from the server", acks: 1, notes: 1,
+    },
+    {
+      name: "a queued item on the page: its text is restored and the id acked",
+      queued: true,
+      run: function (env, id) { answer(env, id, "dropped", { text: "queued here", cause: "closed" }); },
+      composer: "queued here", acks: 1, notes: 1,
+    },
+    {
+      name: "the same reply twice (a re-show before the ack landed): one restore, one notice, an ack each time, nothing sent",
+      run: function (env, id) {
+        var back = { text: "twice", pastes: [], imageCount: 0, cause: "restart" };
+        answer(env, id, "dropped", back);
+        env.ctx.inputEl.value = "";
+        env.us.handleSessionShown(env.ctx.inputEl);
+        answer(env, id, "dropped", back);
+      },
+      composer: "", acks: 2, notes: 1,
+    },
+    {
+      name: "the socket was down at the first ack: the next reply is not restored again and is acked once connected",
+      run: function (env, id) {
+        var back = { text: "offline ack", pastes: [], imageCount: 0, cause: "restart" };
+        env.ctx.ws.readyState = 3;
+        answer(env, id, "dropped", back);
+        assert.equal(env.ctx.inputEl.value, "offline ack", "restored even though the ack could not go");
+        env.ctx.inputEl.value = "";
+        env.ctx.ws.readyState = 1;
+        answer(env, id, "dropped", back);
+      },
+      composer: "", acks: 1, notes: 1,
+    },
+    {
+      name: "the requesting page's cancelled reply is not a hand-back: no ack",
+      run: function (env, id) { answer(env, id, "cancelled", { text: "withdrawn", pastes: [], imageCount: 0 }); },
+      composer: "withdrawn", acks: 0, notes: 1,
+    },
+  ];
+  for (var i = 0; i < rows.length; i++) {
+    var env = await setup(CAN_CANCEL);
+    var id;
+    if (rows[i].queued) { type(env, "queued here"); id = chat(env)[0].messageId; } else { id = freshId(); }
+    var before = chat(env).length;
+    rows[i].run(env, id);
+    assert.equal(env.ctx.inputEl.value, rows[i].composer, rows[i].name + ": composer");
+    assert.deepEqual(acks(env), Array.from({ length: rows[i].acks }, function () { return { type: "queued_message_ack", messageIds: [id] }; }), rows[i].name + ": acks");
+    assert.equal(sysText().filter(function (t) { return /not delivered|not sent|back in your composer/.test(t); }).length, rows[i].notes, rows[i].name + ": notices");
+    assert.equal(chat(env).length, before, rows[i].name + ": the text is never sent to the agent");
+  }
+});
+
 test("Send now: a tracked frame with sendNow (a reload, a switch back, a second tab) draws the item as sending, never queued", async function () {
   var env = await setup(CAN_CANCEL);
   env.us.handleSessionShown(new FakeElement("textarea"));
@@ -630,4 +694,11 @@ test("Send now: a tracked frame with sendNow (a reload, a switch back, a second 
   assert.deepEqual(sendNowItem(), { tag: "Queued", actionsShown: true });
   sendNowAnswer(second, TRACKED_ID, "requested");
   assert.deepEqual(sendNowItem(), { tag: "Sending", actionsShown: false }, "another page's press reaches this page");
+
+  var reloaded = await setup(CAN_CANCEL);
+  var midFlight = "5e1f5e1f-0000-4000-8000-000000000003";
+  tracked(reloaded, { messageId: midFlight, sendNow: true });
+  assert.deepEqual(sendNowItem(), { tag: "Sending", actionsShown: false }, "a page reloaded mid-flight draws it as sending");
+  sendNowAnswer(reloaded, midFlight, "error", { message: "worker gone" });
+  assert.deepEqual(sendNowItem(), { tag: "Queued", actionsShown: true }, "the error the interrupt's rejection sends to every page gives the controls back");
 });
