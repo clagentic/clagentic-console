@@ -163,6 +163,42 @@ test("senders that only named themselves are separate pairs, labelled unverified
   assert.deepEqual(snap.pairs.map(function (p) { return p.sender.senderKind; }).sort(), ["declared", "extracted", "undeclared"]);
 });
 
+// One row per case; each goes through createTeamTraffic(...).snapshot.
+var SENDER_KEY_ROWS = [
+  {
+    name: "declared senders of the same name and session in two projects are two pairs, each with its own project",
+    sender: function (project) { return { kind: "declared", attribution: "unverified", name: "scripter", fromSession: "s1", project: project }; },
+  },
+  {
+    name: "undeclared senders from two projects are two pairs, each with its own project",
+    sender: function (project) { return { kind: "undeclared", attribution: "unverified", project: project }; },
+  },
+];
+
+SENDER_KEY_ROWS.forEach(function (row) {
+  test(row.name, function () {
+    var t = build();
+    t.ledger.record(entry({ sender: row.sender("alpha") }));
+    t.ledger.record(entry({ sender: row.sender("beta") }));
+    var snap = t.traffic.snapshot(OWNER);
+    assert.equal(snap.pairs.length, 2);
+    assert.deepEqual(snap.pairs.map(function (p) { return p.sender.senderProject; }).sort(), ["alpha", "beta"]);
+    assert.notEqual(snap.pairs[0].key, snap.pairs[1].key);
+  });
+});
+
+test("a message carries no source field, from the ledger path or the session-history path", function () {
+  var t = build();
+  t.ledger.record(entry({}));
+  var { consoleTurnEntry } = require("../lib/injected-sender");
+  var e = consoleTurnEntry("loop", "next", "nightly");
+  e._ts = NOW - HOUR;
+  t.held.work.sm.sessions.get(100).history.push(e);
+  var snap = t.traffic.snapshot(OWNER);
+  assert.equal(snap.messages.length, 2);
+  snap.messages.forEach(function (m) { assert.equal("source" in m, false); });
+});
+
 test("a user sees only the entries whose target they may read; the rest are counted with the reason", function () {
   var t = build({ multiUser: true });
   t.ledger.record(entry({ prompt: "to shared" }));
@@ -320,7 +356,7 @@ test("a scheduled firing leaves no ledger entry and is filled from the target's 
   var m = snap.messages.filter(function (x) { return x.pairKey === auto.key; })[0];
   assert.equal(m.kind, "scheduled");
   assert.equal(m.text, "tick");
-  assert.equal(m.source, "session");
+  assert.equal("source" in m, false);
 });
 
 test("a loop iteration is filled from the session's history as its own kind", function () {
