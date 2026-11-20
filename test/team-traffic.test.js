@@ -173,16 +173,29 @@ var SENDER_KEY_ROWS = [
     name: "undeclared senders from two projects are two pairs, each with its own project",
     sender: function (project) { return { kind: "undeclared", attribution: "unverified", project: project }; },
   },
+  {
+    name: "an extracted sender missing project and session and an undeclared sender with the same fields are two pairs, each with its own kind and attribution",
+    variants: ["extracted", "undeclared"],
+    field: "senderKind",
+    sender: function (kind) {
+      return { kind: kind, attribution: kind === "extracted" ? "extracted" : "unverified", name: "worker-a@side", agent: "worker-a" };
+    },
+  },
 ];
 
 SENDER_KEY_ROWS.forEach(function (row) {
   test(row.name, function () {
+    var variants = row.variants || ["alpha", "beta"];
+    var field = row.field || "senderProject";
     var t = build();
-    t.ledger.record(entry({ sender: row.sender("alpha") }));
-    t.ledger.record(entry({ sender: row.sender("beta") }));
+    t.ledger.record(entry({ sender: row.sender(variants[0]) }));
+    t.ledger.record(entry({ sender: row.sender(variants[1]) }));
     var snap = t.traffic.snapshot(OWNER);
     assert.equal(snap.pairs.length, 2);
-    assert.deepEqual(snap.pairs.map(function (p) { return p.sender.senderProject; }).sort(), ["alpha", "beta"]);
+    assert.deepEqual(snap.pairs.map(function (p) { return p.sender[field]; }).sort(), variants.slice().sort());
+    if (field === "senderKind") {
+      assert.deepEqual(snap.pairs.map(function (p) { return p.sender.attribution; }).sort(), ["extracted", "unverified"]);
+    }
     assert.notEqual(snap.pairs[0].key, snap.pairs[1].key);
   });
 });
