@@ -183,3 +183,146 @@ test("lr-db0437: set_server_default_model does not mutate the focused session's 
   assert.strictEqual(ctx.sm._savedDefaultModel, "opus");
   assert.deepStrictEqual(setModelCalls, [], "sdk.setModel must never be called from a default-model handler");
 });
+
+// Effort, betas and thinking follow the model's pattern. One row per default
+// setter: the default is saved and persisted, no running session moves, and the
+// client viewing the session is told the session's own values.
+var OWN = { effort: "low", betas: ["own-beta"], thinking: "disabled", thinkingBudget: 2048 };
+var DEFAULT_SETTER_ROWS = [
+  { type: "set_project_default_effort", msg: { effort: "high" }, optName: "onSetProjectDefaultEffort", saved: { _savedDefaultEffort: "high" } },
+  { type: "set_server_default_effort", msg: { effort: "high" }, optName: "onSetServerDefaultEffort", saved: { _savedDefaultEffort: "high" } },
+  { type: "set_project_default_betas", msg: { betas: ["b-default"] }, optName: "onSetProjectDefaultBetas", saved: { _savedDefaultBetas: ["b-default"] } },
+  { type: "set_server_default_betas", msg: { betas: ["b-default"] }, optName: "onSetServerDefaultBetas", saved: { _savedDefaultBetas: ["b-default"] } },
+  { type: "set_project_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetProjectDefaultThinking", saved: { _savedDefaultThinking: "budget", _savedDefaultThinkingBudget: 4096 } },
+  { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetServerDefaultThinking", saved: { _savedDefaultThinking: "budget", _savedDefaultThinkingBudget: 4096 } },
+];
+
+DEFAULT_SETTER_ROWS.forEach(function (row) {
+  test(row.type + " saves the default and moves no running session", function () {
+    var focused = Object.assign({ localId: 1 }, OWN, { betas: OWN.betas.slice() });
+    var viewer = makeWs();
+    var ctx = makeCtx({ getSessionForWs: function () { return focused; }, clients: new Set([viewer]) });
+    var stored = [];
+    ctx.opts[row.optName] = function () { stored.push(Array.prototype.slice.call(arguments)); };
+
+    attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+
+    assert.deepStrictEqual({ effort: focused.effort, betas: focused.betas, thinking: focused.thinking, thinkingBudget: focused.thinkingBudget }, OWN,
+      "the running session keeps its own values");
+    Object.keys(row.saved).forEach(function (field) {
+      assert.deepStrictEqual(ctx.sm[field], row.saved[field], field + " holds the new default");
+    });
+    assert.strictEqual(stored.length, 1, "the default is persisted through the store callback");
+    var told = ctx._sentTo.map(function (pair) { return pair[1]; }).filter(function (m) { return m.type === "config_state"; });
+    assert.strictEqual(told.length, 1, "the viewing client is told once");
+    assert.strictEqual(told[0].effort, OWN.effort, "with the session's own effort, not the default");
+    assert.deepStrictEqual(told[0].betas, OWN.betas);
+    assert.strictEqual(told[0].thinking, OWN.thinking);
+    assert.strictEqual(told[0].thinkingBudget, OWN.thinkingBudget);
+  });
+});
+
+// A session's pick (set_*) writes that session only and replies to that
+// session's clients; no shared field exists to carry it.
+[
+  { type: "set_effort", msg: { effort: "high" }, field: "effort", expect: "high" },
+  { type: "set_betas", msg: { betas: ["context-beta"] }, field: "betas", expect: ["context-beta"] },
+  { type: "set_thinking", msg: { thinking: "budget", budgetTokens: 8192 }, field: "thinking", expect: "budget" },
+].forEach(function (row) {
+  test(row.type + " writes the viewed session only", function () {
+    var viewed = { localId: 1 };
+    var other = { localId: 2, effort: "low", betas: [], thinking: "adaptive" };
+    var told = [];
+    var ctx = makeCtx({
+      getSessionForWs: function () { return viewed; },
+      sdk: { setEffort: function (session, effort) { session.effort = effort; return Promise.resolve({ ok: true }); } },
+      sendToSession: function (id, msg) { told.push([id, msg]); },
+    });
+    ctx.sm.sessions.set(1, viewed);
+    ctx.sm.sessions.set(2, other);
+
+    attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+
+    return Promise.resolve().then(function () {
+      assert.deepStrictEqual(viewed[row.field], row.expect, "the viewed session holds the pick");
+      assert.deepStrictEqual({ effort: other.effort, betas: other.betas, thinking: other.thinking }, { effort: "low", betas: [], thinking: "adaptive" },
+        "another session is untouched");
+      ["_savedDefaultEffort", "_savedDefaultBetas", "_savedDefaultThinking"].forEach(function (name) {
+        assert.strictEqual(ctx.sm[name], undefined, name + " (the saved default) is not written by a session pick");
+      });
+      told.forEach(function (pair) { assert.strictEqual(pair[0], 1, "only the viewed session's clients are told"); });
+    });
+  });
+});
+
+// The session prompt-expiry setter has the same admin gate as the global one.
+[
+  { name: "an admin sets it", multiUser: false, user: null, msg: { promptExpiryMinutes: 5 }, expect: 5, refused: false },
+  { name: "null clears it", multiUser: false, user: null, msg: { promptExpiryMinutes: null }, expect: undefined, refused: false, preset: 7 },
+  { name: "a malformed value is refused", multiUser: false, user: null, msg: { promptExpiryMinutes: -1 }, expect: undefined, refused: true },
+  { name: "a non-admin is refused", multiUser: true, user: { id: "u1", role: "user" }, msg: { promptExpiryMinutes: 5 }, expect: undefined, refused: true },
+].forEach(function (row) {
+  test("set_session_prompt_expiry: " + row.name, function () {
+    var session = { localId: 1 };
+    if (row.preset !== undefined) session.promptExpiryMinutes = row.preset;
+    var saved = 0;
+    var ctx = makeCtx({
+      getSessionForWs: function () { return session; },
+      projectAccess: createProjectAccess({ users: {}, onGetProjectAccess: null, isMultiUser: function () { return row.multiUser; } }),
+    });
+    ctx.sm.saveSessionFile = function () { saved++; };
+    var ws = makeWs();
+    ws._clagenticUser = row.user;
+    var warn = console.warn;
+    console.warn = function () {};
+    try {
+      attachSessions(ctx).handleSessionsMessage(ws, Object.assign({ type: "set_session_prompt_expiry" }, row.msg));
+    } finally {
+      console.warn = warn;
+    }
+    assert.strictEqual(session.promptExpiryMinutes, row.expect);
+    assert.strictEqual(saved, row.refused ? 0 : 1, "saved with the session only when accepted");
+    assert.strictEqual(ctx._sent.some(function (m) { return m.type === "error"; }), row.refused);
+  });
+});
+
+// What a project reads at its next start is what the default setters stored:
+// the project's own default, else the server's. The stores here keep the value
+// the way the daemon's callbacks do (one slot per level).
+test("the Thinking, effort and betas defaults set in Settings are what project start reads back", function () {
+  var { readSavedDefaults } = require("../lib/session-settings");
+  var server = {};
+  var project = {};
+  var ctx = makeCtx();
+  Object.assign(ctx.opts, {
+    onSetServerDefaultThinking: function (thinking, budget) { server.thinking = { thinking: thinking, thinkingBudget: budget }; },
+    onGetServerDefaultThinking: function () { return server.thinking || { thinking: null, thinkingBudget: null }; },
+    onSetProjectDefaultThinking: function (slug, thinking, budget) { project.thinking = { thinking: thinking, thinkingBudget: budget }; },
+    onGetProjectDefaultThinking: function () { return project.thinking || { thinking: null, thinkingBudget: null }; },
+    onSetServerDefaultBetas: function (betas) { server.betas = { betas: betas }; },
+    onGetServerDefaultBetas: function () { return server.betas || { betas: [] }; },
+    onSetProjectDefaultBetas: function (slug, betas) { project.betas = { betas: betas }; },
+    onGetProjectDefaultBetas: function () { return project.betas || { betas: [] }; },
+    onSetServerDefaultEffort: function (effort) { server.effort = { effort: effort }; },
+    onGetServerDefaultEffort: function () { return server.effort || { effort: null }; },
+  });
+  var handlers = attachSessions(ctx);
+  var ws = makeWs();
+
+  assert.deepStrictEqual(readSavedDefaults(ctx.opts, "test-db0437"), { effort: "medium", betas: [], thinking: null, thinkingBudget: null },
+    "nothing saved: the fallbacks");
+
+  handlers.handleSessionsMessage(ws, { type: "set_server_default_thinking", thinking: "budget", budgetTokens: 4096 });
+  handlers.handleSessionsMessage(ws, { type: "set_server_default_betas", betas: ["server-beta"] });
+  handlers.handleSessionsMessage(ws, { type: "set_server_default_effort", effort: "high" });
+  assert.deepStrictEqual(readSavedDefaults(ctx.opts, "test-db0437"), { effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 },
+    "a restart shows the Thinking default set before, like the betas and effort defaults");
+
+  handlers.handleSessionsMessage(ws, { type: "set_project_default_thinking", thinking: "disabled" });
+  handlers.handleSessionsMessage(ws, { type: "set_project_default_betas", betas: [] });
+  var read = readSavedDefaults(ctx.opts, "test-db0437");
+  assert.strictEqual(read.thinking, "disabled", "the project's default outranks the server's");
+  assert.strictEqual(read.thinkingBudget, null, "the budget comes from the same level as the mode");
+  assert.deepStrictEqual(read.betas, ["server-beta"], "an empty project list is not a default and does not mask the server's");
+  assert.strictEqual(ctx.sm._savedDefaultThinking, "disabled", "and the running project holds the same");
+});

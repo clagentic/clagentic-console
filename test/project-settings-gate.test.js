@@ -68,6 +68,7 @@ var ROWS = [
   { type: "set_project_default_model", msg: { model: "opus" }, optName: "onSetProjectDefaultModel", scope: "conn" },
   { type: "set_project_default_effort", msg: { effort: "high" }, optName: "onSetProjectDefaultEffort", scope: "conn" },
   { type: "set_project_default_betas", msg: { betas: ["b1"] }, optName: "onSetProjectDefaultBetas", scope: "conn" },
+  { type: "set_project_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetProjectDefaultThinking", scope: "conn" },
   { type: "set_project_default_mode", msg: { mode: "plan" }, optName: "onSetProjectDefaultMode", scope: "conn", ownerOnly: true },
   { type: "set_project_env", msg: { envrc: "A=1" }, optName: "onSetProjectEnv", scope: "conn", handlers: "fs", ownerOnly: true },
   { type: "get_project_env", msg: {}, optName: "onGetProjectEnv", scope: "conn", handlers: "fs", ownerOnly: true },
@@ -103,8 +104,8 @@ function build(row, multiUser) {
     }
   }
   var sm = {
-    sessions: new Map(), currentModel: "sonnet", _savedDefaultModel: "sonnet", currentEffort: "medium",
-    currentBetas: [], currentPermissionMode: "default", _savedDefaultMode: "default",
+    sessions: new Map(), currentModel: "sonnet", _savedDefaultModel: "sonnet", _savedDefaultEffort: "medium",
+    _savedDefaultBetas: [], _savedDefaultThinking: "adaptive", currentPermissionMode: "default", _savedDefaultMode: "default",
   };
   var ctx = {
     cwd: "/tmp/test-project-settings-gate", slug: HOME_SLUG, osUsers: false, currentVersion: "0.0.0",
@@ -168,8 +169,9 @@ function assertRefused(who, row, t, label) {
   assert.deepEqual(t.broadcast, [], what + ": nothing is broadcast");
   if (t.sm) {
     assert.equal(t.sm.currentModel, "sonnet", what + ": in-memory model unchanged");
-    assert.equal(t.sm.currentEffort, "medium", what + ": in-memory effort unchanged");
-    assert.deepEqual(t.sm.currentBetas, [], what + ": in-memory betas unchanged");
+    assert.equal(t.sm._savedDefaultEffort, "medium", what + ": in-memory effort unchanged");
+    assert.deepEqual(t.sm._savedDefaultBetas, [], what + ": in-memory betas unchanged");
+    assert.equal(t.sm._savedDefaultThinking, "adaptive", what + ": in-memory thinking unchanged");
   }
   assert.equal(t.sent.length, 1, what + ": one reply");
   assert.deepEqual(t.sent[0], { type: "error", text: "Project settings access is not permitted" }, what);

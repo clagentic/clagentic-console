@@ -21,8 +21,9 @@ var noop = function () {};
 var ROWS = [
   { type: "set_update_channel", msg: { channel: "beta" }, optName: null, ctxStore: "setUpdateChannel" },
   { type: "set_server_default_model", msg: { model: "opus" }, optName: "onSetServerDefaultModel", stored: function (sm) { return sm.currentModel; }, value: "opus" },
-  { type: "set_server_default_effort", msg: { effort: "high" }, optName: "onSetServerDefaultEffort", stored: function (sm) { return sm.currentEffort; }, value: "high" },
-  { type: "set_server_default_betas", msg: { betas: ["b1"] }, optName: "onSetServerDefaultBetas", stored: function (sm) { return sm.currentBetas; }, value: ["b1"] },
+  { type: "set_server_default_effort", msg: { effort: "high" }, optName: "onSetServerDefaultEffort", stored: function (sm) { return sm._savedDefaultEffort; }, value: "high" },
+  { type: "set_server_default_betas", msg: { betas: ["b1"] }, optName: "onSetServerDefaultBetas", stored: function (sm) { return sm._savedDefaultBetas; }, value: ["b1"] },
+  { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetServerDefaultThinking", stored: function (sm) { return sm._savedDefaultThinking; }, value: "budget" },
   { type: "set_server_default_mode", msg: { mode: "plan" }, optName: "onSetServerDefaultMode" },
   { type: "set_pin", msg: { pin: "1234" }, optName: "onSetPin", optReturn: { ok: true, pinEnabled: true } },
   { type: "set_keep_awake", msg: { value: true }, optName: "onSetKeepAwake", optReturn: { ok: true, keepAwake: true } },
@@ -40,8 +41,9 @@ function build(row, multiUser) {
     sessions: new Map(),
     currentModel: "sonnet",
     _savedDefaultModel: "sonnet",
-    currentEffort: "medium",
-    currentBetas: [],
+    _savedDefaultEffort: "medium",
+    _savedDefaultBetas: [],
+    _savedDefaultThinking: "adaptive",
     currentPermissionMode: "default",
     _savedDefaultMode: "default",
   };

@@ -203,6 +203,59 @@ test("lr-041af8: reconnect falls back to the project default only when the resto
   }
 });
 
+// The same split for effort, betas and thinking: a reconnect shows the restored
+// session's own values, and the saved defaults only for a session with none.
+[
+  {
+    name: "a session's own effort, betas and thinking",
+    own: { effort: "low", betas: ["own-beta"], thinking: "budget", thinkingBudget: 2048 },
+    expect: { effort: "low", betas: ["own-beta"], thinking: "budget", thinkingBudget: 2048 },
+  },
+  {
+    name: "the saved defaults for a session that never chose",
+    own: {},
+    expect: { effort: "high", betas: ["default-beta"], thinking: "disabled", thinkingBudget: 10000 },
+  },
+].forEach(function (row) {
+  test("reconnect hydrates config_state with " + row.name, function () {
+    var tmpHome = makeTempHome();
+    try {
+      bustRequireCache();
+      var mods = makeModules(tmpHome);
+      var sm = mods.sessionsModule.createSessionManager({ cwd: tmpHome, send: function () {}, sendTo: function () {}, sendEach: null });
+      sm._savedDefaultEffort = "high";
+      sm._savedDefaultBetas = ["default-beta"];
+      sm._savedDefaultThinking = "disabled";
+      var session = sm.createSessionRaw({});
+      session.cliSessionId = "sess-config-hydrate";
+      // The saved defaults were not set yet when the session was made, as for a
+      // session loaded from a file saved before they existed.
+      delete session.effort; delete session.betas; delete session.thinking; delete session.thinkingBudget;
+      Object.assign(session, row.own);
+      sm.sendAndRecord(session, { type: "user_message", text: "hello" });
+      sm.saveSessionFile(session);
+
+      var sendToCalls = [];
+      var ctx = makeConnectionCtx({
+        cwd: tmpHome,
+        sm: sm,
+        tm: { list: function () { return []; } },
+        nm: { list: function () { return []; } },
+        sendTo: function (ws, msg) { sendToCalls.push(msg); },
+      });
+      mods.connModule.attachConnection(ctx).handleConnection({ on: function () {}, readyState: 1, send: function () {} }, null, function () {}, function () {});
+
+      var state = sendToCalls.find(function (m) { return m.type === "config_state"; });
+      assert.ok(state, "expected a config_state message on connect");
+      assert.deepStrictEqual(
+        { effort: state.effort, betas: state.betas, thinking: state.thinking, thinkingBudget: state.thinkingBudget },
+        row.expect);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+});
+
 // A reconnect hydrates through the same session_switched builder as a switch,
 // so its vendor source tells an unreadable meta (shown neutral by the client)
 // from a recorded vendor.
