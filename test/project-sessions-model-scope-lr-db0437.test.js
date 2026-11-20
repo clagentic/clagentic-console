@@ -157,9 +157,8 @@ test("lr-db0437: set_project_default_model does not mutate the focused session's
   assert.strictEqual(ctx.sm._savedDefaultModel, "opus", "the saved default must reflect the new default");
   assert.deepStrictEqual(setModelCalls, [], "sdk.setModel must never be called from a default-model handler");
 
-  var configState = ctx._sent.find(function (m) { return m.type === "config_state"; });
-  assert.ok(configState, "expected a config_state broadcast");
-  assert.strictEqual(configState.model, "opus");
+  assert.ok(!ctx._sent.some(function (m) { return m.type === "config_state"; }),
+    "a default change sends saved_defaults and never a config_state (which would move other sessions' chips)");
 });
 
 test("lr-db0437: set_server_default_model does not mutate the focused session's live model", function () {
@@ -379,5 +378,95 @@ SAVED_DEFAULT_ROWS.forEach(function (row) {
     assert.deepStrictEqual(told[0][other], { model: null, effort: null, betas: [], thinking: null, thinkingBudget: null },
       "the other level is as stored: nothing");
     assert.notStrictEqual(told[0][row.level].effort, OWN.effort, "never the viewed session's effort");
+  });
+});
+
+// A server default is server-wide, so a change made in one project reaches the
+// others: a session made in another project afterwards starts from the new
+// value, and that project's clients are told it. Two projects share one set of
+// stores, as the daemon's callbacks do; the second holds a real session manager.
+function freshSessionManager(slug) {
+  var fs = require("fs");
+  var os = require("os");
+  var path = require("path");
+  var home = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-test-defaults-"));
+  ["../lib/config", "../lib/sessions", "../lib/utils"].forEach(function (m) { delete require.cache[require.resolve(m)]; });
+  var origHome = process.env.CLAGENTIC_HOME;
+  process.env.CLAGENTIC_HOME = home;
+  try {
+    return require("../lib/sessions").createSessionManager({ cwd: home, slug: slug, send: function () {}, sendTo: function () {}, sendEach: function () {} });
+  } finally {
+    if (origHome === undefined) delete process.env.CLAGENTIC_HOME;
+    else process.env.CLAGENTIC_HOME = origHome;
+  }
+}
+
+function twoProjects() {
+  var shared = {};
+  defaultsStores(shared);
+  var handlers = new Map();
+  shared.onServerDefaultsChanged = function (exceptSlug) {
+    handlers.forEach(function (h, slug) {
+      if (slug !== exceptSlug && typeof h.refreshServerDefaults === "function") h.refreshServerDefaults();
+    });
+  };
+  var { readSavedDefaults } = require("../lib/session-settings");
+  var smB = freshSessionManager("b");
+  var viewerB = makeWs();
+  var ctxA = makeCtx({ slug: "a", opts: shared });
+  var ctxB = makeCtx({ slug: "b", sm: smB, opts: shared, clients: new Set([viewerB]) });
+  // What each project loaded at startup.
+  [[ctxA.sm, "a"], [smB, "b"]].forEach(function (pair) {
+    var d = readSavedDefaults(shared, pair[1]);
+    pair[0]._savedDefaultEffort = d.effort;
+    pair[0]._savedDefaultBetas = d.betas;
+    pair[0]._savedDefaultThinking = d.thinking;
+    pair[0]._savedDefaultThinkingBudget = d.thinkingBudget;
+  });
+  handlers.set("a", attachSessions(ctxA));
+  handlers.set("b", attachSessions(ctxB));
+  return { a: ctxA, b: ctxB, smB: smB, handlersA: handlers.get("a"), handlersB: handlers.get("b"), viewerB: viewerB };
+}
+
+[
+  { type: "set_server_default_effort", msg: { effort: "high" }, seeded: { effort: "high" } },
+  { type: "set_server_default_betas", msg: { betas: ["b-default"] }, seeded: { betas: ["b-default"] } },
+  { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, seeded: { thinking: "budget", thinkingBudget: 4096 } },
+  { type: "set_server_default_model", msg: { model: "opus" }, seeded: { model: "opus" } },
+].forEach(function (row) {
+  test(row.type + " in one project: a new session in another starts from it and its clients are told", function () {
+    var w = twoProjects();
+    w.handlersA.handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+
+    w.handlersB.handleSessionsMessage(w.viewerB, { type: "new_session" });
+    var created = Array.from(w.smB.sessions.values()).pop();
+    Object.keys(row.seeded).forEach(function (field) {
+      assert.deepStrictEqual(created[field], row.seeded[field], "the new session in the other project holds the new " + field);
+    });
+    var told = w.b._sent.concat(w.b._sentTo.map(function (pair) { return pair[1]; })).filter(function (m) { return m.type === "saved_defaults"; });
+    assert.strictEqual(told.length, 1, "the other project's clients are told once");
+    Object.keys(row.seeded).forEach(function (field) {
+      assert.deepStrictEqual(told[0].server[field], row.seeded[field], field + " in the saved server defaults");
+    });
+  });
+});
+
+// A default change is not a session's change: no client's model chip moves.
+[
+  { type: "set_server_default_model", level: "server" },
+  { type: "set_project_default_model", level: "project" },
+].forEach(function (row) {
+  test(row.type + " sends no config_state that moves a session's model", function () {
+    var w = twoProjects();
+    var viewed = { localId: 1, model: "haiku" };
+    w.a.getSessionForWs = function () { return viewed; };
+    w.handlersA = attachSessions(w.a);
+    w.handlersA.handleSessionsMessage(makeWs(), { type: row.type, model: "opus" });
+
+    var all = w.a._sent.concat(w.a._sentTo.map(function (pair) { return pair[1]; }), w.b._sent, w.b._sentTo.map(function (pair) { return pair[1]; }));
+    var moved = all.filter(function (m) { return m.type === "config_state" && "model" in m; });
+    assert.deepStrictEqual(moved, [], "no config_state carries a model");
+    assert.strictEqual(viewed.model, "haiku", "the viewed session keeps its model");
+    assert.ok(all.some(function (m) { return m.type === "saved_defaults" && m[row.level].model === "opus"; }), "the default change is sent as saved_defaults");
   });
 });
