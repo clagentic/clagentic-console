@@ -326,3 +326,58 @@ test("the Thinking, effort and betas defaults set in Settings are what project s
   assert.deepStrictEqual(read.betas, ["server-beta"], "an empty project list is not a default and does not mask the server's");
   assert.strictEqual(ctx.sm._savedDefaultThinking, "disabled", "and the running project holds the same");
 });
+
+// The Settings pickers show the saved defaults, so the server sends them: a
+// default change tells every client the saved server and project defaults, each
+// from its own store, and never a session's values.
+function defaultsStores(opts) {
+  var server = {};
+  var project = {};
+  opts.onGetServerDefaultEffort = function () { return { effort: server.effort || null }; };
+  opts.onSetServerDefaultEffort = function (v) { server.effort = v; };
+  opts.onGetProjectDefaultEffort = function () { return { effort: project.effort || null }; };
+  opts.onSetProjectDefaultEffort = function (slug, v) { project.effort = v; };
+  opts.onGetServerDefaultBetas = function () { return { betas: server.betas || [] }; };
+  opts.onSetServerDefaultBetas = function (v) { server.betas = v; };
+  opts.onGetProjectDefaultBetas = function () { return { betas: project.betas || [] }; };
+  opts.onSetProjectDefaultBetas = function (slug, v) { project.betas = v; };
+  opts.onGetServerDefaultThinking = function () { return { thinking: server.thinking || null, thinkingBudget: server.thinkingBudget || null }; };
+  opts.onSetServerDefaultThinking = function (v, b) { server.thinking = v; server.thinkingBudget = b; };
+  opts.onGetProjectDefaultThinking = function () { return { thinking: project.thinking || null, thinkingBudget: project.thinkingBudget || null }; };
+  opts.onSetProjectDefaultThinking = function (slug, v, b) { project.thinking = v; project.thinkingBudget = b; };
+  opts.onGetServerDefaultModel = function () { return { model: server.model || null }; };
+  opts.onSetServerDefaultModel = function (v) { server.model = v; };
+  opts.onGetProjectDefaultModel = function () { return { model: project.model || null }; };
+  opts.onSetProjectDefaultModel = function (slug, v) { project.model = v; };
+}
+
+var SAVED_DEFAULT_ROWS = [
+  { type: "set_server_default_model", msg: { model: "opus" }, level: "server", expect: { model: "opus" } },
+  { type: "set_project_default_model", msg: { model: "opus" }, level: "project", expect: { model: "opus" } },
+  { type: "set_server_default_effort", msg: { effort: "high" }, level: "server", expect: { effort: "high" } },
+  { type: "set_project_default_effort", msg: { effort: "high" }, level: "project", expect: { effort: "high" } },
+  { type: "set_server_default_betas", msg: { betas: ["b-default"] }, level: "server", expect: { betas: ["b-default"] } },
+  { type: "set_project_default_betas", msg: { betas: ["b-default"] }, level: "project", expect: { betas: ["b-default"] } },
+  { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, level: "server", expect: { thinking: "budget", thinkingBudget: 4096 } },
+  { type: "set_project_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, level: "project", expect: { thinking: "budget", thinkingBudget: 4096 } },
+];
+
+SAVED_DEFAULT_ROWS.forEach(function (row) {
+  test(row.type + " tells every client the saved " + row.level + " defaults, not the session's", function () {
+    var focused = Object.assign({ localId: 1, model: "haiku" }, OWN, { betas: OWN.betas.slice() });
+    var ctx = makeCtx({ getSessionForWs: function () { return focused; } });
+    defaultsStores(ctx.opts);
+
+    attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+
+    var told = ctx._sent.filter(function (m) { return m.type === "saved_defaults"; });
+    assert.strictEqual(told.length, 1, "one saved_defaults broadcast");
+    var other = row.level === "server" ? "project" : "server";
+    Object.keys(row.expect).forEach(function (field) {
+      assert.deepStrictEqual(told[0][row.level][field], row.expect[field], field + " is the value just saved");
+    });
+    assert.deepStrictEqual(told[0][other], { model: null, effort: null, betas: [], thinking: null, thinkingBudget: null },
+      "the other level is as stored: nothing");
+    assert.notStrictEqual(told[0][row.level].effort, OWN.effort, "never the viewed session's effort");
+  });
+});

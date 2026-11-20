@@ -116,6 +116,58 @@ test("a Thinking picker given no message type keeps sending the session's (the l
   assert.deepEqual(sent, ["set_thinking"]);
 });
 
+// --- what the default pickers show ------------------------------------------
+
+// The pickers show the saved defaults, not the viewed session's values. A
+// project falls back to the server's default for what it has not set.
+var SAVED = {
+  server: { model: "claude-sonnet-4-6", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 },
+  project: { model: null, effort: null, betas: [], thinking: null, thinkingBudget: null },
+};
+var SESSION_VIEW = { currentModel: "claude-haiku-4-5", currentEffort: "low", currentBetas: ["own-beta"], currentThinking: "disabled", currentThinkingBudget: 2048 };
+
+[
+  { name: "server page", level: "server", saved: SAVED, expect: { currentModel: "claude-sonnet-4-6", currentEffort: "high", currentBetas: ["server-beta"], currentThinking: "budget", currentThinkingBudget: 4096 } },
+  { name: "project page with nothing of its own", level: "project", saved: SAVED, expect: { currentModel: "claude-sonnet-4-6", currentEffort: "high", currentBetas: ["server-beta"], currentThinking: "budget", currentThinkingBudget: 4096 } },
+  {
+    name: "project page with its own defaults",
+    level: "project",
+    saved: { server: SAVED.server, project: { model: "claude-opus-4-7", effort: "max", betas: ["project-beta"], thinking: "adaptive", thinkingBudget: null } },
+    expect: { currentModel: "claude-opus-4-7", currentEffort: "max", currentBetas: ["project-beta"], currentThinking: "adaptive", currentThinkingBudget: 10000 },
+  },
+  { name: "server page with nothing saved", level: "server", saved: { server: {}, project: {} }, expect: { currentModel: "", currentEffort: "medium", currentBetas: [], currentThinking: "adaptive", currentThinkingBudget: 10000 } },
+].forEach(function (row) {
+  test("default pickers show the saved defaults, not the session's: " + row.name, function () {
+    var picked = defaults.defaultPickerValues(row.saved, row.level);
+    assert.deepEqual(picked, row.expect);
+
+    var opts = Object.assign({}, SESSION_VIEW, picked, {
+      models: [{ value: "claude-haiku-4-5" }, { value: "claude-sonnet-4-6" }, { value: "claude-opus-4-7" }],
+      sendMsg: function () {}, effortMsgType: "x", betasMsgType: "y",
+    });
+    defaults.renderModelList("ss", opts);
+    assert.deepEqual(byId["ss-model-list"].children.filter(function (c) { return /active/.test(c.className); }).map(function (c) { return c.dataset.model; }),
+      row.expect.currentModel ? [row.expect.currentModel] : []);
+    defaults.renderEffortBar("ss", opts);
+    defaults.renderThinkingBar("ss", opts);
+    defaults.renderBetaCard("ss", opts);
+    var active = function (id) {
+      return byId[id].children.filter(function (c) { return /active/.test(c.className); }).map(function (c) { return c.textContent; });
+    };
+    assert.deepEqual(active("ss-effort-bar"), [row.expect.currentEffort.charAt(0).toUpperCase() + row.expect.currentEffort.slice(1)]);
+    assert.deepEqual(active("ss-thinking-bar"), [{ disabled: "Off", adaptive: "Adaptive", budget: "Budget" }[row.expect.currentThinking]]);
+    assert.equal(byId["ss-thinking-budget"].value, row.expect.currentThinkingBudget);
+    assert.equal(byId["ss-beta-1m"].checked, false, "no 1M beta among the saved defaults");
+  });
+});
+
+test("the saved 1M beta default is what the Settings toggle shows, whatever the session holds", function () {
+  var saved = { server: { betas: [beta.CONTEXT_1M_BETA_FALLBACK], model: "claude-sonnet-4-6" }, project: {} };
+  var picked = defaults.defaultPickerValues(saved, "server");
+  defaults.renderBetaCard("ss", Object.assign({ currentBetas: [] }, SESSION_VIEW, picked));
+  assert.equal(byId["ss-beta-1m"].checked, true);
+});
+
 // --- the 1M-context identifier --------------------------------------------
 
 test("the Settings toggle sends the shared 1M identifier, and switching it off removes every form of it", function () {

@@ -256,6 +256,50 @@ test("lr-041af8: reconnect falls back to the project default only when the resto
   });
 });
 
+// The Settings pickers show the saved defaults, which a connecting client is
+// sent from the stores the daemon keeps (so after a restart they are the ones
+// set before), whatever the restored session holds.
+test("reconnect sends the saved server and project defaults, not the restored session's values", function () {
+  var tmpHome = makeTempHome();
+  try {
+    bustRequireCache();
+    var mods = makeModules(tmpHome);
+    var sm = mods.sessionsModule.createSessionManager({ cwd: tmpHome, send: function () {}, sendTo: function () {}, sendEach: null });
+    var session = sm.createSessionRaw({});
+    session.cliSessionId = "sess-saved-defaults";
+    Object.assign(session, { model: "haiku", effort: "low", betas: ["own-beta"], thinking: "disabled" });
+    sm.sendAndRecord(session, { type: "user_message", text: "hello" });
+    sm.saveSessionFile(session);
+
+    var sendToCalls = [];
+    var ctx = makeConnectionCtx({
+      cwd: tmpHome,
+      sm: sm,
+      tm: { list: function () { return []; } },
+      nm: { list: function () { return []; } },
+      sendTo: function (ws, msg) { sendToCalls.push(msg); },
+      opts: {
+        onGetServerDefaultModel: function () { return { model: "sonnet" }; },
+        onGetProjectDefaultModel: function () { return { model: "opus" }; },
+        onGetServerDefaultEffort: function () { return { effort: "high" }; },
+        onGetProjectDefaultEffort: function () { return { effort: null }; },
+        onGetServerDefaultBetas: function () { return { betas: ["server-beta"] }; },
+        onGetProjectDefaultBetas: function () { return { betas: [] }; },
+        onGetServerDefaultThinking: function () { return { thinking: "budget", thinkingBudget: 4096 }; },
+        onGetProjectDefaultThinking: function () { return { thinking: null, thinkingBudget: null }; },
+      },
+    });
+    mods.connModule.attachConnection(ctx).handleConnection({ on: function () {}, readyState: 1, send: function () {} }, null, function () {}, function () {});
+
+    var saved = sendToCalls.find(function (m) { return m.type === "saved_defaults"; });
+    assert.ok(saved, "expected a saved_defaults message on connect");
+    assert.deepStrictEqual(saved.server, { model: "sonnet", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 });
+    assert.deepStrictEqual(saved.project, { model: "opus", effort: null, betas: [], thinking: null, thinkingBudget: null });
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
 // A reconnect hydrates through the same session_switched builder as a switch,
 // so its vendor source tells an unreadable meta (shown neutral by the client)
 // from a recorded vendor.
