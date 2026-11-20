@@ -224,9 +224,11 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
 // A session's pick (set_*) writes that session only and replies to that
 // session's clients; no shared field exists to carry it.
 [
-  { type: "set_effort", msg: { effort: "high" }, field: "effort", expect: "high" },
-  { type: "set_betas", msg: { betas: ["context-beta"] }, field: "betas", expect: ["context-beta"] },
-  { type: "set_thinking", msg: { thinking: "budget", budgetTokens: 8192 }, field: "thinking", expect: "budget" },
+  // told: how many config_state sends to a session's clients the handler makes
+  // itself (set_effort announces through the bridge, not here).
+  { type: "set_effort", msg: { effort: "high" }, field: "effort", expect: "high", told: 0 },
+  { type: "set_betas", msg: { betas: ["context-beta"] }, field: "betas", expect: ["context-beta"], told: 1 },
+  { type: "set_thinking", msg: { thinking: "budget", budgetTokens: 8192 }, field: "thinking", expect: "budget", told: 1, budget: 8192 },
 ].forEach(function (row) {
   test(row.type + " writes the viewed session only", function () {
     var viewed = { localId: 1 };
@@ -244,11 +246,14 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
 
     return Promise.resolve().then(function () {
       assert.deepStrictEqual(viewed[row.field], row.expect, "the viewed session holds the pick");
+      assert.strictEqual(viewed.thinkingBudget, row.budget, "the viewed session holds the pick's token budget");
+      assert.strictEqual(other.thinkingBudget, undefined, "another session's budget is untouched");
       assert.deepStrictEqual({ effort: other.effort, betas: other.betas, thinking: other.thinking }, { effort: "low", betas: [], thinking: "adaptive" },
         "another session is untouched");
       ["_savedDefaultEffort", "_savedDefaultBetas", "_savedDefaultThinking"].forEach(function (name) {
         assert.strictEqual(ctx.sm[name], undefined, name + " (the saved default) is not written by a session pick");
       });
+      assert.strictEqual(told.length, row.told, "the expected number of sends to the session's clients");
       told.forEach(function (pair) { assert.strictEqual(pair[0], 1, "only the viewed session's clients are told"); });
     });
   });
@@ -453,25 +458,39 @@ function twoProjects() {
 
 // A server default changed in the project that has its own default for the same
 // setting does not replace it: a new session there still gets the project's.
-test("set_server_default_model in a project with its own model default: a new session gets the project's", function () {
-  var w = twoProjects();
-  w.a.opts.onSetProjectDefaultModel("a", "sonnet");
-  w.a.sm._savedDefaultModel = "sonnet";
-  w.a.sm.currentModel = "sonnet";
-
-  w.handlersA.handleSessionsMessage(makeWs(), { type: "set_server_default_model", model: "opus" });
-  w.handlersA.handleSessionsMessage(makeWs(), { type: "new_session" });
-
-  var created = Array.from(w.a.sm.sessions.values()).pop();
-  assert.strictEqual(created.model, "sonnet", "the project's own default outranks the server's");
-  assert.strictEqual(w.a.sm.currentModel, "sonnet", "the fallback the bridge reads is still the project's default");
-});
-
-test("set_server_default_model in a project with no model default of its own: a new session gets the server's", function () {
-  var w = twoProjects();
-  w.handlersA.handleSessionsMessage(makeWs(), { type: "set_server_default_model", model: "opus" });
-  w.handlersA.handleSessionsMessage(makeWs(), { type: "new_session" });
-  assert.strictEqual(Array.from(w.a.sm.sessions.values()).pop().model, "opus");
+// Each row runs its steps in project "a", then a new session is made there.
+[
+  {
+    name: "set_server_default_model in a project with its own model default: a new session gets the project's",
+    steps: [
+      { type: "set_project_default_model", model: "sonnet" },
+      { type: "set_server_default_model", model: "opus" },
+    ],
+    field: "model", expect: "sonnet", currentModel: "sonnet",
+  },
+  {
+    name: "set_server_default_model in a project with no model default of its own: a new session gets the server's",
+    steps: [{ type: "set_server_default_model", model: "opus" }],
+    field: "model", expect: "opus",
+  },
+  {
+    name: "a cleared project Thinking default: a new session takes the server's",
+    steps: [
+      { type: "set_server_default_thinking", thinking: "budget", budgetTokens: 4096 },
+      { type: "set_project_default_thinking", thinking: "disabled" },
+      { type: "set_project_default_thinking", thinking: null },
+    ],
+    field: "thinking", expect: "budget",
+  },
+].forEach(function (row) {
+  test(row.name, function () {
+    var w = twoProjects();
+    row.steps.forEach(function (step) { w.handlersA.handleSessionsMessage(makeWs(), step); });
+    w.handlersA.handleSessionsMessage(makeWs(), { type: "new_session" });
+    var created = Array.from(w.a.sm.sessions.values()).pop();
+    assert.strictEqual(created[row.field], row.expect);
+    if (row.currentModel) assert.strictEqual(w.a.sm.currentModel, row.currentModel, "the fallback the bridge reads is still the project's default");
+  });
 });
 
 // A default change is not a session's change: no client's model chip moves.

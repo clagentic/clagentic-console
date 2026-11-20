@@ -23,7 +23,7 @@ var ROWS = [
   { type: "set_server_default_model", msg: { model: "opus" }, optName: "onSetServerDefaultModel", stored: function (sm) { return sm.currentModel; }, value: "opus" },
   { type: "set_server_default_effort", msg: { effort: "high" }, optName: "onSetServerDefaultEffort", stored: function (sm) { return sm._savedDefaultEffort; }, value: "high" },
   { type: "set_server_default_betas", msg: { betas: ["b1"] }, optName: "onSetServerDefaultBetas", stored: function (sm) { return sm._savedDefaultBetas; }, value: ["b1"] },
-  { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetServerDefaultThinking", stored: function (sm) { return sm._savedDefaultThinking; }, value: "budget" },
+  { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetServerDefaultThinking", stored: function (sm) { return sm._savedDefaultThinking; }, value: "budget", writes: ["budget", 4096] },
   { type: "set_server_default_mode", msg: { mode: "plan" }, optName: "onSetServerDefaultMode" },
   { type: "set_pin", msg: { pin: "1234" }, optName: "onSetPin", optReturn: { ok: true, pinEnabled: true } },
   { type: "set_keep_awake", msg: { value: true }, optName: "onSetKeepAwake", optReturn: { ok: true, keepAwake: true } },
@@ -37,6 +37,7 @@ var ROWS = [
 function build(row, multiUser) {
   var sent = [];
   var calls = [];
+  var writes = [];
   var sm = {
     sessions: new Map(),
     currentModel: "sonnet",
@@ -49,7 +50,11 @@ function build(row, multiUser) {
   };
   var opts = {};
   if (row.optName) {
-    opts[row.optName] = function (value) { calls.push(value); return row.optReturn; };
+    opts[row.optName] = function (value) {
+      calls.push(value);
+      writes.push(Array.prototype.slice.call(arguments));
+      return row.optReturn;
+    };
   }
   var ctx = {
     cwd: "/tmp/test-server-wide-gate", slug: "test", osUsers: false, currentVersion: "0.0.0",
@@ -92,7 +97,7 @@ function build(row, multiUser) {
   if (row.ctxStore) {
     ctx[row.ctxStore] = function (value) { calls.push(value); };
   }
-  return { ctx: ctx, sent: sent, calls: calls, sm: sm, handlers: attachSessions(ctx) };
+  return { ctx: ctx, sent: sent, calls: calls, writes: writes, sm: sm, handlers: attachSessions(ctx) };
 }
 
 function socket(user) {
@@ -127,6 +132,7 @@ ROWS.forEach(function (row) {
     t.handlers.handleSessionsMessage(socket({ id: "a1", role: "admin" }), Object.assign({ type: row.type }, row.msg));
     assert.equal(t.calls.length, 1, "the daemon write is made once");
     if (row.stored) assert.deepEqual(row.stored(t.sm), row.value);
+    if (row.writes) assert.deepEqual(t.writes[0], row.writes, "the daemon write carries every sent value");
     assert.ok(t.sent.every(function (m) { return m.type !== "error"; }), "no refusal is sent");
   });
 });
