@@ -150,9 +150,11 @@ clagentic-console schedule-input delete --id 7c1e --project my-project
 
 ## Long prompt text
 
-`open-session` and `send-input` take long or multi-line text from standard input with `--prompt -`, redirected from a file:
+`open-session`, `send-input` and `schedule-input create` take long or multi-line text from a file with `--prompt-file <path>`. A `--prompt` whose whole value is one `@<path>` token naming an existing file sends that file's text the same way; `--prompt -` reads standard input:
 
 ```bash
+clagentic-console send-input --to <agent>@my-project --prompt-file message.txt
+clagentic-console send-input --to <agent>@my-project --prompt @message.txt
 clagentic-console send-input --to <agent>@my-project --prompt - < message.txt
 ```
 

@@ -99,7 +99,7 @@ Both forms do the same thing. Rules, from `lib/session-directory.js` and `lib/se
 Opens a new session in a project and starts its first turn with the prompt. The call returns as soon as the first turn has started.
 
 ```
-clagentic-console open-session (--project <slug> | --to <address>) --prompt <text|->
+clagentic-console open-session (--project <slug> | --to <address>) (--prompt <text|-> | --prompt-file <path>)
     [--vendor <id>] [--agent <name>] [--name <session-name>] [--visibility shared|private]
     [--permission-mode <mode>] [--settings <path>] [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]
 ```
@@ -108,7 +108,8 @@ clagentic-console open-session (--project <slug> | --to <address>) --prompt <tex
 |---|---|---|
 | `--project <slug>` | one of `--project`, `--to` | The registered project slug. |
 | `--to <address>` | one of `--project`, `--to` | Opens the kind of session the address names: `<agent>@<project>` opens that named agent, `<vendor>@<project>` a plain session on that vendor, `@<project>` the project default. It resolves no existing session, so it cannot be ambiguous. With `--to`, do not also give `--vendor` or `--agent`. A `/<name>` suffix names the new session, so do not also give `--name`. May be given beside `--project`, which must then be the address's project. |
-| `--prompt <text\|->` | yes | The first prompt. `-` reads the prompt from stdin (a single trailing newline is removed). |
+| `--prompt <text\|->` | one text flag | The first prompt. `-` reads the prompt from stdin (a single trailing newline is removed). A value that is a single `@<path>` token naming an existing file sends that file's text; see [Prompt text from a file](#prompt-text-from-a-file). |
+| `--prompt-file <path>` | one text flag | Reads the first prompt from a file (a single trailing newline is removed). Give exactly one of `--prompt` and `--prompt-file`. |
 | `--vendor <id>` | no | A registered vendor, for example `claude` or `codex`. Absent: the project's default vendor. An unknown vendor is `refused`. |
 | `--agent <name>` | no | A named agent from the picker's catalog (`.claude/agents/` in the project or `~/.claude/agents/`). Absent: a plain session. An unknown agent is `refused`. |
 | `--name <session-name>` | no | The session name; see [Session names](#session-names-name). |
@@ -178,7 +179,7 @@ The path is saved with the session and passed on every turn, including a resume 
 Sends input to a session. The input becomes the session's next turn. A reaped session is resumed first.
 
 ```
-clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) --prompt <text|->
+clagentic-console send-input (--project <slug> --session <id> | --to <address> | --reply) (--prompt <text|-> | --prompt-file <path>)
     [--initiator <kind>] [--context-note <text>] [--from <name>] [--from-session <id>]
 ```
 
@@ -188,7 +189,8 @@ clagentic-console send-input (--project <slug> --session <id> | --to <address> |
 | `--session <id>` | with `--project` | The console session id or the vendor-assigned id. An id that is not a plain id (letters, digits, `_`, `-`) is `refused`. |
 | `--to <address>` | one target | See [Addressing a session](#addressing-a-session). May be given beside `--project`, which must then be the address's project. |
 | `--reply` | one target | A switch, it takes no value. Answers the sender of the most recent injected message in the calling session; see below. |
-| `--prompt <text\|->` | yes | The input. `-` reads it from stdin. An empty prompt is rejected. |
+| `--prompt <text\|->` | one text flag | The input. `-` reads it from stdin. A value that is a single `@<path>` token naming an existing file sends that file's text; see [Prompt text from a file](#prompt-text-from-a-file). An empty prompt is rejected. |
+| `--prompt-file <path>` | one text flag | Reads the input from a file (a single trailing newline is removed). Give exactly one of `--prompt` and `--prompt-file`. |
 | `--initiator <kind>` | no | See [Initiator](#initiator). |
 | `--context-note <text>` | no | A label stored on the recorded message. |
 | `--from <name>` | no | See [The sender record](#the-sender-record). |
@@ -209,7 +211,7 @@ clagentic-console send-input --to reviewer@my-project --prompt "The build passed
 clagentic-console send-input --to reviewer@my-project/pass-2 --prompt "One more file to review."
 
 # A long prompt from a file
-clagentic-console send-input --to builder@my-project --prompt - < message.txt
+clagentic-console send-input --to builder@my-project --prompt-file message.txt
 ```
 
 A delivered result:
@@ -798,11 +800,21 @@ An allowed `send-input` or `open-session` lets the calling agent start work in a
 
 Migration: the 1.10.x installer added the `list-sessions` rule to the Claude Code settings of the installing account. Later releases stop doing so. A rule already added is left in place and is yours to keep or remove.
 
-Passing long or multi-line prompt text inline in a Bash argument can still trigger Claude Code's own safety prompt, whatever the allow rules say. `open-session` and `send-input` have no `--prompt-file` option. They do read the prompt from stdin when you give `--prompt -`, so put long text in a file and redirect it (`schedule-input create` also takes `--prompt-file <path>`):
+Passing long or multi-line prompt text inline in a Bash argument can still trigger Claude Code's own safety prompt, whatever the allow rules say. `open-session`, `send-input` and `schedule-input create` all take `--prompt-file <path>`, so put long text in a file and name it:
 
 ```bash
-clagentic-console send-input --to reviewer@my-project --prompt - < message.txt
+clagentic-console send-input --to reviewer@my-project --prompt-file message.txt
 ```
+
+### Prompt text from a file
+
+The text is always read on the caller's side, before the request reaches the daemon, so a relative path is relative to the caller's working directory. Three forms deliver a file's text instead of a path:
+
+- `--prompt-file <path>`: the file's text, with one trailing newline removed. An unreadable file exits 1 with `Cannot read --prompt-file <path>: <reason>` and nothing is sent.
+- `--prompt @<path>`: when the whole value is one token that starts with `@`, has no whitespace and names an existing regular file, that file's text is sent, the same as `--prompt-file`. A file that exists but cannot be read exits 1 with `Cannot read --prompt @<path>: <reason>`.
+- `--prompt -`: the text from stdin, with one trailing newline removed.
+
+Any other `--prompt` value is sent exactly as given, including an `@` token that names no existing file and a longer text that merely starts with `@<path>`. To send the literal text `@notes.txt` when a file of that name exists, give it on stdin with `--prompt -`.
 
 ## Keeping this guide current
 
