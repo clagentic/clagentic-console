@@ -7,7 +7,7 @@ Agents are first-class users of Clagentic: Console. A script, a CI job or an AI 
 - `clagentic-console end-session` stands one live session down by id, even one blocked on a permission prompt. The history is kept and the session resumes by id.
 - `clagentic-console answer-prompt` answers one pending prompt of a live session by request id, the way a person answers it in the browser, and records who answered.
 - `clagentic-console list-sessions` lists the console's live and idle sessions (`--state any` for every session) with their state and any prompts they are waiting on.
-- `clagentic-console list-outbound` lists what one session sent out with `send-input` and `open-session`: the target, the prompt, the time and the initiator. It only reads.
+- `clagentic-console list-outbound` lists what one session sent out with `send-input`, `open-session` and `schedule-input create`: the target, the prompt, the time and the initiator. It only reads.
 - `clagentic-console schedule-input` schedules text to be sent into a session later, once or on a repeat that always has an end. A person does the same from the clock button in the browser.
 - `clagentic-console settings` reads and changes server-wide settings by key (`get`, `set`, `list`), starting with the prompt expiry, and prints JSON.
 
@@ -431,10 +431,10 @@ The result carries `host`: `{ memAvailableMB, newWorkRefused }`. `memAvailableMB
 
 ## list-outbound
 
-Read-only. Lists the calls one session made with `send-input` and `open-session`, oldest first: where each went, what was said, when, and why it was sent. It answers "what did that session tell the others", which no other verb does: a delivered prompt is in the target's own history, but nothing there gathers one sender's calls, and a refused call leaves nothing there at all. It returns the outbound calls only, never any other part of a session's transcript.
+Read-only. Lists the calls one session made with `send-input`, `open-session` and `schedule-input create`, oldest first: where each went, what was said, when, and why it was sent. It answers "what did that session tell the others", which no other verb does: a delivered prompt is in the target's own history, but nothing there gathers one sender's calls, and a refused call leaves nothing there at all. It returns the outbound calls only, never any other part of a session's transcript.
 
 ```
-clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>] [--kind sent|opens] [--verbose]
+clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>] [--kind sent|opens|schedules] [--verbose]
 ```
 
 | Flag | Required | Meaning |
@@ -442,7 +442,7 @@ clagentic-console list-outbound --session <id> [--project <slug>] [--since <dur>
 | `--session <id>` | yes | The sending session's vendor session id (`sessionId` in `list-sessions`). A console id is refused: a daemon restart renumbers console ids, so one number can name different sessions over the ledger's retention. An all-digit value is refused with that reason. |
 | `--project <slug>` | no | Only the sender in this project. A vendor id that senders in several projects hold is `ambiguous` (exit 3) until this is given. |
 | `--since <dur>` | no | Only calls from this long ago: `90` (minutes), `10m`, `2h`, `1h30m`, `3d`. |
-| `--kind sent\|opens` | no | `sent` for `send-input` calls, `opens` for `open-session` calls. Default: both. |
+| `--kind sent\|opens\|schedules` | no | `sent` for `send-input` calls, `opens` for `open-session` calls, `schedules` for `schedule-input create` calls. Default: all three. |
 | `--verbose` | no | The full record of each call and the calls whose sender only named itself, as below. Without it each call is a compact row. |
 
 ```bash
@@ -481,7 +481,7 @@ The full result, with `--verbose`:
 }
 ```
 
-Each message carries `ts`, `verb` (`send_input` or `open_session`), `kind` (`sent` or `opens`), `result` (the same vocabulary as the send itself, except that a delivery is always `delivered`, even when the session had to be resumed first: `delivered`, `opened`, `refused`, `not-found`, `ambiguous`, `error`) and `reason` when it did not go through, `messageId` for a delivery (the same id the target's history and the per-message sender record carry), `initiator`, `contextNote`, the `sender`, the `target` (project, console and vendor session ids, agent, the `address` or requested id the caller gave) and the `prompt`. A call that was refused or failed is listed too, with its reason.
+Each message carries `ts`, `verb` (`send_input`, `open_session` or `schedule_input_create`), `kind` (`sent`, `opens` or `schedules`), `result` (the same vocabulary as the send itself, except that a delivery is always `delivered`, even when the session had to be resumed first: `delivered`, `opened`, `scheduled` for a create that made a record, `refused`, `not-found`, `ambiguous`, `error`) and `reason` when it did not go through, `messageId` for a delivery (the same id the target's history and the per-message sender record carry), `initiator`, `contextNote`, the `sender`, the `target` (project, console and vendor session ids, agent, the `address` or requested id the caller gave) and the `prompt`. A call that was refused or failed is listed too, with its reason.
 
 If the ledger itself cannot be read (for example a permission error on its directory), `list-outbound` does not answer with an empty list: it exits 1 with `"result": "error"`, a `reason` naming the path and the errno, and a `code`. Only a ledger that was never written, or has no entry in range, lists as empty.
 
@@ -503,9 +503,9 @@ The socket is mode 0700 and the caller must be the daemon's own OS user. That us
 
 ### Retention, location and privacy
 
-The ledger is written by the daemon, one JSON line per request, when `send-input` or `open-session` is answered (by the CLI or the file drop): at the delivery, or when the request is refused, not found, ambiguous or fails. It is not written for the console's own scheduled firings, which are not a session's calls.
+The ledger is written by the daemon, one JSON line per request, when `send-input` or `open-session` is answered (by the CLI or the file drop): at the delivery, or when the request is refused, not found, ambiguous or fails. A `schedule-input create` made through the CLI leaves one line too, whether it made a record (`scheduled`, with the record id, once or recurring, and the timing) or was refused (with the reason); a create from the clock button in the browser is a person's action and leaves none. The console's own turns are recorded as well, with the console as the sender: each delivered scheduled firing (initiator `scheduled` or `scheduled-now`, carrying the scheduled-input record id and who created it) and each turn a loop composes (an iteration, a judge, a judge-writing or a loop-file crafting turn, initiator `loop`). A firing answered busy, refused or error writes nothing, and a human message queued into a loop is not the console's turn. These are not a session's calls: `list-outbound` never lists them, as a session's call or as unattributed.
 
-- **Where.** `~/.clagentic/console/outbound/` (the console data directory, mode 0700; files mode 0600). `sessions/<project>/<sender>.jsonl` holds identified senders, one file per sender, named by the vendor session id. `unattributed/` holds calls whose sender only named itself or nobody.
+- **Where.** `~/.clagentic/console/outbound/` (the console data directory, mode 0700; files mode 0600). `sessions/<project>/<sender>.jsonl` holds identified senders, one file per sender, named by the vendor session id. `unattributed/` holds calls whose sender only named itself or nobody. `automation/<project>/<initiator>.jsonl` holds the console's own turns (sender kind `automation`, attribution `console`), filed by the target's project; the same retention, modes and withholding apply.
 - **What is stored.** For each request: time, verb, result and reason, message id, initiator, context note, the sender, the target and the **full prompt text**. The prompt is stored in the clear, as it is in the target session's history, except for a target that runs as another OS user (or whose OS user was not recorded), whose prompt and context note are never stored. Treat the directory like the session history: the same OS user can read it, and a backup of the console data directory contains it.
 - **How long.** 30 days by default. Older entries are deleted when the daemon starts and every six hours, and are never returned by `list-outbound` once expired.
 - **Configuration.** Set `outboundRetentionDays` in `~/.clagentic/console/daemon.json` to a whole number of days from 1 to 3650. `0` turns the ledger off: it stops recording and deletes the existing entries at the next prune, so the history already kept is lost. An invalid value is ignored (30 days apply) and a warning is logged. The value is read each time it is used, so a change needs no restart.
