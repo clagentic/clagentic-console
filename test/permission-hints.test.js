@@ -307,16 +307,16 @@ test("the card omits Allow for session for a suppressed ask, in a live request a
   env.tools.applyPromptMessage(request("c1"));
   assert.ok(dom.cardFor(env, "c1").querySelector(".perm-always"), "control: an ordinary ask offers it");
 
-  env.tools.applyPromptMessage(request("c2", { suppressAlwaysAllowRule: true }));
+  env.tools.applyPromptMessage(request("c2", { suppressAlwaysAllowRule: true, noSessionGrant: true }));
   assert.equal(dom.cardFor(env, "c2").querySelector(".perm-always"), null, "live request");
   assert.ok(dom.cardFor(env, "c2").querySelector(".perm-allow"), "Allow once stays");
   assert.ok(dom.cardFor(env, "c2").querySelector(".perm-deny"), "Deny stays");
 
-  env.tools.applyPromptMessage(Object.assign(request("c3", { suppressAlwaysAllowRule: true }), { type: "prompt_pending" }));
+  env.tools.applyPromptMessage(Object.assign(request("c3", { suppressAlwaysAllowRule: true, noSessionGrant: true }), { type: "prompt_pending" }));
   assert.equal(dom.cardFor(env, "c3").querySelector(".perm-always"), null, "pending snapshot");
 
   // The older recorded shape.
-  env.tools.applyPromptMessage({ type: "permission_request", requestId: "c4", toolName: "Bash", toolInput: TOOL_INPUT, suppressAlwaysAllowRule: true });
+  env.tools.applyPromptMessage({ type: "permission_request", requestId: "c4", toolName: "Bash", toolInput: TOOL_INPUT, suppressAlwaysAllowRule: true, noSessionGrant: true });
   assert.equal(dom.cardFor(env, "c4").querySelector(".perm-always"), null, "older permission_request shape");
 });
 
@@ -363,9 +363,9 @@ test("a banner offers Allow for session only for an ask that allows it, and Deny
   var decisions = function (meta) { return banner.bannerActions("permission", meta).map(function (a) { return a.decision; }); };
 
   assert.deepEqual(decisions({}), ["allow", "allow_always", "deny"], "control: an ordinary ask");
-  assert.deepEqual(decisions({ suppressAlwaysAllowRule: true }), ["allow", "deny"]);
+  assert.deepEqual(decisions({ suppressAlwaysAllowRule: true, noSessionGrant: true }), ["allow", "deny"]);
   assert.deepEqual(decisions({ defaultToNo: true }), ["deny", "allow", "allow_always"], "No first when the ask must open on No");
-  assert.deepEqual(decisions({ defaultToNo: true, suppressAlwaysAllowRule: true }), ["deny", "allow"]);
+  assert.deepEqual(decisions({ defaultToNo: true, suppressAlwaysAllowRule: true, noSessionGrant: true }), ["deny", "allow"]);
   assert.deepEqual(banner.bannerActions("plan", { suppressAlwaysAllowRule: true }).map(function (a) { return a.decision; }), ["allow", "deny"], "plan banners are unchanged");
   assert.deepEqual(banner.bannerActions("nonsense", {}), [], "a kind with no entry offers nothing");
   assert.deepEqual(banner.bannerActions("constructor", {}), [], "an inherited name is no kind");
