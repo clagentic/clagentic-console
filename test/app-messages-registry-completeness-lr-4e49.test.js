@@ -112,6 +112,8 @@ var ORIGINAL_CASE_LABELS = [
   "permission_settings", "permission_mode_applied",
   // The unanswered-prompt expiry setting.
   "prompt_expiry_settings",
+  // The saved server and project defaults the Settings pickers show.
+  "saved_defaults",
   // A queued chat message the agent took in, and the answer to withdrawing one.
   "message_delivered", "queued_message_cancelled", "queued_message_tracked", "queued_message_send_now",
   // The ! command line: the outcome of a command, and its settings.

@@ -86,3 +86,220 @@ test("lr-db0437: two sessions setting different models never bleed into each oth
   assert.strictEqual(sm.currentModel, null,
     "no per-session setModel call should ever populate the shared project/global default");
 });
+
+// ---------------------------------------------------------------------------
+// Effort, betas and thinking: the same session scope, through the real session
+// manager, WS handlers and query builder (the prompt harness's project).
+// ---------------------------------------------------------------------------
+
+var path = require("path");
+var world = require("./prompt-harness-world");
+
+// The harness's session handlers reach a session's clients through a no-op
+// sendToSession; this one delivers like the project does.
+function handlersFor(server) {
+  function sendToSession(id, obj) {
+    server.clients.forEach(function (ws) {
+      if (ws.readyState === 1 && ws._clagenticActiveSession === id) ws.send(JSON.stringify(obj));
+    });
+  }
+  return require(world.LIB_ROOT + "/project-sessions").attachSessions(Object.assign({}, server.handlerContext, { sendToSession: sendToSession }));
+}
+
+// A second session in the project, ready to start a query.
+function addSession(server) {
+  var s = server.sm.createSessionRaw({});
+  s.cliSessionId = "harness-second-" + path.basename(server.home);
+  server.sm.saveSessionFile(s);
+  return s;
+}
+
+// A connected, administrator client viewing `session`.
+function viewer(server, session) {
+  var c = world.client();
+  c.ws._clagenticAuthenticated = true;
+  c.ws._clagenticActiveSession = session.localId;
+  server.clients.add(c.ws);
+  return c;
+}
+
+function send(handlers, c, msg) {
+  handlers.handleSessionsMessage(c.ws, msg);
+  return world.flush();
+}
+
+function claudeOptions(server, index) {
+  return server.queryOptions[index].adapterOptions.CLAUDE;
+}
+
+function configStates(c) {
+  return c.inbox.filter(function (m) { return m.type === "config_state"; });
+}
+
+async function withTwoSessions(fn) {
+  var server = await world.createServer();
+  try {
+    var other = addSession(server);
+    var handlers = handlersFor(server);
+    await fn({ server: server, handlers: handlers, a: server.session, b: other, ca: viewer(server, server.session), cb: viewer(server, other) });
+  } finally {
+    server.shutdown();
+    world.removeHome(server.home);
+  }
+}
+
+test("a beta one session turns on is in that session's query and in no other session's", async function () {
+  await withTwoSessions(async function (w) {
+    await send(w.handlers, w.ca, { type: "set_betas", betas: ["context-1m-test"] });
+    await w.server.bridge.startQuery(w.b, "go", null, null);
+    await w.server.bridge.startQuery(w.a, "go", null, null);
+    await world.flush();
+    assert.strictEqual(claudeOptions(w.server, 0).betas, undefined, "the other session's query carries no beta");
+    assert.deepStrictEqual(claudeOptions(w.server, 1).betas, ["context-1m-test"], "the session that chose it does");
+    assert.strictEqual(w.server.sm._savedDefaultBetas, undefined, "and no shared default was written");
+  });
+});
+
+test("a new session starts from the saved defaults, never from another session's picks", async function () {
+  await withTwoSessions(async function (w) {
+    w.server.sm._savedDefaultEffort = "high";
+    w.server.sm._savedDefaultBetas = ["default-beta"];
+    w.server.sm._savedDefaultThinking = "adaptive";
+    await send(w.handlers, w.ca, { type: "set_effort", effort: "low" });
+    await send(w.handlers, w.ca, { type: "set_betas", betas: ["a-beta"] });
+    await send(w.handlers, w.ca, { type: "set_thinking", thinking: "disabled" });
+
+    var made = w.server.sm.createSessionRaw({});
+    assert.strictEqual(made.effort, "high");
+    assert.deepStrictEqual(made.betas, ["default-beta"]);
+    assert.notStrictEqual(made.betas, w.server.sm._savedDefaultBetas, "a copy: editing it cannot edit the default");
+    assert.strictEqual(made.thinking, "adaptive");
+    assert.strictEqual(w.a.effort, "low", "the session that picked keeps its pick");
+
+    var unset = w.server.sm.effectiveSessionSettings({});
+    assert.strictEqual(unset.effort, "high", "a session with no value of its own shows the saved default");
+  });
+});
+
+test("with no saved default anywhere the fallbacks apply", async function () {
+  await withTwoSessions(async function (w) {
+    var shown = w.server.sm.effectiveSessionSettings(w.b);
+    assert.deepStrictEqual(shown, { effort: "medium", betas: [], thinking: "adaptive", thinkingBudget: 10000 });
+  });
+});
+
+test("changing a default leaves a running session's values and its next query alone", async function () {
+  await withTwoSessions(async function (w) {
+    await send(w.handlers, w.cb, { type: "set_effort", effort: "low" });
+    await send(w.handlers, w.cb, { type: "set_betas", betas: ["b-beta"] });
+    await send(w.handlers, w.cb, { type: "set_thinking", thinking: "budget", budgetTokens: 3000 });
+    await send(w.handlers, w.cb, { type: "set_project_default_effort", effort: "max" });
+    await send(w.handlers, w.cb, { type: "set_server_default_betas", betas: ["server-beta"] });
+    await send(w.handlers, w.cb, { type: "set_project_default_thinking", thinking: "disabled" });
+
+    assert.strictEqual(w.b.effort, "low");
+    assert.deepStrictEqual(w.b.betas, ["b-beta"]);
+    assert.strictEqual(w.b.thinking, "budget");
+    await w.server.bridge.startQuery(w.b, "go", null, null);
+    await world.flush();
+    assert.strictEqual(w.server.queryOptions[0].effort, "low");
+    assert.deepStrictEqual(claudeOptions(w.server, 0).betas, ["b-beta"]);
+    assert.deepStrictEqual(claudeOptions(w.server, 0).thinking, { type: "enabled", budgetTokens: 3000 });
+  });
+});
+
+test("loop settings win over the session's values at query start", async function () {
+  await withTwoSessions(async function (w) {
+    await send(w.handlers, w.cb, { type: "set_effort", effort: "low" });
+    await send(w.handlers, w.cb, { type: "set_betas", betas: ["session-beta"] });
+    await send(w.handlers, w.cb, { type: "set_thinking", thinking: "disabled" });
+    w.b.loopSettings = { effort: "max", betas: ["loop-beta"], thinking: "budget", thinkingBudget: 1500 };
+    await w.server.bridge.startQuery(w.b, "go", null, null);
+    await world.flush();
+    assert.strictEqual(w.server.queryOptions[0].effort, "max");
+    assert.deepStrictEqual(claudeOptions(w.server, 0).betas, ["loop-beta"]);
+    assert.deepStrictEqual(claudeOptions(w.server, 0).thinking, { type: "enabled", budgetTokens: 1500 });
+  });
+});
+
+test("effort, betas, thinking and prompt expiry survive a daemon restart and reach the next query", async function () {
+  var first = await world.createServer();
+  var home = first.home;
+  try {
+    var handlers = handlersFor(first);
+    var c = viewer(first, first.session);
+    await send(handlers, c, { type: "set_effort", effort: "low" });
+    await send(handlers, c, { type: "set_betas", betas: ["kept-beta"] });
+    await send(handlers, c, { type: "set_thinking", thinking: "budget", budgetTokens: 4096 });
+    await send(handlers, c, { type: "set_session_prompt_expiry", promptExpiryMinutes: 7 });
+    var meta = JSON.parse(require("fs").readFileSync(path.join(first.sm.sessionsDir, first.session.cliSessionId + ".jsonl"), "utf8").split("\n")[0]);
+    assert.deepStrictEqual(
+      { effort: meta.effort, betas: meta.betas, thinking: meta.thinking, thinkingBudget: meta.thinkingBudget, promptExpiryMinutes: meta.promptExpiryMinutes },
+      { effort: "low", betas: ["kept-beta"], thinking: "budget", thinkingBudget: 4096, promptExpiryMinutes: 7 },
+      "all five are in the meta line");
+    var cliSessionId = first.session.cliSessionId;
+    first.shutdown();
+
+    var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
+    var s = second.session;
+    assert.deepStrictEqual(
+      { effort: s.effort, betas: s.betas, thinking: s.thinking, thinkingBudget: s.thinkingBudget, promptExpiryMinutes: s.promptExpiryMinutes },
+      { effort: "low", betas: ["kept-beta"], thinking: "budget", thinkingBudget: 4096, promptExpiryMinutes: 7 });
+    await second.startQuery();
+    assert.strictEqual(second.queryOptions[0].effort, "low");
+    assert.deepStrictEqual(claudeOptions(second, 0).betas, ["kept-beta"]);
+    assert.deepStrictEqual(claudeOptions(second, 0).thinking, { type: "enabled", budgetTokens: 4096 });
+    second.shutdown();
+  } finally {
+    world.removeHome(home);
+  }
+});
+
+// What a client viewing session A receives while session B changes: nothing
+// that carries B's values. One row per way B can change.
+var B_CHANGES = [
+  { name: "the effort picker", act: function (w) { return send(w.handlers, w.cb, { type: "set_effort", effort: "xhigh" }); }, value: function (m) { return m.effort === "xhigh"; } },
+  { name: "the betas picker", act: function (w) { return send(w.handlers, w.cb, { type: "set_betas", betas: ["b-only-beta"] }); }, value: function (m) { return m.betas && m.betas.indexOf("b-only-beta") !== -1; } },
+  { name: "the thinking picker", act: function (w) { return send(w.handlers, w.cb, { type: "set_thinking", thinking: "budget", budgetTokens: 7777 }); }, value: function (m) { return m.thinkingBudget === 7777; } },
+  {
+    name: "a worker's effort_changed event",
+    act: async function (w) {
+      w.server.adapter.createQuery = function (queryOpts) {
+        w.server.queryOptions.push(queryOpts);
+        var delivered = false;
+        var handle = {
+          _adapterState: null,
+          pushMessage: function () {}, endInput: function () {}, close: function () {}, abort: function () {},
+          setPermissionMode: function () { return Promise.resolve(); },
+        };
+        handle[Symbol.asyncIterator] = function () {
+          return {
+            next: function () {
+              if (delivered) return new Promise(function () {});
+              delivered = true;
+              return Promise.resolve({ value: { type: "_worker_meta", subtype: "effort_changed", data: { effort: "xhigh" } }, done: false });
+            },
+          };
+        };
+        return Promise.resolve(handle);
+      };
+      await w.server.bridge.startQuery(w.b, "go", null, null);
+      await world.flush();
+      await world.flush();
+    },
+    value: function (m) { return m.effort === "xhigh"; },
+  },
+];
+
+B_CHANGES.forEach(function (row) {
+  test("a client viewing one session is sent none of another session's values: " + row.name, async function () {
+    await withTwoSessions(async function (w) {
+      await row.act(w);
+      assert.ok(configStates(w.cb).some(row.value), "the session that changed is told");
+      assert.deepStrictEqual(configStates(w.ca).filter(row.value), [], "the other session's viewer is not");
+      configStates(w.ca).forEach(function (m) {
+        assert.strictEqual(m.effort === undefined || m.effort === "medium", true, "any push it did get carries its own effort");
+      });
+    });
+  });
+});

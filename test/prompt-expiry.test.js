@@ -90,6 +90,35 @@ test("promptExpiryMinutes sets the bound; 0 disables it", async function (t) {
   assert.notEqual(off.registry.lookup(opened.requestId), null, "still pending");
 });
 
+// A session's own promptExpiryMinutes governs the prompts it raises; one
+// without a value takes the daemon-wide one (AC9). Each row: the daemon value,
+// the session's, and the minutes the prompt waits (0 = no expiry).
+[
+  { name: "the session value outranks a longer daemon value", daemon: 60, session: 5, waits: 5 },
+  { name: "the session value outranks a shorter daemon value", daemon: 5, session: 60, waits: 60 },
+  { name: "a session value of 0 turns expiry off for that session", daemon: 10, session: 0, waits: 0 },
+  { name: "a session without a value takes the daemon value", daemon: 10, session: undefined, waits: 10 },
+  { name: "a session without a value and no daemon value takes the default", daemon: undefined, session: undefined, waits: 30 },
+].forEach(function (row) {
+  test("session prompt expiry: " + row.name, async function (t) {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    var h = makeRegistry(row.daemon === undefined ? null : { promptExpiryMinutes: row.daemon });
+    if (row.session !== undefined) h.session.promptExpiryMinutes = row.session;
+    var opened = OPENERS.permission(h);
+    if (row.waits === 0) {
+      t.mock.timers.tick(365 * DAY);
+      assert.equal(cancels(h).length, 0, "no expiry");
+      assert.notEqual(h.registry.lookup(opened.requestId), null);
+      return;
+    }
+    t.mock.timers.tick(row.waits * 60000 - 1);
+    assert.equal(cancels(h).length, 0, "still waiting a moment before the bound");
+    t.mock.timers.tick(1);
+    assert.equal(cancels(h).length, 1, "expired at the session's bound");
+    assert.equal(cancels(h)[0].reason, "expired");
+  });
+});
+
 test("a malformed or negative promptExpiryMinutes falls back to the default with one warning naming the key", function (t) {
   var warnings = silenceWarnings(t);
   var read = createExpiryReader();

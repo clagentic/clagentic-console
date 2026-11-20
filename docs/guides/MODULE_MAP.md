@@ -59,6 +59,7 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `prompt-access.js` | Who may answer a prompt: the one session-visibility rule the WS and HTTP answer paths both apply |
 | `permission-mode-policy.js` | The one check every permission mode passes before it is applied: known mode, bypass only when the server allows it, Don't ask and Auto only for a vendor that declares them |
 | `permission-settings.js` | The server-wide permission settings (Auto-approve read-only tools, mode for sessions opened by the CLI or a trigger): defaults, which request fields are accepted, and the precedence that picks an opened session's mode |
+| `session-settings.js` | A session's effective effort, betas, thinking and thinking budget (its own value, else the saved project, then server, default, else the fallback), the one `config_state` shape for a session, the read of the saved defaults at project start, and the `saved_defaults` push the Settings pickers show |
 | `project-settings-gate.js` | The one server-side rule for project- and folder-scoped setting writes: the `projectSettings` permission plus access to the target project (for a folder setter, to every project in the named folder; an empty or unknown folder is refused); every refusal is logged and answered with one fixed error |
 | `project-permission-settings.js` | The admin-only `set_permission_settings` message and the admin check shared with the server default mode |
 | `project-user-shell.js` | `shell`, `set_user_shell_settings` and the `stop` that interrupts a command: the `!` command line. Applies the refusals in order, gates the command as a Bash call, holds the session busy until the `shell_result` is recorded |
@@ -165,6 +166,7 @@ Bootstraps UI, initializes store, wires remaining Tier 3 modules. All business l
 | `prompt-state.js` | Per-requestId mirror of the server's prompt state (terminal states are final) and the mapping of older recorded message shapes onto the one prompt shape |
 | `prompt-card.js` | The card shell every kind shares: pending/sending/confirmed state machine, terminal outcome rendering |
 | `prompt-kinds/` | One renderer per prompt kind (permission, plan, ask-user, elicitation): body and answer controls, outcome labels. `permission-choices.js` decides which answers a tool-permission ask offers, and in what order, from the SDK's hints; the card and the banner both read it |
+| `context-1m-beta.js` | The 1M-context beta flag: the one fallback-only identifier both toggles send, and the helpers that read and set it in a beta list |
 | `mode-options.js` | The permission modes the config chip offers: the three every session has, Don't ask and Auto only for a vendor that declares them, Bypass permissions when the daemon allows it |
 | `app-skills-install.js` | Skill install dialog, requireSkills |
 | `app-favicon.js` | Dynamic favicon, IO blink, urgent blink, send button mode, activity indicator |

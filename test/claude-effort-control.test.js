@@ -148,13 +148,13 @@ test("the bridge announces an effort only once the running query has taken it", 
     server.connect(c.ws);
     var applied = [];
     server.session.queryInstance.setEffort = function (effort) { applied.push(effort); return Promise.resolve(); };
-    server.sm.currentEffort = "medium";
+    server.session.effort = "medium";
     inbox(c).length = 0;
 
     var ok = await server.bridge.setEffort(server.session, "high");
     assert.deepEqual(ok, { ok: true });
     assert.deepEqual(applied, ["high"]);
-    assert.equal(server.sm.currentEffort, "high");
+    assert.equal(server.session.effort, "high");
     var states = inbox(c).filter(function (m) { return m.type === "config_state"; });
     assert.equal(states[states.length - 1].effort, "high");
 
@@ -162,7 +162,7 @@ test("the bridge announces an effort only once the running query has taken it", 
     inbox(c).length = 0;
     var failed = await server.bridge.setEffort(server.session, "max");
     assert.deepEqual(failed, { ok: false, error: "organization effort limit" });
-    assert.equal(server.sm.currentEffort, "high", "the effort the session runs at is unchanged");
+    assert.equal(server.session.effort, "high", "the effort the session runs at is unchanged");
     assert.equal(inbox(c).filter(function (m) { return m.type === "config_state"; }).length, 0, "no change is announced");
     var errors = inbox(c).filter(function (m) { return m.type === "error"; });
     assert.equal(errors.length, 1);
@@ -176,7 +176,7 @@ test("a session with no running query records the effort for its next query", as
     assert.equal(server.session.queryInstance, null);
     var result = await server.bridge.setEffort(server.session, "low");
     assert.deepEqual(result, { ok: true });
-    assert.equal(server.sm.currentEffort, "low");
+    assert.equal(server.session.effort, "low");
     await server.startQuery();
     assert.equal(server.queryOptions[server.queryOptions.length - 1].effort, "low", "the next query starts at that effort");
   });
@@ -188,7 +188,7 @@ test("set_effort over the socket: a refused change tells the requester and puts 
     var other = client();
     server.connect(asker.ws);
     server.connect(other.ws);
-    server.sm.currentEffort = "medium";
+    server.session.effort = "medium";
 
     // Mid-turn, as well as between turns: the path does not depend on it.
     server.session.isProcessing = true;
@@ -213,7 +213,7 @@ test("set_effort over the socket: a refused change tells the requester and puts 
     var otherStates = inbox(other).filter(function (m) { return m.type === "config_state"; });
     assert.ok(otherStates.length >= 1);
     assert.equal(otherStates[otherStates.length - 1].effort, "high");
-    assert.equal(server.sm.currentEffort, "high");
+    assert.equal(server.session.effort, "high");
   });
 });
 
@@ -221,7 +221,7 @@ test("a restored session starts its query at the persisted permission mode and e
   await withServer(async function (server) {
     await server.endQuery();
     server.session.permissionMode = "dontAsk";
-    server.sm.currentEffort = "xhigh";
+    server.session.effort = "xhigh";
     await server.startQuery();
     var opts = server.queryOptions[server.queryOptions.length - 1];
     assert.equal(opts.effort, "xhigh");
