@@ -16,7 +16,6 @@ var { spawn } = require("child_process");
 
 var { loadPrompt } = require("../lib/cli/prompt-text");
 var { parseSessionArgs } = require("../lib/cli/session-subcommands");
-var agentUsage = require("../lib/cli/agent-usage");
 
 var CLI = path.join(__dirname, "..", "bin", "cli.js");
 var tmp = fs.mkdtempSync(path.join(os.tmpdir(), "prompt-file-"));
@@ -64,9 +63,10 @@ function runCli(args) {
     });
     var stderr = "";
     child.stderr.on("data", function (d) { stderr += d; });
-    child.stdout.on("data", function () {});
+    var stdout = "";
+    child.stdout.on("data", function (d) { stdout += d; });
     child.on("close", function (code) {
-      resolve({ code: code, stderr: stderr, request: received[0] || null });
+      resolve({ code: code, stdout: stdout, stderr: stderr, request: received[0] || null });
     });
   });
 }
@@ -83,6 +83,21 @@ test("AC1: send-input --prompt-file delivers the file text, one trailing newline
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.request.prompt, "line one\nline two\n");
   assert.equal("promptFile" in r.request, false, "no path field crosses IPC");
+});
+
+test("AC1: open-session --prompt-file delivers the file text, one trailing newline removed", async function () {
+  var file = write("open-file.txt", "first prompt\n");
+  var r = await runCli(OPEN.concat(["--prompt-file", file]));
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.request.prompt, "first prompt");
+  assert.equal("promptFile" in r.request, false, "no path field crosses IPC");
+});
+
+test("AC2: send-input --prompt @<file> delivers the file text, not the token", async function () {
+  var file = write("send-at.txt", "sent text\n");
+  var r = await runCli(SEND.concat(["--prompt", "@" + file]));
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.request.prompt, "sent text");
 });
 
 test("AC2: open-session --prompt @<file> delivers the file text, not the token", async function () {
@@ -173,8 +188,13 @@ test("the parser accepts --prompt-file on open-session and send-input only, once
   assert.match(parseSessionArgs("open-session", OPEN.slice(1)).error, /one way only/);
 });
 
-test("--help of open-session and send-input shows --prompt-file", function () {
-  ["open-session", "send-input"].forEach(function (verb) {
-    assert.match(agentUsage.helpText(verb), /\(--prompt <text\|-> \| --prompt-file <path>\)/, verb);
-  });
+test("AC6: --help of send-input and open-session, from the CLI, shows --prompt-file", async function () {
+  var shape = /\(--prompt <text\|-> \| --prompt-file <path>\)/;
+  var send = await runCli(["send-input", "--help"]);
+  assert.equal(send.code, 0, send.stderr);
+  assert.match(send.stdout, shape);
+  var open = await runCli(["open-session", "--help"]);
+  assert.equal(open.code, 0, open.stderr);
+  assert.match(open.stdout, shape);
+  assert.equal(send.request, null, "help contacts no daemon");
 });
