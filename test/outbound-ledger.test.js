@@ -315,3 +315,95 @@ test("a project directory that vanishes between the listing and the read is empt
     fs.readdirSync = original;
   }
 });
+
+// --- The console's own turns: a separate area, never under unattributed/ ---
+
+function automation(over) {
+  return Object.assign({
+    ts: new Date(NOW).toISOString(),
+    verb: "send_input",
+    result: "delivered",
+    initiator: "loop",
+    sender: { kind: "automation", attribution: "console", name: "Loop" },
+    target: { project: "q", sessionId: "9", runsAs: "daemon" },
+    prompt: "next",
+  }, over || {});
+}
+
+test("an automation entry is filed in its own area, outside the attributed and unattributed ones", function () {
+  var dir = tmp();
+  var ledger = ledgerIn(dir);
+  assert.equal(ledger.record(automation()), true);
+  assert.equal(ledger.record(automation({ initiator: "scheduled", sender: { kind: "automation", attribution: "console", name: "Scheduled message" } })), true);
+  var root = path.join(dir, "outbound");
+  var rels = filesBelow(root).map(function (f) { return path.relative(root, f); }).sort();
+  assert.deepEqual(rels, [path.join("automation", "q", "loop.jsonl"), path.join("automation", "q", "scheduled.jsonl")]);
+  assert.equal(fs.existsSync(path.join(root, "unattributed")), false);
+  assert.deepEqual(ledger.readAttributed(), []);
+  assert.deepEqual(ledger.readUnattributed(), []);
+  assert.deepEqual(ledger.readAutomation().map(function (e) { return e.initiator; }).sort(), ["loop", "scheduled"]);
+  assert.deepEqual(ledger.readAutomation({ project: "other" }), []);
+});
+
+test("automation files are 0600 and their directories 0700", function () {
+  if (process.platform === "win32") return;
+  var dir = tmp();
+  var prev = process.umask(0o022);
+  try {
+    ledgerIn(dir).record(automation());
+  } finally {
+    process.umask(prev);
+  }
+  var mode = function (p) { return fs.statSync(p).mode & 0o777; };
+  assert.equal(mode(path.join(dir, "outbound", "automation")), 0o700);
+  assert.equal(mode(path.join(dir, "outbound", "automation", "q")), 0o700);
+  assert.equal(mode(path.join(dir, "outbound", "automation", "q", "loop.jsonl")), 0o600);
+});
+
+test("a target project or initiator cannot name a path in the automation area", function () {
+  var outer = tmp();
+  var base = path.join(outer, "base");
+  fs.mkdirSync(base);
+  var ledger = ledgerIn(base);
+  var hostile = "../../etc";
+  assert.equal(ledger.record(automation({
+    target: { project: hostile, sessionId: hostile },
+    initiator: hostile,
+    sender: { kind: "automation", attribution: "console", name: hostile },
+  })), true);
+  var root = path.join(base, "outbound");
+  var written = filesBelow(root);
+  assert.ok(written.length > 0, "the entry was written somewhere");
+  written.forEach(function (f) {
+    var rel = path.relative(root, path.resolve(f));
+    assert.ok(rel !== "" && rel.split(path.sep)[0] !== ".." && !path.isAbsolute(rel), "inside the ledger root: " + f);
+  });
+  // An unsanitised name would land beside or above the root; the parents hold only what they held.
+  assert.deepEqual(fs.readdirSync(base), ["outbound"]);
+  assert.deepEqual(fs.readdirSync(outer), ["base"]);
+});
+
+test("automation entries are pruned by the configured retention and not written at all at 0", function () {
+  var dir = tmp();
+  var days = 7;
+  var ledger = ledgerIn(dir, { getRetentionDays: function () { return days; } });
+  ledger.record(automation({ ts: new Date(NOW - 8 * DAY).toISOString(), prompt: "old" }));
+  ledger.record(automation({ ts: new Date(NOW - 2 * DAY).toISOString(), prompt: "recent" }));
+  assert.deepEqual(ledger.readAutomation().map(function (e) { return e.prompt; }), ["recent"], "a reader applies the cut-off");
+  assert.equal(ledger.prune().removed, 1);
+  var kept = fs.readFileSync(path.join(dir, "outbound", "automation", "q", "loop.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+  assert.deepEqual(kept.map(function (e) { return e.prompt; }), ["recent"]);
+
+  days = 0;
+  assert.equal(ledger.record(automation()), false);
+  assert.deepEqual(ledger.readAutomation(), []);
+  ledger.prune();
+  assert.equal(fs.existsSync(path.join(dir, "outbound", "automation", "q", "loop.jsonl")), false);
+});
+
+test("an unreadable automation area is an error, not an empty list", function () {
+  var dir = tmp();
+  fs.mkdirSync(path.join(dir, "outbound"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "outbound", "automation"), "not a directory");
+  assert.throws(function () { ledgerIn(dir).readAutomation(); }, function (e) { return e.code === "ENOTDIR"; });
+});

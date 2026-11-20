@@ -1,8 +1,8 @@
 "use strict";
 // The Team view's agent-messages query (lib/team-traffic.js) and its socket side
 // (lib/team-traffic-ws.js): the outbound ledger grouped by counterpart pair under
-// the ledger's own read rules, the routes the ledger does not see filled from the
-// receiving session's history, pending scheduled inputs, and the live nudge.
+// the ledger's own read rules (the console's own scheduled and loop turns are
+// ledger entries too), pending scheduled inputs, and the live nudge.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
@@ -15,6 +15,7 @@ var { createOutboundAccess } = require("../lib/outbound-access");
 var { createProjectAccess } = require("../lib/project-access");
 var { attachPermissions } = require("../lib/users-permissions");
 var { createSessionInput } = require("../lib/session-input");
+var outboundEntry = require("../lib/outbound-entry");
 var { createTeamTraffic, MAX_MESSAGES, MAX_TEXT_CHARS } = require("../lib/team-traffic");
 var teamWs = require("../lib/team-traffic-ws");
 
@@ -102,6 +103,19 @@ function entry(over) {
     prompt: "text " + counter,
   };
   return Object.assign(base, over || {});
+}
+
+// A turn the console composed itself, built by the writer's own builder.
+function automationEntry(over) {
+  counter++;
+  return outboundEntry.buildAutomationEntry(Object.assign({
+    ts: new Date(NOW - HOUR + counter * 1000).toISOString(),
+    initiator: "loop",
+    prompt: "do the next step",
+    note: "nightly · iteration 2",
+    messageId: "auto" + counter,
+    target: { project: "work", consoleSessionId: "100", sessionId: "cli-shared", agent: "reviewer", runsAs: "daemon" },
+  }, over || {}));
 }
 
 test("entries are grouped by sender and target, with count, last seen, kind, result and text", function () {
@@ -206,13 +220,10 @@ SENDER_KEY_ROWS.forEach(function (row) {
   });
 });
 
-test("a message carries no source field, from the ledger path or the session-history path", function () {
+test("a message carries no source field, from a sender's entry or an automation's", function () {
   var t = build();
   t.ledger.record(entry({}));
-  var { consoleTurnEntry } = require("../lib/injected-sender");
-  var e = consoleTurnEntry("loop", "next", "nightly");
-  e._ts = NOW - HOUR;
-  t.held.work.sm.sessions.get(100).history.push(e);
+  t.ledger.record(automationEntry({ prompt: "next", note: "nightly" }));
   var snap = t.traffic.snapshot(OWNER);
   assert.equal(snap.messages.length, 2);
   snap.messages.forEach(function (m) { assert.equal("source" in m, false); });
@@ -313,9 +324,9 @@ test("text over the limit is cut and said to be, and old messages beyond the cap
   assert.equal(snap.pairs[0].count, MAX_MESSAGES + 3, "the pair counts every visible message");
 });
 
-// --- Routes the ledger does not see ---
+// --- The console's own turns ---
 
-function sessionInputFor(t, hooks) {
+function sessionInputFor(t) {
   var recorded = [];
   var sm = t.held.work.sm;
   sm.defaultVendor = "claude";
@@ -326,7 +337,6 @@ function sessionInputFor(t, hooks) {
   var input = createSessionInput({
     getProject: function (slug) { return t.held[slug] || null; },
     outboundLedger: t.ledger,
-    onAutomationInjected: hooks && hooks.onAutomationInjected,
     now: function () { return NOW - HOUR; },
   });
   return { input: input, recorded: recorded };
@@ -348,75 +358,97 @@ test("an internal read error reaches the client as a generic reason, with the de
   assert.ok(logged.some(function (l) { return /ENOTDIR|EEXIST|not a directory/i.test(l); }), "the detail is in the server log");
 });
 
-test("a scheduled firing leaves no ledger entry and is filled from the target's history in the same view", function () {
+test("a scheduled firing is read from the ledger, once, beside the send-input in the same view", function () {
   var t = build();
-  var fired = 0;
-  var si = sessionInputFor(t, { onAutomationInjected: function () { fired++; } });
+  var si = sessionInputFor(t);
   t.held.work.sm.sessions.get(100).queryInstance = {};
 
   var sent = si.input.sendInput({ projectSlug: "work", sessionId: "cli-shared", prompt: "from an agent", senderProject: "side", senderSessionId: "7" });
   assert.equal(sent.result, "delivered");
-  assert.equal(fired, 0, "a send-input is announced through the ledger, not this hook");
   t.held.work.sm.sessions.get(100).isProcessing = false;
   var tick = si.input.fireScheduled({ projectSlug: "work", sessionId: "cli-shared", prompt: "tick", note: "scheduled message" });
   assert.equal(tick.ok, true);
-  assert.equal(fired, 1);
-  assert.equal(t.ledger.readAttributed().concat(t.ledger.readUnattributed()).length, 1, "only the send-input is in the ledger");
+  assert.equal(t.ledger.readAttributed().concat(t.ledger.readUnattributed()).length, 1, "only the send-input is a sender's entry");
+  assert.equal(t.ledger.readAutomation().length, 1);
 
-  // The fixture's history is not the clock under test: stamp the firing at NOW - HOUR, as the input clock above does.
-  t.held.work.sm.sessions.get(100).history.forEach(function (h) { if (h.senderKind === "automation") h._ts = NOW - HOUR; });
   var snap = t.traffic.snapshot(OWNER);
   assert.equal(snap.pairs.length, 2);
   var auto = snap.pairs.filter(function (p) { return p.sender.senderKind === "automation"; })[0];
+  assert.equal(auto.key, "a:Scheduled message>work/cli-shared");
   assert.equal(auto.sender.fromName, "Scheduled message");
   assert.equal(auto.sender.attribution, "console");
   assert.equal(auto.count, 1);
   assert.deepEqual(auto.target.link, { project: "work", id: 100 });
-  var m = snap.messages.filter(function (x) { return x.pairKey === auto.key; })[0];
-  assert.equal(m.kind, "scheduled");
-  assert.equal(m.text, "tick");
-  assert.equal("source" in m, false);
+  var m = snap.messages.filter(function (x) { return x.pairKey === auto.key; });
+  assert.equal(m.length, 1, "the turn appears exactly once");
+  assert.equal(m[0].kind, "scheduled");
+  assert.equal(m[0].result, "delivered");
+  assert.equal(m[0].text, "tick");
+  assert.equal(m[0].contextNote, "scheduled message");
+  assert.equal("source" in m[0], false);
 });
 
-test("a loop iteration is filled from the session's history as its own kind", function () {
+test("a loop turn is read from the ledger as its own kind", function () {
   var t = build();
-  var { consoleTurnEntry } = require("../lib/injected-sender");
-  var e = consoleTurnEntry("loop", "do the next step", "nightly · iteration 2");
-  e._ts = NOW - HOUR;
-  t.held.work.sm.sessions.get(100).history.push(e);
+  t.ledger.record(automationEntry({}));
   var snap = t.traffic.snapshot(OWNER);
   assert.equal(snap.messages.length, 1);
   assert.equal(snap.messages[0].kind, "loop");
+  assert.equal(snap.messages[0].result, "delivered");
   assert.equal(snap.messages[0].contextNote, "nightly · iteration 2");
   assert.equal(snap.pairs[0].sender.fromName, "Loop");
+  assert.equal(snap.pairs[0].sender.senderKind, "automation");
+  assert.equal(snap.pairs[0].sender.attribution, "console");
+  assert.equal(snap.pairs[0].key, "a:Loop>work/cli-shared");
 });
 
-test("filled entries follow the ledger's rules: another OS user's session and an unreadable session are withheld", function () {
+test("the view no longer reads session history for the console's own turns", function () {
+  var t = build();
   var { consoleTurnEntry } = require("../lib/injected-sender");
-  function withTurn(t, id) {
-    var e = consoleTurnEntry("scheduled", "tick", "scheduled message");
-    e._ts = NOW - HOUR;
-    t.held.work.sm.sessions.get(id).history.push(e);
-  }
+  var e = consoleTurnEntry("loop", "made before the ledger covered it", "nightly");
+  e._ts = NOW - HOUR;
+  t.held.work.sm.sessions.get(100).history.push(e);
+  var snap = t.traffic.snapshot(OWNER);
+  assert.equal(snap.messages.length, 0);
+  assert.equal(snap.pairs.length, 0);
+  assert.equal(snap.withheld.count, 0);
+});
+
+test("automation entries follow the ledger's rules: another OS user's session and an unreadable session are withheld", function () {
   var os1 = build({ projects: projects({ linuxUser: function () { return "svc-user"; } }) });
-  withTurn(os1, 100);
+  var si1 = sessionInputFor(os1);
+  os1.held.work.sm.sessions.get(100).queryInstance = {};
+  assert.equal(si1.input.fireScheduled({ projectSlug: "work", sessionId: "cli-shared", prompt: "tick", note: "scheduled message" }).ok, true);
   var a = os1.traffic.snapshot(OWNER);
   assert.equal(a.messages.length, 0);
   assert.equal(a.withheld.count, 1);
+  assert.deepEqual(a.withheld.reasons, ["the target session runs as another OS user"]);
 
   var multi = build({ multiUser: true });
-  withTurn(multi, 102);
+  var si2 = sessionInputFor(multi);
+  multi.held.work.sm.sessions.get(102).queryInstance = {};
+  assert.equal(si2.input.fireScheduled({ projectSlug: "work", sessionId: "cli-bob-private", prompt: "tick", note: "scheduled message" }).ok, true);
   var b = multi.traffic.snapshot({ user: USERS.alice, authenticated: true });
   assert.equal(b.messages.length, 0);
   assert.equal(b.withheld.count, 1);
+  assert.equal(multi.traffic.snapshot({ user: USERS.bob, authenticated: true }).messages.length, 1);
 });
 
-test("an entry older than the retention is not filled in", function () {
+test("an automation turn whose target session the caller may not read is not listed and carries the access reason", function () {
+  var multi = build({ multiUser: true });
+  var si = sessionInputFor(multi);
+  multi.held.work.sm.sessions.get(102).queryInstance = {};
+  assert.equal(si.input.fireScheduled({ projectSlug: "work", sessionId: "cli-bob-private", prompt: "tick", note: "scheduled message" }).ok, true);
+  var snap = multi.traffic.snapshot({ user: USERS.alice, authenticated: true });
+  assert.equal(snap.messages.length, 0);
+  assert.equal(snap.pairs.length, 0);
+  assert.equal(snap.withheld.count, 1);
+  assert.deepEqual(snap.withheld.reasons, ["the caller cannot read the target session"]);
+});
+
+test("an automation entry older than the retention is not listed", function () {
   var t = build({ retentionDays: 1 });
-  var { consoleTurnEntry } = require("../lib/injected-sender");
-  var e = consoleTurnEntry("scheduled", "old tick", "scheduled message");
-  e._ts = NOW - 3 * 24 * HOUR;
-  t.held.work.sm.sessions.get(100).history.push(e);
+  t.ledger.record(automationEntry({ ts: new Date(NOW - 3 * 24 * HOUR).toISOString() }));
   assert.equal(t.traffic.snapshot(OWNER).messages.length, 0);
 });
 
@@ -443,10 +475,7 @@ test("armed scheduled inputs are listed as pending in the scheduled pair's threa
   assert.equal(snap.messages.length, 0, "a pending input is not a sent message");
   assert.ok(asked.length >= 3);
 
-  var { consoleTurnEntry } = require("../lib/injected-sender");
-  var e = consoleTurnEntry("scheduled", "check in", "scheduled repeat");
-  e._ts = NOW - HOUR;
-  t.held.work.sm.sessions.get(100).history.push(e);
+  t.ledger.record(automationEntry({ initiator: "scheduled", prompt: "check in", note: "scheduled repeat" }));
   var after = t.traffic.snapshot(OWNER);
   assert.equal(after.pairs.length, 1, "the fired and the pending share one pair");
   assert.equal(after.pairs[0].count, 1);

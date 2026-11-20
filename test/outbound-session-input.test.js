@@ -441,7 +441,7 @@ test("caller shape: a result that is a Promise stays a Promise with the ledger o
   assert.equal(typeof sync.then, "undefined");
 });
 
-test("caller shape: the console's own scheduled firing and a loop turn leave no entry, by design: the console is the sender, not a session", function () {
+test("caller shape: the console's own scheduled firing leaves no entry under a sender, the console is its own sender (see automation-ledger.test.js)", function () {
   var t = setup();
   var fired = t.input.fireScheduled({ projectSlug: "p", sessionId: "cli-target", prompt: "tick", initiator: "scheduled-now", force: true });
   assert.equal(fired.result, "delivered");
@@ -452,7 +452,7 @@ test("caller shape: the console's own scheduled firing and a loop turn leave no 
   assert.equal(refusedFire.result, "refused");
   assert.deepEqual(all(t.ledger), []);
   // Loops start their turns on the SDK directly (lib/project-loop.js), never
-  // through these handlers, so there is nothing to record.
+  // through these handlers; they write their own ledger entries.
   var loopSrc = fs.readFileSync(path.join(__dirname, "..", "lib", "project-loop.js"), "utf8");
   assert.equal(/session-input|sessionInput\.(sendInput|openSession)/.test(loopSrc), false);
 });
