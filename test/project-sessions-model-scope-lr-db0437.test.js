@@ -451,6 +451,29 @@ function twoProjects() {
   });
 });
 
+// A server default changed in the project that has its own default for the same
+// setting does not replace it: a new session there still gets the project's.
+test("set_server_default_model in a project with its own model default: a new session gets the project's", function () {
+  var w = twoProjects();
+  w.a.opts.onSetProjectDefaultModel("a", "sonnet");
+  w.a.sm._savedDefaultModel = "sonnet";
+  w.a.sm.currentModel = "sonnet";
+
+  w.handlersA.handleSessionsMessage(makeWs(), { type: "set_server_default_model", model: "opus" });
+  w.handlersA.handleSessionsMessage(makeWs(), { type: "new_session" });
+
+  var created = Array.from(w.a.sm.sessions.values()).pop();
+  assert.strictEqual(created.model, "sonnet", "the project's own default outranks the server's");
+  assert.strictEqual(w.a.sm.currentModel, "sonnet", "the fallback the bridge reads is still the project's default");
+});
+
+test("set_server_default_model in a project with no model default of its own: a new session gets the server's", function () {
+  var w = twoProjects();
+  w.handlersA.handleSessionsMessage(makeWs(), { type: "set_server_default_model", model: "opus" });
+  w.handlersA.handleSessionsMessage(makeWs(), { type: "new_session" });
+  assert.strictEqual(Array.from(w.a.sm.sessions.values()).pop().model, "opus");
+});
+
 // A default change is not a session's change: no client's model chip moves.
 [
   { type: "set_server_default_model", level: "server" },

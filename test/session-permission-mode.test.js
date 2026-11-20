@@ -221,7 +221,9 @@ test("a push about the effort, betas or a default model carries no mode, so no c
     server.handlers.handleSessionsMessage(c.ws, { type: "set_thinking", thinking: "adaptive" });
     server.handlers.handleSessionsMessage(c.ws, { type: "set_server_default_effort", effort: "high" });
     var states = c.inbox.filter(function (m) { return m.type === "config_state"; });
-    assert.ok(states.length >= 4);
+    // A default-model change sends saved_defaults, not config_state; the
+    // betas, thinking and effort changes each still send one.
+    assert.ok(states.length >= 3);
     states.forEach(function (m) { assert.equal(m.mode, undefined, "no mode in a push that is not about one"); });
   } finally {
     server.shutdown();
