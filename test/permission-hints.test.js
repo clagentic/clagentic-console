@@ -370,3 +370,125 @@ test("a banner offers Allow for session only for an ask that allows it, and Deny
   assert.deepEqual(banner.bannerActions("nonsense", {}), [], "a kind with no entry offers nothing");
   assert.deepEqual(banner.bannerActions("constructor", {}), [], "an inherited name is no kind");
 });
+
+// --- one offer rule: a session grant is offered, stored and honoured only
+// for an ask it can answer ---------------------------------------------------
+
+var VARIABLE_COMMAND = { command: "A=1 B=2 C=3 cd /work/x; git rev-parse HEAD" };
+
+// One row per hint, plus the control. offered: the ask offers Allow for session
+// and a grant answers the next ask; refused: the server refuses allow_always
+// (the ratified suppress rule, unchanged).
+var OFFER_ROWS = [
+  { name: "no hints (control)", hints: {}, offered: true, refused: false },
+  { name: "matchedAskRule", hints: { matchedAskRule: RULE }, offered: false, refused: false },
+  { name: "defaultToNo", hints: { defaultToNo: true }, offered: false, refused: false },
+  { name: "suppressAlwaysAllowRule", hints: { suppressAlwaysAllowRule: true }, offered: false, refused: true },
+];
+
+function decisionsOf(choices) {
+  return choices.map(function (c) { return c.decision; });
+}
+
+test("the card offers Allow for session only for an ask a session grant can answer, in a live request and a snapshot", async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  await withServer(async function (server) {
+    for (var i = 0; i < OFFER_ROWS.length; i++) {
+      var row = OFFER_ROWS[i];
+      var opened = ask(server, row.hints, "Bash", VARIABLE_COMMAND);
+      var pending = promptsFor(server.sm).pendingMessages(server.session).filter(function (m) { return m.requestId === opened.id; })[0];
+      env.tools.applyPromptMessage(pending);
+      var card = dom.cardFor(env, opened.id);
+      assert.equal(!!card.querySelector(".perm-always"), row.offered, row.name + ": Allow for session offered");
+      assert.ok(card.querySelector(".perm-allow"), row.name + ": Allow once stays");
+      assert.ok(card.querySelector(".perm-deny"), row.name + ": Deny stays");
+    }
+  });
+});
+
+test("the banner offers Allow for session only for an ask a session grant can answer", async function (t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  dom.setupGlobals();
+  var banner = await import(dom.moduleUrl("prompt-banner.js"));
+  await withServer(async function (server) {
+    for (var i = 0; i < OFFER_ROWS.length; i++) {
+      var row = OFFER_ROWS[i];
+      var opened = ask(server, row.hints, "Bash", VARIABLE_COMMAND);
+      var state = null;
+      server.notifications.sendConnectionState({}, function (ws, msg) { state = msg; });
+      var notif = state.notifications.filter(function (n) { return n.type === "permission_request" && n.meta.requestId === opened.id; })[0];
+      var offered = decisionsOf(banner.bannerActions("permission", notif.meta)).indexOf("allow_always") !== -1;
+      assert.equal(offered, row.offered, row.name + ": the banner's Allow for session");
+    }
+  });
+});
+
+test("a stored grant never answers an ask it cannot answer, and an ask with no hints still takes one", async function () {
+  await withServer(async function (server) {
+    var prompts = promptsFor(server.sm);
+    prompts.grant(server.session, "Bash", VARIABLE_COMMAND);
+    for (var i = 0; i < OFFER_ROWS.length; i++) {
+      var row = OFFER_ROWS[i];
+      var again = ask(server, row.hints, "Bash", { command: "A=9 B=8 C=7 cd /work/y; git rev-parse HEAD" });
+      assert.equal(again.opened.length, row.offered ? 0 : 1, row.name + ": " + (row.offered ? "answered by the grant" : "asks the operator"));
+    }
+  });
+});
+
+// allow_always to an ask the grant cannot answer: the call is allowed once, no
+// grant is stored, nothing is refused and the event says so. The suppress row is
+// the ratified refusal and stays as it was.
+test("allow_always on an ask a grant cannot answer allows once on every path, stores nothing and records it", async function () {
+  var answerPrompt = require("../lib/prompt-answer").answerPrompt;
+  var paths = WS_SHAPES.concat([{ name: "answer-prompt verb", verb: true }]);
+  await withServer(async function (server) {
+    var c = client();
+    server.connect(c.ws);
+    var rows = OFFER_ROWS.filter(function (r) { return !r.offered && !r.refused; });
+    for (var i = 0; i < rows.length; i++) {
+      for (var j = 0; j < paths.length; j++) {
+        var where = rows[i].name + " via " + paths[j].name;
+        var opened = ask(server, rows[i].hints, "Bash", VARIABLE_COMMAND);
+        c.inbox.length = 0;
+        if (paths[j].verb) {
+          var result = answerPrompt({ sm: server.sm, session: server.session, requestId: opened.id, decision: "allow_always", source: null });
+          assert.equal(result.result, "answered", where + ": the verb answers it");
+        } else {
+          server.handlers.handleSessionsMessage(c.ws, paths[j].build(opened.id));
+        }
+        var outcome = await opened.promise;
+        assert.equal(outcome.behavior, "allow", where + ": allowed once");
+        assert.deepEqual(Object.keys(server.session.allowedTools || {}), [], where + ": no grant stored");
+        assert.equal(c.inbox.filter(function (m) { return m.type === "prompt_pending" && m.requestId === opened.id; }).length, 0, where + ": nothing refused or re-offered");
+        var resolved = server.session.history.filter(function (m) { return m.type === "prompt_resolved" && m.requestId === opened.id; });
+        assert.equal(resolved.length, 1, where + ": one resolved event");
+        assert.equal(resolved[0].decision, "allow", where + ": recorded as an allow, not a session allow");
+        assert.equal(resolved[0].sessionGrantStored, false, where + ": records that no session grant was stored");
+        assert.equal(ask(server, rows[i].hints, "Bash", VARIABLE_COMMAND).opened.length, 1, where + ": the next ask of that shape asks again");      }
+    }
+  });
+});
+
+test("the Allow for session card of an ask with no hints says what the grant covers, for a tool and for a skill",async function (t) {
+  var env = await dom.setupToolsEnv(t);
+  await withServer(async function (server) {
+    var c = client();
+    server.connect(c.ws);
+    var bash = ask(server, {}, "Bash", VARIABLE_COMMAND);
+    var skill = ask(server, {}, "Skill", { skill: "release-notes" });
+    [bash, skill].forEach(function (opened) {
+      var pending = promptsFor(server.sm).pendingMessages(server.session).filter(function (m) { return m.requestId === opened.id; })[0];
+      env.tools.applyPromptMessage(pending);
+    });
+    var bashCard = dom.cardFor(env, bash.id).textContent;
+    var skillCard = dom.cardFor(env, skill.id).textContent;
+    assert.match(bashCard, /Every Bash call/, "a whole-tool ask says every call of the tool");
+    assert.match(skillCard, /Skill release-notes/, "a Skill ask names the one skill");
+
+    server.handlers.handleSessionsMessage(c.ws, { type: "prompt_response", requestId: bash.id, kind: "permission", decision: "allow_always" });
+    await bash.promise;
+    var resolved = server.session.history.filter(function (m) { return m.type === "prompt_resolved" && m.requestId === bash.id; })[0];
+    assert.equal(resolved.decision, "allow_always");
+    assert.equal(resolved.sessionGrantStored, undefined, "a stored grant needs no extra record");
+  });
+});
