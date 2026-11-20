@@ -504,7 +504,7 @@ test("automation entries are neither a session's calls nor in the unattributed l
 
 // --- The server's nudge wrapper: one nudge per turn, through outboundEntry.VERB ---
 
-test("the live view is nudged once for a scheduled firing, a loop turn, a send-input and an open-session, and not for a create", async function () {
+test("the live view is nudged once for a scheduled firing, a loop turn, a send-input and an open-session and a schedule-input create",async function () {
   var dir = fakes.tmpDir("automation-nudge-");
   try {
     var nudges = 0;
@@ -552,14 +552,14 @@ test("the live view is nudged once for a scheduled firing, a loop turn, a send-i
       assert.equal(nudges - before, 1, "one nudge for the loop turn");
     });
 
-    // A schedule-input create is not a message the view shows.
+    // A schedule-input create arms a schedule the view lists as pending: one nudge.
     var before = nudges;
     var cw = createWorld();
     try {
       await handleScheduledInputCommand({ service: cw.service, getProject: function () { return null; }, ledger: announcing, now: clock },
         { cmd: "schedule_input_create", projectSlug: "alpha", sessionId: "vendor-target", prompt: "ping", at: NOW + 10 * MIN });
     } finally { cw.cleanup(); }
-    assert.equal(nudges, before);
+    assert.equal(nudges - before, 1, "one nudge for the create");
   } finally { fakes.removeDir(dir); }
 });
 

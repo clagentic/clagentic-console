@@ -361,11 +361,26 @@ test("automation files are 0600 and their directories 0700", function () {
 });
 
 test("a target project or initiator cannot name a path in the automation area", function () {
-  var dir = tmp();
-  var ledger = ledgerIn(dir);
-  assert.equal(ledger.record(automation({ target: { project: "../../etc" }, initiator: "a/b" })), true);
-  var root = path.join(dir, "outbound");
-  filesBelow(root).forEach(function (f) { assert.equal(path.relative(root, f).indexOf(".."), -1); });
+  var outer = tmp();
+  var base = path.join(outer, "base");
+  fs.mkdirSync(base);
+  var ledger = ledgerIn(base);
+  var hostile = "../../etc";
+  assert.equal(ledger.record(automation({
+    target: { project: hostile, sessionId: hostile },
+    initiator: hostile,
+    sender: { kind: "automation", attribution: "console", name: hostile },
+  })), true);
+  var root = path.join(base, "outbound");
+  var written = filesBelow(root);
+  assert.ok(written.length > 0, "the entry was written somewhere");
+  written.forEach(function (f) {
+    var rel = path.relative(root, path.resolve(f));
+    assert.ok(rel !== "" && rel.split(path.sep)[0] !== ".." && !path.isAbsolute(rel), "inside the ledger root: " + f);
+  });
+  // An unsanitised name would land beside or above the root; the parents hold only what they held.
+  assert.deepEqual(fs.readdirSync(base), ["outbound"]);
+  assert.deepEqual(fs.readdirSync(outer), ["base"]);
 });
 
 test("automation entries are pruned by the configured retention and not written at all at 0", function () {
