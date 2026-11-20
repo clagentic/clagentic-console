@@ -223,6 +223,18 @@ var ROWS = [
     },
   },
   {
+    name: "a username that is also an Object.prototype property is locked out like any other",
+    run: async function (c) {
+      var odd = c.env.users.createUser({ username: "constructor", pin: PIN }).user;
+      await c.lockOut("constructor");
+      var refused = await c.login("constructor", PIN);
+      assert.equal(refused.status, 429);
+      assert.equal(refused.json.retryAfter, -1);
+      assert.equal((await c.unlock(odd.id, c.rootCookie)).status, 200);
+      assert.equal((await c.login("constructor", PIN)).status, 200);
+    },
+  },
+  {
     name: "the admin user list carries locked per user, and a non-admin list carries no locked field",
     run: async function (c) {
       await c.lockOut("alice");
