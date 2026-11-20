@@ -74,10 +74,15 @@ function hintsFor(p) {
 
 var HINT_KEYS = ["suppressAlwaysAllowRule", "defaultToNo", "matchedAskRule"];
 
+// The offer rule: a session grant can answer an ask carrying none of the hints.
+function grantCanAnswer(req) {
+  return !req.suppressAlwaysAllowRule && !req.defaultToNo && !req.matchedAskRule;
+}
+
 // What the permission card shows for an ask with these hints.
 function assertHintsShown(card, req) {
   var session = card.querySelector(".permission-allow-session, .perm-always");
-  assert.equal(!!session, !req.suppressAlwaysAllowRule, "Allow for session is offered exactly when the ask may offer it, for every tool");
+  assert.equal(!!session, grantCanAnswer(req), "Allow for session is offered exactly when a session grant can answer the ask, for every tool");
   var buttons = card.querySelectorAll(".permission-actions button");
   var approvals = buttons.filter(function (b) { return /permission-allow|perm-allow|perm-always/.test(b.className); });
   approvals.forEach(function (b) { assert.equal(b.dataset.defaultChoice, undefined, "no approve choice is the default"); });
@@ -242,8 +247,8 @@ var SPECS = {
         { selector: ".permission-deny, .perm-deny", label: "Denied", allows: false },
       ];
       assertHintsShown(card, req);
-      // A suppressed ask offers no Allow for session.
-      if (req.suppressAlwaysAllowRule) choices.splice(1, 1);
+      // An ask no grant can answer offers no Allow for session.
+      if (!grantCanAnswer(req)) choices.splice(1, 1);
       var choice = p.one(choices);
       click(card, choice.selector);
       return choice;
@@ -664,7 +669,7 @@ test("permission answers that bypass the card are held to the ask's hints", asyn
       assert.equal(Object.keys(server.session.allowedTools || {}).length, 0, where + ": Allow once grants nothing");
     } else {
       assert.equal(outcome.status, "resolved", where);
-      assert.equal(grants, decision === "allow_always" ? 1 : 0, where + ": a grant is written exactly for an accepted Allow for session");
+      assert.equal(grants, decision === "allow_always" && grantCanAnswer(req) ? 1 : 0, where + ": a grant is written exactly for an Allow for session a grant can answer");
       var expected = decision === "allow" || decision === "allow_always" ? "allow" : "deny";
       assert.equal((await prompt.answer).behavior, expected, where + ": an unknown answer fails closed");
     }

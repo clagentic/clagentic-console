@@ -108,6 +108,43 @@ test("a persisted Bash=<line> key alone covers nothing after load", async functi
   }
 });
 
+// A variable-carrying compound command, as a background agent raises it: Allow
+// for session on the first ask answers every later ask of the same shape, from
+// the same background agent or from the main session, whatever the variable
+// values are.
+var VARIABLE_COMMAND = function (n) { return "A=" + n + " B=" + n + " C=" + n + " cd /work/x; git rev-parse HEAD"; };
+var ORIGINS = [
+  { name: "from the same background agent", asker: "agent", later: "agent" },
+  { name: "from the main session", asker: "agent", later: "main" },
+  { name: "from the main session that raised the first", asker: "main", later: "main" },
+];
+
+ORIGINS.forEach(function (row) {
+  test("Allow for session on a variable-carrying Bash ask (no hints) answers the next ask of that shape " + row.name, async function () {
+    await withServer(async function (server) {
+      var c = client();
+      server.connect(c.ws);
+      server.sm.prompts.taskStarted(server.session, "task-ac1");
+      server.sm.prompts.noteSubagentTool(server.session, "tu-agent-1", "task-ac1");
+      server.sm.prompts.noteSubagentTool(server.session, "tu-agent-2", "task-ac1");
+      var fromAgent = function (n) { return server.ask("Bash", { command: VARIABLE_COMMAND(n) }, { toolUseID: "tu-agent-" + n }); };
+      var fromMain = function (n) { return server.ask("Bash", { command: VARIABLE_COMMAND(n) }); };
+
+      var first = row.asker === "agent" ? fromAgent(1) : fromMain(1);
+      assert.equal(first.opened.length, 1, "the first ask opens a card");
+      var card = c.inbox.filter(function (m) { return m.type === "prompt_request" && m.requestId === first.id; })[0];
+      assert.equal(card.noSessionGrant, undefined, "an ask with no hints offers Allow for session");
+      answer(server, c, first.id, "allow_always");
+      assert.equal((await first.promise).behavior, "allow");
+      assert.deepEqual(grantKeys(server), ["Bash"], "the stored key is the whole-tool key");
+
+      var second = row.later === "agent" ? fromAgent(2) : fromMain(2);
+      assert.equal(second.opened.length, 0, "the second ask opens no prompt");
+      assert.equal((await second.promise).behavior, "allow", "and resolves allow");
+    });
+  });
+});
+
 // The Codex file-change approval reaches canUseTool as the Edit tool with a
 // change summary and no path.
 var FILE_TOOL_CALLS = [

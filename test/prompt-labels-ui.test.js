@@ -115,7 +115,7 @@ test("a banner offers Allow for session for any permission ask except a suppress
   }
   assert.deepEqual(decisions({ toolName: "Write" }), ["allow", "allow_always", "deny"]);
   assert.deepEqual(decisions({ toolName: "Bash" }), ["allow", "allow_always", "deny"]);
-  assert.deepEqual(decisions({ suppressAlwaysAllowRule: true }), ["allow", "deny"]);
+  assert.deepEqual(decisions({ suppressAlwaysAllowRule: true, noSessionGrant: true }), ["allow", "deny"]);
 });
 
 test("the grants list draws one row per grant with a Revoke, marks whole-tool grants, and sends the revoke", async function (t) {
