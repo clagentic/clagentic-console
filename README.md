@@ -171,7 +171,7 @@ These are implementation-level properties, not configuration options — they ap
 
 - **Append-only audit log.** Privileged actions — user creation, lockouts, token revocation, multi-user enable/disable — are written as newline-delimited JSON to `~/.clagentic/console/audit.log` (mode 0o600, opened with `O_APPEND`).
 
-- **Progressive lockout.** Failed login attempts trigger escalating per-username backoff: 1s, 5s, 30s, 5 min. Reaching the threshold locks the username with no timeout; the lockout is held in memory, so it ends when the daemon restarts, and no route unlocks it earlier. Per-IP rate limiting runs in parallel.
+- **Progressive lockout.** Failed login attempts trigger escalating per-username backoff: 1s, 5s, 30s, 5 min. Reaching the threshold locks the username (matched without regard to letter case) with no timeout. An admin unlocks it from the admin user list, which is recorded in the audit log; the admin recovery reset also clears the admin's lockout, and the lockout, held in memory, ends when the daemon restarts. Per-IP rate limiting runs in parallel, and wrong setup or invite codes count toward it.
 
 - **OS-level isolation (Linux, multi-user mode).** Each app user maps to a real system account. File ACLs are set via `setfacl`; processes spawn under the correct UID/GID.
 
