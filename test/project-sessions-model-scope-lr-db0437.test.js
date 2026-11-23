@@ -435,6 +435,7 @@ function twoProjects() {
     pair[0]._savedDefaultThinking = d.thinking;
     pair[0]._savedDefaultThinkingBudget = d.thinkingBudget;
     pair[0]._savedDefaultMode = "default";
+    pair[0].currentPermissionMode = "default";
   });
   handlers.set("a", attachSessions(ctxA));
   handlers.set("b", attachSessions(ctxB));
@@ -509,10 +510,26 @@ function twoProjects() {
 // "b", unless "b" has its own, and "a" keeps its own over the server's. Each row
 // runs its steps, then makes a new session in "b" and reads what "a" would start
 // new sessions in (its stub session manager does not seed a mode itself).
+// Step shapes: { on: "a"|"b", msg } sends a message to that project; { stored }
+// writes a raw value into the server store (as a hand edit would) and reloads
+// "b". Optional row fields: running (a session "b" holds, with its own mode, that
+// must keep it), told (what "b"'s clients must be sent), warn (a start warning
+// that must be logged for "b").
 [
-  { name: "a project with no mode default of its own starts new sessions in the new server mode",
+  { name: "a project with no mode default of its own starts new sessions in the new server mode, and its clients are told",
     steps: [{ on: "a", msg: { type: "set_server_default_mode", mode: "plan" } }],
-    expectB: "plan", expectA: "plan" },
+    expectB: "plan", expectA: "plan", told: { server: "plan", project: null } },
+  { name: "a running session in another project keeps its mode (no applyToRunning)",
+    running: "acceptEdits",
+    steps: [{ on: "a", msg: { type: "set_server_default_mode", mode: "plan" } }],
+    expectB: "plan", expectA: "plan", expectRunning: "acceptEdits" },
+  { name: "a running session in another project keeps its mode (applyToRunning in the changing project)",
+    running: "acceptEdits",
+    steps: [{ on: "a", msg: { type: "set_server_default_mode", mode: "plan", applyToRunning: true } }],
+    expectB: "plan", expectA: "plan", expectRunning: "acceptEdits" },
+  { name: "a saved server mode that fails the check loads as default, with the start warning",
+    steps: [{ stored: "bypassPermissions" }],
+    expectB: "default", expectA: "default", warn: /saved default permission mode .*refused in b/ },
   { name: "a project with its own mode default keeps it when another project changes the server mode",
     steps: [{ on: "b", msg: { type: "set_project_default_mode", mode: "acceptEdits" } },
       { on: "a", msg: { type: "set_server_default_mode", mode: "plan" } }],
@@ -527,53 +544,40 @@ function twoProjects() {
 ].forEach(function (row) {
   test("mode default: " + row.name, function () {
     var w = twoProjects();
-    row.steps.forEach(function (step) {
-      (step.on === "a" ? w.handlersA : w.handlersB).handleSessionsMessage(makeWs(), step.msg);
-    });
+    var running = row.running ? w.smB.createSession({ permissionMode: row.running }) : null;
+    var warned = [];
+    var origWarn = console.warn;
+    console.warn = function (line) { warned.push(String(line)); };
+    try {
+      row.steps.forEach(function (step) {
+        if ("stored" in step) {
+          w.a.opts.onSetServerDefaultMode(step.stored);
+          w.handlersB.refreshServerDefaults();
+        } else {
+          (step.on === "a" ? w.handlersA : w.handlersB).handleSessionsMessage(makeWs(), step.msg);
+        }
+      });
+    } finally {
+      console.warn = origWarn;
+    }
     w.handlersB.handleSessionsMessage(w.viewerB, { type: "new_session" });
     var created = Array.from(w.smB.sessions.values()).pop();
     assert.strictEqual(created.permissionMode, row.expectB, "a new session in b");
     assert.strictEqual(w.smB._savedDefaultMode, row.expectB, "b's saved default mode");
+    assert.strictEqual(w.smB.currentPermissionMode, row.expectB, "b's fallback mode follows it");
     assert.strictEqual(w.a.sm._savedDefaultMode, row.expectA, "a's saved default mode");
     assert.strictEqual(w.a.sm.currentPermissionMode, row.expectA, "a's fallback mode follows it");
+    if (running) assert.strictEqual(running.permissionMode, row.expectRunning, "the running session keeps its mode");
+    if (row.warn) assert.ok(warned.some(function (l) { return row.warn.test(l); }), "the refusal is logged as at project start");
+    if (row.told) {
+      var all = w.b._sent.concat(w.b._sentTo.map(function (pair) { return pair[1]; }));
+      var told = all.filter(function (m) { return m.type === "saved_defaults"; });
+      assert.strictEqual(told.length, 1, "b's clients are told once");
+      assert.strictEqual(told[0].server.mode, row.told.server);
+      assert.strictEqual(told[0].project.mode, row.told.project, "the project level is as stored");
+      assert.deepStrictEqual(all.filter(function (m) { return m.type === "config_state"; }), [], "no session's config moves");
+    }
   });
-});
-
-[false, true].forEach(function (applyToRunning) {
-  test("mode default: a server mode change in one project leaves another's running session alone (applyToRunning " + applyToRunning + ")", function () {
-    var w = twoProjects();
-    var running = w.smB.createSession({ permissionMode: "acceptEdits" });
-    w.handlersA.handleSessionsMessage(makeWs(), { type: "set_server_default_mode", mode: "plan", applyToRunning: applyToRunning });
-    assert.strictEqual(running.permissionMode, "acceptEdits", "the running session keeps its mode");
-    assert.strictEqual(w.smB._savedDefaultMode, "plan", "its project's new sessions take the new default");
-  });
-});
-
-test("mode default: the other project's clients get the mode in saved_defaults and no config_state", function () {
-  var w = twoProjects();
-  w.handlersA.handleSessionsMessage(makeWs(), { type: "set_server_default_mode", mode: "plan" });
-  var all = w.b._sent.concat(w.b._sentTo.map(function (pair) { return pair[1]; }));
-  var told = all.filter(function (m) { return m.type === "saved_defaults"; });
-  assert.strictEqual(told.length, 1);
-  assert.strictEqual(told[0].server.mode, "plan");
-  assert.strictEqual(told[0].project.mode, null, "the project level is as stored: nothing");
-  assert.deepStrictEqual(all.filter(function (m) { return m.type === "config_state"; }), []);
-});
-
-test("mode default: a saved server mode that fails the check loads as default, with the start warning", function () {
-  var w = twoProjects();
-  w.a.opts.onSetServerDefaultMode("bypassPermissions");
-  var warned = [];
-  var origWarn = console.warn;
-  console.warn = function (line) { warned.push(String(line)); };
-  try {
-    w.handlersB.refreshServerDefaults();
-  } finally {
-    console.warn = origWarn;
-  }
-  assert.strictEqual(w.smB._savedDefaultMode, "default");
-  assert.strictEqual(w.smB.currentPermissionMode, "default");
-  assert.ok(warned.some(function (l) { return /saved default permission mode .*refused in b/.test(l); }), "the refusal is logged as at project start");
 });
 
 // A default change is not a session's change: no client's model chip moves.
