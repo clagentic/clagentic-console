@@ -475,6 +475,26 @@ test("a ?notify=<type> cold start opens that place once connected, and survives 
   assert.deepEqual(refused.replaced, ["/"]);
 });
 
+test("a system tap before its place registers is held and opens once on registration; an unregistered type routes nothing (AC1-AC3)", async function (t) {
+  var storage = fakeSessionStorage(false);
+  var c = await freshClient(t, "", storage);
+  c.mod.initNotifyClient();
+  var system = { slug: null, sessionId: null };
+  c.mod.routeTo(system, "update_available");
+  assert.equal(storage.backing["pending-notif-place"], "update_available", "held in the pending slot");
+  c.mod.registerPlace("other_place", function () { assert.fail("an unrelated place must not open"); });
+  var opened = [];
+  c.mod.registerPlace("update_available", function (target) { opened.push(target); });
+  assert.equal(opened.length, 1, "opens once on registration");
+  assert.equal(opened[0].slug, null);
+  assert.deepEqual(storage.backing, {}, "every pending copy is cleared");
+  c.mod.registerPlace("update_available", function (target) { opened.push(target); });
+  assert.equal(c.mod.takePendingPlace(), null, "nothing left to take");
+  assert.equal(opened.length, 1, "a second registration does not open it again");
+  c.mod.routeTo(system, "no_such_type");
+  c.mod.registerPlace("never_seen", function () { assert.fail("held type must not open a different place"); });
+});
+
 // The offer's phone push closes before the install restart, not after it.
 test("installing the offer sends the push close before the restart begins, and the flush covers it (AC4)", async function () {
   var { createBuildUpdateRestart } = require("../lib/build-update-restart");
