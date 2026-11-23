@@ -124,9 +124,10 @@ test("an approval policy is sent as a value the running app-server accepts", fun
 
 test("the console's approval default and the saved setting go through the same normalization", function () {
   assert.equal(CODEX_DEFAULTS.approval, "on-request");
-  assert.equal(getCodexConfig(null).approval, "on-request");
-  assert.equal(getCodexConfig({ codexApproval: "on-failure" }).approval, "on-request", "a saved on-failure is read as on-request");
-  assert.equal(getCodexConfig({ codexApproval: "never" }).approval, "never");
+  assert.equal(getCodexConfig(null, null).approval, "on-request");
+  assert.equal(getCodexConfig({ codexApproval: "on-failure" }, null).approval, "on-request", "a saved on-failure is read as on-request");
+  assert.equal(getCodexConfig({ codexApproval: "never" }, null).approval, "never");
+  assert.equal(getCodexConfig(null, { _savedDefaultCodexApproval: "on-failure" }).approval, "on-request", "a saved default goes through the same normalization");
 });
 
 test("session config carries the plan tool only where the version has it, and never a project trust", function () {

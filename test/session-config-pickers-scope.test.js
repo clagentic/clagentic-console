@@ -109,6 +109,76 @@ SETTINGS_SURFACES.forEach(function (row) {
   });
 });
 
+// The Codex approval, sandbox and web search pickers: each Settings page saves a
+// default (never the session's setting), states its scope, and shows the saved
+// default, with the project falling back to the server's.
+var CODEX_SAVED = {
+  server: { codexApproval: "never", codexSandbox: "read-only", codexWebSearch: "cached" },
+  project: { codexApproval: null, codexSandbox: "danger-full-access", codexWebSearch: null },
+};
+[
+  {
+    prefix: "ss", level: "server", label: "Server default", saved: CODEX_SAVED,
+    msgTypes: { approval: "set_server_default_codex_approval", sandbox: "set_server_default_codex_sandbox", websearch: "set_server_default_codex_websearch" },
+    shown: { approval: "Auto", sandbox: "Read Only", websearch: "Cached" },
+  },
+  {
+    prefix: "ps", level: "project", label: "Default for new sessions in this project", saved: CODEX_SAVED,
+    msgTypes: { approval: "set_project_default_codex_approval", sandbox: "set_project_default_codex_sandbox", websearch: "set_project_default_codex_websearch" },
+    shown: { approval: "Auto", sandbox: "Full Access", websearch: "Cached" },
+  },
+  {
+    prefix: "ss", level: "server", label: "Server default", saved: { server: {}, project: {} },
+    msgTypes: { approval: "set_server_default_codex_approval", sandbox: "set_server_default_codex_sandbox", websearch: "set_server_default_codex_websearch" },
+    shown: { approval: "Ask", sandbox: "Workspace", websearch: "Live" },
+  },
+].forEach(function (row) {
+  test(row.prefix + " settings: the Codex pickers show the saved default, state the scope and send the default's message", function () {
+    var sent = [];
+    defaults.renderCodexBars(row.prefix, {
+      sendMsg: function (type, data) { sent.push([type, data]); },
+      scopeLabel: row.label,
+      codexValues: defaults.codexDefaultPickerValues(row.saved, row.level),
+      codexMsgTypes: row.msgTypes,
+    });
+    Object.keys(row.shown).forEach(function (id) {
+      var bar = byId[row.prefix + "-codex-" + id + "-bar"];
+      assert.deepEqual(bar.children.filter(function (c) { return /active/.test(c.className); }).map(function (c) { return c.textContent; }), [row.shown[id]], id + " shows the saved default");
+      assert.equal(byId[row.prefix + "-codex-" + id + "-scope"].textContent, row.label);
+      bar.children[0].dispatch("click");
+    });
+    assert.deepEqual(sent.map(function (pair) { return pair[0]; }), [row.msgTypes.approval, row.msgTypes.sandbox, row.msgTypes.websearch],
+      "each control sends its default's message, not set_codex_*");
+    assert.deepEqual(sent.map(function (pair) { return Object.keys(pair[1])[0]; }), ["approval", "sandbox", "webSearch"]);
+  });
+});
+
+// The session popover shows the viewed session's own Codex values and sends the
+// session's messages, stating that the scope is this session.
+var CODEX_SESSION_ROWS = [
+  { id: "approval", message: "set_codex_approval", key: "approval", storeKey: "codexApproval", value: "never", pick: 1, picked: "on-request" },
+  { id: "sandbox", message: "set_codex_sandbox", key: "sandbox", storeKey: "codexSandbox", value: "read-only", pick: 2, picked: "danger-full-access" },
+  { id: "websearch", message: "set_codex_websearch", key: "webSearch", storeKey: "codexWebSearch", value: "cached", pick: 0, picked: "disabled" },
+];
+CODEX_SESSION_ROWS.forEach(function (row) {
+  test("the session popover " + row.id + " picker shows the viewed session's value and sends " + row.message, function () {
+    var snap = { currentModel: "gpt-5.4", currentModels: [], currentEffort: "medium", currentThinking: "adaptive", currentThinkingBudget: 10000, currentBetas: [],
+      vendorCapabilities: { executionPolicy: true }, codexApproval: "on-request", codexSandbox: "workspace-write", codexWebSearch: "live" };
+    snap[row.storeKey] = row.value;
+    storeMod.createStore(snap);
+    var sent = [];
+    wsRef.setWs({ readyState: 1, send: function (data) { sent.push(JSON.parse(data)); } });
+    appPanels.initPanels();
+    appPanels.updateConfigChip();
+    var bar = byId["config-" + row.id + "-bar"];
+    assert.equal(byId["config-" + row.id + "-scope"].textContent, "This session only");
+    assert.equal(bar.children.filter(function (c) { return c.classList.contains("active"); }).map(function (c) { return c.dataset.val; })[0], row.value);
+    bar.children[row.pick].dispatch("click");
+    assert.deepEqual(sent, [Object.assign({ type: row.message }, { [row.key]: row.picked })]);
+    wsRef.setWs(null);
+  });
+});
+
 test("a Thinking picker given no message type keeps sending the session's (the loop pickers intercept it)", function () {
   var sent = [];
   defaults.renderThinkingBar("rp", { currentThinking: "adaptive", sendMsg: function (type) { sent.push(type); } });

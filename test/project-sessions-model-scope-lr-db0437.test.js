@@ -194,11 +194,21 @@ var DEFAULT_SETTER_ROWS = [
   { type: "set_server_default_betas", msg: { betas: ["b-default"] }, optName: "onSetServerDefaultBetas", saved: { _savedDefaultBetas: ["b-default"] } },
   { type: "set_project_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetProjectDefaultThinking", saved: { _savedDefaultThinking: "budget", _savedDefaultThinkingBudget: 4096 } },
   { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, optName: "onSetServerDefaultThinking", saved: { _savedDefaultThinking: "budget", _savedDefaultThinkingBudget: 4096 } },
+  // The Codex defaults are saved for new sessions and tell the viewing client
+  // nothing about its session (codex: no config_state, no codex_config).
+  { type: "set_project_default_codex_approval", msg: { approval: "never" }, optName: "onSetProjectDefaultCodex", saved: { _savedDefaultCodexApproval: "never" }, codex: true },
+  { type: "set_project_default_codex_sandbox", msg: { sandbox: "danger-full-access" }, optName: "onSetProjectDefaultCodex", saved: { _savedDefaultCodexSandbox: "danger-full-access" }, codex: true },
+  { type: "set_project_default_codex_websearch", msg: { webSearch: "disabled" }, optName: "onSetProjectDefaultCodex", saved: { _savedDefaultCodexWebSearch: "disabled" }, codex: true },
+  { type: "set_server_default_codex_approval", msg: { approval: "never" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexApproval: "never" }, codex: true },
+  { type: "set_server_default_codex_sandbox", msg: { sandbox: "danger-full-access" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexSandbox: "danger-full-access" }, codex: true },
+  { type: "set_server_default_codex_websearch", msg: { webSearch: "disabled" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexWebSearch: "disabled" }, codex: true },
 ];
+
+var OWN_CODEX = { codexApproval: "on-request", codexSandbox: "read-only", codexWebSearch: "live" };
 
 DEFAULT_SETTER_ROWS.forEach(function (row) {
   test(row.type + " saves the default and moves no running session", function () {
-    var focused = Object.assign({ localId: 1 }, OWN, { betas: OWN.betas.slice() });
+    var focused = Object.assign({ localId: 1 }, OWN, OWN_CODEX, { betas: OWN.betas.slice() });
     var viewer = makeWs();
     var ctx = makeCtx({ getSessionForWs: function () { return focused; }, clients: new Set([viewer]) });
     var stored = [];
@@ -212,6 +222,14 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
       assert.deepStrictEqual(ctx.sm[field], row.saved[field], field + " holds the new default");
     });
     assert.strictEqual(stored.length, 1, "the default is persisted through the store callback");
+    var kept = { codexApproval: focused.codexApproval, codexSandbox: focused.codexSandbox, codexWebSearch: focused.codexWebSearch };
+    assert.deepStrictEqual(kept, OWN_CODEX, "the running session keeps its own Codex values");
+    if (row.codex) {
+      var everything = ctx._sent.map(function (m) { return m.type; });
+      assert.ok(everything.indexOf("saved_defaults") !== -1, "the Settings pickers are told through saved_defaults");
+      assert.deepStrictEqual(everything.filter(function (t) { return t === "config_state" || t === "codex_config"; }), [], "no session's config is pushed");
+      return;
+    }
     var told = ctx._sentTo.map(function (pair) { return pair[1]; }).filter(function (m) { return m.type === "config_state"; });
     assert.strictEqual(told.length, 1, "the viewing client is told once");
     assert.strictEqual(told[0].effort, OWN.effort, "with the session's own effort, not the default");
@@ -229,22 +247,40 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
   { type: "set_effort", msg: { effort: "high" }, field: "effort", expect: "high", told: 0 },
   { type: "set_betas", msg: { betas: ["context-beta"] }, field: "betas", expect: ["context-beta"], told: 1 },
   { type: "set_thinking", msg: { thinking: "budget", budgetTokens: 8192 }, field: "thinking", expect: "budget", told: 1, budget: 8192 },
+  // The Codex picks are saved with the session (codex: the one send is a
+  // codex_config carrying the pick) and written to no other session.
+  { type: "set_codex_approval", msg: { approval: "never" }, field: "codexApproval", expect: "never", told: 1, codex: { approval: "never", sandbox: "workspace-write", webSearch: "live" } },
+  { type: "set_codex_sandbox", msg: { sandbox: "danger-full-access" }, field: "codexSandbox", expect: "danger-full-access", told: 1, codex: { approval: "on-request", sandbox: "danger-full-access", webSearch: "live" } },
+  { type: "set_codex_websearch", msg: { webSearch: "disabled" }, field: "codexWebSearch", expect: "disabled", told: 1, codex: { approval: "on-request", sandbox: "workspace-write", webSearch: "disabled" } },
 ].forEach(function (row) {
   test(row.type + " writes the viewed session only", function () {
     var viewed = { localId: 1 };
-    var other = { localId: 2, effort: "low", betas: [], thinking: "adaptive" };
+    var other = { localId: 2, effort: "low", betas: [], thinking: "adaptive", codexApproval: "untrusted", codexSandbox: "read-only", codexWebSearch: "cached" };
     var told = [];
+    var savedSessions = [];
     var ctx = makeCtx({
       getSessionForWs: function () { return viewed; },
       sdk: { setEffort: function (session, effort) { session.effort = effort; return Promise.resolve({ ok: true }); } },
       sendToSession: function (id, msg) { told.push([id, msg]); },
     });
+    ctx.sm.saveSessionFile = function (s) { savedSessions.push(s.localId); };
     ctx.sm.sessions.set(1, viewed);
     ctx.sm.sessions.set(2, other);
 
     attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
 
     return Promise.resolve().then(function () {
+      assert.deepStrictEqual({ a: other.codexApproval, s: other.codexSandbox, w: other.codexWebSearch }, { a: "untrusted", s: "read-only", w: "cached" }, "another session's Codex values are untouched");
+      ["_savedDefaultCodexApproval", "_savedDefaultCodexSandbox", "_savedDefaultCodexWebSearch"].forEach(function (name) {
+        assert.strictEqual(ctx.sm[name], undefined, name + " (the saved default) is not written by a session pick");
+      });
+      if (row.codex) {
+        assert.deepStrictEqual(savedSessions, [1], "the pick is saved with the session (its meta line)");
+        var pushed = told[0][1];
+        assert.strictEqual(pushed.type, "codex_config");
+        assert.deepStrictEqual({ approval: pushed.approval, sandbox: pushed.sandbox, webSearch: pushed.webSearch }, row.codex);
+        assert.strictEqual(ctx._sent.filter(function (m) { return m.type === "codex_config"; }).length, 0, "no broadcast to every client");
+      }
       assert.deepStrictEqual(viewed[row.field], row.expect, "the viewed session holds the pick");
       assert.strictEqual(viewed.thinkingBudget, row.budget, "the viewed session holds the pick's token budget");
       assert.strictEqual(other.thinkingBudget, undefined, "another session's budget is untouched");
@@ -256,6 +292,47 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
       assert.strictEqual(told.length, row.told, "the expected number of sends to the session's clients");
       told.forEach(function (pair) { assert.strictEqual(pair[0], 1, "only the viewed session's clients are told"); });
     });
+  });
+});
+
+// With no session viewed a Codex pick has nothing to set: the requester alone is
+// sent the saved-default config, and nothing is saved.
+[
+  { type: "set_codex_approval", msg: { approval: "never" } },
+  { type: "set_codex_sandbox", msg: { sandbox: "read-only" } },
+  { type: "set_codex_websearch", msg: { webSearch: "cached" } },
+].forEach(function (row) {
+  test(row.type + " with no session viewed answers the requester with the saved defaults", function () {
+    var ctx = makeCtx();
+    ctx.sm._savedDefaultCodexSandbox = "danger-full-access";
+    var saved = 0;
+    ctx.sm.saveSessionFile = function () { saved++; };
+    attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+    var pushed = ctx._sentTo.map(function (pair) { return pair[1]; });
+    assert.strictEqual(pushed.length, 1);
+    assert.deepStrictEqual(pushed[0], { type: "codex_config", approval: "on-request", sandbox: "danger-full-access", webSearch: "live" });
+    assert.strictEqual(saved, 0);
+    assert.strictEqual(ctx._sent.length, 1, "and no other client is told");
+  });
+});
+
+// A client that switches to a session is sent that session's Codex values (its
+// own, else the saved defaults), never another session's.
+[
+  { name: "a session with its own values", id: 2, expect: { approval: "never", sandbox: "read-only", webSearch: "cached" } },
+  { name: "a session with none takes the saved defaults", id: 3, expect: { approval: "on-request", sandbox: "danger-full-access", webSearch: "live" } },
+].forEach(function (row) {
+  test("switch_session sends codex_config: " + row.name, function () {
+    var ctx = makeCtx();
+    ctx.sm._savedDefaultCodexSandbox = "danger-full-access";
+    ctx.sm.switchSession = function () {};
+    ctx.sm.sessions.set(1, { localId: 1, codexApproval: "untrusted", codexSandbox: "workspace-write", codexWebSearch: "disabled" });
+    ctx.sm.sessions.set(2, { localId: 2, codexApproval: "never", codexSandbox: "read-only", codexWebSearch: "cached" });
+    ctx.sm.sessions.set(3, { localId: 3 });
+    attachSessions(ctx).handleSessionsMessage(makeWs(), { type: "switch_session", id: row.id });
+    var pushed = ctx._sentTo.map(function (pair) { return pair[1]; }).filter(function (m) { return m.type === "codex_config"; });
+    assert.strictEqual(pushed.length, 1);
+    assert.deepStrictEqual({ approval: pushed[0].approval, sandbox: pushed[0].sandbox, webSearch: pushed[0].webSearch }, row.expect);
   });
 });
 
@@ -349,6 +426,16 @@ function defaultsStores(opts) {
   opts.onSetServerDefaultThinking = function (v, b) { server.thinking = v; server.thinkingBudget = b; };
   opts.onGetProjectDefaultThinking = function () { return { thinking: project.thinking || null, thinkingBudget: project.thinkingBudget || null }; };
   opts.onSetProjectDefaultThinking = function (slug, v, b) { project.thinking = v; project.thinkingBudget = b; };
+  // The Codex defaults of a project are kept per slug, as its mode default is.
+  var projectCodex = {};
+  var serverCodex = {};
+  opts.onGetServerDefaultCodex = function () { return Object.assign({ approval: null, sandbox: null, webSearch: null }, serverCodex); };
+  opts.onSetServerDefaultCodex = function (field, v) { if (v) serverCodex[field] = v; else delete serverCodex[field]; };
+  opts.onGetProjectDefaultCodex = function (slug) { return Object.assign({ approval: null, sandbox: null, webSearch: null }, projectCodex[slug]); };
+  opts.onSetProjectDefaultCodex = function (slug, field, v) {
+    projectCodex[slug] = projectCodex[slug] || {};
+    if (v) projectCodex[slug][field] = v; else delete projectCodex[slug][field];
+  };
   opts.onGetServerDefaultModel = function () { return { model: server.model || null }; };
   opts.onSetServerDefaultModel = function (v) { server.model = v; };
   opts.onGetProjectDefaultModel = function () { return { model: project.model || null }; };
@@ -371,6 +458,12 @@ var SAVED_DEFAULT_ROWS = [
   { type: "set_project_default_betas", msg: { betas: ["b-default"] }, level: "project", expect: { betas: ["b-default"] } },
   { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, level: "server", expect: { thinking: "budget", thinkingBudget: 4096 } },
   { type: "set_project_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, level: "project", expect: { thinking: "budget", thinkingBudget: 4096 } },
+  { type: "set_server_default_codex_approval", msg: { approval: "never" }, level: "server", expect: { codexApproval: "never" } },
+  { type: "set_project_default_codex_approval", msg: { approval: "never" }, level: "project", expect: { codexApproval: "never" } },
+  { type: "set_server_default_codex_sandbox", msg: { sandbox: "read-only" }, level: "server", expect: { codexSandbox: "read-only" } },
+  { type: "set_project_default_codex_sandbox", msg: { sandbox: "read-only" }, level: "project", expect: { codexSandbox: "read-only" } },
+  { type: "set_server_default_codex_websearch", msg: { webSearch: "cached" }, level: "server", expect: { codexWebSearch: "cached" } },
+  { type: "set_project_default_codex_websearch", msg: { webSearch: "cached" }, level: "project", expect: { codexWebSearch: "cached" } },
 ];
 
 SAVED_DEFAULT_ROWS.forEach(function (row) {
@@ -387,7 +480,7 @@ SAVED_DEFAULT_ROWS.forEach(function (row) {
     Object.keys(row.expect).forEach(function (field) {
       assert.deepStrictEqual(told[0][row.level][field], row.expect[field], field + " is the value just saved");
     });
-    assert.deepStrictEqual(told[0][other], { model: null, mode: null, effort: null, betas: [], thinking: null, thinkingBudget: null },
+    assert.deepStrictEqual(told[0][other], { codexApproval: null, codexSandbox: null, codexWebSearch: null, model: null, mode: null, effort: null, betas: [], thinking: null, thinkingBudget: null },
       "the other level is as stored: nothing");
     assert.notStrictEqual(told[0][row.level].effort, OWN.effort, "never the viewed session's effort");
   });
@@ -447,10 +540,25 @@ function twoProjects() {
   { type: "set_server_default_betas", msg: { betas: ["b-default"] }, seeded: { betas: ["b-default"] } },
   { type: "set_server_default_thinking", msg: { thinking: "budget", budgetTokens: 4096 }, seeded: { thinking: "budget", thinkingBudget: 4096 } },
   { type: "set_server_default_model", msg: { model: "opus" }, seeded: { model: "opus" } },
+  { type: "set_server_default_codex_approval", msg: { approval: "never" }, seeded: { codexApproval: "never" }, running: true },
+  { type: "set_server_default_codex_sandbox", msg: { sandbox: "danger-full-access" }, seeded: { codexSandbox: "danger-full-access" }, running: true },
+  { type: "set_server_default_codex_websearch", msg: { webSearch: "disabled" }, seeded: { codexWebSearch: "disabled" }, running: true },
 ].forEach(function (row) {
   test(row.type + " in one project: a new session in another starts from it and its clients are told", function () {
     var w = twoProjects();
+    // A running session in the other project (and one in the changing project)
+    // keeps its own Codex values (rows with `running`).
+    var runningB = row.running ? w.smB.createSession({}) : null;
+    var runningA = row.running ? w.a.sm.createSession({}) : null;
+    var ownCodex = { codexApproval: "on-request", codexSandbox: "read-only", codexWebSearch: "live" };
+    if (runningB) { Object.assign(runningB, ownCodex); Object.assign(runningA, ownCodex); }
     w.handlersA.handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+    if (runningB) {
+      [runningA, runningB].forEach(function (s) {
+        assert.deepStrictEqual({ codexApproval: s.codexApproval, codexSandbox: s.codexSandbox, codexWebSearch: s.codexWebSearch }, ownCodex,
+          "no running session's Codex values change");
+      });
+    }
 
     w.handlersB.handleSessionsMessage(w.viewerB, { type: "new_session" });
     var created = Array.from(w.smB.sessions.values()).pop();
@@ -490,6 +598,23 @@ function twoProjects() {
       { type: "set_project_default_thinking", thinking: null },
     ],
     field: "thinking", expect: "budget", project: "b",
+  },
+  {
+    name: "set_server_default_codex_sandbox in a project with its own Codex default: a new session gets the project's",
+    steps: [
+      { type: "set_project_default_codex_sandbox", sandbox: "read-only" },
+      { type: "set_server_default_codex_sandbox", sandbox: "danger-full-access" },
+    ],
+    field: "codexSandbox", expect: "read-only", project: "b",
+  },
+  {
+    name: "a cleared project Codex default: a new session takes the server's",
+    steps: [
+      { type: "set_server_default_codex_approval", approval: "never" },
+      { type: "set_project_default_codex_approval", approval: "untrusted" },
+      { type: "set_project_default_codex_approval", approval: "" },
+    ],
+    field: "codexApproval", expect: "never", project: "b",
   },
 ].forEach(function (row) {
   test(row.name, function () {

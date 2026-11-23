@@ -291,6 +291,62 @@ var B_CHANGES = [
   },
 ];
 
+// The Codex approval policy, sandbox and web search are a session's own too:
+// one row per setting, through the real handlers, session manager and bridge.
+// `option` is the adapterOptions.CODEX field the Codex adapter reads.
+var CODEX_ROWS = [
+  { type: "set_codex_approval", key: "approval", field: "codexApproval", option: "approvalPolicy", value: "never", fallback: "on-request" },
+  { type: "set_codex_sandbox", key: "sandbox", field: "codexSandbox", option: "sandboxMode", value: "danger-full-access", fallback: "workspace-write" },
+  { type: "set_codex_websearch", key: "webSearch", field: "codexWebSearch", option: "webSearchMode", value: "disabled", fallback: "live" },
+];
+
+function codexOptions(server, index) {
+  return server.queryOptions[index].adapterOptions.CODEX;
+}
+
+function codexConfigs(c) {
+  return c.inbox.filter(function (m) { return m.type === "codex_config"; });
+}
+
+CODEX_ROWS.forEach(function (row) {
+  test(row.type + ": the pick is in that session's query and its clients only, and no other session's", async function () {
+    await withTwoSessions(async function (w) {
+      await send(w.handlers, w.ca, Object.assign({ type: row.type }, { [row.key]: row.value }));
+      await w.server.bridge.startQuery(w.b, "go", null, null);
+      await w.server.bridge.startQuery(w.a, "go", null, null);
+      await world.flush();
+      assert.strictEqual(codexOptions(w.server, 0)[row.option], row.fallback, "the other session's query carries its own value");
+      assert.strictEqual(codexOptions(w.server, 1)[row.option], row.value, "the session that chose it carries the pick");
+      assert.ok(codexConfigs(w.ca).some(function (m) { return m[row.key] === row.value; }), "the session's viewer is told");
+      assert.deepStrictEqual(codexConfigs(w.cb), [], "the other session's viewer is not");
+      assert.strictEqual(w.server.sm.codexApproval, undefined, "no shared field holds it");
+      assert.strictEqual(w.server.sm[row.field], undefined);
+    });
+  });
+
+  test(row.type + ": the pick survives a daemon restart and reaches the next query", async function () {
+    var first = await world.createServer();
+    var home = first.home;
+    try {
+      var handlers = handlersFor(first);
+      var c = viewer(first, first.session);
+      await send(handlers, c, Object.assign({ type: row.type }, { [row.key]: row.value }));
+      var meta = JSON.parse(require("fs").readFileSync(path.join(first.sm.sessionsDir, first.session.cliSessionId + ".jsonl"), "utf8").split("\n")[0]);
+      assert.strictEqual(meta[row.field], row.value, "it is in the meta line");
+      var cliSessionId = first.session.cliSessionId;
+      first.shutdown();
+
+      var second = await world.createServer({ home: home, cliSessionId: cliSessionId });
+      assert.strictEqual(second.session[row.field], row.value, "it is read back at load");
+      await second.startQuery();
+      assert.strictEqual(codexOptions(second, 0)[row.option], row.value);
+      second.shutdown();
+    } finally {
+      world.removeHome(home);
+    }
+  });
+});
+
 B_CHANGES.forEach(function (row) {
   test("a client viewing one session is sent none of another session's values: " + row.name, async function () {
     await withTwoSessions(async function (w) {
