@@ -277,6 +277,70 @@ test("AC1: a pop-up the operator closed is not brought back by the refresh; clos
   assert.deepEqual(page.sent, [], "closing a pop-up declined nothing");
 });
 
+// A page after load has seen no withdrawal inside the grace window: the setup
+// withdrawal in adminPage is moved out of it, then the operator closes the
+// pop-up of the first offer with its real X.
+async function closedOfferPage(t) {
+  var w = daemonWorld();
+  var page = await adminPage(t);
+  var realNow = Date.now;
+  var skew = { ms: 0 };
+  t.mock.method(Date, "now", function () { return realNow() + skew.ms; });
+  skew.ms = 60000;
+  var panel = new dom.FakeElement("div");
+  var list = new dom.FakeElement("div");
+  var byId = { "overlay-stack": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-list": list, "diagnostics-panel-btn": new dom.FakeElement("button"), "diagnostics-panel-badge": new dom.FakeElement("span") };
+  global.document.getElementById = function (id) { return byId[id] || null; };
+  page.diagnostics.initDiagnostics();
+  w.poll(); w.poll();
+  page.deliver(w);
+  assert.equal(page.popups().length, 1);
+  page.popups()[0].querySelectorAll(".overlay-close")[0]._listeners.click[0]({});
+  t.mock.timers.tick(300);
+  assert.equal(page.popups().length, 0, "closed");
+  return { w: w, page: page, skew: skew, list: list };
+}
+
+test("AC1: with no recent withdrawal, a closed pop-up is not brought back by a same-key refresh, and the entry updates", async function (t) {
+  var c = await closedOfferPage(t);
+  var before = c.list.querySelectorAll(".diagnostics-item")[0].textContent;
+  var from = c.w.frames.length;
+  await c.w.settle();
+  c.page.deliver(c.w, from);
+  t.mock.timers.tick(300);
+  assert.ok(c.w.created().length >= 2, "the core sent the refreshed offer");
+  assert.equal(c.page.popups().length, 0, "no pop-up");
+  var items = c.list.querySelectorAll(".diagnostics-item");
+  assert.equal(items.length, 1, "the offer's entry is held");
+  assert.notEqual(items[0].textContent, before, "carrying the refreshed content");
+  assert.deepEqual(c.page.sent, [], "closing a pop-up declined nothing");
+});
+
+test("AC2: after the pop-up was closed, an offer for a different build pair pops up", async function (t) {
+  var c = await closedOfferPage(t);
+  var other = daemonWorld();
+  other.poll(); other.poll();
+  c.page.deliver(other);
+  t.mock.timers.tick(300);
+  assert.equal(c.page.popups().length, 1, "a new build pair pops up");
+});
+
+test("AC3: after the pop-up was closed, a withdrawn offer that returns after the grace period pops up", async function (t) {
+  var c = await closedOfferPage(t);
+  var env = { push: c.w.push, inApp: c.w.store, isMultiUser: MULTI, listAdmins: function () { return [ADMIN]; } };
+  var from = c.w.frames.length;
+  buildNotify.resolveBuildOffer(env);
+  c.page.deliver(c.w, from);
+  t.mock.timers.tick(300);
+  assert.equal(c.page.popups().length, 0, "withdrawn");
+  c.skew.ms += 60000;
+  from = c.w.frames.length;
+  buildNotify.showBuildOffer(env, composeNotice(c.w.verdict.current, LISTED));
+  c.page.deliver(c.w, from);
+  t.mock.timers.tick(300);
+  assert.equal(c.page.popups().length, 1, "the same pair, back after the grace period, pops up");
+});
+
 test("AC3: a clear-all with the pop-up up draws no banner and leaves the offer undeclined", async function (t) {
   var w = daemonWorld();
   var page = await adminPage(t);
