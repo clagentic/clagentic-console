@@ -441,14 +441,17 @@
                   </div>
                   <div id="config-approval-section" class="config-section" style="display:none">
                     <div class="config-section-label">APPROVAL</div>
+                    <div id="config-approval-scope" class="config-scope-label">This session only</div>
                     <div id="config-approval-bar" class="config-segmented"></div>
                   </div>
                   <div id="config-sandbox-section" class="config-section" style="display:none">
                     <div class="config-section-label">SANDBOX</div>
+                    <div id="config-sandbox-scope" class="config-scope-label">This session only</div>
                     <div id="config-sandbox-bar" class="config-segmented"></div>
                   </div>
                   <div id="config-websearch-section" class="config-section" style="display:none">
                     <div class="config-section-label">WEB SEARCH</div>
+                    <div id="config-websearch-scope" class="config-scope-label">This session only</div>
                     <div id="config-websearch-bar" class="config-segmented"></div>
                   </div>
                 </div>
@@ -687,6 +690,21 @@
                   <label class="settings-budget-label">Budget tokens</label>
                   <input id="ps-thinking-budget" type="number" class="settings-budget-input" min="1024" max="128000" step="1024" value="10000">
                 </div>
+              </div>
+            </div>
+            <div class="settings-card" id="ps-codex-card">
+              <div class="settings-field">
+                <label class="settings-label">Codex approval, sandbox and web search</label>
+                <div class="settings-hint">What a new Codex session in this project starts with. A session keeps its own values afterwards; changing a default here does not change any running session.</div>
+                <div class="settings-label">Approval</div>
+                <div id="ps-codex-approval-scope" class="config-scope-label"></div>
+                <div class="settings-btn-group" id="ps-codex-approval-bar"></div>
+                <div class="settings-label">Sandbox</div>
+                <div id="ps-codex-sandbox-scope" class="config-scope-label"></div>
+                <div class="settings-btn-group" id="ps-codex-sandbox-bar"></div>
+                <div class="settings-label">Web search</div>
+                <div id="ps-codex-websearch-scope" class="config-scope-label"></div>
+                <div class="settings-btn-group" id="ps-codex-websearch-bar"></div>
               </div>
             </div>
           </div>
@@ -1172,6 +1190,21 @@
                 <label class="settings-budget-label">Budget tokens</label>
                 <input id="ss-thinking-budget" type="number" class="settings-budget-input" min="1024" max="128000" step="1024" value="10000">
               </div>
+            </div>
+          </div>
+          <div class="settings-card" id="ss-codex-card">
+            <div class="settings-field">
+              <label class="settings-label">Codex approval, sandbox and web search</label>
+              <div class="settings-hint">What a new Codex session starts with, in every project that has no default of its own. A session keeps its own values afterwards; changing a default here does not change any running session. Only an admin can change this.</div>
+              <div class="settings-label">Approval</div>
+              <div id="ss-codex-approval-scope" class="config-scope-label"></div>
+              <div class="settings-btn-group" id="ss-codex-approval-bar"></div>
+              <div class="settings-label">Sandbox</div>
+              <div id="ss-codex-sandbox-scope" class="config-scope-label"></div>
+              <div class="settings-btn-group" id="ss-codex-sandbox-bar"></div>
+              <div class="settings-label">Web search</div>
+              <div id="ss-codex-websearch-scope" class="config-scope-label"></div>
+              <div class="settings-btn-group" id="ss-codex-websearch-bar"></div>
             </div>
           </div>
         </div>
