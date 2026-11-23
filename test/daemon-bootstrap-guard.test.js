@@ -133,8 +133,8 @@ test("daemon exits EX_CONFIG (78) when CLAGENTIC_HOME points at the socket subdi
 
   // Point CLAGENTIC_HOME at the socket subdir — this is the mis-configuration
   var result = spawnDaemon({
-    CLAGENTIC_HOME: consoleDir,
-    // Ensure no CLAGENTIC_CONFIG override so configPath() is derived from CLAGENTIC_HOME
+    CLAGENTIC_CONSOLE_HOME: consoleDir,
+    // Ensure no CLAGENTIC_CONSOLE_CONFIG override so configPath() is derived from CLAGENTIC_CONSOLE_HOME
     HOME: tmpDir,
   });
 
@@ -196,7 +196,7 @@ test("spawnDaemon timeout diagnostic identifies spawnSync's own timeout, not a r
   // 1ms is below any real daemon startup time (fs I/O + module require) —
   // this deterministically reproduces spawnSync's own timeout rather than
   // waiting on full-suite contention to trigger it by chance.
-  var result = spawnDaemon({ CLAGENTIC_HOME: consoleDir, HOME: tmpDir }, 1);
+  var result = spawnDaemon({ CLAGENTIC_CONSOLE_HOME: consoleDir, HOME: tmpDir }, 1);
 
   assert.strictEqual(result.status, null,
     "expected spawnSync's own 1ms timeout to leave status null; got status " + result.status);
@@ -229,7 +229,7 @@ test("daemon does NOT trigger the guard when CLAGENTIC_HOME is set correctly to 
 
   // No daemon.json present → fresh install path → guard must NOT fire
   var result = spawnDaemon({
-    CLAGENTIC_HOME: dotClagentic,
+    CLAGENTIC_CONSOLE_HOME: dotClagentic,
     HOME: tmpDir,
   });
 
@@ -257,7 +257,7 @@ test("daemon does NOT trigger the guard when there is no sibling config", functi
 
   // No daemon.json in dotClagentic — guard must not fire even though basename === 'console'
   var result = spawnDaemon({
-    CLAGENTIC_HOME: consoleDir,
+    CLAGENTIC_CONSOLE_HOME: consoleDir,
     HOME: tmpDir,
   });
 

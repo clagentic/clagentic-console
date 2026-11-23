@@ -31,6 +31,7 @@ var { spawn } = require("child_process");
 var WebSocket = require("ws");
 var {
   waitForServer,
+  boundedRequest,
   waitForDaemonListening,
   captureLog,
   killAndWait,
@@ -44,6 +45,7 @@ var TEST_TIMEOUT_MS = 45000;
 var DAEMON_READY_MS = 20000;
 var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
 var WS_CONNECT_MS  = 10000;
+var REQUEST_MS = 10000; // each post-readiness request; below the 45000 ms whole-test cap
 var PORT_ATTEMPTS = 5;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -64,31 +66,15 @@ function httpGet(url) {
 // ── test ─────────────────────────────────────────────────────────────────────
 
 // Perform an HTTP POST and return { status, body, headers }.
-function httpPost(url, body) {
-  return new Promise(function (resolve, reject) {
-    var parsed = new (require("url").URL)(url);
-    var bodyStr = typeof body === "string" ? body : JSON.stringify(body);
-    var opts = {
-      hostname: parsed.hostname,
-      port: parseInt(parsed.port, 10),
-      path: parsed.pathname + (parsed.search || ""),
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(bodyStr),
-      },
-    };
-    var req = http.request(opts, function (res) {
-      var b = "";
-      res.setEncoding("utf8");
-      res.on("data", function (c) { b += c; });
-      res.on("end", function () {
-        resolve({ status: res.statusCode, body: b, headers: res.headers });
-      });
-    });
-    req.on("error", reject);
-    req.write(bodyStr);
-    req.end();
+function httpPost(step, url, body) {
+  var parsed = new (require("url").URL)(url);
+  return boundedRequest(step, REQUEST_MS, {
+    hostname: parsed.hostname,
+    port: parseInt(parsed.port, 10),
+    path: parsed.pathname + (parsed.search || ""),
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
@@ -148,8 +134,8 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
 
     var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
       env: Object.assign({}, process.env, {
-        CLAGENTIC_HOME:   tmpHome,
-        CLAGENTIC_CONFIG: configFile,
+        CLAGENTIC_CONSOLE_HOME:   tmpHome,
+        CLAGENTIC_CONSOLE_CONFIG: configFile,
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -173,7 +159,7 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
 
   startOnFreePort(startDaemonOn, function () { return daemonProc; }, PORT_ATTEMPTS).then(function (port) {
     // ── 4. Authenticate: create admin via /auth/setup ─────────────────────────
-    return httpPost("http://127.0.0.1:" + port + "/auth/setup", {
+    return httpPost("POST /auth/setup", "http://127.0.0.1:" + port + "/auth/setup", {
       setupCode: SMOKE_SETUP_CODE,
       username:  SMOKE_USERNAME,
       pin:       SMOKE_PIN,
@@ -200,24 +186,14 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
     var cookieHeader = ctx.cookieHeader;
 
     // ── 5. Check 2 — /info responds 200 with valid cookie ────────────────────
-    return new Promise(function (resolve, reject) {
-      var req = http.get({
-        hostname: "127.0.0.1",
-        port: port,
-        path: "/info",
-        headers: { "Cookie": cookieHeader.split(";")[0] },
-      }, function (res) {
-        var b = "";
-        res.setEncoding("utf8");
-        res.on("data", function (c) { b += c; });
-        res.on("end", function () {
-          try {
-            assert.strictEqual(res.statusCode, 200, "Expected HTTP 200 for /info, got " + res.statusCode);
-            resolve({ port: port, cookieHeader: cookieHeader });
-          } catch (e) { reject(e); }
-        });
-      });
-      req.on("error", reject);
+    return boundedRequest("GET /info", REQUEST_MS, {
+      hostname: "127.0.0.1",
+      port: port,
+      path: "/info",
+      headers: { "Cookie": cookieHeader.split(";")[0] },
+    }).then(function (res) {
+      assert.strictEqual(res.status, 200, "Expected HTTP 200 for /info, got " + res.status);
+      return { port: port, cookieHeader: cookieHeader };
     });
 
   }).then(function (ctx) {
@@ -226,29 +202,19 @@ test("boot smoke: daemon starts, HTTP 200, WS connects (lr-1a5f)", { timeout: TE
     var cookieValue = cookieHeader.split(";")[0]; // strip Path, HttpOnly etc.
 
     // ── 6. Check 3 — frontend HTML served with 200 ───────────────────────────
-    return new Promise(function (resolve, reject) {
-      var req = http.get({
-        hostname: "127.0.0.1",
-        port: port,
-        path: "/p/smoke-project/",
-        headers: { "Cookie": cookieValue },
-      }, function (res) {
-        var b = "";
-        res.setEncoding("utf8");
-        res.on("data", function (c) { b += c; });
-        res.on("end", function () {
-          try {
-            assert.strictEqual(res.statusCode, 200,
-              "Expected HTTP 200 for frontend page, got " + res.statusCode);
-            assert.ok(
-              b.includes("<html") || b.includes("<!DOCTYPE"),
-              "Expected HTML response for frontend page"
-            );
-            resolve({ port: port, cookieValue: cookieValue });
-          } catch (e) { reject(e); }
-        });
-      });
-      req.on("error", reject);
+    return boundedRequest("GET /p/smoke-project/", REQUEST_MS, {
+      hostname: "127.0.0.1",
+      port: port,
+      path: "/p/smoke-project/",
+      headers: { "Cookie": cookieValue },
+    }).then(function (res) {
+      assert.strictEqual(res.status, 200,
+        "Expected HTTP 200 for frontend page, got " + res.status);
+      assert.ok(
+        res.body.includes("<html") || res.body.includes("<!DOCTYPE"),
+        "Expected HTML response for frontend page"
+      );
+      return { port: port, cookieValue: cookieValue };
     });
 
   }).then(function (ctx) {
@@ -336,7 +302,7 @@ test("boot smoke: a foreign server on the daemon port is a port collision, not r
       port: port, host: "127.0.0.1", tls: false, debug: false, projects: [],
     }), { mode: 0o600 });
     daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
-      env: Object.assign({}, process.env, { CLAGENTIC_HOME: tmpHome, CLAGENTIC_CONFIG: configFile }),
+      env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: tmpHome, CLAGENTIC_CONSOLE_CONFIG: configFile }),
       stdio: ["ignore", "pipe", "pipe"],
     });
     daemonProc.stdout.on("data", function (d) { log.push(d.toString()); });
