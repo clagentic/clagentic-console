@@ -287,14 +287,16 @@ test("reconnect sends the saved server and project defaults, not the restored se
         onGetProjectDefaultBetas: function () { return { betas: [] }; },
         onGetServerDefaultThinking: function () { return { thinking: "budget", thinkingBudget: 4096 }; },
         onGetProjectDefaultThinking: function () { return { thinking: null, thinkingBudget: null }; },
+        onGetServerDefaultMode: function () { return { mode: "acceptEdits" }; },
+        onGetProjectDefaultMode: function () { return { mode: null }; },
       },
     });
     mods.connModule.attachConnection(ctx).handleConnection({ on: function () {}, readyState: 1, send: function () {} }, null, function () {}, function () {});
 
     var saved = sendToCalls.find(function (m) { return m.type === "saved_defaults"; });
     assert.ok(saved, "expected a saved_defaults message on connect");
-    assert.deepStrictEqual(saved.server, { model: "sonnet", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 });
-    assert.deepStrictEqual(saved.project, { model: "opus", effort: null, betas: [], thinking: null, thinkingBudget: null });
+    assert.deepStrictEqual(saved.server, { model: "sonnet", mode: "acceptEdits", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 });
+    assert.deepStrictEqual(saved.project, { model: "opus", mode: null, effort: null, betas: [], thinking: null, thinkingBudget: null });
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
