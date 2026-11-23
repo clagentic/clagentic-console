@@ -103,6 +103,9 @@ function describeSpawnOutcome(result) {
   return "daemon exited " + result.status + " (expected 78)\nstderr: " + result.stderr;
 }
 
+// Stable fragment of the line lib/daemon.js prints when the guard fires.
+var GUARD_MESSAGE = "appears to point at the console/ socket subdirectory";
+
 // ─── tests ─────────────────────────────────────────────────────────────────
 
 test("daemon exits EX_CONFIG (78) when CLAGENTIC_HOME points at the socket subdir and a real config exists above", function () {
@@ -141,6 +144,13 @@ test("daemon exits EX_CONFIG (78) when CLAGENTIC_HOME points at the socket subdi
   // Must exit with EX_CONFIG (78), not 0 or 1 — and not merely fail to exit
   // in time (see describeSpawnOutcome for why status alone is not enough).
   assert.strictEqual(result.status, 78, describeSpawnOutcome(result));
+
+  // The same text the negative cases search for, so rewording lib/daemon.js
+  // fails here instead of silently voiding them.
+  assert.ok(
+    result.stderr.includes(GUARD_MESSAGE),
+    "stderr should carry the guard message: " + GUARD_MESSAGE + "\nstderr: " + result.stderr
+  );
 
   // stderr must explain the problem clearly
   assert.ok(
@@ -239,7 +249,7 @@ test("daemon does NOT trigger the guard when CLAGENTIC_HOME is set correctly to 
 
   // stderr must NOT contain the guard's specific error message
   assert.ok(
-    !result.stderr.includes("CLAGENTIC_HOME appears to be set to the socket subdirectory"),
+    !result.stderr.includes(GUARD_MESSAGE),
     "guard message must not appear when CLAGENTIC_HOME is correctly configured\nstderr: " + result.stderr
   );
 });
@@ -264,7 +274,7 @@ test("daemon does NOT trigger the guard when there is no sibling config", functi
   assert.notStrictEqual(result.status, 78,
     "guard must not fire when no sibling daemon.json exists\nstderr: " + result.stderr);
   assert.ok(
-    !result.stderr.includes("CLAGENTIC_HOME appears to be set to the socket subdirectory"),
+    !result.stderr.includes(GUARD_MESSAGE),
     "guard message must not appear when no sibling config exists\nstderr: " + result.stderr
   );
 });
