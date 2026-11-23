@@ -202,6 +202,12 @@ var DEFAULT_SETTER_ROWS = [
   { type: "set_server_default_codex_approval", msg: { approval: "never" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexApproval: "never" }, codex: true },
   { type: "set_server_default_codex_sandbox", msg: { sandbox: "danger-full-access" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexSandbox: "danger-full-access" }, codex: true },
   { type: "set_server_default_codex_websearch", msg: { webSearch: "disabled" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexWebSearch: "disabled" }, codex: true },
+  // A value outside the allowed ones (or not a string) is answered with an error
+  // to the requester alone and is neither saved nor persisted (refused: true).
+  { type: "set_project_default_codex_approval", msg: { approval: "yolo" }, optName: "onSetProjectDefaultCodex", saved: { _savedDefaultCodexApproval: undefined }, codex: true, refused: true },
+  { type: "set_server_default_codex_sandbox", msg: { sandbox: "everything" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexSandbox: undefined }, codex: true, refused: true },
+  { type: "set_project_default_codex_websearch", msg: { webSearch: 7 }, optName: "onSetProjectDefaultCodex", saved: { _savedDefaultCodexWebSearch: undefined }, codex: true, refused: true },
+  { type: "set_server_default_codex_approval", msg: { approval: "on-failure" }, optName: "onSetServerDefaultCodex", saved: { _savedDefaultCodexApproval: undefined }, codex: true, refused: true },
 ];
 
 var OWN_CODEX = { codexApproval: "on-request", codexSandbox: "read-only", codexWebSearch: "live" };
@@ -214,16 +220,30 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
     var stored = [];
     ctx.opts[row.optName] = function () { stored.push(Array.prototype.slice.call(arguments)); };
 
-    attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+    var requester = makeWs();
+    var warn = console.warn;
+    console.warn = function () {};
+    try {
+      attachSessions(ctx).handleSessionsMessage(requester, Object.assign({ type: row.type }, row.msg));
+    } finally {
+      console.warn = warn;
+    }
 
+    if (row.refused) {
+      assert.strictEqual(stored.length, 0, "a refused value is not persisted");
+      assert.strictEqual(ctx._sent.length, 1, "and only the requester is answered");
+      assert.strictEqual(ctx._sentTo[0][0], requester);
+      assert.strictEqual(ctx._sentTo[0][1].type, "error");
+    }
     assert.deepStrictEqual({ effort: focused.effort, betas: focused.betas, thinking: focused.thinking, thinkingBudget: focused.thinkingBudget }, OWN,
       "the running session keeps its own values");
     Object.keys(row.saved).forEach(function (field) {
       assert.deepStrictEqual(ctx.sm[field], row.saved[field], field + " holds the new default");
     });
-    assert.strictEqual(stored.length, 1, "the default is persisted through the store callback");
     var kept = { codexApproval: focused.codexApproval, codexSandbox: focused.codexSandbox, codexWebSearch: focused.codexWebSearch };
     assert.deepStrictEqual(kept, OWN_CODEX, "the running session keeps its own Codex values");
+    if (row.refused) return;
+    assert.strictEqual(stored.length, 1, "the default is persisted through the store callback");
     if (row.codex) {
       var everything = ctx._sent.map(function (m) { return m.type; });
       assert.ok(everything.indexOf("saved_defaults") !== -1, "the Settings pickers are told through saved_defaults");
@@ -252,9 +272,20 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
   { type: "set_codex_approval", msg: { approval: "never" }, field: "codexApproval", expect: "never", told: 1, codex: { approval: "never", sandbox: "workspace-write", webSearch: "live" } },
   { type: "set_codex_sandbox", msg: { sandbox: "danger-full-access" }, field: "codexSandbox", expect: "danger-full-access", told: 1, codex: { approval: "on-request", sandbox: "danger-full-access", webSearch: "live" } },
   { type: "set_codex_websearch", msg: { webSearch: "disabled" }, field: "codexWebSearch", expect: "disabled", told: 1, codex: { approval: "on-request", sandbox: "workspace-write", webSearch: "disabled" } },
+  // noSession: with no session viewed a pick has nothing to set; the requester
+  // alone is sent the saved-default config (the sandbox default is
+  // "danger-full-access" here) and nothing is saved.
+  { type: "set_codex_approval", msg: { approval: "never" }, noSession: { approval: "on-request", sandbox: "danger-full-access", webSearch: "live" } },
+  { type: "set_codex_sandbox", msg: { sandbox: "read-only" }, noSession: { approval: "on-request", sandbox: "danger-full-access", webSearch: "live" } },
+  { type: "set_codex_websearch", msg: { webSearch: "cached" }, noSession: { approval: "on-request", sandbox: "danger-full-access", webSearch: "live" } },
+  // refused: a value outside the allowed ones is answered with an error and the
+  // session's own config, to the requester alone, and is not saved.
+  { type: "set_codex_approval", msg: { approval: "yolo" }, field: "codexApproval", expect: undefined, refused: { approval: "on-request", sandbox: "workspace-write", webSearch: "live" } },
+  { type: "set_codex_sandbox", msg: { sandbox: "everything" }, field: "codexSandbox", expect: undefined, refused: { approval: "on-request", sandbox: "workspace-write", webSearch: "live" } },
+  { type: "set_codex_websearch", msg: { webSearch: ["live"] }, field: "codexWebSearch", expect: undefined, refused: { approval: "on-request", sandbox: "workspace-write", webSearch: "live" } },
 ].forEach(function (row) {
-  test(row.type + " writes the viewed session only", function () {
-    var viewed = { localId: 1 };
+  test(row.type + " " + (row.noSession ? "with no session viewed answers the requester with the saved defaults" : row.refused ? "refuses " + JSON.stringify(row.msg) : "writes the viewed session only"), function () {
+    var viewed = row.noSession ? null : { localId: 1 };
     var other = { localId: 2, effort: "low", betas: [], thinking: "adaptive", codexApproval: "untrusted", codexSandbox: "read-only", codexWebSearch: "cached" };
     var told = [];
     var savedSessions = [];
@@ -264,10 +295,34 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
       sendToSession: function (id, msg) { told.push([id, msg]); },
     });
     ctx.sm.saveSessionFile = function (s) { savedSessions.push(s.localId); };
-    ctx.sm.sessions.set(1, viewed);
+    if (viewed) ctx.sm.sessions.set(1, viewed);
     ctx.sm.sessions.set(2, other);
+    if (row.noSession) ctx.sm._savedDefaultCodexSandbox = "danger-full-access";
+    var requester = makeWs();
+    var warn = console.warn;
+    console.warn = function () {};
+    try {
+      attachSessions(ctx).handleSessionsMessage(requester, Object.assign({ type: row.type }, row.msg));
+    } finally {
+      console.warn = warn;
+    }
 
-    attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
+    if (row.noSession) {
+      var answered = ctx._sentTo.map(function (pair) { return pair[1]; });
+      assert.deepStrictEqual(answered, [Object.assign({ type: "codex_config" }, row.noSession)]);
+      assert.deepStrictEqual(savedSessions, [], "nothing is saved");
+      assert.strictEqual(ctx._sent.length, 1, "and no other client is told");
+      return Promise.resolve();
+    }
+    if (row.refused) {
+      assert.deepStrictEqual(ctx._sentTo.map(function (pair) { return pair[0]; }), [requester, requester], "the requester alone is answered");
+      assert.strictEqual(ctx._sentTo[0][1].type, "error");
+      assert.deepStrictEqual(ctx._sentTo[1][1], Object.assign({ type: "codex_config" }, row.refused), "with the config its session still runs");
+      assert.deepStrictEqual(savedSessions, [], "nothing is saved");
+      assert.deepStrictEqual(told, [], "no session's clients are told");
+      assert.strictEqual(viewed[row.field], undefined, "the viewed session is unchanged");
+      return Promise.resolve();
+    }
 
     return Promise.resolve().then(function () {
       assert.deepStrictEqual({ a: other.codexApproval, s: other.codexSandbox, w: other.codexWebSearch }, { a: "untrusted", s: "read-only", w: "cached" }, "another session's Codex values are untouched");
@@ -292,27 +347,6 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
       assert.strictEqual(told.length, row.told, "the expected number of sends to the session's clients");
       told.forEach(function (pair) { assert.strictEqual(pair[0], 1, "only the viewed session's clients are told"); });
     });
-  });
-});
-
-// With no session viewed a Codex pick has nothing to set: the requester alone is
-// sent the saved-default config, and nothing is saved.
-[
-  { type: "set_codex_approval", msg: { approval: "never" } },
-  { type: "set_codex_sandbox", msg: { sandbox: "read-only" } },
-  { type: "set_codex_websearch", msg: { webSearch: "cached" } },
-].forEach(function (row) {
-  test(row.type + " with no session viewed answers the requester with the saved defaults", function () {
-    var ctx = makeCtx();
-    ctx.sm._savedDefaultCodexSandbox = "danger-full-access";
-    var saved = 0;
-    ctx.sm.saveSessionFile = function () { saved++; };
-    attachSessions(ctx).handleSessionsMessage(makeWs(), Object.assign({ type: row.type }, row.msg));
-    var pushed = ctx._sentTo.map(function (pair) { return pair[1]; });
-    assert.strictEqual(pushed.length, 1);
-    assert.deepStrictEqual(pushed[0], { type: "codex_config", approval: "on-request", sandbox: "danger-full-access", webSearch: "live" });
-    assert.strictEqual(saved, 0);
-    assert.strictEqual(ctx._sent.length, 1, "and no other client is told");
   });
 });
 
@@ -616,6 +650,35 @@ function twoProjects() {
     ],
     field: "codexApproval", expect: "never", project: "b",
   },
+  {
+    name: "a cleared server Codex default: a new session takes the built-in one (none seeded)",
+    steps: [
+      { type: "set_server_default_codex_sandbox", sandbox: "read-only" },
+      { type: "set_server_default_codex_sandbox", sandbox: "" },
+    ],
+    field: "codexSandbox", expect: undefined, project: "b",
+  },
+  {
+    name: "a refused server Codex value is not saved: a new session takes the previous default",
+    steps: [
+      { type: "set_server_default_codex_websearch", webSearch: "cached" },
+      { type: "set_server_default_codex_websearch", webSearch: "bing" },
+    ],
+    field: "codexWebSearch", expect: "cached", project: "b",
+  },
+  {
+    name: "a refused project Codex value is not saved: a new session takes the previous default",
+    steps: [
+      { type: "set_project_default_codex_approval", approval: "never" },
+      { type: "set_project_default_codex_approval", approval: "yolo" },
+    ],
+    field: "codexApproval", expect: "never", project: "b",
+  },
+  {
+    name: "a Codex default read back from the store that is not an allowed value is not seeded",
+    steps: [{ storedCodex: { key: "sandbox", value: "everything" } }],
+    field: "codexSandbox", expect: undefined, project: "b",
+  },
 ].forEach(function (row) {
   test(row.name, function () {
     var w = twoProjects();
@@ -623,7 +686,21 @@ function twoProjects() {
     // effort, betas and thinking from its saved defaults; "a" is a stub.
     var handlers = row.project === "b" ? w.handlersB : w.handlersA;
     var sm = row.project === "b" ? w.smB : w.a.sm;
-    row.steps.forEach(function (step) { handlers.handleSessionsMessage(makeWs(), step); });
+    var warn = console.warn;
+    console.warn = function () {};
+    try {
+      row.steps.forEach(function (step) {
+        if (step.storedCodex) {
+          // A raw value in the server store, as a hand edit of daemon.json leaves it.
+          w.a.opts.onSetServerDefaultCodex(step.storedCodex.key, step.storedCodex.value);
+          w.handlersB.refreshServerDefaults();
+        } else {
+          handlers.handleSessionsMessage(makeWs(), step);
+        }
+      });
+    } finally {
+      console.warn = warn;
+    }
     handlers.handleSessionsMessage(makeWs(), { type: "new_session" });
     var created = Array.from(sm.sessions.values()).pop();
     assert.strictEqual(created[row.field], row.expect);
