@@ -52,11 +52,11 @@ var fs = require("fs");
 var path = require("path");
 var os = require("os");
 var net = require("net");
-var http = require("http");
 var crypto = require("crypto");
 var { spawn } = require("child_process");
 var {
   waitForServer,
+  boundedRequest,
   waitForDaemonListening,
   captureLog,
   killAndWait,
@@ -69,6 +69,7 @@ var DAEMON_SCRIPT = path.resolve(__dirname, "..", "lib", "daemon.js");
 var TEST_TIMEOUT_MS = 45000;
 var DAEMON_READY_MS = 20000;
 var HTTP_READY_MS = 10000; // after the listen line, HTTP must answer promptly
+var REQUEST_MS = 10000; // the post-readiness request; below the 45000 ms whole-test cap
 var PORT_ATTEMPTS = 5;
 var PROJECT_SLUG = "ws-echo-project";
 var SESSION_COOKIE_NAME = "relay_auth_user";
@@ -200,8 +201,8 @@ test("lr-4c58ae: a cookie-authed upgrade that also offers a ticket subprotocol e
 
     daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
       env: Object.assign({}, process.env, {
-        CLAGENTIC_HOME: tmpHome,
-        CLAGENTIC_CONFIG: configFile,
+        CLAGENTIC_CONSOLE_HOME: tmpHome,
+        CLAGENTIC_CONSOLE_CONFIG: configFile,
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -261,24 +262,14 @@ test("lr-4c58ae: a cookie-authed upgrade that also offers a ticket subprotocol e
     // behavior from lr-de5fcb must still hold: mint a real ticket via the
     // live daemon's HTTP API (using the cookie), then offer it with NO
     // cookie on the upgrade — the ticket-auth fallback path.
-    return new Promise(function (resolve, reject) {
-      var cookie = SESSION_COOKIE_NAME + "=" + sessionToken;
-      var req = http.get({
-        hostname: "127.0.0.1",
-        port: port,
-        path: "/api/ws-ticket",
-        headers: { Cookie: cookie },
-      }, function (res) {
-        var chunks = [];
-        res.on("data", function (c) { chunks.push(c); });
-        res.on("end", function () {
-          try {
-            var body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-            resolve(body.ticket);
-          } catch (e) { reject(e); }
-        });
-      });
-      req.on("error", reject);
+    var cookie = SESSION_COOKIE_NAME + "=" + sessionToken;
+    return boundedRequest("GET /api/ws-ticket", REQUEST_MS, {
+      hostname: "127.0.0.1",
+      port: port,
+      path: "/api/ws-ticket",
+      headers: { Cookie: cookie },
+    }).then(function (res) {
+      return JSON.parse(res.body).ticket;
     }).then(function (ticket) {
       assert.ok(ticket && typeof ticket === "string" && ticket.length > 0,
         "test setup: /api/ws-ticket must mint a real ticket for the cookie-authed request");

@@ -138,8 +138,8 @@ test("lr-e33776: unauthed project asset/module/API requests never get 200 text/h
 
     var proc = spawn(process.execPath, [DAEMON_SCRIPT], {
       env: Object.assign({}, process.env, {
-        CLAGENTIC_HOME: tmpHome,
-        CLAGENTIC_CONFIG: configFile,
+        CLAGENTIC_CONSOLE_HOME: tmpHome,
+        CLAGENTIC_CONSOLE_CONFIG: configFile,
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -281,7 +281,7 @@ test("lr-e33776: a foreign server on the daemon port is reported as a port colli
       port: port, host: "127.0.0.1", tls: false, debug: false, projects: [],
     }), { mode: 0o600 });
     daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
-      env: Object.assign({}, process.env, { CLAGENTIC_HOME: tmpHome, CLAGENTIC_CONFIG: configFile }),
+      env: Object.assign({}, process.env, { CLAGENTIC_CONSOLE_HOME: tmpHome, CLAGENTIC_CONSOLE_CONFIG: configFile }),
       stdio: ["ignore", "pipe", "pipe"],
     });
     daemonProc.stdout.on("data", function (d) { log.push(d.toString()); });

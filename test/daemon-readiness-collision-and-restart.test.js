@@ -20,6 +20,7 @@ var http = require("http");
 var { spawn } = require("child_process");
 var {
   waitForServer,
+  boundedRequest,
   waitForDaemonListening,
   killAndWait,
   captureLog,
@@ -38,16 +39,12 @@ function closeServer(srv) {
   return new Promise(function (resolve) { srv.close(function () { resolve(); }); });
 }
 
+var REQUEST_MS = 10000; // below the fixture test's 60000 ms whole-test timeout
+
 function get(port) {
-  return new Promise(function (resolve, reject) {
-    var req = http.get("http://127.0.0.1:" + port + "/", function (res) {
-      var b = "";
-      res.setEncoding("utf8");
-      res.on("data", function (c) { b += c; });
-      res.on("end", function () { resolve(b); });
-    });
-    req.on("error", reject);
-  });
+  return boundedRequest("fixture GET / on the booted daemon", REQUEST_MS, {
+    hostname: "127.0.0.1", port: port, path: "/",
+  }).then(function (res) { return res.body; });
 }
 
 // A child that prints `lines` to stdout, then stays alive until killed.
@@ -127,6 +124,28 @@ test("a timeout says the daemon never bound; an exit says it exited; both carry 
       return true;
     }
   );
+});
+
+test("a request to a server that accepts and never responds rejects naming its step and bound", async function () {
+  var sockets = [];
+  var silent = http.createServer(function () { /* accept, never respond */ });
+  silent.on("connection", function (s) { sockets.push(s); });
+  await new Promise(function (resolve) { silent.listen(0, "127.0.0.1", resolve); });
+  var started = Date.now();
+  try {
+    await assert.rejects(
+      boundedRequest("probe step", 300, { hostname: "127.0.0.1", port: silent.address().port, path: "/" }),
+      function (err) {
+        assert.match(err.message, /probe step/);
+        assert.match(err.message, /300 ms/);
+        return true;
+      }
+    );
+    assert.ok(Date.now() - started < 3000, "rejects within the bound plus a small margin");
+  } finally {
+    sockets.forEach(function (s) { s.destroy(); });
+    await closeServer(silent);
+  }
 });
 
 test("fixture: a foreign server on the first probed port restarts the boot on a fresh port", { timeout: 60000 }, async function () {

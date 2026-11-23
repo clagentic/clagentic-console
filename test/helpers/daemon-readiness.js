@@ -49,6 +49,48 @@ function waitForServer(port, timeoutMs) {
   });
 }
 
+// One HTTP request with its own deadline, for requests made after readiness.
+// Without it such a request is bounded only by the whole-test timeout, so under
+// load a stalled daemon fails the test as a bare timeout that names no step.
+// The deadline covers the whole exchange (connect, headers and body). A failure
+// always names `step` and the bound.
+//   opts: http.request options (hostname, port, path, method, headers), plus
+//     opts.body: string written as the request body (Content-Length is added).
+// Resolves { status, headers, body }.
+function boundedRequest(step, boundMs, opts) {
+  return new Promise(function (resolve, reject) {
+    var reqOpts = Object.assign({ method: "GET" }, opts);
+    var payload = reqOpts.body;
+    delete reqOpts.body;
+    if (payload !== undefined) {
+      reqOpts.headers = Object.assign({ "Content-Length": Buffer.byteLength(payload) }, reqOpts.headers);
+    }
+    var settled = false;
+    var timer = null;
+    var req = null;
+    function settle(err, value) {
+      if (settled) { return; }
+      settled = true;
+      clearTimeout(timer);
+      if (err) { reject(err); } else { resolve(value); }
+    }
+    timer = setTimeout(function () {
+      settle(new Error("step '" + step + "' got no complete response within " + boundMs + " ms"));
+      if (req) { req.destroy(); }
+    }, boundMs);
+    req = http.request(reqOpts, function (res) {
+      var b = "";
+      res.setEncoding("utf8");
+      res.on("data", function (c) { b += c; });
+      res.on("end", function () { settle(null, { status: res.statusCode, headers: res.headers, body: b }); });
+      res.on("error", function (e) { settle(new Error("step '" + step + "' failed within its " + boundMs + " ms bound: " + e.message)); });
+    });
+    req.on("error", function (e) { settle(new Error("step '" + step + "' failed within its " + boundMs + " ms bound: " + e.message)); });
+    if (payload !== undefined) { req.write(payload); }
+    req.end();
+  });
+}
+
 // opts.fromOffset: only log text after this character offset counts, so a
 //   restarted daemon cannot be satisfied by the previous boot's listen line.
 // opts.tolerateInUse: ignore "in use, retrying" lines and keep waiting for the
@@ -142,6 +184,7 @@ function startOnFreePort(startOn, getProc, attempts) {
 module.exports = {
   findFreePort: findFreePort,
   waitForServer: waitForServer,
+  boundedRequest: boundedRequest,
   waitForDaemonListening: waitForDaemonListening,
   captureLog: captureLog,
   killAndWait: killAndWait,

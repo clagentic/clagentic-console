@@ -174,8 +174,8 @@ test("lr-2895ea: unauth GET of the app-shell static assets returns the real asse
 
     daemonProc = spawn(process.execPath, [DAEMON_SCRIPT], {
       env: Object.assign({}, process.env, {
-        CLAGENTIC_HOME: tmpHome,
-        CLAGENTIC_CONFIG: configFile,
+        CLAGENTIC_CONSOLE_HOME: tmpHome,
+        CLAGENTIC_CONSOLE_CONFIG: configFile,
       }),
       stdio: ["ignore", "pipe", "pipe"],
     });
