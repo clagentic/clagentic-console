@@ -121,21 +121,21 @@ test("a Thinking picker given no message type keeps sending the session's (the l
 // The pickers show the saved defaults, not the viewed session's values. A
 // project falls back to the server's default for what it has not set.
 var SAVED = {
-  server: { model: "claude-sonnet-4-6", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 },
-  project: { model: null, effort: null, betas: [], thinking: null, thinkingBudget: null },
+  server: { model: "claude-sonnet-4-6", mode: "acceptEdits", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 },
+  project: { model: null, mode: null, effort: null, betas: [], thinking: null, thinkingBudget: null },
 };
-var SESSION_VIEW = { currentModel: "claude-haiku-4-5", currentEffort: "low", currentBetas: ["own-beta"], currentThinking: "disabled", currentThinkingBudget: 2048 };
+var SESSION_VIEW = { currentModel: "claude-haiku-4-5", currentMode: "plan", currentEffort: "low", currentBetas: ["own-beta"], currentThinking: "disabled", currentThinkingBudget: 2048 };
 
 [
-  { name: "server page", level: "server", saved: SAVED, expect: { currentModel: "claude-sonnet-4-6", currentEffort: "high", currentBetas: ["server-beta"], currentThinking: "budget", currentThinkingBudget: 4096 } },
-  { name: "project page with nothing of its own", level: "project", saved: SAVED, expect: { currentModel: "claude-sonnet-4-6", currentEffort: "high", currentBetas: ["server-beta"], currentThinking: "budget", currentThinkingBudget: 4096 } },
+  { name: "server page", level: "server", saved: SAVED, expect: { currentModel: "claude-sonnet-4-6", currentMode: "acceptEdits", currentEffort: "high", currentBetas: ["server-beta"], currentThinking: "budget", currentThinkingBudget: 4096 } },
+  { name: "project page with nothing of its own", level: "project", saved: SAVED, expect: { currentModel: "claude-sonnet-4-6", currentMode: "acceptEdits", currentEffort: "high", currentBetas: ["server-beta"], currentThinking: "budget", currentThinkingBudget: 4096 } },
   {
     name: "project page with its own defaults",
     level: "project",
-    saved: { server: SAVED.server, project: { model: "claude-opus-4-7", effort: "max", betas: ["project-beta"], thinking: "adaptive", thinkingBudget: null } },
-    expect: { currentModel: "claude-opus-4-7", currentEffort: "max", currentBetas: ["project-beta"], currentThinking: "adaptive", currentThinkingBudget: 10000 },
+    saved: { server: SAVED.server, project: { model: "claude-opus-4-7", mode: "plan", effort: "max", betas: ["project-beta"], thinking: "adaptive", thinkingBudget: null } },
+    expect: { currentModel: "claude-opus-4-7", currentMode: "plan", currentEffort: "max", currentBetas: ["project-beta"], currentThinking: "adaptive", currentThinkingBudget: 10000 },
   },
-  { name: "server page with nothing saved", level: "server", saved: { server: {}, project: {} }, expect: { currentModel: "", currentEffort: "medium", currentBetas: [], currentThinking: "adaptive", currentThinkingBudget: 10000 } },
+  { name: "server page with nothing saved", level: "server", saved: { server: {}, project: {} }, expect: { currentModel: "", currentMode: "default", currentEffort: "medium", currentBetas: [], currentThinking: "adaptive", currentThinkingBudget: 10000 } },
 ].forEach(function (row) {
   test("default pickers show the saved defaults, not the session's: " + row.name, function () {
     var picked = defaults.defaultPickerValues(row.saved, row.level);
