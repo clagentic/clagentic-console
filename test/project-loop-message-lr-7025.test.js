@@ -14,6 +14,7 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-msg-cap-"));
@@ -92,7 +93,7 @@ function makeEngine(cwd, ctxOpts) {
   engine.stopTimer();
 
   function cleanup() {
-    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch(_) {}
+    return removeTempHome(tmpHome);
   }
 
   return { engine: engine, ctx: ctx, cleanup: cleanup, mod: mod };
@@ -100,7 +101,7 @@ function makeEngine(cwd, ctxOpts) {
 
 // ---------------------------------------------------------------------------
 
-test("lr-7025: loop_message rejects text over the per-message length cap", function() {
+test("lr-7025: loop_message rejects text over the per-message length cap", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup, mod } = makeEngine(cwd);
   try {
@@ -115,12 +116,12 @@ test("lr-7025: loop_message rejects text over the per-message length cap", funct
     assert.ok(errMsg, "expected a loop_message_error broadcast");
     assert.match(errMsg.text, /too long/i);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-7025: loop_message at exactly the length cap is accepted", function() {
+test("lr-7025: loop_message at exactly the length cap is accepted", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup, mod } = makeEngine(cwd);
   try {
@@ -135,12 +136,12 @@ test("lr-7025: loop_message at exactly the length cap is accepted", function() {
       "no error should be broadcast for a message exactly at the cap"
     );
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-7025: loop_message rejects once the queue is at max length", function() {
+test("lr-7025: loop_message rejects once the queue is at max length", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup, mod } = makeEngine(cwd);
   try {
@@ -174,12 +175,12 @@ test("lr-7025: loop_message rejects once the queue is at max length", function()
     assert.ok(errMsg, "expected a loop_message_error broadcast");
     assert.match(errMsg.text, /queue is full/i);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-7025: loop_message_error on rejection is sent only to the requesting client, not broadcast", function() {
+test("lr-7025: loop_message_error on rejection is sent only to the requesting client, not broadcast", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup, mod } = makeEngine(cwd);
   try {
@@ -193,7 +194,7 @@ test("lr-7025: loop_message_error on rejection is sent only to the requesting cl
     assert.ok(call, "loop_message_error should be routed via sendTo");
     assert.strictEqual(call[0], ws, "error should be sent to the originating client");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });

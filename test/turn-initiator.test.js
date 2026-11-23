@@ -21,6 +21,7 @@ var { attachUserMessage } = require("../lib/project-user-message");
 var { attachExternalTrigger } = require("../lib/project-external-trigger");
 var { createScheduledInputService } = require("../lib/scheduled-input/service");
 var { createSessionInput } = require("../lib/session-input");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 var { INITIATORS } = turnInitiator;
 var APP_ID = "clagentic-console/" + require("../package.json").version;
 
@@ -371,7 +372,7 @@ test("an external trigger names the trigger as the initiator for a spawned sessi
   assert.deepEqual(calls.slice().sort(), ["pushMessage:trigger", "startQuery:trigger", "startQuery:trigger"]);
 });
 
-test("a loop iteration names the loop as the initiator", function () {
+test("a loop iteration names the loop as the initiator", async function () {
   var cwd = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-initiator-"));
   var home = fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-initiator-home-"));
   var gitEnv = Object.assign({}, process.env, {
@@ -431,7 +432,7 @@ test("a loop iteration names the loop as the initiator", function () {
     armed.forEach(function (t) { clearTimeout(t); });
     if (origHome === undefined) delete process.env.CLAGENTIC_CONSOLE_HOME;
     else process.env.CLAGENTIC_CONSOLE_HOME = origHome;
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(home, { recursive: true, force: true });
+    await removeTempHome(cwd);
+    await removeTempHome(home);
   }
 });

@@ -26,6 +26,7 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-msg-remove-"));
@@ -104,7 +105,7 @@ function makeEngine(cwd, ctxOpts) {
   engine.stopTimer();
 
   function cleanup() {
-    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch(_) {}
+    return removeTempHome(tmpHome);
   }
 
   return { engine: engine, ctx: ctx, cleanup: cleanup, mod: mod };
@@ -112,7 +113,7 @@ function makeEngine(cwd, ctxOpts) {
 
 // ---------------------------------------------------------------------------
 
-test("lr-4a9c: loop_message_remove splices the targeted message out of the queue", function() {
+test("lr-4a9c: loop_message_remove splices the targeted message out of the queue", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -145,12 +146,12 @@ test("lr-4a9c: loop_message_remove splices the targeted message out of the queue
     assert.ok(pendingBroadcast, "expected a loop_pending_messages re-broadcast");
     assert.strictEqual(pendingBroadcast.messages.length, 2);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-4a9c: loop_message_remove is rejected when no loop is running", function() {
+test("lr-4a9c: loop_message_remove is rejected when no loop is running", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -163,12 +164,12 @@ test("lr-4a9c: loop_message_remove is rejected when no loop is running", functio
     assert.ok(errMsg, "expected a loop_message_error broadcast");
     assert.match(errMsg.text, /no loop is currently running/i);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-4a9c: loop_message_remove is rejected when id is missing", function() {
+test("lr-4a9c: loop_message_remove is rejected when id is missing", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -180,12 +181,12 @@ test("lr-4a9c: loop_message_remove is rejected when id is missing", function() {
     assert.ok(errMsg, "expected a loop_message_error broadcast");
     assert.match(errMsg.text, /no message id/i);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-4a9c: loop_message_remove is rejected when id does not match a queued message", function() {
+test("lr-4a9c: loop_message_remove is rejected when id does not match a queued message", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -201,12 +202,12 @@ test("lr-4a9c: loop_message_remove is rejected when id does not match a queued m
     assert.ok(errMsg, "expected a loop_message_error broadcast");
     assert.match(errMsg.text, /not found/i);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-4a9c: loop_message_error on a rejected remove is sent only to the requesting client", function() {
+test("lr-4a9c: loop_message_error on a rejected remove is sent only to the requesting client", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -218,12 +219,12 @@ test("lr-4a9c: loop_message_error on a rejected remove is sent only to the reque
     assert.ok(call, "loop_message_error should be routed via sendTo");
     assert.strictEqual(call[0], ws, "error should be sent to the originating client");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-4a9c: distinct loop_message calls produce distinct ids", function() {
+test("lr-4a9c: distinct loop_message calls produce distinct ids", async function() {
   var cwd = makeTempHome();
   var { engine, cleanup } = makeEngine(cwd);
   try {
@@ -235,7 +236,7 @@ test("lr-4a9c: distinct loop_message calls produce distinct ids", function() {
     assert.notStrictEqual(ids[0], ids[1]);
     assert.ok(ids[0] && ids[1], "both ids must be truthy");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });

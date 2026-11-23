@@ -19,6 +19,7 @@ var { handleScheduledInputCommand } = require("../lib/scheduled-input/ipc");
 var { createOutboundQuery } = require("../lib/outbound-query");
 var { createAnnouncingLedger } = require("../lib/team-traffic-ws");
 var fakes = require("./scheduled-input-fakes");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 var NOW = Date.parse("2026-03-01T18:00:00Z");
 var MIN = 60000;
@@ -252,10 +253,12 @@ function loopHarness(opts) {
   engine.loopState.loopFilesId = "loop_ledger";
   engine.loopState.wizardData = { name: "nightly", loopMode: opts.loopMode || "judge" };
   return {
-    engine: engine, ctx: ctx, ledger: ledger, sessions: sessions,
-    cleanup: function () {
+    engine: engine, ctx: ctx, ledger: ledger, sessions: sessions, dirs: [home, cwd, dataDir],
+    // Async: saveLoopState starts a fire-and-forget store write chain that a
+    // synchronous handler call leaves in flight; removeTempHome drains it first.
+    cleanup: async function () {
       engine.stopClaudeDirWatch();
-      [home, cwd, dataDir].forEach(function (d) { fs.rmSync(d, { recursive: true, force: true }); });
+      for (var d of [home, cwd, dataDir]) await removeTempHome(d);
     },
   };
 }
@@ -276,7 +279,7 @@ async function withLoop(opts, fn) {
   } finally {
     global.setTimeout = origSetTimeout;
     armed.forEach(function (t) { clearTimeout(t); });
-    if (h) h.cleanup();
+    if (h) await h.cleanup();
   }
 }
 
@@ -357,6 +360,17 @@ test("a loop turn on a target running as another OS user has its prompt withheld
     assert.equal(e.promptWithheld, true);
     assert.equal("prompt" in e, false);
   });
+});
+
+// A synchronous handler call starts saveLoopState's fire-and-forget store write
+// chain; the harness teardown must outlast it, leaving every directory gone.
+test("the loop harness teardown after a synchronous handler that saves loop state leaves no directory behind", async function () {
+  var dirs;
+  await withLoop({}, function (h) {
+    dirs = h.dirs;
+    h.engine.handleLoopMessage({}, { type: "ralph_wizard_complete", data: { name: "n", task: "t", loopMode: "simple", mode: "draft" } });
+  });
+  dirs.forEach(function (d) { assert.equal(fs.existsSync(d), false, d + " was removed"); });
 });
 
 // --- schedule-input create, through the daemon's IPC handler ---

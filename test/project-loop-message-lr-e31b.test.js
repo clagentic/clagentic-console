@@ -26,6 +26,7 @@ var fs = require("fs");
 var path = require("path");
 var os = require("os");
 var execFileSync = require("child_process").execFileSync;
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-msg-"));
@@ -123,7 +124,7 @@ function makeEngine(cwd, ctxOpts) {
   engine.stopTimer();
 
   function cleanup() {
-    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch(_) {}
+    return removeTempHome(tmpHome);
   }
 
   return { engine: engine, ctx: ctx, cleanup: cleanup };
@@ -131,7 +132,7 @@ function makeEngine(cwd, ctxOpts) {
 
 // ---------------------------------------------------------------------------
 
-test("lr-e31b: loop_message is rejected when no loop is active", function() {
+test("lr-e31b: loop_message is rejected when no loop is active", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -142,12 +143,12 @@ test("lr-e31b: loop_message is rejected when no loop is active", function() {
     assert.ok(errMsg, "expected a loop_message_error broadcast");
     assert.strictEqual(engine.loopState.pendingUserMessages.length, 0);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-e31b: loop_message queues text and broadcasts loop_pending_messages while a loop is active", function() {
+test("lr-e31b: loop_message queues text and broadcasts loop_pending_messages while a loop is active", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -168,12 +169,12 @@ test("lr-e31b: loop_message queues text and broadcasts loop_pending_messages whi
     assert.ok(broadcast, "expected a loop_pending_messages broadcast");
     assert.strictEqual(broadcast.messages.length, 1);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-e31b: loop_message with blank text is a silent no-op", function() {
+test("lr-e31b: loop_message with blank text is a silent no-op", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -182,12 +183,12 @@ test("lr-e31b: loop_message with blank text is a silent no-op", function() {
     assert.strictEqual(engine.loopState.pendingUserMessages.length, 0);
     assert.strictEqual(ctx._sent.some(function(m) { return m.type === "loop_pending_messages"; }), false);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-e31b: runNextIteration() drains the queue into the next iteration as human lead messages and session history, then clears it", function() {
+test("lr-e31b: runNextIteration() drains the queue into the next iteration as human lead messages and session history, then clears it", async function() {
   var cwd = makeTempHome();
   var capturedPrompts = [];
   var capturedLeads = [];
@@ -311,12 +312,12 @@ test("lr-e31b: runNextIteration() drains the queue into the next iteration as hu
     assert.ok(clearedBroadcast, "expected a loop_pending_messages broadcast clearing the queue");
     assert.strictEqual(clearedBroadcast.messages.length, 0);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("lr-e31b: finishLoop() clears undelivered queued messages", function() {
+test("lr-e31b: finishLoop() clears undelivered queued messages", async function() {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -353,7 +354,7 @@ test("lr-e31b: finishLoop() clears undelivered queued messages", function() {
     assert.ok(clearedBroadcast, "expected a loop_pending_messages broadcast clearing the queue on finish");
     assert.strictEqual(clearedBroadcast.messages.length, 0);
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });

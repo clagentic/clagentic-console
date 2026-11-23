@@ -49,6 +49,7 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 var { computeAllProjectSessions } = require("../lib/server-hub-sessions");
 var { createProjectAccess } = require("../lib/project-access");
@@ -329,12 +330,12 @@ function makeEngine(cwd, getAllProjectSessionsStub) {
   }
   engine.stopTimer();
   function cleanup() {
-    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (_) {}
+    return removeTempHome(tmpHome);
   }
   return { engine: engine, ctx: ctx, cleanup: cleanup };
 }
 
-test("project-loop.js hub_recent_sessions_list: getAllProjectSessions is called with (true, authenticated userId), not just (true)", function () {
+test("project-loop.js hub_recent_sessions_list: getAllProjectSessions is called with (true, authenticated userId), not just (true)", async function () {
   var cwd = makeTempHomeLoop();
   var calls = [];
   var stub = function (includeSelf, userId) {
@@ -349,12 +350,12 @@ test("project-loop.js hub_recent_sessions_list: getAllProjectSessions is called 
     assert.strictEqual(calls.length, 1, "expected exactly one getAllProjectSessions call");
     assert.deepStrictEqual(calls[0], [true, "user-real-123"], "expected getAllProjectSessions(true, userId) with the connecting client's real userId");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clagenticUser) still calls getAllProjectSessions but with a null userId -- server-side fails closed, does not crash", function () {
+test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clagenticUser) still calls getAllProjectSessions but with a null userId -- server-side fails closed, does not crash", async function () {
   var cwd = makeTempHomeLoop();
   var calls = [];
   var stub = function (includeSelf, userId) {
@@ -372,8 +373,8 @@ test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clage
     assert.ok(call, "expected a hub_recent_sessions reply even in the unauthenticated case");
     assert.deepStrictEqual(call[1].sessions, [], "unauthenticated payload must be empty, matching the fail-closed contract");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
@@ -388,7 +389,7 @@ test("project-loop.js hub_recent_sessions_list: an unauthenticated ws (no _clage
 // stops reading it changes the reply.
 // ---------------------------------------------------------------------------
 
-function singleUserHubReply(f, ws) {
+async function singleUserHubReply(f, ws) {
   var projectAccess = createProjectAccess({
     users: f.users,
     onGetProjectAccess: f.onGetProjectAccess,
@@ -409,25 +410,25 @@ function singleUserHubReply(f, ws) {
     assert.ok(reply, "expected a hub_recent_sessions reply");
     return reply[1].sessions;
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 }
 
-test("single-user mode: a socket without proof of login gets no cross-project sessions", function () {
+test("single-user mode: a socket without proof of login gets no cross-project sessions", async function () {
   var f = makeFixture();
   try {
-    assert.deepStrictEqual(singleUserHubReply(f, {}), []);
-    assert.deepStrictEqual(singleUserHubReply(f, { _clagenticAuthenticated: "true" }), [], "only boolean true counts as proof");
+    assert.deepStrictEqual(await singleUserHubReply(f, {}), []);
+    assert.deepStrictEqual(await singleUserHubReply(f, { _clagenticAuthenticated: "true" }), [], "only boolean true counts as proof");
   } finally {
     f.cleanup();
   }
 });
 
-test("single-user mode: a socket that proved its login gets every project's sessions (control for the unproven case)", function () {
+test("single-user mode: a socket that proved its login gets every project's sessions (control for the unproven case)", async function () {
   var f = makeFixture();
   try {
-    var sessions = singleUserHubReply(f, { _clagenticAuthenticated: true });
+    var sessions = await singleUserHubReply(f, { _clagenticAuthenticated: true });
     var slugs = sessions.map(function (s) { return s.projectSlug; });
     assert.ok(slugs.indexOf("project-shared") !== -1);
     assert.ok(slugs.indexOf("project-private-x") !== -1, "the implicit owner sees the private project too");
