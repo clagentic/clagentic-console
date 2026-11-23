@@ -55,6 +55,7 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 function readMod(rel) {
   return fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
@@ -360,12 +361,12 @@ function makeEngine(cwd, sessionsByProject, unreadBySessKey) {
   }
   engine.stopTimer();
   function cleanup() {
-    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (_) {}
+    return removeTempHome(tmpHome);
   }
   return { engine: engine, ctx: ctx, cleanup: cleanup };
 }
 
-test("project-loop.js hub_recent_sessions_list: only the notifying session carries unread > 0, sibling session in same project stays 0", function () {
+test("project-loop.js hub_recent_sessions_list: only the notifying session carries unread > 0, sibling session in same project stays 0", async function () {
   var cwd = makeTempHomeLoop();
   var sessionsByProject = [
     { localId: 1, title: "Notifying session", lastActivity: 200, _projectSlug: "project-a", _projectTitle: "Project A", isProcessing: false },
@@ -387,12 +388,12 @@ test("project-loop.js hub_recent_sessions_list: only the notifying session carri
     assert.strictEqual(notifying.unread, 1, "the notifying session must carry unread: 1");
     assert.strictEqual(sibling.unread, 0, "the sibling session in the SAME project must carry unread: 0 — this is the bug lr-0aa7b6 fixes");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
-test("project-loop.js hub_recent_sessions_list: same-localId sessions in different projects resolve independent unread counts", function () {
+test("project-loop.js hub_recent_sessions_list: same-localId sessions in different projects resolve independent unread counts", async function () {
   var cwd = makeTempHomeLoop();
   var sessionsByProject = [
     { localId: 1, title: "Project A session 1", lastActivity: 200, _projectSlug: "project-a", _projectTitle: "Project A", isProcessing: false },
@@ -410,7 +411,7 @@ test("project-loop.js hub_recent_sessions_list: same-localId sessions in differe
     assert.strictEqual(aSess.unread, 3, "project-a's localId-1 session must show its own unread");
     assert.strictEqual(bSess.unread, 0, "project-b's localId-1 session must NOT inherit project-a's unread despite the colliding localId");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });

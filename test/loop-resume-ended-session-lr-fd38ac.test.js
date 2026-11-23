@@ -29,6 +29,7 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 function makeTempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-resume-"));
@@ -107,7 +108,7 @@ function makeEngine(cwd) {
   engine.stopTimer();
 
   function cleanup() {
-    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (_) {}
+    return removeTempHome(tmpHome);
   }
 
   return { engine: engine, ctx: ctx, cleanup: cleanup };
@@ -141,7 +142,7 @@ function triggerFinishLoop(engine) {
 // clear via sm.saveSessionFile(), not just the last coder session in memory.
 // ---------------------------------------------------------------------------
 
-test("lr-fd38ac: finishLoop() clears loop.active on judge sessions and prior-iteration coder sessions, not just the last coder", function () {
+test("lr-fd38ac: finishLoop() clears loop.active on judge sessions and prior-iteration coder sessions, not just the last coder", async function () {
   var cwd = makeTempHome();
   var { engine, ctx, cleanup } = makeEngine(cwd);
   try {
@@ -194,8 +195,8 @@ test("lr-fd38ac: finishLoop() clears loop.active on judge sessions and prior-ite
     assert.ok(ctx._savedSessionIds.indexOf(otherLoopSession.localId) === -1,
       "an unrelated loop's session must never be saved by this finish");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch (_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 

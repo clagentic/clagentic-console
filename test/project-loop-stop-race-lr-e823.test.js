@@ -19,6 +19,7 @@ var assert = require("node:assert/strict");
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,7 +97,7 @@ function makeEngine(cwd) {
   engine.stopTimer();
 
   function cleanup() {
-    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch(_) {}
+    return removeTempHome(tmpHome);
   }
 
   return { engine: engine, cleanup: cleanup };
@@ -112,15 +113,15 @@ function makeEngine(cwd) {
 // current counter, then artificially incrementing to prove isolation.
 // ---------------------------------------------------------------------------
 
-test("lr-e823: _loopSeq starts at 0", function() {
+test("lr-e823: _loopSeq starts at 0", async function() {
   var cwd = makeTempHome();
   var { engine, cleanup } = makeEngine(cwd);
   try {
     assert.strictEqual(engine.loopState._loopSeq, 0,
       "_loopSeq should be 0 before any loop starts");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
@@ -136,7 +137,7 @@ test("lr-e823: _loopSeq starts at 0", function() {
 //   e. Invoke the captured callback — it must be a no-op (active stays true).
 // ---------------------------------------------------------------------------
 
-test("lr-e823: stop fallback no-ops when _loopSeq advanced (stop/restart race)", function() {
+test("lr-e823: stop fallback no-ops when _loopSeq advanced (stop/restart race)", async function() {
   var cwd = makeTempHome();
   var { engine, cleanup } = makeEngine(cwd);
   try {
@@ -180,8 +181,8 @@ test("lr-e823: stop fallback no-ops when _loopSeq advanced (stop/restart race)",
     assert.strictEqual(ls.active, true,
       "active must remain true — stale fallback must not terminate the new loop");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });
 
@@ -190,7 +191,7 @@ test("lr-e823: stop fallback no-ops when _loopSeq advanced (stop/restart race)",
 // (normal slow stop, no restart).
 // ---------------------------------------------------------------------------
 
-test("lr-e823: stop fallback fires when loop identity unchanged (normal slow stop)", function() {
+test("lr-e823: stop fallback fires when loop identity unchanged (normal slow stop)", async function() {
   var cwd = makeTempHome();
   var { engine, cleanup } = makeEngine(cwd);
   try {
@@ -232,7 +233,7 @@ test("lr-e823: stop fallback fires when loop identity unchanged (normal slow sto
     assert.strictEqual(ls.active, false,
       "active must be false — fallback should call finishLoop on same-seq loop");
   } finally {
-    cleanup();
-    try { fs.rmSync(cwd, { recursive: true, force: true }); } catch(_) {}
+    await cleanup();
+    await removeTempHome(cwd);
   }
 });

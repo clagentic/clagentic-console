@@ -14,6 +14,7 @@ var fs = require("fs");
 var path = require("path");
 var os = require("os");
 var execFileSync = require("child_process").execFileSync;
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "clagentic-loop-tabs-"));
@@ -102,10 +103,10 @@ function makeHarness() {
 
   return {
     engine: engine, ctx: ctx, c1: clients[0], c2: clients[1],
-    cleanup: function () {
+    cleanup: async function () {
       engine.stopClaudeDirWatch();
-      fs.rmSync(home, { recursive: true, force: true });
-      fs.rmSync(cwd, { recursive: true, force: true });
+      await removeTempHome(home);
+      await removeTempHome(cwd);
     },
   };
 }
@@ -121,7 +122,7 @@ function completeIteration(h) {
 }
 
 // The loop arms real watchdog timers; clear every one so the test process exits.
-function withHarness(fn) {
+async function withHarness(fn) {
   var origSetTimeout = global.setTimeout;
   var armed = [];
   global.setTimeout = function (f, d) {
@@ -132,16 +133,16 @@ function withHarness(fn) {
   var h;
   try {
     h = makeHarness();
-    fn(h);
+    await fn(h);
   } finally {
     global.setTimeout = origSetTimeout;
     armed.forEach(function (t) { clearTimeout(t); });
-    if (h) h.cleanup();
+    if (h) await h.cleanup();
   }
 }
 
-test("a scheduled trigger runs an iteration and a judge and no client switches", function () {
-  withHarness(function (h) {
+test("a scheduled trigger runs an iteration and a judge and no client switches", async function () {
+  await withHarness(function (h) {
     h.engine.startLoop({ maxIterations: 3, name: "nightly" });
     completeIteration(h);
     assert.ok(h.ctx.sm.sessions.size >= 2, "iteration and judge sessions were created");
@@ -150,8 +151,8 @@ test("a scheduled trigger runs an iteration and a judge and no client switches",
   });
 });
 
-test("wizard draft crafting switches only the requesting client, once", function () {
-  withHarness(function (h) {
+test("wizard draft crafting switches only the requesting client, once", async function () {
+  await withHarness(function (h) {
     h.engine.handleLoopMessage(h.c1, {
       type: "ralph_wizard_complete",
       data: { name: "n", task: "t", loopMode: "simple", mode: "draft" },
@@ -161,8 +162,8 @@ test("wizard draft crafting switches only the requesting client, once", function
   });
 });
 
-test("wizard judge crafting switches only the requesting client, once", function () {
-  withHarness(function (h) {
+test("wizard judge crafting switches only the requesting client, once", async function () {
+  await withHarness(function (h) {
     h.engine.handleLoopMessage(h.c1, {
       type: "ralph_wizard_complete",
       data: { name: "n", task: "t", loopMode: "judge", mode: "own", promptText: "p", source: "ralph" },
@@ -172,8 +173,8 @@ test("wizard judge crafting switches only the requesting client, once", function
   });
 });
 
-test("loop_start from client 1 switches client 1 for the iteration and the judge, never client 2", function () {
-  withHarness(function (h) {
+test("loop_start from client 1 switches client 1 for the iteration and the judge, never client 2", async function () {
+  await withHarness(function (h) {
     h.engine.handleLoopMessage(h.c1, { type: "loop_start", maxIterations: 3 });
     completeIteration(h);
     assert.equal(h.c1.switched.length, 2, "iteration then judge");
@@ -181,8 +182,8 @@ test("loop_start from client 1 switches client 1 for the iteration and the judge
   });
 });
 
-test("loop_start from client 1 then client 1 disconnects: later sessions switch nobody", function () {
-  withHarness(function (h) {
+test("loop_start from client 1 then client 1 disconnects: later sessions switch nobody", async function () {
+  await withHarness(function (h) {
     h.engine.handleLoopMessage(h.c1, { type: "loop_start", maxIterations: 3 });
     assert.equal(h.c1.switched.length, 1, "first iteration followed the starter");
     h.c1.readyState = 3;

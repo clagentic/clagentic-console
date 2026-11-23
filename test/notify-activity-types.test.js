@@ -11,6 +11,7 @@ var os = require("os");
 var path = require("path");
 var execFileSync = require("child_process").execFileSync;
 var world = require("./prompt-harness-world");
+var { removeTempHome } = require("./helpers/remove-temp-home");
 
 // The banner store persists under the console config directory: keep it off
 // the host's own.
@@ -242,15 +243,15 @@ function loopHarness(push, banner) {
   return {
     engine: engine,
     ctx: ctx,
-    cleanup: function () {
+    cleanup: async function () {
       engine.stopClaudeDirWatch();
-      fs.rmSync(home, { recursive: true, force: true });
-      fs.rmSync(cwd, { recursive: true, force: true });
+      await removeTempHome(home);
+      await removeTempHome(cwd);
     },
   };
 }
 
-test("a loop that stops carries its project, its last session and its owner; a tap lands on the project (AC3)", function () {
+test("a loop that stops carries its project, its last session and its owner; a tap lands on the project (AC3)", async function () {
   var origSetTimeout = global.setTimeout;
   var armed = [];
   global.setTimeout = function (f, d) { var t = origSetTimeout(f, d); armed.push(t); return t; };
@@ -266,7 +267,7 @@ test("a loop that stops carries its project, its last session and its owner; a t
   } finally {
     global.setTimeout = origSetTimeout;
     armed.forEach(function (t) { clearTimeout(t); });
-    if (h) h.cleanup();
+    if (h) await h.cleanup();
   }
   assert.equal(push.calls.length, 1);
   assert.equal(push.calls[0].to, "alice");
