@@ -32,6 +32,7 @@ var assert = require("node:assert/strict");
 
 var { attachSessions } = require("../lib/project-sessions");
 var { createProjectAccess } = require("../lib/project-access");
+var { getCodexConfig } = require("../lib/codex-defaults");
 
 function makeSessionManager(overrides) {
   var sessions = new Map();
@@ -272,6 +273,10 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
   { type: "set_codex_approval", msg: { approval: "never" }, field: "codexApproval", expect: "never", told: 1, codex: { approval: "never", sandbox: "workspace-write", webSearch: "live" } },
   { type: "set_codex_sandbox", msg: { sandbox: "danger-full-access" }, field: "codexSandbox", expect: "danger-full-access", told: 1, codex: { approval: "on-request", sandbox: "danger-full-access", webSearch: "live" } },
   { type: "set_codex_websearch", msg: { webSearch: "disabled" }, field: "codexWebSearch", expect: "disabled", told: 1, codex: { approval: "on-request", sandbox: "workspace-write", webSearch: "disabled" } },
+  // A clear removes the session's own value (own: what it held), so it inherits
+  // the project default (saved) in the pushed config and in the next query's
+  // adapterOptions, which sdk-bridge builds from getCodexConfig.
+  { type: "set_codex_sandbox", msg: { sandbox: "" }, field: "codexSandbox", expect: undefined, told: 1, own: { codexSandbox: "danger-full-access" }, saved: { _savedDefaultCodexSandbox: "read-only" }, codex: { approval: "on-request", sandbox: "read-only", webSearch: "live" } },
   // noSession: with no session viewed a pick has nothing to set; the requester
   // alone is sent the saved-default config (the sandbox default is
   // "danger-full-access" here) and nothing is saved.
@@ -285,7 +290,7 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
   { type: "set_codex_websearch", msg: { webSearch: ["live"] }, field: "codexWebSearch", expect: undefined, refused: { approval: "on-request", sandbox: "workspace-write", webSearch: "live" } },
 ].forEach(function (row) {
   test(row.type + " " + (row.noSession ? "with no session viewed answers the requester with the saved defaults" : row.refused ? "refuses " + JSON.stringify(row.msg) : "writes the viewed session only"), function () {
-    var viewed = row.noSession ? null : { localId: 1 };
+    var viewed = row.noSession ? null : Object.assign({ localId: 1 }, row.own);
     var other = { localId: 2, effort: "low", betas: [], thinking: "adaptive", codexApproval: "untrusted", codexSandbox: "read-only", codexWebSearch: "cached" };
     var told = [];
     var savedSessions = [];
@@ -298,6 +303,7 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
     if (viewed) ctx.sm.sessions.set(1, viewed);
     ctx.sm.sessions.set(2, other);
     if (row.noSession) ctx.sm._savedDefaultCodexSandbox = "danger-full-access";
+    Object.assign(ctx.sm, row.saved);
     var requester = makeWs();
     var warn = console.warn;
     console.warn = function () {};
@@ -327,7 +333,7 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
     return Promise.resolve().then(function () {
       assert.deepStrictEqual({ a: other.codexApproval, s: other.codexSandbox, w: other.codexWebSearch }, { a: "untrusted", s: "read-only", w: "cached" }, "another session's Codex values are untouched");
       ["_savedDefaultCodexApproval", "_savedDefaultCodexSandbox", "_savedDefaultCodexWebSearch"].forEach(function (name) {
-        assert.strictEqual(ctx.sm[name], undefined, name + " (the saved default) is not written by a session pick");
+        assert.strictEqual(ctx.sm[name], (row.saved || {})[name], name + " (the saved default) is not written by a session pick");
       });
       if (row.codex) {
         assert.deepStrictEqual(savedSessions, [1], "the pick is saved with the session (its meta line)");
@@ -335,6 +341,7 @@ DEFAULT_SETTER_ROWS.forEach(function (row) {
         assert.strictEqual(pushed.type, "codex_config");
         assert.deepStrictEqual({ approval: pushed.approval, sandbox: pushed.sandbox, webSearch: pushed.webSearch }, row.codex);
         assert.strictEqual(ctx._sent.filter(function (m) { return m.type === "codex_config"; }).length, 0, "no broadcast to every client");
+        assert.deepStrictEqual(getCodexConfig(viewed, ctx.sm), row.codex, "the next query's adapterOptions carry the same values");
       }
       assert.deepStrictEqual(viewed[row.field], row.expect, "the viewed session holds the pick");
       assert.strictEqual(viewed.thinkingBudget, row.budget, "the viewed session holds the pick's token budget");
