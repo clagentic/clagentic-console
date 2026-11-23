@@ -282,7 +282,7 @@ var CODEX_SESSION_ROWS = [
   { id: "websearch", message: "set_codex_websearch", key: "webSearch", storeKey: "codexWebSearch", value: "cached", pick: 0, picked: "disabled" },
 ];
 
-test("the session popover states 'This session only' for effort, thinking, beta and the Codex settings through the shared label helper", function () {
+test("the session popover states 'This session only' for effort, thinking and beta through the shared label helper", function () {
   var snap = {
     currentModel: "claude-sonnet-4-6",
     currentModels: [{ value: "claude-sonnet-4-6", displayName: "Sonnet", supportsEffort: true }],

@@ -162,7 +162,7 @@ async function withTwoSessions(fn) {
   }
 }
 
-test("a beta and the Codex settings one session turns on are in that session's query and in no other session's", async function () {
+test("a beta one session turns on is in that session's query and in no other session's", async function () {
   await withTwoSessions(async function (w) {
     await send(w.handlers, w.ca, { type: "set_betas", betas: ["context-1m-test"] });
     for (var row of CODEX_ROWS) await send(w.handlers, w.ca, { type: row.type, [row.key]: row.value });
