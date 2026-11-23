@@ -208,13 +208,15 @@ test("lr-041af8: reconnect falls back to the project default only when the resto
 [
   {
     name: "a session's own effort, betas and thinking",
-    own: { effort: "low", betas: ["own-beta"], thinking: "budget", thinkingBudget: 2048 },
+    own: { effort: "low", betas: ["own-beta"], thinking: "budget", thinkingBudget: 2048, codexApproval: "never", codexSandbox: "read-only", codexWebSearch: "cached" },
     expect: { effort: "low", betas: ["own-beta"], thinking: "budget", thinkingBudget: 2048 },
+    codex: { approval: "never", sandbox: "read-only", webSearch: "cached" },
   },
   {
     name: "the saved defaults for a session that never chose",
     own: {},
     expect: { effort: "high", betas: ["default-beta"], thinking: "disabled", thinkingBudget: 10000 },
+    codex: { approval: "on-request", sandbox: "danger-full-access", webSearch: "disabled" },
   },
 ].forEach(function (row) {
   test("reconnect hydrates config_state with " + row.name, function () {
@@ -226,11 +228,15 @@ test("lr-041af8: reconnect falls back to the project default only when the resto
       sm._savedDefaultEffort = "high";
       sm._savedDefaultBetas = ["default-beta"];
       sm._savedDefaultThinking = "disabled";
+      sm._savedDefaultCodexApproval = "on-request";
+      sm._savedDefaultCodexSandbox = "danger-full-access";
+      sm._savedDefaultCodexWebSearch = "disabled";
       var session = sm.createSessionRaw({});
       session.cliSessionId = "sess-config-hydrate";
       // The saved defaults were not set yet when the session was made, as for a
       // session loaded from a file saved before they existed.
       delete session.effort; delete session.betas; delete session.thinking; delete session.thinkingBudget;
+      delete session.codexApproval; delete session.codexSandbox; delete session.codexWebSearch;
       Object.assign(session, row.own);
       sm.sendAndRecord(session, { type: "user_message", text: "hello" });
       sm.saveSessionFile(session);
@@ -250,6 +256,10 @@ test("lr-041af8: reconnect falls back to the project default only when the resto
       assert.deepStrictEqual(
         { effort: state.effort, betas: state.betas, thinking: state.thinking, thinkingBudget: state.thinkingBudget },
         row.expect);
+      var codex = sendToCalls.find(function (m) { return m.type === "codex_config"; });
+      assert.ok(codex, "expected a codex_config message on connect");
+      assert.deepStrictEqual({ approval: codex.approval, sandbox: codex.sandbox, webSearch: codex.webSearch }, row.codex,
+        "the restored session's own Codex values, else the saved defaults");
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
@@ -289,14 +299,16 @@ test("reconnect sends the saved server and project defaults, not the restored se
         onGetProjectDefaultThinking: function () { return { thinking: null, thinkingBudget: null }; },
         onGetServerDefaultMode: function () { return { mode: "acceptEdits" }; },
         onGetProjectDefaultMode: function () { return { mode: null }; },
+        onGetServerDefaultCodex: function () { return { approval: "never", sandbox: null, webSearch: null }; },
+        onGetProjectDefaultCodex: function () { return { approval: null, sandbox: "read-only", webSearch: null }; },
       },
     });
     mods.connModule.attachConnection(ctx).handleConnection({ on: function () {}, readyState: 1, send: function () {} }, null, function () {}, function () {});
 
     var saved = sendToCalls.find(function (m) { return m.type === "saved_defaults"; });
     assert.ok(saved, "expected a saved_defaults message on connect");
-    assert.deepStrictEqual(saved.server, { model: "sonnet", mode: "acceptEdits", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096 });
-    assert.deepStrictEqual(saved.project, { model: "opus", mode: null, effort: null, betas: [], thinking: null, thinkingBudget: null });
+    assert.deepStrictEqual(saved.server, { model: "sonnet", mode: "acceptEdits", effort: "high", betas: ["server-beta"], thinking: "budget", thinkingBudget: 4096, codexApproval: "never", codexSandbox: null, codexWebSearch: null });
+    assert.deepStrictEqual(saved.project, { model: "opus", mode: null, effort: null, betas: [], thinking: null, thinkingBudget: null, codexApproval: null, codexSandbox: "read-only", codexWebSearch: null });
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }

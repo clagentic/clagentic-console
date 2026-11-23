@@ -67,7 +67,9 @@ Wires all modules, sets up session manager and SDK bridge, dispatches messages.
 | `sdk-skill-discovery.js` | Skill directory scanning, shell segment splitting, SDK/filesystem skill merging |
 | `sdk-message-queue.js` | Async iterable message queue for streaming input to SDK |
 | `sdk-message-processor.js` | SDK stream event processing (message_start, content_block_*), sub-agent message routing |
-| `codex-defaults.js` | Codex-specific default values (sandbox, approval, web search). **Single source of truth** - do not duplicate elsewhere |
+| `codex-defaults.js` | Codex-specific default values (sandbox, approval, web search) and `getCodexConfig(session, sm)`: a session's own value, else the saved default, else these. **Single source of truth** - do not duplicate elsewhere |
+| `codex-default-store.js` | How the saved server and project Codex defaults sit in `daemon.json` |
+| `codex-values.js` | The Codex settings (approval, sandbox, web search): the session field each is saved in, and the get and set of each saved default on the session manager |
 | `users.js` | User CRUD, invites, profile/PIN update, storage, Linux user integration |
 | `users-auth.js` | Authentication, PIN hashing, auth tokens, multi-user mode, setup codes |
 | `users-permissions.js` | RBAC permissions, project/session access control |

@@ -81,13 +81,52 @@ test.beforeEach(function () {
 
 // --- the settings pages ----------------------------------------------------
 
+// The Codex approval, sandbox and web search pickers sit on the same pages: each
+// saves a default (never the session's setting, so never set_codex_*) and states
+// its scope. `saved` is what saved_defaults carried; `shown` the choice each
+// picker marks active (the project page adds "Inherit", marked when the project
+// has no default of its own); `first` what the first choice of each sends.
+var CODEX_SAVED = {
+  server: { codexApproval: "never", codexSandbox: "read-only", codexWebSearch: "cached" },
+  project: { codexApproval: null, codexSandbox: "danger-full-access", codexWebSearch: null },
+};
+var SERVER_CODEX_MSGS = { approval: "set_server_default_codex_approval", sandbox: "set_server_default_codex_sandbox", websearch: "set_server_default_codex_websearch" };
+var PROJECT_CODEX_MSGS = { approval: "set_project_default_codex_approval", sandbox: "set_project_default_codex_sandbox", websearch: "set_project_default_codex_websearch" };
 var SETTINGS_SURFACES = [
-  { prefix: "ss", label: "Server default", thinkingMsgType: "set_server_default_thinking" },
-  { prefix: "ps", label: "Default for new sessions in this project", thinkingMsgType: "set_project_default_thinking" },
+  {
+    prefix: "ss", level: "server", label: "Server default", thinkingMsgType: "set_server_default_thinking",
+    saved: CODEX_SAVED, codexMsgTypes: SERVER_CODEX_MSGS,
+    shown: { approval: "Auto", sandbox: "Read Only", websearch: "Cached" },
+    first: { approval: "never", sandbox: "read-only", webSearch: "disabled" },
+  },
+  {
+    prefix: "ps", level: "project", label: "Default for new sessions in this project", thinkingMsgType: "set_project_default_thinking",
+    saved: CODEX_SAVED, codexMsgTypes: PROJECT_CODEX_MSGS,
+    shown: { approval: "Inherit (Auto)", sandbox: "Full Access", websearch: "Inherit (Cached)" },
+    first: { approval: "", sandbox: "", webSearch: "" },
+  },
+  {
+    name: "with a default of its own for every setting", prefix: "ps", level: "project", label: "Default for new sessions in this project", thinkingMsgType: "set_project_default_thinking",
+    saved: { server: CODEX_SAVED.server, project: { codexApproval: "on-request", codexSandbox: "workspace-write", codexWebSearch: "live" } }, codexMsgTypes: PROJECT_CODEX_MSGS,
+    shown: { approval: "Ask", sandbox: "Workspace", websearch: "Live" },
+    first: { approval: "", sandbox: "", webSearch: "" },
+  },
+  {
+    name: "with nothing saved anywhere", prefix: "ps", level: "project", label: "Default for new sessions in this project", thinkingMsgType: "set_project_default_thinking",
+    saved: { server: {}, project: {} }, codexMsgTypes: PROJECT_CODEX_MSGS,
+    shown: { approval: "Inherit (Ask)", sandbox: "Inherit (Workspace)", websearch: "Inherit (Live)" },
+    first: { approval: "", sandbox: "", webSearch: "" },
+  },
+  {
+    name: "with nothing saved", prefix: "ss", level: "server", label: "Server default", thinkingMsgType: "set_server_default_thinking",
+    saved: { server: {}, project: {} }, codexMsgTypes: SERVER_CODEX_MSGS,
+    shown: { approval: "Ask", sandbox: "Workspace", websearch: "Live" },
+    first: { approval: "never", sandbox: "read-only", webSearch: "disabled" },
+  },
 ];
 
 SETTINGS_SURFACES.forEach(function (row) {
-  test(row.prefix + " settings: effort, thinking and beta each state the scope, and Thinking saves a default", function () {
+  test(row.prefix + " settings" + (row.name ? " " + row.name : "") + ": effort, thinking and beta each state the scope, Thinking saves a default, and the Codex pickers do the same", function () {
     var sent = [];
     var opts = {
       currentEffort: "medium", currentThinking: "adaptive", currentThinkingBudget: 10000, currentBetas: [],
@@ -106,6 +145,25 @@ SETTINGS_SURFACES.forEach(function (row) {
     var buttons = byId[row.prefix + "-thinking-bar"].children;
     buttons[buttons.length - 1].dispatch("click");
     assert.equal(sent[0][0], row.thinkingMsgType, "the Thinking control sends the default's message, not set_thinking");
+
+    var codexSent = [];
+    defaults.renderCodexBars(row.prefix, {
+      sendMsg: function (type, data) { codexSent.push([type, data]); },
+      scopeLabel: row.label,
+      codexValues: defaults.codexDefaultPickerValues(row.saved, row.level),
+      inheritedValues: row.level === "project" ? defaults.codexInheritedValues(row.saved) : undefined,
+      codexMsgTypes: row.codexMsgTypes,
+    });
+    Object.keys(row.shown).forEach(function (id) {
+      var bar = byId[row.prefix + "-codex-" + id + "-bar"];
+      assert.deepEqual(bar.children.filter(function (c) { return /active/.test(c.className); }).map(function (c) { return c.textContent; }), [row.shown[id]], id + " shows the saved default");
+      assert.equal(byId[row.prefix + "-codex-" + id + "-scope"].textContent, row.label);
+      bar.children[0].dispatch("click");
+    });
+    assert.deepEqual(codexSent.map(function (pair) { return pair[0]; }), [row.codexMsgTypes.approval, row.codexMsgTypes.sandbox, row.codexMsgTypes.websearch],
+      "each control sends its default's message, not set_codex_*");
+    assert.deepEqual(codexSent.map(function (pair) { return pair[1]; }), [{ approval: row.first.approval }, { sandbox: row.first.sandbox }, { webSearch: row.first.webSearch }],
+      "the first choice sends its value; a project's Inherit sends the empty value that clears its default");
   });
 });
 
@@ -215,15 +273,37 @@ test("the dated 1M identifier is written once in lib/, in the shared fallback co
 
 // --- the session popover ---------------------------------------------------
 
+// The Codex pickers of the popover (an agent with an execution policy) show the
+// viewed session's own value and send the session's message: `value` is what the
+// store holds, `pick` the choice clicked and `picked` the value it sends.
+var CODEX_SESSION_ROWS = [
+  { id: "approval", message: "set_codex_approval", key: "approval", storeKey: "codexApproval", value: "never", pick: 1, picked: "on-request" },
+  { id: "sandbox", message: "set_codex_sandbox", key: "sandbox", storeKey: "codexSandbox", value: "read-only", pick: 2, picked: "danger-full-access" },
+  { id: "websearch", message: "set_codex_websearch", key: "webSearch", storeKey: "codexWebSearch", value: "cached", pick: 0, picked: "disabled" },
+];
+
 test("the session popover states 'This session only' for effort, thinking and beta through the shared label helper", function () {
-  storeMod.createStore({
+  var snap = {
     currentModel: "claude-sonnet-4-6",
     currentModels: [{ value: "claude-sonnet-4-6", displayName: "Sonnet", supportsEffort: true }],
     currentEffort: "medium", currentThinking: "adaptive", currentThinkingBudget: 10000, currentBetas: [],
-  });
+    vendorCapabilities: { executionPolicy: true }, codexApproval: "on-request", codexSandbox: "workspace-write", codexWebSearch: "live",
+  };
+  CODEX_SESSION_ROWS.forEach(function (row) { snap[row.storeKey] = row.value; });
+  storeMod.createStore(snap);
+  var sent = [];
+  wsRef.setWs({ readyState: 1, send: function (data) { sent.push(JSON.parse(data)); } });
   appPanels.initPanels();
   appPanels.updateConfigChip();
   assert.equal(byId["config-effort-scope"].textContent, "This session only");
   assert.equal(byId["config-thinking-scope"].textContent, "This session only");
   assert.equal(byId["config-beta-scope"].textContent, "This session only");
+  CODEX_SESSION_ROWS.forEach(function (row) {
+    var bar = byId["config-" + row.id + "-bar"];
+    assert.equal(byId["config-" + row.id + "-scope"].textContent, "This session only");
+    assert.equal(bar.children.filter(function (c) { return c.classList.contains("active"); }).map(function (c) { return c.dataset.val; })[0], row.value, row.id + " shows the viewed session's value");
+    bar.children[row.pick].dispatch("click");
+  });
+  assert.deepEqual(sent, CODEX_SESSION_ROWS.map(function (row) { return Object.assign({ type: row.message }, { [row.key]: row.picked }); }));
+  wsRef.setWs(null);
 });

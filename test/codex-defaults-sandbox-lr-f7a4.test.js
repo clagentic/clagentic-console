@@ -18,22 +18,22 @@ test("lr-f7a4: default sandbox is not danger-full-access", function () {
 });
 
 test("lr-f7a4: getCodexConfig falls back to the safe default sandbox when session-manager has no explicit setting", function () {
-  var config = getCodexConfig(null);
+  var config = getCodexConfig(null, null);
   assert.notEqual(config.sandbox, "danger-full-access");
   assert.equal(config.sandbox, CODEX_DEFAULTS.sandbox);
 });
 
 test("lr-f7a4: getCodexConfig still honors an explicit danger-full-access opt-in", function () {
-  var sm = { codexSandbox: "danger-full-access" };
-  var config = getCodexConfig(sm);
+  var session = { codexSandbox: "danger-full-access" };
+  var config = getCodexConfig(session, null);
   assert.equal(config.sandbox, "danger-full-access");
 });
 
 test("lr-f7a4: getCodexConfig does not force a fixed approval policy — it passes through whatever is configured", function () {
-  var smOnRequest = { codexApproval: "on-request" };
-  assert.equal(getCodexConfig(smOnRequest).approval, "on-request");
+  var sessionOnRequest = { codexApproval: "on-request" };
+  assert.equal(getCodexConfig(sessionOnRequest, null).approval, "on-request");
 
-  var smDefault = null;
-  assert.equal(getCodexConfig(smDefault).approval, CODEX_DEFAULTS.approval);
+  var sessionDefault = null;
+  assert.equal(getCodexConfig(sessionDefault, null).approval, CODEX_DEFAULTS.approval);
   assert.notEqual(CODEX_DEFAULTS.approval, "never");
 });
