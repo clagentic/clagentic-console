@@ -659,6 +659,34 @@ var ACQUIRE_SITES = [
     },
   },
   {
+    id: "vendor registry on connect, a narrow context without the resolvers", needsUser: true, onlyShape: "no Linux mapping",
+    run: async function (shape) {
+      var sm = {
+        sessions: new Map(), installedVendors: ["claude"], effectiveSessionModel: function () { return null; },
+        availableVendors: [], capabilitiesByVendor: {},
+      };
+      var sent = [];
+      var narrow = require("../lib/project-connection").attachConnection({
+        cwd: PROJ, slug: "narrow", osUsers: true, sm: sm, tm: { list: function () { return []; } }, nm: { list: function () { return []; } },
+        clients: new Set(), sendTo: function (ws, m) { sent.push(m); }, opts: {},
+        _loop: { loopState: {}, loopRegistry: {}, sendConnectionState: function () {} },
+        broadcastClientCount: function () {}, broadcastPresence: function () {},
+        getProjectList: function () { return []; }, getHubSchedules: function () { return []; },
+        getProjectOwnerId: function () { return null; }, getTitle: function () { return "narrow"; }, getProject: function () { return "narrow"; },
+        liteStatus: { installed: false, liteHome: null },
+      });
+      var ws = fakeWs(shape.user);
+      ws.on = function () {};
+      try { narrow.handleConnection(ws, shape.user, function () {}, function () {}); } catch (e) { /* what follows the registry is not under test */ }
+      var registryMsg = sent.filter(function (m) { return m.type === "vendor_registry"; })[0];
+      assert.ok(registryMsg, "the registry was sent");
+      assert.deepEqual(registryMsg.vendors.filter(function (v) { return v.installed || v.available; }), [], "the daemon's registry was not served to an unmapped user");
+      var identity = require("../lib/connection-identity").createConnectionIdentity({ osUsers: true, getSm: function () { return sm; } });
+      assert.throws(function () { identity.getLinuxUserForWs(ws); }, function (e) { assert.equal(e.code, shape.code); assertNamed(shape, e.message); return true; });
+      return 0;
+    },
+  },
+  {
     id: "vendor re-check (recheck_vendors)", needsUser: true,
     run: async function (shape) {
       var ctx = ctxFor(true);
@@ -697,6 +725,7 @@ var ACQUIRE_SITES = [
 ACQUIRE_SITES.forEach(function (site) {
   OWNER_SHAPES.forEach(function (shape) {
     if (site.needsUser && !shape.user) return;
+    if (site.onlyShape && site.onlyShape !== shape.id) return;
     test("AC4 AC5 " + site.id + ": an owner with " + shape.id + " is refused by name and nothing runs as the daemon", async function () {
       W = ownerWorld(shape);
       try {
