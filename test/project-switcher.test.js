@@ -2,15 +2,34 @@
 
 // The Ctrl+E project switcher lists the projects the sidebar shows at top
 // level: a worktree that has a parent project is reached through that parent,
-// so it gets no row. No browser: the real project-switcher.js and the real
-// switchProject run over the hand-built DOM, driven by the keyboard.
+// so it gets no row. No browser: the real project-switcher.js runs over the
+// hand-built DOM and is driven by the keyboard. Its one collaborator that
+// reaches the whole client (app-projects.js: the cached list and
+// switchProject) is replaced at the module boundary by a recorder, so the
+// test sees which project Enter switches to without booting the client.
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var nodeModule = require("node:module");
 
 var dom = require("./fake-dom-prompt-cards");
 
 var instance = 0;
+
+var RECORDER =
+  "export function getCachedProjects() { return globalThis.__switcherSeam.projects; }" +
+  "export function switchProject(slug) { globalThis.__switcherSeam.switched.push(slug); }";
+
+var hooks = nodeModule.registerHooks({
+  resolve: function (specifier, context, nextResolve) {
+    if (specifier === "./app-projects.js" && /project-switcher\.js\?switcher=/.test(context.parentURL || "")) {
+      return { url: "data:text/javascript," + encodeURIComponent(RECORDER), shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+test.after(function () { hooks.deregister(); });
 
 function project(slug, over) {
   return Object.assign({ slug: slug, title: "Title " + slug }, over);
@@ -26,14 +45,7 @@ async function browser(t, current, projects) {
   await dom.setupToolsEnv(t);
   var listeners = {};
   global.document.addEventListener = function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); };
-  global.document.documentElement = { classList: { contains: function () { return false; } } };
-  global.window.addEventListener = function () {};
-  var pushed = [];
-  global.history = {
-    pushState: function (s, title, url) { pushed.push(url); },
-    replaceState: function (s, title, url) { pushed.push(url); },
-  };
-  global.WebSocket = function () { this.readyState = 0; this.close = function () {}; };
+  global.__switcherSeam = { projects: projects, switched: [] };
 
   var overlay = new dom.FakeElement("div");
   overlay.id = "project-switcher";
@@ -46,9 +58,7 @@ async function browser(t, current, projects) {
   global.document.getElementById = function (id) { return id === "project-switcher" ? overlay : null; };
 
   var storeMod = await import(dom.moduleUrl("store.js"));
-  storeMod.store.set({ currentSlug: current, activeSessionId: 1 });
-  var appProjects = await import(dom.moduleUrl("app-projects.js"));
-  appProjects.setCachedProjects(projects);
+  storeMod.store.set({ currentSlug: current });
   var n = ++instance;
   var switcher = await import(dom.moduleUrl("project-switcher.js") + "?switcher=" + n);
   switcher.initProjectSwitcher();
@@ -58,18 +68,15 @@ async function browser(t, current, projects) {
       preventDefault: function () {}, stopPropagation: function () {} }, extra);
     (listeners.keydown || []).forEach(function (fn) { fn(ev); });
   }
+  function titleOf(el) { return el.querySelector(".cmd-palette-item-title").textContent; }
   return {
     open: function () { key("e", { ctrlKey: true }); },
     enter: function () { key("Enter"); },
     isOpen: function () { return !overlay.classList.contains("hidden"); },
     items: function () { return overlay.querySelectorAll(".project-switcher-item"); },
-    titles: function () {
-      return overlay.querySelectorAll(".project-switcher-item").map(function (el) {
-        return el.querySelector(".cmd-palette-item-title").textContent;
-      });
-    },
-    current: function () { return storeMod.store.get("currentSlug"); },
-    pushed: pushed,
+    titles: function () { return overlay.querySelectorAll(".project-switcher-item").map(titleOf); },
+    titleOf: titleOf,
+    switched: function () { return global.__switcherSeam.switched; },
   };
 }
 
@@ -77,23 +84,23 @@ var ROWS = [
   { name: "AC1: worktrees of a parent get no row, the rest keep the server order",
     current: "alpha",
     projects: [project("alpha"), worktree("alpha--wt-one", "alpha"), project("gamma"), worktree("alpha--wt-two", "alpha")],
-    titles: ["Title alpha", "Title gamma"], badges: 1, commitTo: "gamma" },
+    titles: ["Title alpha", "Title gamma"], badges: 1, switchesTo: ["gamma"] },
   { name: "AC2: opened from a worktree, no row is current and Enter switches to the parent",
     current: "alpha--wt-one",
     projects: [project("alpha"), worktree("alpha--wt-one", "alpha"), project("gamma"), worktree("alpha--wt-two", "alpha")],
-    titles: ["Title alpha", "Title gamma"], badges: 0, commitTo: "alpha" },
+    titles: ["Title alpha", "Title gamma"], badges: 0, switchesTo: ["alpha"] },
   { name: "AC3: a worktree record without a parent is listed, and an unreachable one stays disabled",
     current: "alpha",
     projects: [project("alpha"), worktree("orphan", undefined), worktree("stranded", undefined, { worktreeAccessible: false })],
-    titles: ["Title alpha", "Title orphan", "Title stranded"], badges: 1, disabled: ["Title stranded"], commitTo: "orphan" },
+    titles: ["Title alpha", "Title orphan", "Title stranded"], badges: 1, disabled: ["Title stranded"], switchesTo: ["orphan"] },
   { name: "AC4: only the current project and its worktrees leaves one row, and the dialog still opens",
     current: "alpha",
     projects: [project("alpha"), worktree("alpha--wt-one", "alpha")],
-    titles: ["Title alpha"], badges: 1, commitTo: null },
+    titles: ["Title alpha"], badges: 1, switchesTo: [] },
   { name: "AC4: nothing but worktrees of other projects leaves no row, and the dialog stays shut",
     current: "alpha",
     projects: [worktree("beta--wt-one", "beta")],
-    titles: [], badges: 0, commitTo: null },
+    titles: [], badges: 0, switchesTo: [] },
 ];
 
 test("project switcher: Ctrl+E lists only top-level projects, Enter switches to the highlighted one", async function (t) {
@@ -106,12 +113,11 @@ test("project switcher: Ctrl+E lists only top-level projects, Enter switches to 
     assert.equal(b.isOpen(), row.titles.length > 0, row.name + ": dialog open");
     assert.equal(b.items().filter(function (el) { return el.querySelector(".project-switcher-current"); }).length, row.badges, row.name + ": current badge");
     (row.disabled || []).forEach(function (title) {
-      var el = b.items().filter(function (it) { return it.querySelector(".cmd-palette-item-title").textContent === title; })[0];
+      var el = b.items().filter(function (it) { return b.titleOf(it) === title; })[0];
       assert.ok(el.classList.contains("disabled"), row.name + ": " + title + " disabled");
       assert.equal(el.title, "Outside project path", row.name + ": " + title + " reason");
     });
     b.enter();
-    assert.equal(b.current(), row.commitTo || row.current, row.name + ": slug after Enter");
-    assert.deepEqual(b.pushed, row.commitTo ? ["/p/" + row.commitTo + "/"] : [], row.name + ": navigation");
+    assert.deepEqual(b.switched(), row.switchesTo, row.name + ": switchProject calls after Enter");
   }
 });
