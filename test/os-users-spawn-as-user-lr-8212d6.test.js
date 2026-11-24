@@ -53,8 +53,16 @@ var W = null;
 function newWorld(over) {
   return Object.assign({
     accounts: [], users: {}, calls: [], output: "{}", getentFailure: false, spawnExit: false,
+    // The daemon's own supplementary groups: none unless a test says so, so no
+    // result depends on the groups of whoever runs the suite.
+    daemonGroups: [],
   }, over || {});
 }
+
+var realGetgroups = process.getgroups;
+process.getgroups = function () {
+  return W ? W.daemonGroups.slice() : realGetgroups.apply(process, arguments);
+};
 
 function findAccount(key) {
   for (var i = 0; i < W.accounts.length; i++) {
@@ -199,12 +207,12 @@ function withPath(hasSetpriv, fn) {
   return Promise.resolve(out).then(function (v) { restore(); return v; }, function (e) { restore(); throw e; });
 }
 
-function until(predicate, label) {
+function until(predicate, label, limitMs) {
   return new Promise(function (resolve, reject) {
     var started = Date.now();
     (function poll() {
       if (predicate()) return resolve();
-      if (Date.now() - started > 3000) return reject(new Error("timed out waiting for " + label));
+      if (Date.now() - started > (limitMs || 3000)) return reject(new Error("timed out waiting for " + label));
       setTimeout(poll, 10);
     })();
   });
@@ -266,10 +274,32 @@ var contexts = {};
 
 // Built before any world is installed, so what building one starts is real and
 // is not counted among the processes a test expects not to see.
-test.before(function () {
+test.before(async function () {
   ctxFor(true);
   ctxFor(false);
+  await settleFirstConnectionWarmup(ctxFor(true));
 });
+
+// The first connection into a project starts its adapters' warmup, which runs
+// on after the connection returns and starts processes of its own. Run it here,
+// to its end, so it never lands inside a test that counts the processes started.
+async function settleFirstConnectionWarmup(ctx) {
+  var user = { id: "u-warmup", username: "warmup", role: "admin", linuxUser: null };
+  W = newWorld({ users: { "u-warmup": user } });
+  var ws = fakeWs(user);
+  ws.on = function () {};
+  function registries() { return ws.inbox.filter(function (m) { return m.type === "vendor_registry"; }).length; }
+  try {
+    ctx.handleConnection(ws, user);
+    // One registry answers the connection, a second is the end of the warmup.
+    await until(function () { return registries() >= 2; }, "the warmup to finish", 60000);
+  } catch (e) {
+    // A warmup that never finishes is left to run on; the tests then fail on what it starts.
+  } finally {
+    ctx.handleDisconnection(ws);
+    W = null;
+  }
+}
 
 test.after(async function () {
   for (var key of Object.keys(contexts)) {
@@ -398,13 +428,15 @@ var SPAWN_SITES = [
     },
   },
   {
-    id: "repository git", want: "git", extraEnv: ["GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL"],
+    // Git reads run as the repository owner's uid and gid alone, so the owner
+    // below has no supplementary groups whatever the caller shape.
+    id: "repository git", want: "git", ownerWithoutGroups: true, extraEnv: ["GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL"],
     drive: async function (acct) {
       var repo = fs.mkdtempSync(path.join(SANDBOX, "repo-"));
       fs.mkdirSync(path.join(repo, ".git"));
       var st = fs.statSync(path.join(repo, ".git"));
       // The account that owns the repository: this one's groups, the stat's uid and gid.
-      var owner = { name: "repo-owner-" + acct.name, uid: st.uid, gid: st.gid, home: acct.home, shell: acct.shell, groups: [st.gid].concat(extras(acct)) };
+      var owner = { name: "repo-owner-" + acct.name, uid: st.uid, gid: st.gid, home: acct.home, shell: acct.shell, groups: [st.gid] };
       W.accounts.push(owner);
       try {
         require("../lib/project-git").runGit(["log", "-1"], { cwd: repo, osUsers: true, exec: function (c, a, o) { record(c, a, o); return ""; } });
@@ -448,14 +480,40 @@ SPAWN_SITES.forEach(function (site) {
 
 SPAWN_SITES.forEach(function (site) {
   test("AC3 " + site.id + ": an account with groups is refused by name when setpriv is missing; one without may start", async function () {
-    var refusedRun = await runSite(site, GROUPED, { setpriv: false });
-    assert.match(String(refusedRun.result.refused), /supplementary groups/);
-    assert.match(String(refusedRun.result.refused), /setpriv/);
-    assert.equal(callFor(refusedRun.calls, site.want), null, "nothing was started without the groups");
+    if (!site.ownerWithoutGroups) {
+      var refusedRun = await runSite(site, GROUPED, { setpriv: false });
+      assert.match(String(refusedRun.result.refused), /supplementary groups/);
+      assert.match(String(refusedRun.result.refused), /setpriv/);
+      assert.equal(callFor(refusedRun.calls, site.want), null, "nothing was started without the groups");
+    }
 
     var plainRun = await runSite(site, PLAIN, { setpriv: false });
     assert.equal(plainRun.result.refused, null);
     assert.deepEqual(problems(callFor(plainRun.calls, site.want), plainRun.acct, site.extraEnv), []);
+  });
+});
+
+// A pty child keeps the daemon's groups unless they are cleared, so a daemon that
+// has some sends even a no-group account through setpriv; the daemon's own
+// account needs no wrapper at all. Both are stated here, not read from the host.
+[
+  { id: "a daemon with supplementary groups clears them for a no-group account", daemonGroups: [777], acct: PLAIN, clears: true },
+  { id: "a daemon with no supplementary groups starts a no-group account directly", daemonGroups: [], acct: PLAIN, clears: false },
+  { id: "the daemon's own account starts directly even with groups", daemonGroups: [777], acct: { name: "clay-self", uid: process.geteuid(), gid: process.getegid(), groups: [process.getegid(), 53001], home: "/home/clay-self", shell: "/bin/bash" }, clears: false },
+].forEach(function (shape) {
+  test("AC1 terminal: " + shape.id, async function () {
+    W = newWorld({ accounts: [shape.acct], daemonGroups: shape.daemonGroups });
+    try {
+      await withPath(true, function () {
+        require("../lib/terminal").createTerminal(PROJ, 80, 24, osUsers.resolveOsUserInfo(shape.acct.name));
+      });
+      var call = W.calls[W.calls.length - 1];
+      assert.equal(isSetpriv(call.command), shape.clears);
+      if (shape.clears) assert.ok(call.args.indexOf("--clear-groups") !== -1);
+      else assert.equal(call.options.uid, shape.acct.uid);
+    } finally {
+      W = null;
+    }
   });
 });
 
