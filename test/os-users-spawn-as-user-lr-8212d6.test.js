@@ -283,7 +283,7 @@ function ctxFor(osUsersOn) {
   if (!contexts[key]) {
     contexts[key] = require("../lib/project").createProjectContext({
       cwd: PROJ, slug: "spawn-" + key, title: "spawn-" + key, debug: false, currentVersion: "0.0.0", osUsers: osUsersOn,
-      notificationsModule: { handleNotificationMessage: function () { return false; } },
+      notificationsModule: { handleNotificationMessage: function () { return false; }, sendConnectionState: function () {} },
     });
   }
   return contexts[key];
