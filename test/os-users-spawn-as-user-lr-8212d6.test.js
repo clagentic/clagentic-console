@@ -76,9 +76,11 @@ function lookup(cmd, args) {
     if (!a) throw statusError(2, "getent: no such key");
     return a.name + ":x:" + a.uid + ":" + a.gid + ":gecos:" + a.home + ":" + a.shell + "\n";
   }
-  if (cmd === "id" && args[0] === "-G") {
+  if (cmd === "id" && /^-[Gug]$/.test(String(args[0]))) {
     var b = findAccount(args[1]);
     if (!b) throw statusError(1, "id: no such user");
+    if (args[0] === "-u") return b.uid + "\n";
+    if (args[0] === "-g") return b.gid + "\n";
     return b.groups.join(" ") + "\n";
   }
   return undefined;
