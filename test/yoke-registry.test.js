@@ -64,7 +64,7 @@ test("both shipped agents register one complete descriptor each, in preference o
   assert.equal(codex.needsRuntimeEnv, true, "every Codex entry point requires runtimeEnv");
   assert.equal(claude.needsRuntimeEnv, false);
   assert.equal(claude.osUsersSupported, true);
-  assert.equal(codex.osUsersSupported, false);
+  assert.equal(codex.osUsersSupported, true, "Codex runs one app-server per mapped account in os-users mode");
   assert.deepEqual(codex.ownedEnvNames, ["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
   assert.ok(claude.ownedEnvNames.indexOf("ANTHROPIC_API_KEY") !== -1);
   assert.ok(claude.installHint.length > 0 && codex.installHint.length > 0);

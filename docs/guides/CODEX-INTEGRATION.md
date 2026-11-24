@@ -208,9 +208,9 @@ The approval default is `on-request`. `on-failure` is only an alias of it in cur
 
 `turn/start` takes `turnTrigger` (Codex 0.151.0 and later). Codex counts a turn as automated only for the exact value `automation_heartbeat_scheduled`. Typed turns omit the field. Do not invent other values: they are treated as a user turn.
 
-### 15. Not run under OS user isolation
+### 15. One app-server per account under OS user isolation
 
-In os-users mode the Codex agent is disabled ("Codex is not yet isolated per OS user"): no adapter is created and no app-server is started, because one started by the daemon would run as the daemon's user. Never start one in that mode.
+In os-users mode each mapped Linux account gets its own app-server, started through `os-users.asUser` with that account's uid, gid, supplementary groups, HOME and minimal environment, and keyed by the account so it is never shared. A caller that names no account is refused (`CODEX_OS_USER_REQUIRED`); never start an app-server as the daemon's account in that mode.
 
 ---
 

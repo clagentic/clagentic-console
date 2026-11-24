@@ -51,4 +51,4 @@ Use this only when one set of provider credentials for the whole host is what yo
 
 Codex is a separate agent and does not read the Claude provider variables. Codex can use Amazon Bedrock through its own built-in `amazon-bedrock` provider, which is selected in the user's own Codex configuration file, `~/.codex/config.toml`, not in Clagentic: Console. Variables Codex needs for that provider (for example `AWS_REGION`) can come from the shared environment, because the shared text reaches Codex runtimes too.
 
-Codex is unavailable when os-users is on. The console does not start it in that mode.
+When os-users is on, each mapped Linux account gets its own Codex app-server, started as that account, so it reads that account's own `~/.codex/config.toml`.
