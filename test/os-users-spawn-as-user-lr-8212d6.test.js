@@ -625,6 +625,61 @@ var ACQUIRE_SITES = [
     },
   },
   {
+    id: "vendor model list (get_vendor_models)", needsUser: true,
+    run: async function (shape) {
+      var ws = fakeWs(shape.user);
+      ctxFor(true).handleMessage(ws, { type: "get_vendor_models", vendor: "claude" });
+      await until(function () { return ws.inbox.some(function (m) { return m.type === "model_info"; }); }, "the model answer");
+      var err = ws.inbox.filter(function (m) { return m.type === "error"; })[0];
+      assert.ok(err, "the request was refused by name");
+      assert.equal(err.code, shape.code);
+      assertNamed(shape, err.text);
+      assert.deepEqual(ws.inbox.filter(function (m) { return m.type === "model_info"; })[0].models, [], "no model list from the daemon account");
+      return 0;
+    },
+  },
+  {
+    id: "vendor registry on connect (handleConnection)", needsUser: true,
+    run: async function (shape) {
+      var ctx = ctxFor(true);
+      var ws = fakeWs(shape.user);
+      var saved = ctx.sm.installedVendors;
+      ctx.sm.installedVendors = ["claude"];
+      try {
+        ctx.handleConnection(ws, shape.user);
+      } finally {
+        ctx.sm.installedVendors = saved;
+        ctx.handleDisconnection(ws);
+      }
+      var registryMsg = ws.inbox.filter(function (m) { return m.type === "vendor_registry"; })[0];
+      assert.ok(registryMsg, "the registry was sent");
+      assert.deepEqual(registryMsg.vendors.filter(function (v) { return v.installed || v.available; }), [], "no agent shown as usable, the daemon's install state is not theirs");
+      return 0;
+    },
+  },
+  {
+    id: "vendor re-check (recheck_vendors)", needsUser: true,
+    run: async function (shape) {
+      var ctx = ctxFor(true);
+      var ws = fakeWs(shape.user);
+      var saved = ctx.sm.installedVendors;
+      ctx.sm.installedVendors = ["claude"];
+      try {
+        ctx.handleMessage(ws, { type: "recheck_vendors" });
+      } finally {
+        ctx.sm.installedVendors = saved;
+      }
+      var err = ws.inbox.filter(function (m) { return m.type === "error"; })[0];
+      assert.ok(err, "the re-check was refused by name");
+      assert.equal(err.code, shape.code);
+      assertNamed(shape, err.text);
+      var registryMsg = ws.inbox.filter(function (m) { return m.type === "vendor_registry"; })[0];
+      assert.ok(registryMsg, "the registry was sent");
+      assert.deepEqual(registryMsg.vendors.filter(function (v) { return v.installed || v.available; }), [], "no agent shown as usable");
+      return 0;
+    },
+  },
+  {
     id: "idle-compaction setting (set_idle_compaction)", needsUser: true,
     run: async function (shape) {
       var ws = fakeWs(shape.user);
