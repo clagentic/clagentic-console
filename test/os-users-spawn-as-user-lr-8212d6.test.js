@@ -643,6 +643,7 @@ var ACQUIRE_SITES = [
     run: async function (shape) {
       var ctx = ctxFor(true);
       var ws = fakeWs(shape.user);
+      ws.on = function () {};
       var saved = ctx.sm.installedVendors;
       ctx.sm.installedVendors = ["claude"];
       try {
