@@ -108,6 +108,8 @@ function fakeExecFileSync(cmd, args, options) {
   if (answered !== undefined) return answered;
   if (cmd === CODEX_STAND_IN) return "codex-cli 0.162.1\n";
   record(cmd, args, options);
+  var failure = W.failOn ? W.failOn(args || []) : null;
+  if (failure) throw failure;
   var asAccount = cmd === process.execPath || isSetpriv(cmd) || (options && options.uid !== undefined);
   return asAccount ? W.output : "";
 }
@@ -1010,6 +1012,291 @@ GIT_ROUTES.forEach(function (route) {
         assert.deepEqual(Object.keys(call.options).sort(), ["cwd", "encoding", "timeout"]);
         assert.equal(call.options.cwd, repo);
         assert.equal(call.options.encoding, "utf8");
+      });
+    } finally {
+      W = null;
+    }
+  });
+});
+
+// --- Worktree and loop git calls (lib/worktree.js, lib/project-loop.js) --------------
+//
+// One table: a row per entry point, each listing the git calls it makes. Every
+// row runs with os-users on (each call started as the repository owner), over the
+// owner shapes (no repository, owner lookup fails: nothing is started and the
+// call keeps its failure shape), and with os-users off (main's call, unchanged).
+
+var projectGit = require("../lib/project-git");
+var WT_ENV = ["GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL"];
+var WT_KEYS = ["cwd", "encoding", "stdio", "timeout"];
+var wtSlugCount = 0;
+
+function worktreeLib() { return require("../lib/worktree"); }
+
+function fakeRelay() {
+  var relay = { added: [], addProject: function (p, slug) { relay.added.push(slug); }, removeProject: function () {}, broadcastAll: function () {}, getProjects: function () { return []; } };
+  return relay;
+}
+
+// A loop attached to `repo` with a prompt and a judge on disk, its sessions and
+// messages recorded. The ten-minute watchdogs are never armed, so none outlives the test.
+function loopHarness(repo, osUsersOn) {
+  var noop = function () {};
+  var h = { sent: [], started: [], sessions: new Map(), next: 1 };
+  var ctx = {
+    cwd: repo, slug: "loop-git", osUsers: osUsersOn,
+    sm: {
+      sessions: h.sessions, setResolveLoopInfo: noop, saveSessionFile: noop, appendToSessionFile: noop, broadcastSessionList: noop,
+      createSession: function () {
+        var s = { localId: h.next++, history: [], loop: {}, isProcessing: false };
+        h.sessions.set(s.localId, s);
+        return s;
+      },
+      recordHistoryEntry: function (sess, obj) { sess.history.push(obj); },
+    },
+    sdk: { startQuery: function (session, text) { h.started.push({ session: session, text: text }); } },
+    send: function (msg) { h.sent.push(msg); }, sendTo: function (ws, msg) { h.sent.push(msg); }, sendToSession: noop,
+    pushModule: null, notificationsModule: null,
+    getHubSchedules: function () { return []; }, getAllProjectSessions: function () { return []; },
+    getStatus: noop, getLinuxUserForSession: function () { return null; }, onProcessingChanged: noop, hydrateImageRefs: noop,
+  };
+  h.engine = require("../lib/project-loop").attachLoop(ctx);
+  h.engine.stopTimer();
+  var dir = path.join(repo, ".claude", "loops", "loop-git");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "PROMPT.md"), "Do the task.");
+  fs.writeFileSync(path.join(dir, "JUDGE.md"), "It is done when it is done.");
+  h.engine.loopState.loopId = "loop-git";
+  h.engine.loopState.loopFilesId = "loop-git";
+  return h;
+}
+
+function withoutWatchdogs(fn) {
+  var original = global.setTimeout;
+  global.setTimeout = function (f, delay) {
+    if (delay >= 60000) return { unref: function () {} };
+    return original.apply(this, arguments);
+  };
+  try { return fn(); } finally { global.setTimeout = original; }
+}
+
+function sentTypes(h) { return h.sent.map(function (m) { return m.type; }); }
+
+function addCall(repo, withB) {
+  var wt = path.join(repo, "feat");
+  return { argv: withB ? ["worktree", "add", wt, "-b", "feat", "main"] : ["worktree", "add", wt, "feat"], timeout: 15000, keys: WT_KEYS };
+}
+
+var LIST = { argv: ["worktree", "list", "--porcelain"], read: true, timeout: 5000, keys: WT_KEYS };
+var GIT_DIR = { argv: ["rev-parse", "--git-dir"], read: true, timeout: 5000, keys: WT_KEYS };
+var COMMON_DIR = { argv: ["rev-parse", "--git-common-dir"], read: true, timeout: 5000, keys: WT_KEYS };
+
+function listing(repo) { return "worktree " + repo + "\n\nworktree " + path.join(repo, "wt") + "\nHEAD 0\nbranch refs/heads/wt\n\n"; }
+
+var WT_ROWS = [
+  {
+    id: "isWorktree: rev-parse --git-dir and --git-common-dir",
+    output: function () { return ".git\n"; },
+    calls: function () { return [GIT_DIR, COMMON_DIR]; },
+    drive: function (c) { c.breakIt(); return worktreeLib().isWorktree(c.repo, { osUsers: c.osUsers }); },
+    onResult: function (res) { assert.equal(res, false); },
+    closedResult: function (res) { assert.equal(res, false); },
+  },
+  {
+    id: "scanWorktrees: worktree list",
+    output: listing,
+    calls: function () { return [LIST]; },
+    drive: function (c) { c.breakIt(); return worktreeLib().scanWorktrees(c.repo, { osUsers: c.osUsers }); },
+    onResult: function (res) { assert.deepEqual(res.map(function (w) { return w.dirName; }), ["wt"]); },
+    closedResult: function (res) { assert.deepEqual(res, []); },
+  },
+  {
+    id: "daemon-projects scanAndRegisterWorktrees: isWorktree and scan",
+    output: listing,
+    calls: function () { return [GIT_DIR, COMMON_DIR, LIST]; },
+    drive: function (c) {
+      var dp = require("../lib/daemon-projects");
+      var relay = fakeRelay();
+      var slug = "wt-scan-" + (++wtSlugCount);
+      c.breakIt();
+      dp.scanAndRegisterWorktrees(relay, c.repo, slug, null, null, { osUsers: c.osUsers });
+      dp.cleanupWorktreesForParent(relay, slug);
+      return relay.added;
+    },
+    onResult: function (res) { assert.equal(res.length, 1); assert.match(res[0], /--wt$/); },
+    closedResult: function (res) { assert.deepEqual(res, []); },
+  },
+  {
+    id: "daemon-projects rescanWorktrees: scan",
+    output: listing,
+    calls: function () { return [LIST]; },
+    drive: function (c) {
+      var dp = require("../lib/daemon-projects");
+      var relay = fakeRelay();
+      var slug = "wt-rescan-" + (++wtSlugCount);
+      c.breakIt();
+      dp.rescanWorktrees(relay, c.repo, slug, null, null, { osUsers: c.osUsers });
+      dp.cleanupWorktreesForParent(relay, slug);
+      return relay.added;
+    },
+    onResult: function (res) { assert.equal(res.length, 1); assert.match(res[0], /--wt$/); },
+    closedResult: function (res) { assert.deepEqual(res, []); },
+  },
+  {
+    id: "removeWorktree: resolve (worktree list) and worktree remove",
+    output: listing,
+    calls: function (repo) { return [LIST, { argv: ["worktree", "remove", path.join(repo, "wt")], timeout: 15000, keys: WT_KEYS }]; },
+    drive: function (c) { c.breakIt(); return worktreeLib().removeWorktree(c.repo, "wt", { osUsers: c.osUsers }); },
+    onResult: function (res) { assert.deepEqual(res, { ok: true }); },
+    closedResult: function (res) { assert.equal(res.ok, false); assert.equal(typeof res.error, "string"); },
+  },
+  {
+    id: "removeWorktree: git's locked message is still reported",
+    output: listing,
+    fail: { match: function (args) { return args.indexOf("remove") !== -1; }, stderr: "fatal: 'wt' is locked" },
+    calls: function (repo) { return [LIST, { argv: ["worktree", "remove", path.join(repo, "wt")], timeout: 15000, keys: WT_KEYS }]; },
+    drive: function (c) { c.breakIt(); return worktreeLib().removeWorktree(c.repo, "wt", { osUsers: c.osUsers }); },
+    onResult: function (res) { assert.deepEqual(res, { ok: false, error: "Worktree is locked. Unlock it first with: git worktree unlock" }); },
+    closedResult: function (res) { assert.equal(res.ok, false); },
+  },
+  {
+    id: "removeWorktree: git's uncommitted-changes message is still reported",
+    output: listing,
+    fail: { match: function (args) { return args.indexOf("remove") !== -1; }, stderr: "fatal: 'wt' contains modified or untracked files" },
+    calls: function (repo) { return [LIST, { argv: ["worktree", "remove", path.join(repo, "wt")], timeout: 15000, keys: WT_KEYS }]; },
+    drive: function (c) { c.breakIt(); return worktreeLib().removeWorktree(c.repo, "wt", { osUsers: c.osUsers }); },
+    onResult: function (res) { assert.deepEqual(res, { ok: false, error: "Worktree has uncommitted changes. Commit or discard them first." }); },
+    closedResult: function (res) { assert.equal(res.ok, false); },
+  },
+  {
+    id: "createWorktree: worktree add -b",
+    output: function () { return ""; },
+    calls: function (repo) { return [addCall(repo, true)]; },
+    drive: function (c) { c.breakIt(); return worktreeLib().createWorktree(c.repo, "feat", "feat", "main", { osUsers: c.osUsers }); },
+    onResult: function (res, repo) { assert.deepEqual(res, { ok: true, path: path.join(repo, "feat") }); },
+    closedResult: function (res) { assert.equal(res.ok, false); },
+  },
+  {
+    id: "createWorktree: worktree add when the branch exists",
+    output: function () { return ""; },
+    fail: { match: function (args) { return args.indexOf("-b") !== -1; }, stderr: "fatal: a branch named 'feat' already exists" },
+    calls: function (repo) { return [addCall(repo, true), addCall(repo, false)]; },
+    drive: function (c) { c.breakIt(); return worktreeLib().createWorktree(c.repo, "feat", "feat", "main", { osUsers: c.osUsers }); },
+    onResult: function (res, repo) { assert.deepEqual(res, { ok: true, path: path.join(repo, "feat") }); },
+    closedResult: function (res) { assert.equal(res.ok, false); },
+  },
+  {
+    id: "loop start: rev-parse HEAD",
+    output: function () { return "abc123\n"; },
+    calls: function () { return [{ argv: ["rev-parse", "HEAD"], read: true, timeout: 5000, keys: ["cwd", "encoding", "timeout"] }]; },
+    drive: function (c) {
+      var h = loopHarness(c.repo, c.osUsers);
+      c.breakIt();
+      withoutWatchdogs(function () { h.engine.startLoop({ maxIterations: 3 }); });
+      return h;
+    },
+    onResult: function (h) {
+      assert.equal(h.engine.loopState.baseCommit, "abc123");
+      assert.ok(sentTypes(h).indexOf("loop_started") !== -1);
+    },
+    closedResult: function (h) {
+      assert.ok(sentTypes(h).indexOf("loop_error") !== -1);
+      assert.equal(h.engine.loopState.active, false);
+      assert.deepEqual(h.started, []);
+    },
+  },
+  {
+    id: "loop judge: git diff and git log",
+    output: function () { return "abc123\n"; },
+    callsBeforeBreak: 1,
+    calls: function (repo, base) {
+      return [
+        { argv: ["rev-parse", "HEAD"], read: true, timeout: 5000, keys: ["cwd", "encoding", "timeout"] },
+        { argv: ["diff", base], read: true, timeout: 30000, keys: ["cwd", "encoding", "maxBuffer", "timeout"] },
+        { argv: ["log", "--oneline", base + "..HEAD"], read: true, timeout: 10000, keys: ["cwd", "encoding", "timeout"] },
+      ];
+    },
+    drive: function (c) {
+      var h = loopHarness(c.repo, c.osUsers);
+      withoutWatchdogs(function () {
+        h.engine.startLoop({ maxIterations: 3 });
+        c.breakIt();
+        var coder = h.started[0].session;
+        coder.history.push({ type: "done", code: 0 });
+        coder.onQueryComplete(coder);
+      });
+      return h;
+    },
+    onResult: function (h) {
+      assert.ok(sentTypes(h).indexOf("loop_judging") !== -1);
+      assert.match(h.started[1].text, /abc123/);
+    },
+    closedResult: function (h) {
+      assert.ok(h.sent.some(function (m) { return m.type === "loop_error" && /git diff/.test(m.text); }));
+      assert.ok(h.sent.some(function (m) { return m.type === "loop_finished" && m.reason === "error"; }));
+      assert.equal(h.started.length, 1, "no judge session was started");
+    },
+  },
+];
+
+var WT_SHAPES = [
+  { id: "no repository", apply: function (repo) { fs.rmSync(path.join(repo, ".git"), { recursive: true }); } },
+  { id: "owner lookup fails", apply: function () { W.getentFailure = true; } },
+];
+
+function runWtRow(row, osUsersOn, shape) {
+  var repo = gitRepo("wt-repo-");
+  var owner = ownerOf(repo);
+  W = newWorld({ accounts: [owner], output: row.output(repo) });
+  if (row.fail) W.failOn = function (args) { return row.fail.match(args) ? Object.assign(new Error("git failed"), { stderr: row.fail.stderr }) : null; };
+  var base = osUsersOn ? W.output.trim() : "";
+  var res = row.drive({ repo: repo, osUsers: osUsersOn, breakIt: function () { if (shape) shape.apply(repo); } });
+  return { repo: repo, owner: owner, res: res, want: row.calls(repo, base), calls: gitCalls() };
+}
+
+WT_ROWS.forEach(function (row) {
+  test(row.id + ": os-users on, every git call runs as the repository owner with its main argv and timeout", function () {
+    try {
+      var r = runWtRow(row, true, null);
+      row.onResult(r.res, r.repo);
+      assert.equal(r.calls.length, r.want.length);
+      r.calls.forEach(function (call, i) {
+        var want = r.want[i];
+        assert.deepEqual(problems(call, r.owner, WT_ENV), [], "call " + i);
+        var argv = want.read ? projectGit.buildArgs(want.argv) : want.argv;
+        assert.deepEqual(call.args.slice(-argv.length), argv);
+        assert.equal(call.options.timeout, want.timeout);
+        assert.equal(call.options.cwd, r.repo);
+        if (!want.read) assert.deepEqual(call.options.stdio, ["pipe", "pipe", "pipe"]);
+      });
+    } finally {
+      W = null;
+    }
+  });
+
+  WT_SHAPES.forEach(function (shape) {
+    test(row.id + ": os-users on, " + shape.id + ", no git is started and the failure shape is kept", function () {
+      try {
+        var r = runWtRow(row, true, shape);
+        row.closedResult(r.res, r.repo);
+        assert.equal(r.calls.length, row.callsBeforeBreak || 0, "no git process after the owner is lost");
+      } finally {
+        W = null;
+      }
+    });
+  });
+
+  test(row.id + ": os-users off, git is called exactly as before", function () {
+    try {
+      var r = runWtRow(row, false, null);
+      assert.equal(r.calls.length, r.want.length);
+      r.calls.forEach(function (call, i) {
+        var want = r.want[i];
+        assert.equal(call.command, "git");
+        assert.deepEqual(call.args, want.argv);
+        assert.deepEqual(Object.keys(call.options).sort(), want.keys);
+        assert.equal(call.options.cwd, r.repo);
+        assert.equal(call.options.timeout, want.timeout);
       });
     } finally {
       W = null;
