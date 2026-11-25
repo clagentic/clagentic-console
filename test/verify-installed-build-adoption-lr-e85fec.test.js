@@ -57,11 +57,12 @@ test("stale: a daemon on an older build fails and prints both shas", function ()
   assert.ok(r.stderr.indexOf("installedBuildSha=" + HEAD) !== -1, r.stderr);
 });
 
-test("stale: the same sha over different installed files fails", function () {
+test("stale: the same sha over different installed files is a pending restart, not adopted", function () {
   var r = run({ loadedBuildSha: HEAD, installedBuildSha: HEAD, state: "stale", reason: "content", detail: "files differ", staleInodes: true, pid: 1 });
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /PROCESS_MISMATCH: stale/);
-  assert.match(r.stderr, /files differ/);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /PENDING_RESTART:/);
+  assert.match(r.stdout, /files differ/);
+  assert.doesNotMatch(r.stdout, /adopted/i);
 });
 
 test("never adopted while the loaded sha differs from the installed build, whatever the daemon says", function () {

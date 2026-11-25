@@ -79,5 +79,5 @@ merge:
       description: "Install latest build globally for developer test (npm pack + npm install -g). Test-tier only -- not production."
       on_failure: fail
     - cmd: "npm run verify:installed-build"
-      description: "Assert the globally-installed build's embedded SHA (lib/build-sha.json, written at npm prepack time) matches this repo's merged HEAD."
+      description: "Assert the installed build's embedded SHA (lib/build-sha.json) matches merged HEAD. A daemon awaiting restart passes with a PENDING_RESTART note: the build is not live until then."
       on_failure: fail
