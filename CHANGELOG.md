@@ -1,3 +1,9 @@
+# Unreleased
+
+### Bug Fixes
+
+* **verify:** `npm run verify:installed-build` exits 0 with a PENDING_RESTART note when the installed build is merged HEAD and the running daemon only awaits a restart onto it; the merged build is reported as not live until then. A loaded build that is not an ancestor of HEAD, or an installed build that is not HEAD, still fails.
+
 # [1.13.0-beta.1](https://github.com/clagentic/clagentic-console/compare/v1.12.0...v1.13.0-beta.1) (2026-11-17)
 
 

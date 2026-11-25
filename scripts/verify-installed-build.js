@@ -80,7 +80,8 @@
 //                  post-merge reinstall) is adopted: its "(deleted)" mappings
 //                  (staleInodes) are reported but do not decide it.
 //   stale        — the daemon loaded a different build than the installed one;
-//                  both shas are printed. Exit 1.
+//                  both shas are printed. Exit 1, unless the loaded build is an
+//                  ancestor of merged HEAD (see PENDING_RESTART below).
 //   inconclusive — the check cannot say (no daemon, a daemon that predates
 //                  the status query or the content comparison); the reason is
 //                  printed. Exit 0, and never read as adopted.
@@ -95,10 +96,19 @@
 //        verified — nothing to compare against yet (e.g. a fresh box that
 //        has never started the service). This is not a failure, but it must
 //        never be read as "the service is fine".
+//      — PENDING_RESTART: the artifact matches merged HEAD and the running
+//        daemon loaded merged HEAD or an ancestor of it (git merge-base
+//        --is-ancestor in this tree), so only a restart separates the service
+//        from the merged build. This is the state after every merge, because
+//        restarts are scheduled outside the merge. Printed on stdout with the
+//        loaded, installed and HEAD shas and the statement that the merged
+//        build is NOT live until the daemon restarts; never read as verified.
 //   1  — ARTIFACT_MISMATCH: installed build-sha.json does not match merged
 //        HEAD (PART 1's original failure mode, unchanged).
 //      — PROCESS_MISMATCH (stale): the artifact matches, but the running
-//        daemon's loaded SHA differs from merged HEAD, or the daemon itself
+//        daemon's loaded SHA is not merged HEAD or an ancestor of it (a newer
+//        build already running, or a sha this tree does not know: a restart
+//        would not move the service forward), or the daemon itself
 //        reports the installed build differs from the one it loaded. THIS is
 //        the failure mode that would have caught 2026-08-25 at 01:48 — see
 //        test/verify-installed-build-lr-dc9a3b.test.js for the
@@ -132,6 +142,29 @@ const { execFileSync } = require('child_process');
 const APPLY_IS_THE_OPERATORS =
   'The artifact on disk is correct; the SERVICE is still serving the old build. Applying it is the ' +
   'operator\'s decision: the "Restart to apply update" action in the Clagentic: Console UI offers it.';
+
+// Printed on stdout by the pending-restart outcome. scripts/verify-installed.js
+// reads it from this script's output to label its summary line, so the two
+// share this text through the module export rather than each spelling it.
+const PENDING_RESTART_MARKER = 'PENDING_RESTART:';
+
+// True when the running build is merged HEAD itself or an earlier commit of
+// this tree's history, i.e. a daemon restart moves the service forward. An
+// unknown sha, a missing sha or a git failure all read as false: the caller
+// then fails, because a restart is not known to be forward.
+function isForwardRestart(loadedSha, headSha) {
+  if (typeof loadedSha !== 'string' || !/^[0-9a-f]{7,64}$/i.test(loadedSha)) return false;
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', loadedSha, headSha], {
+      cwd: path.join(__dirname, '..'),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return true;
+  } catch (_notAncestor) {
+    // exit 1 = not an ancestor, 128 = unknown object; both mean "not forward".
+    return false;
+  }
+}
 
 function resolveHeadSha() {
   return execFileSync('git', ['rev-parse', 'HEAD'], {
@@ -315,10 +348,26 @@ function main() {
     const daemonStale = processStatus.state === 'stale';
     const installedSha = (daemonStale && processStatus.installedBuildSha) || headSha;
     const why = daemonStale && processStatus.detail ? ` (${processStatus.detail})` : '';
+    if (isForwardRestart(processStatus.loadedBuildSha, headSha)) {
+      // The expected state after every merge: the installed build is merged
+      // HEAD and the daemon runs an earlier build of this history. A restart
+      // moves it forward, and restarts are scheduled outside the merge, so
+      // this is reported (stdout, exit 0) rather than failed. It is never
+      // worded as verified or adopted: the service is NOT serving HEAD.
+      console.log(
+        `[verify-installed-build] ${PENDING_RESTART_MARKER} The installed build is merged HEAD ` +
+        `(installedBuildSha=${installedSha}, HEAD=${headSha}), but the RUNNING daemon (PID ${processStatus.pid}) ` +
+        `is still serving loadedBuildSha=${processStatus.loadedBuildSha}${why}. The merged build is NOT live ` +
+        'until the daemon restarts; this check does not restart it. ' +
+        `Not a failure: a restart moves the service forward. ${APPLY_IS_THE_OPERATORS}`
+      );
+      return;
+    }
     console.error(
       `[verify-installed-build] PROCESS_MISMATCH: stale. The RUNNING daemon (PID ${processStatus.pid}) has NOT ` +
       `loaded the installed build. loadedBuildSha=${processStatus.loadedBuildSha || '(none)'} ` +
-      `installedBuildSha=${installedSha}${why}. ${APPLY_IS_THE_OPERATORS}`
+      `installedBuildSha=${installedSha}${why}. The loaded build is not an ancestor of merged HEAD ` +
+      `(or that could not be established), so a restart would not move the service forward. ${APPLY_IS_THE_OPERATORS}`
     );
     process.exit(1);
   }
@@ -342,7 +391,7 @@ function main() {
   );
 }
 
-module.exports = { resolveHeadSha, resolveInstalledSha, resolveProcessBuildStatus };
+module.exports = { resolveHeadSha, resolveInstalledSha, resolveProcessBuildStatus, PENDING_RESTART_MARKER };
 
 if (require.main === module) {
   main();
