@@ -288,17 +288,24 @@ async function settleFirstConnectionWarmup(ctx) {
   W = newWorld({ users: { "u-warmup": user } });
   var ws = fakeWs(user);
   ws.on = function () {};
-  function registries() { return ws.inbox.filter(function (m) { return m.type === "vendor_registry"; }).length; }
   try {
     ctx.handleConnection(ws, user);
-    // One registry answers the connection, a second is the end of the warmup.
-    await until(function () { return registries() >= 2; }, "the warmup to finish", 60000);
+    await until(function () { return warmupEnded(ws, true); }, "the warmup to finish", 60000);
   } catch (e) {
     // A warmup that never finishes is left to run on; the tests then fail on what it starts.
   } finally {
     ctx.handleDisconnection(ws);
     W = null;
   }
+}
+
+// The end of the warmup. With os-users on it starts nothing and its one message
+// is a model_info (the connection sends none of its own for a project with no
+// model); with os-users off it ends with its registry, after the connection's.
+function warmupEnded(ws, osUsersOn) {
+  var types = ws.inbox.map(function (m) { return m.type; });
+  if (osUsersOn) return types.indexOf("model_info") !== -1;
+  return types.filter(function (t) { return t === "vendor_registry"; }).length >= 2;
 }
 
 test.after(async function () {
@@ -1044,5 +1051,97 @@ test("finding: a node child started with uid and gid drops the daemon's groups; 
         resolve();
       } catch (e) { reject(e); }
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The project warmup the first connection starts. One table, driven through
+// handleConnection on a fresh project context; the default adapter's init is
+// replaced by a recorder at the adapter factory, so what it was called with is
+// seen and no real agent starts.
+// ---------------------------------------------------------------------------
+
+var WARMUP_ROWS = [
+  {
+    id: "AC1 AC2 os-users on: the first connection starts no init, no process and broadcasts no daemon-identity state",
+    osUsers: true,
+    check: function (r) {
+      assert.deepEqual(r.inits, [], "the default adapter was not initialised as anyone");
+      assert.deepEqual(r.calls, [], "no process was started");
+      assert.equal(r.inbox.filter(function (m) { return m.type === "slash_commands" && JSON.stringify(m).indexOf("stubcmd") !== -1; }).length, 0, "no slash commands from a daemon-account init");
+      assert.equal(r.inbox.filter(function (m) { return m.type === "vendor_registry"; }).length, 1, "only the registry that answers the connection");
+      assert.ok(Object.keys(r.ctx.sm.capabilitiesByVendor || {}).length > 0, "declared capabilities are seeded");
+    },
+  },
+  {
+    id: "AC3 os-users on: get_vendor_models afterwards initialises the vendor as the asking user's own account",
+    osUsers: true, thenGetModels: true,
+    check: function (r) {
+      assert.deepEqual(r.inits, [GROUPED.name], "one init, as the user's account");
+    },
+  },
+  {
+    id: "AC4 os-users off: the warmup runs the default adapter's init once and broadcasts its commands, models and registry",
+    osUsers: false,
+    check: function (r) {
+      assert.deepEqual(r.inits, ["(daemon)"], "one init, as before");
+      assert.ok(r.inbox.some(function (m) { return m.type === "slash_commands" && JSON.stringify(m).indexOf("stubcmd") !== -1; }), "the warmup's slash commands were broadcast");
+      assert.equal(r.inbox.filter(function (m) { return m.type === "vendor_registry"; }).length, 2, "the connection's registry and the warmup's");
+      assert.deepEqual(r.ctx.sm.modelsByVendor[r.ctx.sm.defaultVendor], [{ value: "stub-model" }]);
+    },
+  },
+];
+
+async function runWarmupRow(row, index) {
+  // Each adapter the project is given is wrapped, never changed: some are shared
+  // between projects. Whichever agent is the project's default, its init is the
+  // recorder.
+  var realCreate = yoke.createAdapters;
+  var inits = [];
+  yoke.createAdapters = function () {
+    var state = realCreate.apply(this, arguments);
+    Object.keys(state.adapters).forEach(function (id) {
+      var wrapped = Object.create(state.adapters[id]);
+      wrapped.init = function (o) {
+        inits.push(o && o.linuxUser ? o.linuxUser : "(daemon)");
+        return Promise.resolve({ skills: [], slashCommands: ["stubcmd"], models: [{ value: "stub-model" }], defaultModel: "stub-model" });
+      };
+      state.adapters[id] = wrapped;
+    });
+    return state;
+  };
+  var ctx;
+  try {
+    ctx = require("../lib/project").createProjectContext({
+      cwd: PROJ, slug: "warmup-" + index, title: "warmup", debug: false, currentVersion: "0.0.0", osUsers: row.osUsers,
+      notificationsModule: { handleNotificationMessage: function () { return false; }, sendConnectionState: function () {} },
+    });
+  } finally {
+    yoke.createAdapters = realCreate;
+  }
+  contexts["warmup-" + index] = ctx;
+  var user = row.osUsers ? userOf(GROUPED) : { id: "u-w", username: "w", role: "admin", linuxUser: null };
+  W = newWorld({ accounts: [GROUPED], users: {} });
+  W.users[user.id] = user;
+  var ws = fakeWs(user);
+  ws.on = function () {};
+  try {
+    ctx.handleConnection(ws, user);
+    await until(function () { return warmupEnded(ws, row.osUsers); }, "the warmup to finish", 10000);
+    if (row.thenGetModels) {
+      var before = ws.inbox.length;
+      ctx.handleMessage(ws, { type: "get_vendor_models", vendor: ctx.sm.defaultVendor });
+      await until(function () { return ws.inbox.slice(before).some(function (m) { return m.type === "model_info"; }); }, "the model answer");
+    }
+    return { ctx: ctx, inits: inits, inbox: ws.inbox, calls: W.calls.filter(function (c) { return c.command !== "chown"; }) };
+  } finally {
+    ctx.handleDisconnection(ws);
+  }
+}
+
+WARMUP_ROWS.forEach(function (row, index) {
+  test(row.id, async function () {
+    var r;
+    try { r = await runWarmupRow(row, index); row.check(r); } finally { W = null; }
   });
 });
