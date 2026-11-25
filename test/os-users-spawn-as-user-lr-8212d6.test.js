@@ -288,18 +288,24 @@ async function settleFirstConnectionWarmup(ctx) {
   W = newWorld({ users: { "u-warmup": user } });
   var ws = fakeWs(user);
   ws.on = function () {};
-  function modelInfos() { return ws.inbox.filter(function (m) { return m.type === "model_info"; }).length; }
   try {
     ctx.handleConnection(ws, user);
-    // One model_info answers the connection, a second is the end of the warmup
-    // (the one message the warmup sends in every mode).
-    await until(function () { return modelInfos() >= 2; }, "the warmup to finish", 60000);
+    await until(function () { return warmupEnded(ws, true); }, "the warmup to finish", 60000);
   } catch (e) {
     // A warmup that never finishes is left to run on; the tests then fail on what it starts.
   } finally {
     ctx.handleDisconnection(ws);
     W = null;
   }
+}
+
+// The end of the warmup. With os-users on it starts nothing and its one message
+// is a model_info (the connection sends none of its own for a project with no
+// model); with os-users off it ends with its registry, after the connection's.
+function warmupEnded(ws, osUsersOn) {
+  var types = ws.inbox.map(function (m) { return m.type; });
+  if (osUsersOn) return types.indexOf("model_info") !== -1;
+  return types.filter(function (t) { return t === "vendor_registry"; }).length >= 2;
 }
 
 test.after(async function () {
@@ -1062,7 +1068,7 @@ var WARMUP_ROWS = [
     check: function (r) {
       assert.deepEqual(r.inits, [], "the default adapter was not initialised as anyone");
       assert.deepEqual(r.calls, [], "no process was started");
-      assert.equal(r.inbox.filter(function (m) { return m.type === "slash_commands"; }).length, 0, "no slash commands from a daemon-account init");
+      assert.equal(r.inbox.filter(function (m) { return m.type === "slash_commands" && JSON.stringify(m).indexOf("stubcmd") !== -1; }).length, 0, "no slash commands from a daemon-account init");
       assert.equal(r.inbox.filter(function (m) { return m.type === "vendor_registry"; }).length, 1, "only the registry that answers the connection");
       assert.ok(Object.keys(r.ctx.sm.capabilitiesByVendor || {}).length > 0, "declared capabilities are seeded");
     },
@@ -1079,24 +1085,30 @@ var WARMUP_ROWS = [
     osUsers: false,
     check: function (r) {
       assert.deepEqual(r.inits, ["(daemon)"], "one init, as before");
-      assert.equal(r.inbox.filter(function (m) { return m.type === "slash_commands"; }).length, 1);
+      assert.ok(r.inbox.some(function (m) { return m.type === "slash_commands" && JSON.stringify(m).indexOf("stubcmd") !== -1; }), "the warmup's slash commands were broadcast");
       assert.equal(r.inbox.filter(function (m) { return m.type === "vendor_registry"; }).length, 2, "the connection's registry and the warmup's");
-      assert.deepEqual(r.ctx.sm.modelsByVendor.claude, [{ value: "stub-model" }]);
+      assert.deepEqual(r.ctx.sm.modelsByVendor[r.ctx.sm.defaultVendor], [{ value: "stub-model" }]);
     },
   },
 ];
 
 async function runWarmupRow(row, index) {
-  var claudeModule = require("../lib/yoke/adapters/claude");
-  var realCreate = claudeModule.createClaudeAdapter;
+  // Each adapter the project is given is wrapped, never changed: some are shared
+  // between projects. Whichever agent is the project's default, its init is the
+  // recorder.
+  var realCreate = yoke.createAdapters;
   var inits = [];
-  claudeModule.createClaudeAdapter = function () {
-    var a = realCreate.apply(this, arguments);
-    a.init = function (o) {
-      inits.push(o && o.linuxUser ? o.linuxUser : "(daemon)");
-      return Promise.resolve({ skills: [], slashCommands: ["stubcmd"], models: [{ value: "stub-model" }], defaultModel: "stub-model" });
-    };
-    return a;
+  yoke.createAdapters = function () {
+    var state = realCreate.apply(this, arguments);
+    Object.keys(state.adapters).forEach(function (id) {
+      var wrapped = Object.create(state.adapters[id]);
+      wrapped.init = function (o) {
+        inits.push(o && o.linuxUser ? o.linuxUser : "(daemon)");
+        return Promise.resolve({ skills: [], slashCommands: ["stubcmd"], models: [{ value: "stub-model" }], defaultModel: "stub-model" });
+      };
+      state.adapters[id] = wrapped;
+    });
+    return state;
   };
   var ctx;
   try {
@@ -1105,7 +1117,7 @@ async function runWarmupRow(row, index) {
       notificationsModule: { handleNotificationMessage: function () { return false; }, sendConnectionState: function () {} },
     });
   } finally {
-    claudeModule.createClaudeAdapter = realCreate;
+    yoke.createAdapters = realCreate;
   }
   contexts["warmup-" + index] = ctx;
   var user = row.osUsers ? userOf(GROUPED) : { id: "u-w", username: "w", role: "admin", linuxUser: null };
@@ -1113,14 +1125,13 @@ async function runWarmupRow(row, index) {
   W.users[user.id] = user;
   var ws = fakeWs(user);
   ws.on = function () {};
-  function modelInfos() { return ws.inbox.filter(function (m) { return m.type === "model_info"; }).length; }
   try {
     ctx.handleConnection(ws, user);
-    await until(function () { return modelInfos() >= 2; }, "the warmup to finish", 10000);
+    await until(function () { return warmupEnded(ws, row.osUsers); }, "the warmup to finish", 10000);
     if (row.thenGetModels) {
-      var before = modelInfos();
-      ctx.handleMessage(ws, { type: "get_vendor_models", vendor: "claude" });
-      await until(function () { return modelInfos() > before; }, "the model answer");
+      var before = ws.inbox.length;
+      ctx.handleMessage(ws, { type: "get_vendor_models", vendor: ctx.sm.defaultVendor });
+      await until(function () { return ws.inbox.slice(before).some(function (m) { return m.type === "model_info"; }); }, "the model answer");
     }
     return { ctx: ctx, inits: inits, inbox: ws.inbox, calls: W.calls.filter(function (c) { return c.command !== "chown"; }) };
   } finally {
