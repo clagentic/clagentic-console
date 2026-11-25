@@ -38,11 +38,6 @@ var ALLOWLIST = [
     reason: "Per-person cursor colours: they tell collaborators apart, so each stays one fixed hue in every theme.",
   },
   {
-    file: "lib/public/modules/console-logo.js",
-    keys: ["#00CFFF", "#4A7FE8", "#7B3FE4"],
-    reason: "The brand logo gradient. The mark keeps its colours in every theme.",
-  },
-  {
     file: "lib/public/index.html",
     keys: ["#00CFFF", "#4A7FE8", "#7B3FE4"],
     reason: "The brand logo gradient. The mark keeps its colours in every theme.",
