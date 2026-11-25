@@ -1296,8 +1296,80 @@ button.top-bar-pill.pill-accent:hover { background: color-mix(in srgb, var(--acc
 #console-logo-svg {
   width: 160px;
   height: 160px;
+}
+
+/* Logo draw-in. The markup ships in index.html and the overlay carries
+   .logo-running in the served page, so the cycle plays from first paint with no
+   wait on the module graph. console-logo.js only toggles .logo-running (start
+   re-applies it to restart from frame 0). One cycle is 3.5s: staggered draw-in
+   about 1.4s, hold with a slight breathe 1.2s, fade 0.6s, gap 0.3s. Without
+   .logo-running, while hidden (so a hidden overlay costs nothing) and on the
+   boot-error state, nothing animates and the logo is not shown. */
+#connect-overlay:not(.logo-running) #console-logo-svg,
+#connect-overlay.hidden #console-logo-svg,
+#connect-overlay[data-state="boot-error"] #console-logo-svg {
   opacity: 0;
 }
+
+.clogo-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) #console-logo-svg {
+  animation: clogo-cycle 3.5s linear infinite;
+}
+
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-path {
+  animation-duration: 3.5s;
+  animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1);
+  animation-iteration-count: infinite;
+}
+
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p0 { animation-name: clogo-draw-0; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p1 { animation-name: clogo-draw-1; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p2 { animation-name: clogo-draw-2; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p3 { animation-name: clogo-draw-3; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p4 { animation-name: clogo-draw-4; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p5 { animation-name: clogo-draw-5; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p6 { animation-name: clogo-draw-6; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p7 { animation-name: clogo-draw-7; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p8 { animation-name: clogo-draw-8; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p9 { animation-name: clogo-draw-9; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p10 { animation-name: clogo-draw-10; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p11 { animation-name: clogo-draw-11; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p12 { animation-name: clogo-draw-12; }
+#connect-overlay.logo-running:not(.hidden):not([data-state="boot-error"]) .clogo-p13 { animation-name: clogo-draw-13; }
+
+/* Whole-icon opacity over the cycle: fade up in 0.3s, hold with a breathe,
+   ease out over 0.6s, invisible for the 0.3s gap. */
+@keyframes clogo-cycle {
+  0% { opacity: 0; }
+  8.57% { opacity: 1; }
+  40% { opacity: 0.94; }
+  51.9% { opacity: 1; }
+  63.8% { opacity: 0.94; }
+  74.29% { opacity: 0.88; animation-timing-function: ease-in-out; }
+  91.43% { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Each stroke draws over 0.91s, started 1/14 of 0.77s after the one before,
+   then stays drawn until the cycle restarts (the icon is invisible then). */
+@keyframes clogo-draw-0 { 0% { stroke-dashoffset: 1; } 26%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-1 { 0%, 1.57% { stroke-dashoffset: 1; } 27.57%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-2 { 0%, 3.14% { stroke-dashoffset: 1; } 29.14%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-3 { 0%, 4.71% { stroke-dashoffset: 1; } 30.71%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-4 { 0%, 6.29% { stroke-dashoffset: 1; } 32.29%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-5 { 0%, 7.86% { stroke-dashoffset: 1; } 33.86%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-6 { 0%, 9.43% { stroke-dashoffset: 1; } 35.43%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-7 { 0%, 11% { stroke-dashoffset: 1; } 37%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-8 { 0%, 12.57% { stroke-dashoffset: 1; } 38.57%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-9 { 0%, 14.14% { stroke-dashoffset: 1; } 40.14%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-10 { 0%, 15.71% { stroke-dashoffset: 1; } 41.71%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-11 { 0%, 17.29% { stroke-dashoffset: 1; } 43.29%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-12 { 0%, 18.86% { stroke-dashoffset: 1; } 44.86%, 100% { stroke-dashoffset: 0; } }
+@keyframes clogo-draw-13 { 0%, 20.43% { stroke-dashoffset: 1; } 46.43%, 100% { stroke-dashoffset: 0; } }
 
 #connect-overlay-msg {
   color: var(--text-dimmer);
