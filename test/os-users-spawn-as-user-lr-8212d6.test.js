@@ -916,6 +916,107 @@ test("AC7 os-users off: git reads run as the daemon, a file listing is served di
   }
 });
 
+// --- Project git routes (/api/git-dirty, /api/branches) -----------------------------
+//
+// Driven through the handler attachHTTP returns, with a repository on disk whose
+// .git is the owner. One table: a row per route, run over the owner shapes.
+
+function routeHandler(cwd, osUsersOn) {
+  return require("../lib/project-http").attachHTTP({ cwd: cwd, slug: "git-routes", osUsers: osUsersOn });
+}
+
+function gitRepo(prefix) {
+  var repo = fs.mkdtempSync(path.join(SANDBOX, prefix));
+  fs.mkdirSync(path.join(repo, ".git"));
+  return repo;
+}
+
+function ownerOf(repo) {
+  var st = fs.statSync(path.join(repo, ".git"));
+  return { name: "repo-owner", uid: st.uid, gid: st.gid, home: "/home/repo-owner", shell: "/bin/bash", groups: [st.gid] };
+}
+
+function gitCalls() {
+  return W.calls.filter(function (c) { return c.command === "git" || (c.args || []).indexOf("git") !== -1; });
+}
+
+var GIT_ROUTES = [
+  {
+    id: "GET /api/git-dirty", url: "/api/git-dirty", output: " M tracked.js\n?? untracked.js\n",
+    argvs: [["status", "--porcelain"]],
+    body: { dirty: true, files: ["M tracked.js"] },
+    fallback: { dirty: false },
+    offBody: { dirty: false, files: [] },
+  },
+  {
+    id: "GET /api/branches", url: "/api/branches", output: "origin/trunk\n",
+    argvs: [["branch", "-a", "--format=%(refname:short)"], ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"]],
+    body: { branches: ["origin/trunk"], defaultBranch: "trunk" },
+    fallback: { branches: ["main"], defaultBranch: "main" },
+    offBody: { branches: [], defaultBranch: "" },
+  },
+];
+
+GIT_ROUTES.forEach(function (route) {
+  test(route.id + ": os-users on, git runs as the repository owner with its uid, gid and the minimal environment", async function () {
+    var repo = gitRepo("route-repo-");
+    var owner = ownerOf(repo);
+    W = newWorld({ accounts: [owner], output: route.output });
+    try {
+      var res = await httpRound(routeHandler(repo, true), "GET", route.url, userOf(GROUPED));
+      assert.equal(res.status, 200);
+      assert.deepEqual(JSON.parse(res.body), route.body);
+      var calls = gitCalls();
+      assert.equal(calls.length, route.argvs.length);
+      calls.forEach(function (call, i) {
+        assert.deepEqual(problems(call, owner, ["GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL"]), []);
+        assert.deepEqual(call.args.slice(-route.argvs[i].length), route.argvs[i]);
+      });
+    } finally {
+      W = null;
+    }
+  });
+
+  [
+    { id: "no repository", world: {}, repo: function () { return fs.mkdtempSync(path.join(SANDBOX, "route-none-")); }, owner: false },
+    { id: "owner lookup fails", world: { getentFailure: true }, repo: function () { return gitRepo("route-flaky-"); }, owner: true },
+  ].forEach(function (shape) {
+    test(route.id + ": os-users on, " + shape.id + ", no git is started and the fallback body is returned", async function () {
+      var repo = shape.repo();
+      W = newWorld(Object.assign({ accounts: shape.owner ? [ownerOf(repo)] : [], output: route.output }, shape.world));
+      try {
+        var res = await httpRound(routeHandler(repo, true), "GET", route.url, userOf(GROUPED));
+        assert.equal(res.status, 200);
+        assert.deepEqual(JSON.parse(res.body), route.fallback);
+        assert.deepEqual(gitCalls(), [], "no git process under any identity");
+      } finally {
+        W = null;
+      }
+    });
+  });
+
+  test(route.id + ": os-users off, git is called exactly as before", async function () {
+    var repo = gitRepo("route-off-");
+    W = newWorld({});
+    try {
+      var res = await httpRound(routeHandler(repo, false), "GET", route.url, userOf(GROUPED));
+      assert.equal(res.status, 200);
+      assert.deepEqual(JSON.parse(res.body), route.offBody);
+      var calls = gitCalls();
+      assert.equal(calls.length, route.argvs.length);
+      calls.forEach(function (call, i) {
+        assert.equal(call.command, "git");
+        assert.deepEqual(call.args, route.argvs[i]);
+        assert.deepEqual(Object.keys(call.options).sort(), ["cwd", "encoding", "timeout"]);
+        assert.equal(call.options.cwd, repo);
+        assert.equal(call.options.encoding, "utf8");
+      });
+    } finally {
+      W = null;
+    }
+  });
+});
+
 // --- AC6: Codex in os-users mode ---------------------------------------------------
 
 test("AC6 Codex is offered in os-users mode: the registry, the probe and adapter creation no longer refuse it", function () {
