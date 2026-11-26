@@ -8,7 +8,12 @@
 
 var test = require("node:test");
 var assert = require("node:assert/strict");
+var fs = require("fs");
+var path = require("path");
 var dom = require("./fake-dom-prompt-cards");
+var cssRules = require("./fixtures/css-rules");
+
+var MENUS_CSS = fs.readFileSync(path.join(__dirname, "../lib/public/css/menus.css"), "utf8");
 
 var FakeElement = dom.FakeElement;
 var seq = 0;
@@ -133,6 +138,7 @@ var USERS = [
   {
     name: "notifications", panel: "notifPanel", button: "bell", other: "diagBtn", otherPanel: "diagPanel",
     emptyText: "No notifications.", title: "Notifications",
+    reinit: function (p) { p.notif.initAppNotifications(); },
     arrive: function (p) { var id = "n" + (++seq); p.notif.handleNotificationCreated({ unreadCount: 1, notification: notification(id) }); },
     // The card the arrival raises in the toast stack, which the panel does not touch.
     cards: function (p) { return p.stack.querySelectorAll(".notif-banner").length; },
@@ -140,6 +146,7 @@ var USERS = [
   {
     name: "diagnostics", panel: "diagPanel", button: "diagBtn", other: "bell", otherPanel: "notifPanel",
     emptyText: "No diagnostics this session.", title: "Diagnostics",
+    reinit: function (p) { p.diagnostics.initDiagnostics(); },
     arrive: function (p) { var n = ++seq; p.diagnostics.addDiagnostic({ type: "diagnostic", severity: "warning", source: "s" + n, message: "message " + n }); },
     cards: function (p) { return p.stack.querySelectorAll(".toast-diagnostic").length; },
   },
@@ -236,7 +243,10 @@ var SHARED = [
       p[u.button].click();
       var rows = p.rows(p[u.panel]);
       assert.equal(rows.length, 2);
-      rows.forEach(function (r) { assert.equal(r.querySelectorAll(".list-panel-row-dismiss").length, 1); });
+      rows.forEach(function (r) {
+        assert.equal(r.querySelectorAll(".list-panel-row-dismiss").length, 1);
+        assert.ok(r.querySelector(".list-panel-row-dismiss").getAttribute("aria-label"), "the dismiss control is named");
+      });
       rows[0].querySelector(".list-panel-row-dismiss").click();
       assert.equal(p.rows(p[u.panel]).length, 1);
     } },
@@ -257,6 +267,40 @@ var SHARED = [
       assert.equal(p.isOpen(p[u.panel]), true);
       assert.ok(p[u.panel].classList.contains("list-panel"));
       assert.equal(p[u.panel].parentNode, p.host);
+    } },
+  { name: "a second init leaves one opener listener: one press opens and the panel stays open",
+    run: function (p, u) {
+      u.reinit(p);
+      assert.equal(p[u.button]._listeners.click.length, 1, "one listener on the opener");
+      p[u.button].click();
+      assert.equal(p.isOpen(p[u.panel]), true);
+      p[u.button].click();
+      assert.equal(p.isOpen(p[u.panel]), false, "and one more press closes it");
+    } },
+  // The panel sits in the click-through #info-panels column, so it opts
+  // back into pointer events on its own bounds when open, and a closed one is
+  // display:none and blocks none. Read from the real stylesheet.
+  { name: "an open panel takes pointer events and a closed one is hidden, so blocks none",
+    run: function (p, u) {
+      var el = p[u.panel];
+      assert.ok(el.classList.contains("list-panel"), "styled by the shared class");
+      assert.equal(cssRules.valueAt(MENUS_CSS, "#info-panels", "pointer-events", 1280), "none");
+      p[u.button].click();
+      assert.equal(el.classList.contains("hidden"), false);
+      assert.equal(cssRules.valueAt(MENUS_CSS, ".list-panel", "pointer-events", 1280), "auto");
+      p[u.button].click();
+      assert.equal(el.classList.contains("hidden"), true);
+      assert.equal(cssRules.valueAt(MENUS_CSS, ".list-panel.hidden", "display", 1280), "none");
+    } },
+  { name: "the clear-all and row dismiss controls are styled by the shared stylesheet",
+    run: function (p, u) {
+      u.arrive(p);
+      p[u.button].click();
+      var row = p.rows(p[u.panel])[0];
+      assert.ok(row.querySelector(".list-panel-row-dismiss"));
+      assert.ok(p[u.panel].querySelector(".list-panel-clear-all"));
+      assert.equal(cssRules.valueAt(MENUS_CSS, ".list-panel-row-dismiss", "position", 1280), "absolute");
+      assert.equal(cssRules.valueAt(MENUS_CSS, ".usage-panel-header .list-panel-clear-all", "cursor", 1280), "pointer");
     } },
 ];
 
@@ -373,7 +417,19 @@ var TYPES = [
   { name: "auth required: Open terminal and log in",
     notif: notification("a1", { type: "auth_required", category: "system", slug: null, sessionId: null, persistent: true, meta: { vendor: "unregistered-agent" } }),
     act: function (root) { root.querySelector(".notif-banner-auth-login").click(); },
-    frames: [{ type: "notification_dismiss", ids: ["a1"] }] },
+    frames: [{ type: "notification_dismiss", ids: ["a1"] }],
+    // Only the panel's row is followed on: the sign-in row leaves, the login
+    // reminder row takes its place, outlasts a refresh and offers a new session.
+    afterRow: function (q, rowEl) {
+      assert.equal(q.notifPanel.querySelector('[data-notif-id="a1"]'), null, "the sign-in row is gone");
+      assert.ok(q.notifPanel.querySelector('[data-auth-reminder="true"]'), "the reminder is a row too");
+      q.sent.length = 0;
+      q.state([]);
+      assert.ok(q.notifPanel.querySelector('[data-auth-reminder="true"]'), "it outlasts a state refresh");
+      q.notifPanel.querySelector(".notif-banner-new-session").click();
+      assert.deepEqual(q.sent, [{ type: "new_session" }]);
+      assert.equal(q.notifPanel.querySelector('[data-auth-reminder="true"]'), null);
+    } },
 ];
 
 function fire(root) {
@@ -414,24 +470,8 @@ TYPES.forEach(function (row) {
     row.act(rowEl);
     assert.deepEqual(shapeOf(q.sent), row.frames, "the row's frames");
     if (viaBanner) assert.deepEqual(shapeOf(q.sent), viaBanner, "row and banner agree");
+    if (row.afterRow) row.afterRow(q, rowEl);
   });
-});
-
-test("notification rows: an auth-required row's login leaves the row, and the login reminder row offers a new session", async function (t) {
-  var p = await page(t);
-  var n = TYPES[TYPES.length - 1].notif;
-  p.state([n]);
-  p.bell.click();
-  p.notifPanel.querySelector(".notif-banner-auth-login").click();
-  assert.equal(p.notifPanel.querySelector('[data-notif-id="a1"]'), null, "the sign-in row is gone");
-  var reminder = p.notifPanel.querySelector('[data-auth-reminder="true"]');
-  assert.ok(reminder, "the reminder is a row too");
-  p.sent.length = 0;
-  p.state([]);
-  assert.ok(p.notifPanel.querySelector('[data-auth-reminder="true"]'), "it outlasts a state refresh");
-  p.notifPanel.querySelector(".notif-banner-new-session").click();
-  assert.deepEqual(p.sent, [{ type: "new_session" }]);
-  assert.equal(p.notifPanel.querySelector('[data-auth-reminder="true"]'), null);
 });
 
 test("notification rows: a permission row waiting for the server stays as it is through a refresh, and is answerable again when the connection drops", async function (t) {
@@ -499,9 +539,15 @@ test("reload after clearing notifications: the server's list no longer holds the
 test("diagnostics clear-all is client-side: it sends nothing to the server, so a reload starts with an empty list", async function (t) {
   var p = await page(t);
   p.diagnostics.addDiagnostic({ type: "diagnostic", severity: "error", source: "x" + (++seq), message: "boom " + seq });
+  p.diagnostics.addDiagnostic({ type: "diagnostic", severity: "error", source: "x" + (++seq), message: "boom " + seq });
+  var badge = global.document.getElementById("diagnostics-panel-badge");
+  assert.equal(badge.textContent, "2");
   p.diagBtn.click();
+  p.rows(p.diagPanel)[0].querySelector(".list-panel-row-dismiss").click();
+  assert.equal(badge.textContent, "1", "a dismissal refreshes the badge");
   p.sent.length = 0;
   p.diagPanel.querySelector(".list-panel-clear-all").click();
+  assert.equal(badge.classList.contains("hidden"), true, "clear-all hides the badge");
   assert.deepEqual(p.sent, [], "no frame");
   assert.equal(p.rows(p.diagPanel).length, 0);
   var fresh = await import(dom.moduleUrl("diagnostics.js") + "?reload=" + (++seq));
