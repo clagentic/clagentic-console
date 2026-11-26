@@ -148,6 +148,7 @@ test("the diagnostics panel entry collapses the list the same way", async functi
   global.document.getElementById = function (id) { return byId[id] || null; };
   c.diagnostics.initDiagnostics();
   c.diagnostics.addDiagnostic(confirmCard(), { toast: false });
+  list = panel.querySelector(".list-panel-list");
 
   var region = list.querySelectorAll(".build-update-sessions");
   assert.equal(region.length, 1);

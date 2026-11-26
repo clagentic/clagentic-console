@@ -314,19 +314,14 @@ test("the diagnostics clear-all removes diagnostic cards only, not another surfa
   var overlay = await import(dom.moduleUrl("overlay.js"));
   var panel = new dom.FakeElement("div");
   panel.id = "diagnostics-panel";
-  var list = new dom.FakeElement("div");
-  list.id = "diagnostics-panel-list";
-  var clearAll = new dom.FakeElement("button");
-  clearAll.className = "diagnostics-panel-clear-all";
-  panel.appendChild(clearAll);
   global.document.body.appendChild(panel);
-  global.document.body.appendChild(list);
   ["diagnostics-panel-btn", "diagnostics-panel-badge"].forEach(function (id) {
     var el = new dom.FakeElement("span");
     el.id = id;
     global.document.body.appendChild(el);
   });
   b.diagnostics.initDiagnostics();
+  var clearAll = panel.querySelector(".list-panel-clear-all");
   b.diagnostics.addDiagnostic({ type: "diagnostic", severity: "error", source: "d", message: "m" });
   overlay.showOverlay({ kind: "toast", source: "other-surface", content: "x" });
   assert.equal(b.stack().querySelectorAll("[data-overlay-source]").length, 2, "both cards carry a source key");
@@ -630,9 +625,10 @@ var B1_SHEETS = [
   { file: "scheduler-modal.css", selectors: [".sched-custom-end-list"] },
   { file: "loop.css", selectors: [".loop-pending-popover"] },
   // B2.
-  // The three adopted info panels set their layer on their own node (the column
+  // The adopted info panels set their layer on their own node (the column
   // sits below modals); the stylesheet row above asserts it is the menu token.
-  { file: "menus.css", selectors: ["#notif-menu", "#usage-panel", "#status-panel", "#diagnostics-panel"], ownLayer: ["#usage-panel", "#status-panel", "#diagnostics-panel"] },
+  // The shared list panel (Notifications and Diagnostics) is one class.
+  { file: "menus.css", selectors: ["#notif-menu", "#usage-panel", "#status-panel", ".list-panel"], ownLayer: ["#usage-panel", "#status-panel", ".list-panel"] },
   { file: "overlays.css", selectors: [".ext-popover", ".top-bar-popover"] },
   { file: "title-bar.css", selectors: [".rate-limit-popover"] },
   { file: "sidebar.css", selectors: [".tool-palette-ctx-menu"] },
@@ -681,6 +677,7 @@ var B1_MODULES = [
   // its hotkey-pick mode.
   { file: "notifications.js", layer: true, clicks: 0, keys: 0 }, { file: "diagnostics.js", layer: true, clicks: 0, keys: 0 },
   { file: "app-panels.js", layer: true }, { file: "info-panel.js", layer: true, clicks: 0, keys: 0 },
+  { file: "list-panel.js", layer: true, clicks: 0, keys: 0 }, { file: "app-notifications.js", layer: true, clicks: 0, keys: 0 },
   { file: "app-rate-limit.js", layer: true, clicks: 0, keys: 0 }, { file: "tool-palette.js", layer: true, clicks: 1, keys: 1 },
   { file: "profile.js", layer: true, clicks: 0, keys: 0 }, { file: "stt.js", layer: true, clicks: 0, keys: 0 },
 ];
@@ -706,7 +703,7 @@ test("stylesheet: the info-panels column sits below modals, each adopted panel t
   var MENUS = css("menus.css");
   // --z-base is below --z-modal (the layer-scale test above asserts the order).
   assert.equal(cssRules.valueAt(MENUS, "#info-panels", "z-index", DESKTOP), "var(--z-base)", "the column is below --z-modal");
-  ["#usage-panel", "#status-panel", "#diagnostics-panel"].forEach(function (id) {
+  ["#usage-panel", "#status-panel", ".list-panel"].forEach(function (id) {
     assert.equal(cssRules.valueAt(MENUS, id, "z-index", DESKTOP), "var(--z-menu)", id + " takes the menu layer on its own node");
   });
   assert.notEqual(cssRules.valueAt(MENUS, "#context-panel", "z-index", DESKTOP), "var(--z-menu)", "the context panel is not a menu");
