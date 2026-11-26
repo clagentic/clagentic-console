@@ -73,7 +73,7 @@
       <div id="client-count" class="top-bar-pill pill-accent hidden"><i data-lucide="users"></i> <span id="client-count-text"></span></div>
       <button id="share-pill" title="Share"><i data-lucide="share-2"></i></button>
       <button id="diagnostics-panel-btn" title="Diagnostics" aria-label="Diagnostics" aria-expanded="false"><i data-lucide="activity"></i><span id="diagnostics-panel-badge" class="diagnostics-panel-badge hidden" aria-hidden="true">0</span></button>
-      <button id="notif-center-btn" title="Notifications"><i data-lucide="bell"></i><span id="notif-center-badge" class="notif-badge hidden">0</span></button>
+      <button id="notif-center-btn" title="Notifications" aria-label="Notifications" aria-expanded="false"><i data-lucide="bell"></i><span id="notif-center-badge" class="notif-badge hidden">0</span></button>
       <button id="server-settings-btn" title="Server settings"><i data-lucide="settings"></i></button>
     </div>
   </div>
@@ -342,20 +342,7 @@
           <div class="usage-row"><span class="usage-label">Terminals</span><span id="status-terminals" class="usage-value">-</span></div>
         </div>
       </div>
-      <!-- Diagnostics panel (lr-8294, epic lr-1a52) -->
-      <div id="diagnostics-panel" class="hidden" role="region" aria-label="Diagnostics" aria-expanded="false" tabindex="-1">
-        <div class="usage-panel-header">
-          <span>Diagnostics</span>
-          <div class="diagnostics-panel-header-actions">
-            <button class="diagnostics-panel-clear-all" aria-label="Clear all diagnostics">Clear all</button>
-          </div>
-        </div>
-        <div class="usage-panel-body diagnostics-panel-body">
-          <div id="diagnostics-panel-list">
-            <div class="diagnostics-empty">No diagnostics this session.</div>
-          </div>
-        </div>
-      </div>
+      <!-- The Notifications and Diagnostics panels are drawn here by modules/list-panel.js -->
       <div id="context-panel" class="hidden">
         <div class="usage-panel-header">
           <span>Context</span>
