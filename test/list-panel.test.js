@@ -360,6 +360,30 @@ BELL.forEach(function (row) {
   });
 });
 
+test("a row dismissed while the socket is offline lowers the bell count at once", async function (t) {
+  var p = await page(t);
+  p.state([notification("o1"), notification("o2")]);
+  var badge = global.document.getElementById("notif-center-badge");
+  assert.equal(badge.textContent, "2");
+  var wsRef = await import(dom.moduleUrl("ws-ref.js"));
+  wsRef.setWs({ readyState: 3, send: function () { throw new Error("offline"); } });
+  p.bell.click();
+  p.rows(p.notifPanel)[0].querySelector(".list-panel-row-dismiss").click();
+  assert.equal(p.rows(p.notifPanel).length, 1);
+  assert.equal(badge.textContent, "1");
+  p.rows(p.notifPanel)[0].querySelector(".list-panel-row-dismiss").click();
+  assert.equal(badge.classList.contains("hidden"), true);
+});
+
+test("a row keyed like an inherited property (toString) is removed on the next sync", async function (t) {
+  var p = await page(t);
+  p.state([notification("toString")]);
+  assert.equal(p.rows(p.notifPanel).length, 1);
+  p.state([]);
+  assert.equal(p.rows(p.notifPanel).length, 0);
+  assert.ok(p.notifPanel.querySelector(".list-panel-empty"));
+});
+
 test("the removed paths are gone: no re-raise function and no random empty-state message", function () {
   var fs = require("fs");
   var path = require("path");
