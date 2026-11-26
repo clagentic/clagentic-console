@@ -431,15 +431,16 @@ test("command-palette.js: recent sessions / search results / project list route 
   }
 });
 
-test("app-notifications.js: banner icon routes through projectIconHtml, not raw interpolation", async () => {
+// The card content (the banner's and the bell's row) is drawn by notification-card.js.
+test("notification-card.js: banner icon routes through projectIconHtml, not raw interpolation", async () => {
   var fs = (await import("node:fs")).default;
   var path = (await import("node:path")).default;
-  var src = fs.readFileSync(path.resolve("lib/public/modules/app-notifications.js"), "utf8");
+  var src = fs.readFileSync(path.resolve("lib/public/modules/notification-card.js"), "utf8");
 
-  assert.ok(src.includes("projectIconHtml"), "app-notifications.js imports/uses projectIconHtml");
+  assert.ok(src.includes("projectIconHtml"), "notification-card.js imports/uses projectIconHtml");
   assert.ok(
     !src.includes("'<span class=\"notif-banner-emoji\">' + projectIcon +"),
-    "app-notifications.js must not raw-interpolate projectIcon into the banner markup"
+    "notification-card.js must not raw-interpolate projectIcon into the banner markup"
   );
 });
 

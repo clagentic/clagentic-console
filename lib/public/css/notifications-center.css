@@ -6,6 +6,9 @@
 #notif-center-btn {
   position: relative;
 }
+#notif-center-btn.active {
+  color: var(--accent);
+}
 
 .notif-badge {
   position: absolute;
@@ -62,9 +65,17 @@
   height: 12px;
 }
 
-/* A banner opens its session when tapped. */
-.notif-banner {
+/* A banner, or a row in the bell's panel, opens its session when tapped. The
+   panel's shell is the shared list panel (menus.css); a row's content is the
+   banner's, read left to right (an icon, then text). */
+.notif-banner,
+.list-panel-row.notif-row {
   cursor: pointer;
+}
+.list-panel-row.notif-row {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--overlay-banner-gap);
 }
 
 .notif-banner-icon {

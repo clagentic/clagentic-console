@@ -771,18 +771,19 @@
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
 }
 
-/* The three adopted panels are menus and take the menu layer. */
-#usage-panel, #status-panel, #diagnostics-panel {
+/* The adopted panels are menus and take the menu layer: usage, status and the
+   shared list panel (Notifications, Diagnostics). */
+#usage-panel, #status-panel, .list-panel {
   z-index: var(--z-menu);
 }
 
 /* --- Usage panel --- */
-#usage-panel, #status-panel, #context-panel, #diagnostics-panel {
+#usage-panel, #status-panel, #context-panel, .list-panel {
   font-size: var(--font-size-sm);
   pointer-events: auto;
 }
 
-#usage-panel.hidden, #status-panel.hidden, #context-panel.hidden, #diagnostics-panel.hidden { display: none; }
+#usage-panel.hidden, #status-panel.hidden, #context-panel.hidden, .list-panel.hidden { display: none; }
 
 .usage-panel-header {
   display: flex;
@@ -822,6 +823,100 @@
 
 .usage-panel-body {
   padding: var(--space-4) var(--space-7) var(--space-6);
+}
+
+/* --- Shared list panel (modules/list-panel.js): Notifications and Diagnostics.
+   The header, the clear-all control, the row shell, the row dismiss control and
+   the empty state are the panel's; a list styles only what its rows hold. --- */
+.list-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.list-panel:focus { outline: none; }
+
+.list-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  min-height: 0;
+}
+
+/* Clear all, beside the shared close control. */
+.list-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.usage-panel-header .list-panel-clear-all {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-2xs);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.usage-panel-header .list-panel-clear-all:hover {
+  color: var(--text);
+  border-color: var(--border-bright, var(--border));
+  background: none;
+}
+.usage-panel-header .list-panel-clear-all:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* One row. Its dismiss control sits at the top right, the room reserved by the
+   row's right padding. */
+.list-panel-row {
+  position: relative;
+  padding: var(--space-5) calc(var(--overlay-close-size) + var(--overlay-close-inset) + var(--space-3)) var(--space-5) var(--space-7);
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.list-panel-row:last-child { border-bottom: none; }
+.list-panel-row:hover { background: rgba(var(--overlay-rgb), 0.02); }
+
+.list-panel-row-dismiss {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-2);
+  transition: color 0.15s, background 0.15s;
+}
+.list-panel-row-dismiss:hover {
+  color: var(--text);
+  background: rgba(var(--overlay-rgb), 0.06);
+}
+.list-panel-row-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.list-panel-row-dismiss .lucide { width: 12px; height: 12px; }
+
+.list-panel-empty {
+  padding: var(--space-10) var(--space-7);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-align: center;
 }
 
 /* --- Plan usage link --- */

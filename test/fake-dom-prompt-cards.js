@@ -43,6 +43,9 @@ function FakeElement(tag) {
   this.classList = new FakeClassList(this);
 }
 FakeElement.prototype.addEventListener = function (t, fn) { (this._listeners[t] = this._listeners[t] || []).push(fn); };
+FakeElement.prototype.removeEventListener = function (t, fn) {
+  this._listeners[t] = (this._listeners[t] || []).filter(function (l) { return l !== fn; });
+};
 FakeElement.prototype.click = function () {
   if (this.disabled) return;
   (this._listeners.click || []).slice().forEach(function (fn) { fn({}); });

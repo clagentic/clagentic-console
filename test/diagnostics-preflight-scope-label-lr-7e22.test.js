@@ -55,8 +55,8 @@ test("diagnostics.js: toast header passes entry.scope into _formatSource", () =>
 });
 
 test("diagnostics.js: panel row passes entry.scope into _formatSource", () => {
-  var idx = DIAGNOSTICS_JS.indexOf("function _appendEntry");
-  assert.ok(idx !== -1, "expected _appendEntry to exist");
+  var idx = DIAGNOSTICS_JS.indexOf("function _diagnosticRow");
+  assert.ok(idx !== -1, "expected _diagnosticRow to exist");
   var block = DIAGNOSTICS_JS.slice(idx, idx + 1200);
 
   assert.match(

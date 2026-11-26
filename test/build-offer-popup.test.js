@@ -288,10 +288,10 @@ async function closedOfferPage(t) {
   t.mock.method(Date, "now", function () { return realNow() + skew.ms; });
   skew.ms = 60000;
   var panel = new dom.FakeElement("div");
-  var list = new dom.FakeElement("div");
-  var byId = { "overlay-stack": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-list": list, "diagnostics-panel-btn": new dom.FakeElement("button"), "diagnostics-panel-badge": new dom.FakeElement("span") };
+  var byId = { "overlay-stack": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-btn": new dom.FakeElement("button"), "diagnostics-panel-badge": new dom.FakeElement("span") };
   global.document.getElementById = function (id) { return byId[id] || null; };
   page.diagnostics.initDiagnostics();
+  var list = panel.querySelector(".list-panel-list");
   w.poll(); w.poll();
   page.deliver(w);
   assert.equal(page.popups().length, 1);
@@ -572,15 +572,17 @@ test("R-573-3: the diagnostics clear-all keeps the offer entry and its pop-up, d
   var w = daemonWorld();
   var page = await adminPage(t);
   var panel = new dom.FakeElement("div");
-  var list = new dom.FakeElement("div");
   var toggle = new dom.FakeElement("button");
   var badge = new dom.FakeElement("span");
-  var clearAll = new dom.FakeElement("button");
-  clearAll.className = "diagnostics-panel-clear-all";
-  panel.appendChild(clearAll);
-  var byId = { "overlay-stack": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-list": list, "diagnostics-panel-btn": toggle, "diagnostics-panel-badge": badge };
+  var byId = { "overlay-stack": page.toasts, "diagnostics-panel": panel, "diagnostics-panel-btn": toggle, "diagnostics-panel-badge": badge };
   global.document.getElementById = function (id) { return byId[id] || null; };
   page.diagnostics.initDiagnostics();
+  var list = panel.querySelector(".list-panel-list");
+  var clearAll = panel.querySelector(".list-panel-clear-all");
+  // The panel lists what the module holds, and the module is shared by every page
+  // of this process: start from an empty list.
+  clearAll.click();
+  page.diagnostics.withdrawBuildOffer();
   w.poll(); w.poll();
   await w.settle();
   page.deliver(w);

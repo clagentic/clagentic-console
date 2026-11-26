@@ -36,7 +36,7 @@ var MENUS_CSS = fs.readFileSync(
   "utf8"
 );
 
-test("menus.css: #diagnostics-panel is included in the shared pointer-events:auto selector", () => {
+test("menus.css: the shared list panel (.list-panel, which the diagnostics panel is) is in the shared pointer-events:auto selector", () => {
   // Isolate the selector block that follows the "Usage panel" comment so this
   // assertion is scoped to the regression site.
   var idx = MENUS_CSS.indexOf("/* --- Usage panel --- */");
@@ -45,16 +45,16 @@ test("menus.css: #diagnostics-panel is included in the shared pointer-events:aut
 
   assert.match(
     block,
-    /#usage-panel,\s*#status-panel,\s*#context-panel,\s*#diagnostics-panel\s*\{[^}]*pointer-events:\s*auto/,
-    "#diagnostics-panel must share the pointer-events:auto rule with its sibling panels -- without it, the panel inherits pointer-events:none from #info-panels and becomes fully unclickable (lr-b580 root cause)"
+    /#usage-panel,\s*#status-panel,\s*#context-panel,\s*\.list-panel\s*\{[^}]*pointer-events:\s*auto/,
+    ".list-panel must share the pointer-events:auto rule with its sibling panels -- without it, the panel inherits pointer-events:none from #info-panels and becomes fully unclickable (lr-b580 root cause)"
   );
 });
 
-test("menus.css: #diagnostics-panel.hidden is included in the shared display:none selector", () => {
+test("menus.css: .list-panel.hidden is included in the shared display:none selector", () => {
   assert.match(
     MENUS_CSS,
-    /#usage-panel\.hidden,\s*#status-panel\.hidden,\s*#context-panel\.hidden,\s*#diagnostics-panel\.hidden\s*\{\s*display:\s*none;\s*\}/,
-    "#diagnostics-panel.hidden must be listed alongside its sibling panels for consistency with the shared panel pattern"
+    /#usage-panel\.hidden,\s*#status-panel\.hidden,\s*#context-panel\.hidden,\s*\.list-panel\.hidden\s*\{\s*display:\s*none;\s*\}/,
+    ".list-panel.hidden must be listed alongside its sibling panels for consistency with the shared panel pattern"
   );
 });
 
@@ -84,12 +84,12 @@ test("the diagnostics panel element takes pointer events when open and is hidden
 
   toggle.click();
   assert.equal(panel.classList.contains("hidden"), false, "the toggle opens the panel");
-  assert.equal(cssRules.valueAt(MENUS_CSS, "#diagnostics-panel", "pointer-events", 1280), "auto",
+  assert.equal(cssRules.valueAt(MENUS_CSS, ".list-panel", "pointer-events", 1280), "auto",
     "an open panel takes pointer events on its own bounds under the click-through #info-panels");
   assert.equal(cssRules.valueAt(MENUS_CSS, "#info-panels", "pointer-events", 1280), "none");
 
   toggle.click();
   assert.equal(panel.classList.contains("hidden"), true, "closing the panel hides it");
-  assert.equal(cssRules.valueAt(MENUS_CSS, "#diagnostics-panel.hidden", "display", 1280), "none",
+  assert.equal(cssRules.valueAt(MENUS_CSS, ".list-panel.hidden", "display", 1280), "none",
     "a hidden panel is display:none, so it blocks no pointer events");
 });

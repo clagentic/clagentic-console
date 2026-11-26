@@ -38,68 +38,10 @@
 .diagnostics-badge-error   { background: var(--error); color: var(--on-error); }
 
 /* --------------------------------------------------------
-   Diagnostics panel (inside #info-panels)
-   Follows the usage-panel pattern.
+   Diagnostic rows
+   The panel (header, clear-all, row shell, dismiss, empty state) is the shared
+   list panel (menus.css); only what a diagnostic row holds is styled here.
    -------------------------------------------------------- */
-#diagnostics-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-#diagnostics-panel.hidden { display: none; }
-#diagnostics-panel:focus { outline: none; }
-
-.diagnostics-panel-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0;
-  min-height: 0;
-}
-
-/* Header actions group: Clear all, beside the shared close control (parity with
-   the Notifications panel's .notif-banner-clear-all placement). */
-.diagnostics-panel-header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.diagnostics-panel-clear-all {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-2) var(--space-4);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-2xs);
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.diagnostics-panel-clear-all:hover {
-  color: var(--text);
-  border-color: var(--border-bright, var(--border));
-}
-.diagnostics-panel-clear-all:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* --------------------------------------------------------
-   Diagnostic items
-   -------------------------------------------------------- */
-.diagnostics-item {
-  padding: var(--space-5) var(--space-7);
-  border-bottom: 1px solid var(--border-subtle, var(--border));
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.diagnostics-item:last-child { border-bottom: none; }
-.diagnostics-item:hover { background: rgba(var(--overlay-rgb), 0.02); }
 
 /* Left-border severity indicator */
 .diagnostics-item-info    { border-left: 2px solid var(--text-muted); }
@@ -145,31 +87,6 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-
-/* Per-entry dismiss (x) control, pushed to the end of the meta row. */
-.diagnostics-item-dismiss {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: var(--space-1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-2);
-  flex-shrink: 0;
-  transition: color 0.15s, background 0.15s;
-}
-.diagnostics-item-dismiss:hover {
-  color: var(--text);
-  background: rgba(var(--overlay-rgb), 0.06);
-}
-.diagnostics-item-dismiss:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.diagnostics-item-dismiss .lucide { width: 12px; height: 12px; }
 
 /* Message text */
 .diagnostics-message {
@@ -289,14 +206,6 @@
   margin-top: var(--space-2);
   font-size: var(--font-size-xs);
   color: var(--error);
-}
-
-/* Empty state */
-.diagnostics-empty {
-  padding: var(--space-10) var(--space-7);
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  text-align: center;
 }
 
 /* --------------------------------------------------------
